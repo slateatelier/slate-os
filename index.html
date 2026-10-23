@@ -460,19 +460,120 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .cl-h{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:10px 10px 4px;border-bottom:1px solid var(--line)}
 @media (max-width:560px){.cl-row{grid-template-columns:28px minmax(0,1fr)}.cl-a{grid-column:2;justify-content:flex-start}}
 /* ---- how to use ---- */
-.hg{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;display:grid;gap:14px}
-.hg.mine{border-color:var(--ink);box-shadow:inset 0 3px 0 var(--ink)}
-.hg-steps{list-style:none;margin:0;padding:0;display:grid;gap:0}
-.hg-step{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;position:relative;padding-bottom:16px}
-.hg-step:last-child{padding-bottom:0}
-.hg-step:not(:last-child)::before{content:"";position:absolute;left:16px;top:34px;bottom:0;width:2px;background:var(--border)}
-.hg-n{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px}
-.hg-body{padding-top:5px;min-width:0}
-.hg-t{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
-.hg-btn{font-size:12px;font-weight:600;background:var(--group);border:1px solid var(--border);border-radius:7px;padding:2px 8px;white-space:nowrap}
-.hg-d{font-size:13.5px;color:#3a3a3c;margin-top:3px}
-.hg-rules{background:var(--group);border-radius:10px;padding:10px 14px}
-.hg-rules ul{margin:6px 0 0;padding-left:18px;display:grid;gap:4px;font-size:13.5px}
+.hx-hero{position:relative;padding:8px 0 4px;display:grid;gap:6px}
+.hx-mark{width:34px;height:34px;border:3px solid var(--ink);border-right-color:transparent;border-radius:3px;margin-bottom:8px;position:relative}
+.hx-mark i{position:absolute;right:-9px;top:50%;width:16px;height:3px;margin-top:-1.5px;background:#d7262b}
+.hx-hero .lead{max-width:56ch}
+.hx-roles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:var(--group);border-radius:12px;padding:4px;margin-top:10px}
+.hx-role{appearance:none;border:0;background:none;border-radius:9px;padding:9px 6px;font:inherit;cursor:pointer;display:grid;gap:1px;justify-items:center;color:var(--ink);min-width:0}
+.hx-role b{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.hx-role span{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#d7262b}
+.hx-role.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+@media (max-width:560px){.hx-roles{grid-template-columns:1fr 1fr}}
+.hx-sec{display:grid;gap:12px;padding-top:26px}
+.hx-sec-h{display:grid;gap:3px}
+.hx-sec-h .eyebrow{color:#d7262b}
+.hx-h2{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.hx-lead{margin:0;color:var(--muted);font-size:14px;max-width:60ch}
+.hx-card{background:var(--group);border-radius:var(--r-lg);padding:16px;display:grid;gap:14px;min-width:0}
+.hx-ico{width:20px;height:20px;flex:none}
+.hx-foot{margin:0;font-size:13px;color:#3a3a3c;line-height:1.45}
+/* routine */
+.hx-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.hx-step{background:var(--group);border-radius:var(--r-lg);padding:14px;display:grid;gap:6px;align-content:start}
+.hx-step-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.hx-num{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
+.hx-step-ic{width:36px;height:36px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center}
+.hx-step-t{font-weight:600;font-size:15.5px}
+@media (max-width:560px){.hx-step{grid-template-columns:36px minmax(0,1fr);column-gap:12px;row-gap:3px;padding:12px}.hx-step-top{grid-row:1/span 3;flex-direction:column-reverse;justify-content:flex-end;gap:6px;margin:0}.hx-step-t,.hx-step-d,.hx-step-m{grid-column:2}.hx-step-m{margin-top:4px;padding-top:8px}}
+.hx-step-d{font-size:13.5px;color:#3a3a3c;line-height:1.45}
+.hx-step-m{display:flex;align-items:center;gap:8px;margin-top:6px;padding-top:10px;border-top:1px solid var(--line)}
+.hx-tap{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.hx-mock{pointer-events:none;background:#fff}
+.hx-mock.btn-primary{background:var(--ink)}
+.hx-mock-chk{width:22px;height:22px;border-radius:50%;border:2px solid var(--ink);background:#fff;position:relative}
+.hx-mock-chk::after{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid rgba(52,199,89,.5);animation:hxPulse 1.8s ease-out infinite}
+@keyframes hxPulse{0%{transform:scale(.7);opacity:1}100%{transform:scale(1.25);opacity:0}}
+@media (prefers-reduced-motion:reduce){.hx-mock-chk::after{animation:none;opacity:.6}}
+.hx-mock-bell{position:relative;display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#fff}
+.hx-mock-bell i{position:absolute;top:-3px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:var(--overdue);color:#fff;font:700 10px/16px var(--font);font-style:normal;text-align:center;padding:0 4px}
+/* spine */
+.hx-spine{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));row-gap:20px}
+.hx-ph{display:grid;gap:6px;align-content:start;padding:0 8px 0 0;min-width:0}
+.hx-ph-n,.hx-ph-g{overflow-wrap:anywhere}
+.hx-ph-no{font:700 22px/1 var(--font);letter-spacing:-.02em}
+.hx-ph-bar{display:flex;align-items:center;gap:3px;height:14px}
+.hx-ph-bar i{flex:1;height:3px;border-radius:2px;background:var(--faint)}
+.hx-ph-bar b{width:11px;height:11px;background:var(--ink);transform:rotate(45deg);flex:none;margin:0 2px}
+.hx-ph.side .hx-ph-bar i{background:repeating-linear-gradient(90deg,var(--faint) 0 3px,transparent 3px 5px)}
+.hx-ph-n{font-size:12.5px;font-weight:600;line-height:1.25}
+.hx-ph-g{font-size:11px;color:var(--muted);line-height:1.3}
+@media (max-width:640px){
+  .hx-spine{grid-template-columns:1fr;gap:0}
+  .hx-ph{grid-template-columns:30px 1fr;grid-template-areas:"no n" "bar g";column-gap:10px;row-gap:2px;padding:9px 0;border-top:1px solid var(--line);min-width:0}
+  .hx-ph:first-child{border-top:0}
+  .hx-ph-no{grid-area:no;font-size:20px}.hx-ph-n{grid-area:n;font-size:14px;align-self:center}.hx-ph-g{grid-area:g;font-size:12.5px}
+  .hx-ph-bar{grid-area:bar;justify-content:center}.hx-ph-bar i{display:none}
+}
+.hx-key{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12.5px;color:#3a3a3c}
+.hx-key span{display:inline-flex;align-items:center;gap:7px}
+.hx-key i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.hx-key .k-dot{border-radius:50%;background:var(--faint)}
+.hx-key .k-gate{background:var(--ink);transform:rotate(45deg);border-radius:1px;width:9px;height:9px}
+.hx-key .k-side{height:3px;width:16px;border-radius:2px;background:repeating-linear-gradient(90deg,var(--faint) 0 3px,transparent 3px 5px)}
+/* task flow */
+.hx-flow{display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr) 18px minmax(0,1fr) 18px minmax(0,1fr) 18px minmax(0,1fr);align-items:stretch;gap:4px}
+.hx-node{background:#fff;border-radius:12px;padding:10px;display:grid;gap:3px;align-content:start;box-shadow:inset 0 3px 0 var(--c)}
+.hx-node b{font-size:13.5px}
+.hx-node span{font-size:11.5px;color:var(--muted);line-height:1.3}
+.hx-arr{display:grid;place-items:center;color:var(--faint)}
+.hx-arr .hx-ico{width:16px;height:16px}
+@media (max-width:640px){.hx-flow{grid-template-columns:1fr}.hx-arr{height:14px}.hx-arr .hx-ico{transform:rotate(90deg)}.hx-node{grid-template-columns:120px 1fr;align-items:center;box-shadow:inset 3px 0 0 var(--c)}}
+.hx-loop{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:start;font-size:13.5px;line-height:1.45;background:#fff;border-radius:12px;padding:10px 12px}
+.hx-loop-ic{width:34px;height:34px;border-radius:50%;background:var(--group);display:grid;place-items:center}
+/* messages */
+.hx-msg{justify-items:start}
+.hx-bub{background:#fff;border-radius:16px 16px 16px 4px;padding:10px 14px;display:grid;gap:4px;max-width:340px;font-size:14.5px;box-shadow:inset 3px 0 0 #d7262b}
+.hx-bub-h{display:flex;align-items:center;gap:6px;font-size:12px}
+.hx-bub-h span:last-child{color:var(--muted)}
+.hx-msg-arrow{color:var(--faint);padding-left:22px}
+.hx-replies{display:flex;flex-wrap:wrap;gap:6px}
+.hx-chip{--c:var(--ink);background:#fff;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;box-shadow:inset 0 0 0 1.5px var(--c);color:var(--ink)}
+/* score */
+.hx-eq{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.hx-eq em{font-style:normal;color:var(--muted);font-weight:600;font-size:15px}
+.hx-eq-b{background:#fff;border-radius:10px;padding:7px 11px;display:grid;justify-items:center;min-width:64px}
+.hx-eq-b b{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+.hx-eq-b span{font-size:11px;color:var(--muted)}
+.hx-eq-b.dark{background:var(--ink);color:#fff}.hx-eq-b.dark span{color:#c7c7cc}
+.hx-bars{display:grid;gap:8px}
+.hx-bar{display:grid;grid-template-columns:96px minmax(0,1fr) 46px;gap:10px;align-items:center;font-size:13px}
+.hx-bar b{text-align:right;font-variant-numeric:tabular-nums}
+.hx-bar-t{height:12px;border-radius:6px;background:#fff;overflow:hidden;display:flex;gap:2px}
+.hx-bar-t i{display:block;height:100%;border-radius:6px}
+/* inbox */
+.hx-inbox{display:grid;grid-template-columns:minmax(0,1.3fr) 30px minmax(0,1fr);gap:8px;align-items:center}
+.hx-src{display:grid;gap:5px}
+.hx-src-i{display:flex;align-items:center;gap:9px;background:#fff;border-radius:10px;padding:8px 10px;font-size:13px}
+.hx-src-i .hx-ico{width:17px;height:17px;color:var(--muted)}
+.hx-fan{display:grid;place-items:center;color:var(--faint)}
+.hx-home{background:var(--ink);color:#fff;border-radius:var(--r-lg);padding:16px;display:grid;gap:6px;align-content:center}
+.hx-home b{font-size:20px}
+.hx-home span{font-size:13px;color:#c7c7cc;line-height:1.4}
+.hx-home .hx-ico{width:26px;height:26px}
+@media (max-width:640px){.hx-inbox{grid-template-columns:1fr}.hx-fan .hx-ico{transform:rotate(90deg)}}
+/* tabs */
+.hx-tabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.hx-tab{background:var(--group);border-radius:12px;padding:12px;display:grid;gap:3px;align-content:start}
+.hx-tab-ic{width:30px;height:30px;border-radius:8px;background:#fff;display:grid;place-items:center;margin-bottom:4px}
+.hx-tab-ic .hx-ico{width:17px;height:17px}
+.hx-tab b{font-size:14px}.hx-tab span{font-size:12px;color:var(--muted);line-height:1.35}
+/* rules */
+.hx-rules{background:var(--group);border-radius:var(--r-lg);overflow:hidden}
+.hx-rule{display:grid;grid-template-columns:24px 1fr;gap:10px;padding:12px 14px;font-size:14px;line-height:1.45;border-top:1px solid var(--line)}
+.hx-rule:first-child{border-top:0}
+.hx-rule-ic{width:22px;height:22px;border-radius:50%;background:var(--ontime);color:#fff;display:grid;place-items:center}
+.hx-rule-ic .hx-ico{width:13px;height:13px;stroke-width:3}
 /* ---- calendar ---- */
 .cal-keys{display:flex;flex-wrap:wrap;gap:6px}
 .cal-key{appearance:none;border:0;background:var(--group);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;color:var(--ink)}
@@ -1412,7 +1513,7 @@ function buildView(){
 function viewMore(){
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
-    h('div',{class:'list'},item('help','How to use','A one-screen guide for your role'),item('team','Team','Full team, pods and who works on each project'),item('meet','Weekly meeting','Sundays 11:00 · organiser rotation and minutes'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log','Audit trail: every change, notification and message'),
+    h('div',{class:'list'},item('help','How to use','Your routine, the phases and how scoring works, in pictures'),item('team','Team','Full team, pods and who works on each project'),item('meet','Weekly meeting','Sundays 11:00 · organiser rotation and minutes'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log','Audit trail: every change, notification and message'),
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
@@ -3190,49 +3291,153 @@ function pmHomeSec(){
 }
 
 
-/* ---------- How to use: one visual guide per role ---------- */
+/* ---------- How to use: a visual guide, one role at a time ---------- */
+const HX_ICO={
+ home:'M3 11l9-7 9 7M5 10v10h14V10M10 20v-5h4v5',
+ check:'M20 6 9 17l-5-5',
+ circle:'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
+ clock:'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2',
+ bell:'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
+ chat:'M4 5h16v11H9l-5 4z',
+ flag:'M5 21V4M5 4h11l-2 4 2 4H5',
+ layers:'M12 3 2 8l10 5 10-5zM2 13l10 5 10-5',
+ users:'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 7.5M18 14a6 6 0 0 1 4 7',
+ chart:'M4 20V10M10 20V4M16 20v-7M22 20H2',
+ cal:'M4 6h16v15H4zM4 10h16M9 3v5M15 3v5',
+ key:'M15 7a4 4 0 1 1-3.9 4.9L3 20v-3h3v-3h3l2.1-2.1A4 4 0 0 1 15 7z',
+ doc:'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7',
+ gauge:'M12 14l4-4M3 18a9 9 0 1 1 18 0',
+ list:'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+ meet:'M3 7h18v10H3zM7 21h10M12 17v4',
+ sliders:'M4 8h10M18 8h2M4 16h4M12 16h8M14 5v6M8 13v6',
+ shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+ trash:'M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3',
+ arrow:'M5 12h14M13 6l6 6-6 6',
+ down:'M12 5v14M6 13l6 6 6-6'};
+function hxIco(k,cls){ return svgEl('svg',{viewBox:'0 0 24 24',class:'hx-ico'+(cls?' '+cls:''),fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[k]||HX_ICO.circle})); }
+/* a look-alike of the real control, so people recognise it on screen */
+function hxMock(m){ if(!m) return null;
+  if(m==='chk') return h('span',{class:'hx-mock-chk','aria-hidden':'true'});
+  if(m==='bell') return h('span',{class:'hx-mock-bell','aria-hidden':'true'},hxIco('bell'),h('i',{text:'2'}));
+  const [label,kind]=Array.isArray(m)?m:[m,''];
+  return h('span',{class:'btn btn-sm hx-mock'+(kind==='p'?' btn-primary':''),'aria-hidden':'true',text:label}); }
+
 const HOWTO=[
- {key:'member',title:'Team member',who:'Junior architects, drafting associates, visualizers and interns',steps:[
-   ['Open Home','Home','Your checklist items and tasks are waiting here. Start every day on this page.'],
-   ['Tick your checklist','○  tick','Tap the circle when the item is done and checked. Never before.'],
-   ['Finish your tasks','✓ Done today','Or “Done on another date” if you finished earlier.'],
-   ['Need more time?','Request new date','Open the task, choose the reason and the new date. The COO decides.'],
-   ['Watch the bell','🔔','New assignments, deadlines and approvals arrive here.']],
-  rules:['You are compared only with people in the same role. Interns are not scored.','Attended a project meeting? Log the minutes within 24 hours: from the project, or from Home if you are in the drafting pool.','Tick only what is complete and checked.','Raise a risk the day you know it, not the day it is due.','If the client or a consultant caused the delay, say so in the reason. It will not count against you.']},
- {key:'lead',title:'Pod lead',who:'Owns the project from brief to as-built',steps:[
-   ['Set up phases','Set up phases','Projects → open the project. Choose the phases; gate deliverables and checklists are created.'],
-   ['Propose the gate dates','Send for approval','Enter a date for each gate deliverable. They count once the COO approves.'],
-   ['Assign the checklist','Show checklist','Pick who does each item, or mark it N/A. Enter the client feedback due date.'],
-   ['Log every meeting','+ Log meeting','Within 24 hours: decisions, client changes, actions. Then Finalise minutes.'],
-   ['Send the minutes','Mark as sent','Email client, consultant and authority minutes. Silence for 3 working days means accepted.'],
-   ['Close the gate','✓ Done today','Mark the final gate deliverable done once every checklist item is ticked or N/A.']],
+ {key:'member',title:'Team member',who:'Junior architects, design associates, visualizers and interns',steps:[
+   ['home','Start on Home','Your checklist items, tasks and messages wait here. Open it first every day.','Home'],
+   ['check','Tick your checklist','Tap the circle when an item is done and checked. Never before.','chk'],
+   ['flag','Finish a task','Tap Done today, or Done on another date if you finished earlier.',['✓ Done today','p']],
+   ['clock','Need more time?','Open the task, pick the reason and the new date. The COO decides; your old date stays until then.','Request new date'],
+   ['chat','Answer messages','A message from the Principal or the COO sits on Home until you reply with one tap or set a reminder.',['On it','p']],
+   ['meet','Log meetings','Went to a client, consultant, authority or site meeting? Log the minutes within 24 hours.','+ Log meeting']],
+  rules:['You are compared only with people in the same role. Interns are not scored.','Tick only what is complete and checked.','Raise a risk the day you know it, not the day it is due.','If the client or a consultant caused a delay, say so in the reason. It will not count against you.']},
+ {key:'lead',title:'Pod lead',who:'Accountable for the project from brief to as-built',steps:[
+   ['layers','Set up phases','Projects › open the project. Choose the phases; gate deliverables and checklists are created for you.',['Set up phases','p']],
+   ['cal','Propose the gate dates','Enter a date for each gate deliverable. They count once the COO approves them.','Send for approval'],
+   ['list','Assign the checklist','Pick who does each item, or mark it N/A. Add the client feedback due date.','Show checklist'],
+   ['meet','Log every meeting','Within 24 hours: decisions, client changes and actions. Finalising turns actions into tasks.','+ Log meeting'],
+   ['doc','Send the minutes','Email client, consultant and authority minutes. Silence for 3 working days means accepted.','Mark as sent'],
+   ['flag','Close the gate','Mark the final gate deliverable done once every checklist item is ticked or N/A.',['✓ Done today','p']]],
   rules:['You are accountable for the whole project; the team works through your checklist.','Changes beyond the agreement are an extra revision round: tick the box in the meeting and the COO decides.','Land share resume: use Add phases when the project restarts.','Choose Standard or Relaxed pace at setup; ask the COO for fast track or a proposal sprint.']},
- {key:'head',title:'Drafting head',who:'Runs the drafting pool for every pod',steps:[
-   ['Open your team view','Dashboard','Choose “Drafting Pool (whole team)”: every drafter’s load, what is overdue and what is due this week.'],
-   ['Check the load','Support team load','See who is overloaded and who has room before new work arrives.'],
-   ['Balance the work','Ask the COO','Pod leads request drafters; the COO approves. Tell the COO who should take each job and why.'],
-   ['Check before it leaves','Show checklist','Drafting checklist items in each phase are your team’s. Check the sets before the pod lead submits.'],
-   ['Raise risks early','🔔','If two pods need the same drafter on the same days, tell the COO the day you see it.']],
-  rules:['You are scored on your own tasks, against other drafting heads, or on timeliness if you are the only one.','Drafters are compared only with other drafters.','Interns in the pool are not scored.']},
- {key:'boss',title:'COO and Principal',who:'Approve, track and improve the standard',steps:[
-   ['Approve on Home','Approve all','Timelines, date changes, support assignments and extra revision rounds wait on Home.'],
-   ['Chase the minutes','Minutes overdue','Meetings without finished or sent minutes after a day appear on your Home.'],
-   ['Set the pace','Pace','On the project: Fast track (or Proposal sprint) for urgent jobs, Relaxed for jobs with time. Fast track counts ×1.25 and is decided the same day.'],
-   ['Track delivery','Dashboard','On-time rate against the 90% target, by pod and person. Phase dots on Projects.'],
-   ['Improve the standard','More › SLATE standard process','Edit any phase, gate deliverable or checklist item. Changes apply to every project at once.']],
-  rules:['Only approved dates count on the dashboard.','You can close a gate with open checklist items; use it rarely.','Tell pod leads when you change a phase that is in progress.']}];
+ {key:'head',title:'Drafting lead',who:'Runs the drafting pool for every pod',steps:[
+   ['chart','Open your team view','Dashboard › choose Drafting Pool (whole team): every drafter’s load, overdue work and this week’s dates.','Dashboard'],
+   ['gauge','Check the load','See who is overloaded and who has room before new work arrives.','Support team load'],
+   ['users','Balance the work','Pod leads request drafters and the COO approves. Tell the COO who should take each job, and why.','Ask the COO'],
+   ['list','Check before it leaves','Drafting checklist items in each phase are your team’s. Check the sets before the pod lead submits.','Show checklist'],
+   ['bell','Raise clashes early','Two pods need the same drafter on the same days? Tell the COO the day you see it.','bell']],
+  rules:['You are scored on your own tasks, against other drafting leads, or on timeliness if you are the only one.','Drafters are compared only with other drafters.','Interns in the pool are not scored.']},
+ {key:'boss',title:'Principal and COO',who:'Approve, steer and keep the standard',steps:[
+   ['home','Clear your Home','Timelines, date changes, support requests, extra revision rounds and phase dates wait on Home.',['Approve all','p']],
+   ['chat','Message the team','People › tap people, write and tap Notify. Replies (On it, Already done, Need help) come back under Sent and replies.',['Notify 3 people','p']],
+   ['sliders','Set the pace','On the project: Fast track or Proposal sprint for urgent jobs, Relaxed for jobs with time.','Pace'],
+   ['chart','Track delivery','On-time rate against the 90% target, by pod and by person. Phase dots on Projects.','Dashboard'],
+   ['key','Look after accounts','People › Accounts and passwords: reset a forgotten password or add a new person.','Accounts and passwords'],
+   ['shield','Check the record','More › Log shows every change, notification and message. Nothing in it can be edited.','Log']],
+  rules:['Only approved dates count on the dashboard.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
 const myGuide=()=>amApprover()||S.isOwner?'boss':(amMgr()||amPodLead())?'lead':myHeadTeam()?'head':'member';
-function guideCard(g,mine){
-  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:g.title+(mine?' · your guide':'')}),h('span',{class:'cnt',text:g.who})),
-    h('div',{class:'hg'+(mine?' mine':'')},
-      h('ol',{class:'hg-steps'},g.steps.map(([t,b,d],i)=>h('li',{class:'hg-step'},h('span',{class:'hg-n',text:String(i+1)}),h('div',{class:'hg-body'},h('div',{class:'hg-t'},h('b',{text:t}),h('span',{class:'hg-btn',text:b})),h('div',{class:'hg-d',text:d}))))),
-      h('div',{class:'hg-rules'},h('div',{class:'lbl',text:'Remember'}),h('ul',{},g.rules.map(r=>h('li',{text:r}))))));
+
+function hxSec(eyebrow,title,lead,...body){ return h('section',{class:'hx-sec'},h('div',{class:'hx-sec-h'},h('div',{class:'eyebrow',text:eyebrow}),h('h2',{class:'hx-h2',text:title}),lead?h('p',{class:'hx-lead',text:lead}):null),...body); }
+function hxSteps(g){
+  return h('ol',{class:'hx-steps'},g.steps.map(([ic,t,d,m],i)=>h('li',{class:'hx-step'},
+    h('div',{class:'hx-step-top'},h('span',{class:'hx-num',text:String(i+1).padStart(2,'0')}),h('span',{class:'hx-step-ic'},hxIco(ic))),
+    h('div',{class:'hx-step-t',text:t}),h('div',{class:'hx-step-d',text:d}),
+    m?h('div',{class:'hx-step-m'},h('span',{class:'hx-tap',text:'Tap'}),hxMock(m)):null)));
+}
+/* infographic: the SLATE spine of phases, each ending at a dated gate */
+function hxSpine(){
+  const ks=['0','1','2','3','4','5','6','7','8','9'];
+  return h('div',{class:'hx-card'},
+    h('div',{class:'hx-spine',role:'list'},ks.map(k=>h('div',{class:'hx-ph'+(k==='4'?' side':''),role:'listitem'},
+      h('div',{class:'hx-ph-no',text:PH[k].no}),h('div',{class:'hx-ph-bar'},h('i'),h('i'),h('i'),h('b',{title:'Gate'})),
+      h('div',{class:'hx-ph-n',text:PH[k].n}),h('div',{class:'hx-ph-g',text:PH[k].gate})))),
+    h('div',{class:'hx-key'},h('span',{},h('i',{class:'k-dot'}),'Checklist item: ticked, never dated'),h('span',{},h('i',{class:'k-gate'}),'Gate deliverable: dated, counts on the dashboard'),h('span',{},h('i',{class:'k-side'}),'Phase 4 runs beside 5 and 6 once the design is frozen')));
+}
+/* infographic: how a task moves */
+function hxTaskFlow(){
+  const node=(c,t,s)=>h('div',{class:'hx-node',style:`--c:${c}`},h('b',{text:t}),h('span',{text:s}));
+  const arr=()=>h('div',{class:'hx-arr','aria-hidden':'true'},hxIco('arrow'));
+  return h('div',{class:'hx-card'},
+    h('div',{class:'hx-flow'},node('var(--muted)','Assigned','Pod lead gives you the task'),arr(),node('var(--late)','Date proposed','Pod lead suggests a target'),arr(),node('var(--ink)','COO approves','Now it counts'),arr(),node('var(--early)','In progress','Move it on the Board'),arr(),node('var(--ontime)','Done','Locked, with the date')),
+    h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('clock')),h('div',{},h('b',{text:'Running late?'}),h('span',{text:' Request a new date with a reason. The COO approves or returns it; the original target stays on record as R0, each change is R1, R2…'}))),
+    h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('doc')),h('div',{},h('b',{text:'Client sent changes after it was done?'}),h('span',{text:' Use + Client revision. It becomes a new linked task; the original on-time record is kept.'}))));
+}
+/* infographic: messages and the one-tap replies */
+function hxMessages(){
+  const chip=(t,c)=>h('span',{class:'hx-chip',style:c?`--c:${c}`:'',text:t});
+  return h('div',{class:'hx-card hx-msg'},
+    h('div',{class:'hx-bub in'},h('div',{class:'hx-bub-h'},avaEl(ownerId(),true,'sm'),h('b',{text:'Principal'}),h('span',{text:'9:05'})),h('div',{text:'Site visit moved to 3 pm today.'})),
+    h('div',{class:'hx-msg-arrow','aria-hidden':'true'},hxIco('down')),
+    h('div',{class:'hx-replies'},chip('On it','var(--ink)'),chip('Already done','var(--ontime)'),chip('Will do it later','var(--early)'),chip('Need help','var(--overdue)'),chip('Remind me…','var(--late)')),
+    h('p',{class:'hx-foot',text:'The message stays on Home until you answer. Your reply goes straight back to the sender, and both are kept in the log. Remind me brings it back in 1 hour, 3 hours, this evening or tomorrow morning.'}));
+}
+/* infographic: how points are earned */
+function hxScore(){
+  const bar=(l,v,c,n)=>h('div',{class:'hx-bar'},h('span',{class:'hx-bar-l',text:l}),h('div',{class:'hx-bar-t'},h('i',{style:`width:${Math.min(v,110)/110*100}%;background:${c}`})),h('b',{text:n}));
+  return h('div',{class:'hx-card hx-score'},
+    h('div',{class:'hx-eq'},h('div',{class:'hx-eq-b'},h('b',{text:'3'}),h('span',{text:'Deliverable'})),h('em',{text:'or'}),h('div',{class:'hx-eq-b'},h('b',{text:'1'}),h('span',{text:'Task'})),h('em',{text:'×'}),h('div',{class:'hx-eq-b'},h('b',{text:'1–2'}),h('span',{text:'Project size'})),h('em',{text:'×'}),h('div',{class:'hx-eq-b'},h('b',{text:'1.25'}),h('span',{text:'Fast track'})),h('em',{text:'='}),h('div',{class:'hx-eq-b dark'},h('b',{text:'Points'}),h('span',{text:'possible'}))),
+    h('div',{class:'hx-bars'},bar('Early',110,'var(--early)','110%'),bar('On time',100,'var(--ontime)','100%'),bar('2 days late',90,'var(--late)','90%'),bar('6 days late',70,'var(--late)','70%'),bar('Overdue',0,'var(--overdue)','0%')),
+    h('p',{class:'hx-foot',text:'You earn the share shown for each item. Late costs 5% a day, down to 40%; overdue earns nothing until it is done. No early bonus on relaxed projects. 100 on your index is the average for your role.'}));
+}
+/* infographic: what reaches the Principal and the COO */
+function hxInbox(){
+  const src=[['cal','Timelines and date changes'],['users','Support and pod requests'],['doc','Extra revision rounds'],['flag','Phase completion dates'],['meet','Minutes to approve'],['layers','New project requests'],['trash','Project deletions (Principal)'],['chat','Replies to your messages']];
+  return h('div',{class:'hx-card'},h('div',{class:'hx-inbox'},
+    h('div',{class:'hx-src'},src.map(([i,t])=>h('div',{class:'hx-src-i'},hxIco(i),h('span',{text:t})))),
+    h('div',{class:'hx-fan','aria-hidden':'true'},hxIco('arrow')),
+    h('div',{class:'hx-home'},hxIco('home'),h('b',{text:'Home'}),h('span',{text:'Approve, return or reply. Each decision is logged with your name and the time.'}))));
+}
+/* infographic: drafting load bar */
+function hxLoad(){
+  const row=(n,a)=>h('div',{class:'hx-bar'},h('span',{class:'hx-bar-l',text:n}),h('div',{class:'hx-bar-t seg'},a.map(([w,c])=>h('i',{style:`width:${w}%;background:${c}`}))),h('b',{text:String(a.reduce((x,y)=>x+y[2],0))}));
+  return h('div',{class:'hx-card hx-score'},h('div',{class:'hx-bars'},row('Drafter A',[[10,'var(--overdue)',1],[40,'var(--late)',4],[20,'var(--early)',2]]),row('Drafter B',[[20,'var(--late)',2],[10,'var(--early)',1]]),row('Drafter C',[[30,'var(--early)',3],[10,'var(--faint)',1]])),
+    h('div',{class:'hx-key'},h('span',{},h('i',{style:'background:var(--overdue)'}),'Overdue'),h('span',{},h('i',{style:'background:var(--late)'}),'Due in 7 days'),h('span',{},h('i',{style:'background:var(--early)'}),'Later'),h('span',{},h('i',{style:'background:var(--faint)'}),'No date yet')),
+    h('p',{class:'hx-foot',text:'Read it like this: Drafter A is full this week and has something overdue; Drafter B has room. Give B the next job.'}));
+}
+/* where things are: the tab bar, explained */
+function hxTabs(){
+  const t=[['home','Home','Your work, approvals and messages'],['list','Tasks','Every task, the Board and the Timeline'],['layers','Projects','Phases, gates, meetings, agreement'],['cal','Calendar','Dates, gates and meetings by day'],['chart','Dashboard','On-time rate and performance index'],['bell','Notifications','What changed, what is due']];
+  if(amApprover()) t.splice(5,0,['users','People','Message the team · accounts']);
+  return h('div',{class:'hx-tabs'},t.map(([i,n,d])=>h('div',{class:'hx-tab'},h('span',{class:'hx-tab-ic'},hxIco(i)),h('b',{text:n}),h('span',{text:d}))));
 }
 function viewHelp(){
-  const me=myGuide(), order=[me,...['member','lead','head','boss'].filter(k=>k!==me)];
+  const me=myGuide(); if(!S.helpRole) S.helpRole=me; const k=S.helpRole, g=HOWTO.find(x=>x.key===k);
   if(!pref.helpSeen) savePref('helpSeen',1);
-  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Guide'}),h('h1',{class:'h1',text:'How to use SLATE OS'}),h('p',{class:'lead',text:'Your role first. Every project runs on the SLATE standard phases: each phase ends at a dated gate, and the work inside is a checklist.'}))),
-    ...order.map(k=>guideCard(HOWTO.find(g=>g.key===k),k===me))];
+  const roleExtra={member:[hxSec('Scoring','How your points work','Every item carries points. Delivering on time earns them in full.',hxScore())],
+    lead:[hxSec('Scoring','How the pod is scored','Your pod is ranked on timeliness against the studio average.',hxScore())],
+    head:[hxSec('Load','Reading the support team load','Dashboard › Support team load shows every drafter’s open work.',hxLoad())],
+    boss:[hxSec('Approvals','What lands on your Home','Anything that needs a decision comes to you. Nothing counts until it is approved.',hxInbox())]}[k];
+  return [h('div',{class:'hx-hero'},
+      h('div',{class:'hx-mark','aria-hidden':'true'},h('i')),
+      h('div',{class:'eyebrow',text:'Guide'}),h('h1',{class:'h1',text:'How to use SLATE OS'}),
+      h('p',{class:'lead',text:'One spine of phases for every project. Each phase ends at a dated gate; the work inside it is a checklist. Pick your role to see your routine.'}),
+      h('div',{class:'hx-roles',role:'tablist'},HOWTO.map(x=>h('button',{type:'button',role:'tab','aria-selected':String(x.key===k),class:'hx-role'+(x.key===k?' on':''),onclick:()=>{S.helpRole=x.key;render(true)}},h('b',{text:x.title}),x.key===me?h('span',{text:'You'}):null)))),
+    hxSec('Your routine',g.title,g.who,hxSteps(g)),
+    ...roleExtra,
+    hxSec('The spine','Ten phases, ten gates','Client projects follow these phases. The project type decides which are switched on.',hxSpine()),
+    hxSec('Tasks','The life of a task','Only dates the COO approves count. Every step is kept in the task’s history.',hxTaskFlow()),
+    hxSec('Messages','One message, one tap','The Principal and the COO can message anyone. You answer from Home.',hxMessages()),
+    hxSec('Find your way','Where things are',null,hxTabs()),
+    hxSec('Remember','Ground rules',g.title,h('div',{class:'hx-rules'},g.rules.map(r=>h('div',{class:'hx-rule'},h('span',{class:'hx-rule-ic'},hxIco('check')),h('span',{text:r})))))];
 }
 
 
