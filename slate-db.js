@@ -507,8 +507,10 @@
       el('div', { class: 'form-title' }, n ? `To: ${[...PS.sel].map(id => nm(people.get(id))).join(', ')}` : 'Tap people above to select them'),
       ta, el('div', { class: 'bar', style: 'justify-content:space-between' }, count, send), note);
     if (!sentLoaded) loadSent();
+    const acctBtn = canAdmin() ? el('button', { class: 'btn', type: 'button', id: 'slate-accounts-btn' }, 'Accounts and passwords') : null;
+    if (acctBtn) acctBtn.addEventListener('click', accountsSheet);
     return [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Studio'), el('h1', { class: 'h1' }, 'People'),
-              el('p', { class: 'lead' }, 'Tap people to select them, write a short message and tap Notify. It arrives with sound even if their app is closed; they reply with one tap.'))),
+              el('p', { class: 'lead' }, 'Tap people to select them, write a short message and tap Notify. It arrives with sound even if their app is closed; they reply with one tap.')), ...(acctBtn ? [acctBtn] : [])),
             search, ...secs, sentView(), compose];
   }
   /* what I sent, with each person's reply */
@@ -599,10 +601,99 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadMessages(); });
   }
 
+  /* ---------------- accounts: the Principal and the COO reset passwords and add people ---------------- */
+  const canAdmin = () => !!me && me.active !== false && (me.designation === 'principal' || me.designation === 'coo');
+  async function adminCall(body) {
+    const { data, error } = await sb.functions.invoke('admin-users', { body });
+    if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.error) m = j.error; } catch (_) {} throw new Error(m); }
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  }
+  function accountsSheet() {
+    addCss();
+    const old = document.getElementById('slate-accounts'); if (old) old.remove();
+    const boss = me.designation === 'principal';
+    const nm = p => { try { return nameOf(p.id); } catch (_) { return displayName(p); } };
+    const root = el('div', { id: 'slate-accounts', class: 'slate-sheet slate-acc', role: 'dialog', 'aria-label': 'Accounts and passwords' });
+    const box = el('div', { class: 'box' });
+    const result = el('div');
+    const showResult = (title, email, pw, name) => {
+      const copy = el('button', { class: 'primary', type: 'button' }, 'Copy password');
+      copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(pw); copy.textContent = 'Copied'; } catch (_) { copy.textContent = 'Select and copy it above'; } });
+      const msgTxt = `SLATE OS: sign in at ${location.origin} with ${email} and the temporary password ${pw}. You'll choose your own password straight after.`;
+      const share = el('button', { class: 'link', type: 'button' }, 'Share…');
+      share.addEventListener('click', async () => { try { if (navigator.share) await navigator.share({ text: msgTxt }); else { await navigator.clipboard.writeText(msgTxt); share.textContent = 'Message copied'; } } catch (_) {} });
+      result.replaceChildren(el('div', { class: 'slate-acc-res', role: 'status' },
+        el('b', {}, title), el('span', {}, `${name} · ${email}`),
+        el('code', {}, pw), el('div', { class: 'row', style: 'justify-content:flex-start;gap:16px' }, copy, share),
+        el('span', { class: 'f' }, 'Shown only this once. Give it to them in person or on WhatsApp. When they sign in, SLATE OS makes them choose their own password, so you never know it. This is in the audit trail.')));
+      result.scrollIntoView({ block: 'nearest' });
+    };
+    // add a person
+    const roles = (() => { try { return ROLE_SUGGEST; } catch (_) { return ['COO', 'Pod Leader', 'Junior Architect', 'Design Associate Lead', 'Design Associate', 'Visualizer', 'Intern', 'Others']; } })()
+      .filter(r => r !== 'Principal' && (boss || r !== 'COO'));
+    const tms = (() => { try { return teams(); } catch (_) { return []; } })();
+    const fName = el('input', { type: 'text', maxlength: '80', autocomplete: 'off' });
+    const fEmail = el('input', { type: 'email', inputmode: 'email', autocomplete: 'off', placeholder: 'name@slate-atelier.com' });
+    const fRole = el('select', {}, el('option', { value: '' }, 'Choose…'), ...roles.map(r => el('option', { value: r }, r)));
+    const fTeam = el('select', {}, el('option', { value: '' }, 'No team yet'), ...tms.map(t => { let l = t; try { l = podLabel(t); } catch (_) {} return el('option', { value: t }, l); }));
+    const addMsg = el('div', { class: 'msg', role: 'status' });
+    const addGo = el('button', { class: 'primary', type: 'submit' }, 'Create account');
+    const addForm = el('form', { class: 'slate-acc-card', novalidate: '' }, el('b', {}, 'Add a person'),
+      el('label', {}, 'Name', fName), el('label', {}, 'Studio email', fEmail),
+      el('div', { class: 'slate-acc-2' }, el('label', {}, 'Designation', fRole), el('label', {}, 'Team', fTeam)), addGo, addMsg);
+    addForm.addEventListener('submit', async e => {
+      e.preventDefault(); addMsg.className = 'msg err';
+      if (!fName.value.trim()) return (addMsg.textContent = 'Enter their name.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fEmail.value.trim())) return (addMsg.textContent = 'Enter a valid email address.');
+      if (!fRole.value) return (addMsg.textContent = 'Choose their designation.');
+      addGo.disabled = true; addMsg.className = 'msg'; addMsg.textContent = 'Creating…';
+      try {
+        const r = await adminCall({ action: 'create', email: fEmail.value.trim(), full_name: fName.value.trim(), role_label: fRole.value, team: fTeam.value });
+        addMsg.textContent = ''; showResult('Account created', r.email, r.password, fName.value.trim());
+        fName.value = fEmail.value = ''; fRole.value = fTeam.value = '';
+      } catch (err) { addMsg.className = 'msg err'; addMsg.textContent = err.message; }
+      addGo.disabled = false;
+    });
+    // reset someone's password
+    const q = el('input', { type: 'search', placeholder: 'Search people', 'aria-label': 'Search people' });
+    const list = el('div', { class: 'slate-acc-list' });
+    const draw = () => {
+      const t = q.value.trim().toLowerCase();
+      const ps = [...people.values()].filter(p => p.id !== me.id && p.active !== false && (!t || (nm(p) + ' ' + (p.email || '')).toLowerCase().includes(t)))
+        .sort((a, b) => nm(a).localeCompare(nm(b)));
+      list.replaceChildren(...ps.map(p => {
+        const locked = !boss && (p.designation === 'principal' || p.designation === 'coo');
+        const st = el('div', { class: 'msg', role: 'status' });
+        const b = el('button', { class: 'link', type: 'button' }, locked ? 'Principal only' : 'Reset password');
+        if (locked) b.disabled = true;
+        let armed = false;
+        b.addEventListener('click', async () => {
+          if (!armed) { armed = true; b.textContent = 'Tap again to reset'; b.classList.add('danger'); setTimeout(() => { if (armed && b.isConnected && !b.disabled) { armed = false; b.textContent = 'Reset password'; b.classList.remove('danger'); } }, 4000); return; }
+          armed = false; b.disabled = true; b.textContent = 'Resetting…';
+          try { const r = await adminCall({ action: 'reset', user_id: p.id }); showResult('Password reset', r.email, r.password, nm(p)); b.textContent = 'Reset done'; }
+          catch (err) { st.className = 'msg err'; st.textContent = err.message; b.disabled = false; b.textContent = 'Reset password'; }
+          b.classList.remove('danger');
+        });
+        return el('div', { class: 'slate-acc-row' }, el('div', { style: 'min-width:0' }, el('div', { class: 'n' }, nm(p)), el('div', { class: 'e' }, [p.role_label, p.email].filter(Boolean).join(' · ')), st), b);
+      }));
+    };
+    q.addEventListener('input', draw); draw();
+    const close = el('button', { class: 'link', type: 'button' }, 'Close');
+    close.addEventListener('click', () => root.remove());
+    const close2 = el('button', { class: 'link', type: 'button', style: 'justify-self:end' }, 'Close');
+    close2.addEventListener('click', () => root.remove());
+    box.append(close2, el('div', { class: 'brand' }, el('b', {}, 'Accounts'), el('i', {}), el('span', {}, boss ? 'Principal' : 'COO')),
+      el('p', { class: 'f', style: 'margin:0' }, 'Someone forgot their password? Reset it here and give them the temporary one. ' + (boss ? 'You can reset anyone’s.' : 'Only the Principal can reset the Principal’s password.')),
+      result, addForm, el('div', { class: 'slate-acc-card' }, el('b', {}, 'Reset a password'), q, list), el('div', { class: 'row' }, close));
+    root.append(box); document.body.append(root);
+  }
+  window.slateAccounts = accountsSheet;
+
   /* ---------------- audit trail: every change, notification and message, from the database log ---------------- */
   const AU = { rows: [], loaded: false, busy: false, kind: '', more: true, err: '' };
   const AU_KINDS = [['', 'Everything'], ['msg', 'Messages'], ['notification', 'Notifications'], ['projects', 'Projects'], ['tasks', 'Tasks'], ['people', 'People'], ['other', 'Other']];
-  const AU_TABLES = { msg: ['message'], notification: ['notification'], projects: ['projects', 'project', 'pmeetings'], tasks: ['tasks', 'lead', 'tasklib'], people: ['profiles', 'podnames', 'podreq', 'podjoin', 'rolereq'] };
+  const AU_TABLES = { msg: ['message'], notification: ['notification'], projects: ['projects', 'project', 'pmeetings'], tasks: ['tasks', 'lead', 'tasklib'], people: ['profiles', 'podnames', 'podreq', 'podjoin', 'rolereq', 'account'] };
   async function loadAudit(reset) {
     if (AU.busy) return; AU.busy = true; if (reset) { AU.rows = []; AU.more = true; }
     let q = sb.from('activity_log').select('id,at,actor,table_name,row_id,action,subject_user,before,after').order('id', { ascending: false }).limit(150);
@@ -626,6 +717,12 @@
       if (r.action === 'read') return [`${nm(r.actor)} read ${nm(a.from)}’s message`, a.message];
       if (r.action === 'reply') return [`${nm(r.actor)} replied “${a.reply}” to ${nm(a.from)}`, a.message];
       if (r.action === 'remind') return [`${nm(r.actor)} set a reminder${a.remind_at ? ' for ' + when(a.remind_at) : ''}`, a.message];
+    }
+    if (r.table_name === 'account') {
+      const who = nm(r.subject_user);
+      if (r.action === 'password_reset') return [`${nm(r.actor)} reset ${who}’s password`, a.email];
+      if (r.action === 'account_create') return [`${nm(r.actor)} created an account for ${who}`, a.email];
+      if (r.action === 'password_chosen') return [`${who} chose a new password`, ''];
     }
     if (r.table_name === 'notification') return [`Notification to ${nm(r.subject_user)}${r.actor ? ' · from ' + nm(r.actor) : ''}: ${a.title || ''}`, a.body];
     if (r.table_name === 'profiles') {
@@ -697,6 +794,25 @@
   .slate-bub-n{font-size:14px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
   .slate-bub-r{font-size:11.5px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slate-bub.on .slate-bub-n{color:#000}
+  .slate-acc{display:block;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-block:max(24px,env(safe-area-inset-top,0px)) 40px}
+  .slate-acc .box{width:min(560px,100%);margin:0 auto}
+  .slate-acc .f{font-size:13.5px;color:#6e6e73;line-height:1.4}
+  .slate-acc-card{display:grid;gap:12px;background:#f2f2f7;border-radius:14px;padding:16px}
+  .slate-acc-card>b{font-size:16px}
+  .slate-acc-card input,.slate-acc-card select{background:#fff}
+  .slate-acc select{font:inherit;font-size:16px;background:#fff;border:0;border-radius:10px;padding:12px 10px;color:#000;width:100%}
+  .slate-acc-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:440px){.slate-acc-2{grid-template-columns:1fr}}
+  .slate-acc-list{display:grid;background:#fff;border-radius:10px;overflow:hidden}
+  .slate-acc-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid #e5e5ea}
+  .slate-acc-row:first-child{border-top:0}
+  .slate-acc-row .n{font-weight:600;font-size:15px}
+  .slate-acc-row .e{font-size:12.5px;color:#8e8e93;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-acc-row .link{white-space:nowrap}
+  .slate-acc-row .link.danger{color:#d7262b}
+  .slate-acc-row .link:disabled{color:#c7c7cc;cursor:default}
+  .slate-acc-res{display:grid;gap:8px;background:#fff;border:2px solid #34C759;border-radius:14px;padding:16px}
+  .slate-acc-res code{font:600 22px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;background:#f2f2f7;border-radius:10px;padding:12px;text-align:center;user-select:all;-webkit-user-select:all}
   .slate-prow input{width:20px;height:20px;margin:0;accent-color:#000}
   #slate-acct{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));z-index:6;
     font:500 12.5px -apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#000;border:0;border-radius:999px;padding:6px 12px;cursor:pointer}
@@ -717,15 +833,23 @@
     const say = (t, err) => { msg.textContent = t || ''; msg.className = 'msg' + (err ? ' err' : ''); };
     const brand = el('div', { class: 'brand' }, el('b', {}, 'SLATE OS'), el('i', {}), el('span', {}, 'Design with purpose'));
     const box = el('form', { class: 'box', novalidate: '' });
-    if (mode === 'recovery') {
+    if (mode === 'recovery' || mode === 'temp') {
+      const temp = mode === 'temp';
       const pw = el('input', { type: 'password', autocomplete: 'new-password', minlength: '8', required: '' });
+      const pw2 = el('input', { type: 'password', autocomplete: 'new-password', minlength: '8' });
       const go = el('button', { class: 'primary', type: 'submit' }, 'Set password and continue');
-      box.append(brand, el('label', {}, 'New password (8+ characters)', pw), go, msg);
+      const out = el('button', { class: 'link', type: 'button' }, 'Sign out');
+      out.addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+      box.append(brand, temp ? el('p', { style: 'margin:0;font-size:15px;line-height:1.4;text-align:center' }, 'You signed in with a temporary password. Choose your own to continue. Only you will know it.') : el('span'),
+        el('label', {}, 'New password (8+ characters)', pw), el('label', {}, 'Type it again', pw2), go, temp ? el('div', { class: 'row' }, out) : el('span'), msg);
       box.addEventListener('submit', async e => {
         e.preventDefault(); if (pw.value.length < 8) return say('Use at least 8 characters.', true);
+        if (pw.value !== pw2.value) return say('The two passwords don’t match.', true);
         go.disabled = true; say('Saving…');
         const { error } = await sb.auth.updateUser({ password: pw.value });
-        go.disabled = false; if (error) return say(friendly(error).message, true);
+        go.disabled = false;
+        if (error) return say(/different/i.test(error.message) ? 'Choose a password different from the temporary one.' : friendly(error).message, true);
+        if (temp) { try { await sb.rpc('temp_password_pending'); } catch (_) {} }
         onDone();
       });
       root.append(box); pw.focus(); return root;
@@ -827,6 +951,7 @@
   async function start(session) {
     if (started) return; started = true;
     authUser = session.user;
+    try { const { data: tp } = await sb.rpc('temp_password_pending'); if (tp === true) await new Promise(r => whenBody(() => authScreen('temp', r))); } catch (_) {}
     try { await loadAll(); } catch (e) { started = false; authScreen('signin'); return; }
     hideAuth(); goLive(); addCss(); window.slateAccount = accountPanel;
     setupNotifications();
