@@ -247,27 +247,28 @@
 
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
-  #slate-auth{position:fixed;inset:0;z-index:1000;background:#fff;display:grid;place-items:center;
+  .slate-sheet{position:fixed;inset:0;z-index:1000;background:#fff;display:grid;place-items:center;
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#000;padding:16px}
-  #slate-auth .box{width:min(360px,100%);display:grid;gap:14px}
-  #slate-auth .brand{text-align:center;margin-bottom:6px}
-  #slate-auth .brand b{display:block;font-family:Futura,"Futura PT","Century Gothic",sans-serif;font-size:26px;letter-spacing:.14em;font-weight:600}
-  #slate-auth .brand i{display:block;width:30px;height:3px;background:#d7262b;margin:12px auto}
-  #slate-auth .brand span{font-size:12px;color:#8e8e93;letter-spacing:.04em}
-  #slate-auth label{display:grid;gap:6px;font-size:12px;font-weight:600;color:#8e8e93}
-  #slate-auth input{font:inherit;font-size:16px;background:#f2f2f7;border:0;border-radius:10px;padding:12px 14px;color:#000}
-  #slate-auth input:focus{outline:2px solid #000}
-  #slate-auth button{font:inherit;font-size:15px;font-weight:600;border:0;border-radius:10px;padding:12px 16px;cursor:pointer}
-  #slate-auth .primary{background:#000;color:#fff}
-  #slate-auth .link{background:none;color:#000;padding:4px;font-weight:500;text-decoration:underline;text-decoration-color:#c7c7cc;text-underline-offset:3px}
-  #slate-auth .row{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
-  #slate-auth .msg{font-size:13.5px;min-height:18px}
-  #slate-auth .msg.err{color:#ff3b30}
-  #slate-auth button[disabled]{opacity:.5}
+  .slate-sheet .box{width:min(360px,100%);display:grid;gap:14px}
+  .slate-sheet .brand{text-align:center;margin-bottom:6px}
+  .slate-sheet .brand b{display:block;font-family:Futura,"Futura PT","Century Gothic",sans-serif;font-size:26px;letter-spacing:.14em;font-weight:600}
+  .slate-sheet .brand i{display:block;width:30px;height:3px;background:#d7262b;margin:12px auto}
+  .slate-sheet .brand span{font-size:12px;color:#8e8e93;letter-spacing:.04em}
+  .slate-sheet label{display:grid;gap:6px;font-size:12px;font-weight:600;color:#8e8e93}
+  .slate-sheet input{font:inherit;font-size:16px;background:#f2f2f7;border:0;border-radius:10px;padding:12px 14px;color:#000}
+  .slate-sheet input:focus{outline:2px solid #000}
+  .slate-sheet button{font:inherit;font-size:15px;font-weight:600;border:0;border-radius:10px;padding:12px 16px;cursor:pointer}
+  .slate-sheet .primary{background:#000;color:#fff}
+  .slate-sheet .link{background:none;color:#000;padding:4px;font-weight:500;text-decoration:underline;text-decoration-color:#c7c7cc;text-underline-offset:3px}
+  .slate-sheet .row{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .slate-sheet .msg{font-size:13.5px;min-height:18px}
+  .slate-sheet .msg.err{color:#ff3b30}
+  .slate-sheet button[disabled]{opacity:.5}
   #slate-acct{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));z-index:6;
     font:500 12.5px -apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#000;border:0;border-radius:999px;padding:6px 12px;cursor:pointer}
   @media (max-width:560px){#slate-acct{top:auto;bottom:calc(14px + env(safe-area-inset-bottom,0px));position:fixed}}`;
 
+  function addCss() { if (!document.getElementById('slate-css')) document.head.append(el('style', { id: 'slate-css' }, CSS)); }
   function el(tag, attrs, ...kids) {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) { if (k === 'on') for (const [e, f] of Object.entries(v)) n.addEventListener(e, f); else if (v != null) n.setAttribute(k, v); }
@@ -276,7 +277,7 @@
   }
   function authScreen(mode, onDone) {
     let root = document.getElementById('slate-auth');
-    if (!root) { document.head.append(el('style', {}, CSS)); root = el('div', { id: 'slate-auth', role: 'dialog', 'aria-label': 'Sign in to SLATE OS' }); document.body.append(root); }
+    if (!root) { addCss(); root = el('div', { id: 'slate-auth', class: 'slate-sheet', role: 'dialog', 'aria-label': 'Sign in to SLATE OS' }); document.body.append(root); }
     root.innerHTML = '';
     const msg = el('div', { class: 'msg', role: 'status' });
     const say = (t, err) => { msg.textContent = t || ''; msg.className = 'msg' + (err ? ' err' : ''); };
@@ -323,12 +324,42 @@
   }
   function hideAuth() { const r = document.getElementById('slate-auth'); if (r) r.remove(); }
 
+  function accountPanel() {
+    if (document.getElementById('slate-acct-panel')) return;
+    const msg = el('div', { class: 'msg', role: 'status' });
+    const say = (t, err) => { msg.textContent = t || ''; msg.className = 'msg' + (err ? ' err' : ''); };
+    const pw1 = el('input', { type: 'password', autocomplete: 'new-password', minlength: '8' });
+    const pw2 = el('input', { type: 'password', autocomplete: 'new-password', minlength: '8' });
+    const save = el('button', { class: 'primary', type: 'submit' }, 'Change password');
+    const out = el('button', { class: 'link', type: 'button' }, 'Sign out');
+    const close = el('button', { class: 'link', type: 'button' }, 'Close');
+    const form = el('form', { class: 'box', novalidate: '' },
+      el('div', { class: 'brand' }, el('b', {}, 'Account'), el('i', {}), el('span', {}, authUser ? authUser.email : '')),
+      el('label', {}, 'New password (8+ characters)', pw1), el('label', {}, 'Type it again', pw2), save,
+      el('div', { class: 'row' }, out, close), msg);
+    const root = el('div', { id: 'slate-acct-panel', class: 'slate-sheet', role: 'dialog', 'aria-label': 'Account' }, form);
+    document.body.append(root);
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (pw1.value.length < 8) return say('Use at least 8 characters.', true);
+      if (pw1.value !== pw2.value) return say('The two passwords don’t match.', true);
+      save.disabled = true; say('Saving…');
+      const { error } = await sb.auth.updateUser({ password: pw1.value });
+      save.disabled = false;
+      if (error) return say(friendly(error).message, true);
+      pw1.value = pw2.value = ''; say('Password changed. Use it next time you sign in.');
+    });
+    out.addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+    close.addEventListener('click', () => root.remove());
+    pw1.focus();
+  }
   function accountButton() {
+    addCss();
     const place = () => {
       const chrome = document.querySelector('.chrome');
       if (!chrome || chrome.querySelector('#slate-acct')) return;
-      const b = el('button', { id: 'slate-acct', type: 'button', title: 'Signed in as ' + (authUser && authUser.email) }, 'Sign out');
-      b.addEventListener('click', async () => { if (confirm('Sign out of SLATE OS?')) { await sb.auth.signOut(); location.reload(); } });
+      const b = el('button', { id: 'slate-acct', type: 'button', title: 'Signed in as ' + (authUser && authUser.email) }, 'Account');
+      b.addEventListener('click', accountPanel);
       chrome.append(b);
     };
     new MutationObserver(place).observe(document.body, { childList: true, subtree: true });
