@@ -254,6 +254,73 @@
     }
   };
 
+
+  /* ---------------- notifications: push to this device + the number on the app icon ---------------- */
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const urlB64 = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+  const ls = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} } };
+
+  function notifStatus() {
+    if (!pushSupported()) return isIOS() && !isStandalone() ? 'install-first' : 'unsupported';
+    if (isIOS() && !isStandalone()) return 'install-first';
+    return Notification.permission;                    // 'default' | 'granted' | 'denied'
+  }
+  async function enableNotifications() {
+    if (notifStatus() === 'install-first') throw new Error('On iPhone, add SLATE OS to your Home Screen first, then open it from there.');
+    if (!pushSupported()) throw new Error('This browser can’t receive notifications.');
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') throw new Error(perm === 'denied' ? 'Notifications are blocked for SLATE OS. Allow them in your phone or browser settings.' : 'Notifications were not turned on.');
+    const { data: key, error } = await sb.rpc('push_public_key');
+    if (error || !key) throw new Error('The notification service isn’t ready. Try again shortly.');
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(key) });
+    const j = sub.toJSON();
+    const { error: e2 } = await sb.from('push_subs').upsert({ endpoint: j.endpoint, user_id: authUser.id, p256dh: j.keys.p256dh, auth: j.keys.auth, ua: navigator.userAgent.slice(0, 200) }, { onConflict: 'endpoint' });
+    if (e2) throw friendly(e2);
+    ls.set('slate-notif-asked', '1');
+    return 'granted';
+  }
+  // Keep this device's subscription saved (it can change after a browser update).
+  async function refreshSubscription() {
+    if (notifStatus() !== 'granted') return;
+    try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+      if (!sub) return enableNotifications(); const j = sub.toJSON();
+      await sb.from('push_subs').upsert({ endpoint: j.endpoint, user_id: authUser.id, p256dh: j.keys.p256dh, auth: j.keys.auth, ua: navigator.userAgent.slice(0, 200) }, { onConflict: 'endpoint' });
+    } catch (_) {}
+  }
+  // The icon number: while the app is open it mirrors the bell; opening the app marks pushes as seen.
+  function syncBadge() {
+    if (document.visibilityState !== 'visible') return;
+    let n = 0; try { n = typeof window.newCount === 'function' ? Number(window.newCount()) || 0 : 0; } catch (_) {}
+    try { if ('setAppBadge' in navigator) (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {}); } catch (_) {}
+  }
+  function markSeen() { if (document.visibilityState === 'visible') sb.rpc('notifications_seen').then(() => {}, () => {}); }
+  function notifBanner() {
+    const st = notifStatus();
+    if (ls.get('slate-notif-asked') || !(st === 'default' || st === 'install-first')) return;
+    const place = () => {
+      const main = document.querySelector('main'); if (!main || document.getElementById('slate-notif-banner')) return;
+      const msg = st === 'install-first' ? 'Get notifications on this iPhone: tap Share → Add to Home Screen, then open SLATE OS from the icon.' : 'Get notified about tasks and approvals, even when SLATE OS is closed.';
+      const on = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Turn on');
+      const later = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Not now');
+      const b = el('div', { id: 'slate-notif-banner', class: 'banner' }, el('span', {}, msg), el('div', { class: 'actions' }, ...(st === 'default' ? [on] : []), later));
+      on.addEventListener('click', async () => { on.disabled = true; try { await enableNotifications(); b.remove(); } catch (e) { on.disabled = false; alertMsg(b, e.message); } });
+      later.addEventListener('click', () => { ls.set('slate-notif-asked', '1'); b.remove(); });
+      main.prepend(b);
+    };
+    new MutationObserver(place).observe(document.body, { childList: true, subtree: true }); place();
+  }
+  function alertMsg(box, text) { let m = box.querySelector('.slate-err'); if (!m) { m = el('div', { class: 'slate-err', style: 'color:#ff3b30;font-size:13px;width:100%' }); box.append(m); } m.textContent = text; }
+  function setupNotifications() {
+    window.slateNotif = { status: notifStatus, enable: enableNotifications };
+    refreshSubscription(); markSeen(); syncBadge(); notifBanner();
+    document.addEventListener('visibilitychange', () => { markSeen(); syncBadge(); });
+    setInterval(syncBadge, 4000);
+  }
+
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
   .slate-sheet{position:fixed;inset:0;z-index:1000;background:#fff;display:grid;place-items:center;
@@ -333,6 +400,20 @@
   }
   function hideAuth() { const r = document.getElementById('slate-auth'); if (r) r.remove(); }
 
+  function notifRow() {
+    const st = notifStatus();
+    const text = { granted: 'Notifications are on for this device.', denied: 'Notifications are blocked. Allow them for SLATE OS in your phone or browser settings.',
+      'install-first': 'On iPhone, add SLATE OS to your Home Screen (Share → Add to Home Screen), then open it from the icon to turn on notifications.',
+      unsupported: 'This browser can’t receive notifications.', default: 'Get notified about tasks and approvals, even when SLATE OS is closed.' }[st];
+    const box = el('div', { style: 'display:grid;gap:8px;background:#f2f2f7;border-radius:10px;padding:12px 14px;font-size:14px' },
+      el('b', {}, 'Notifications'), el('span', { style: 'color:#3c3c43' }, text));
+    if (st === 'default') {
+      const b = el('button', { class: 'primary', type: 'button' }, 'Turn on notifications');
+      b.addEventListener('click', async () => { b.disabled = true; try { await enableNotifications(); box.replaceWith(notifRow()); } catch (e) { b.disabled = false; alertMsg(box, e.message); } });
+      box.append(b);
+    }
+    return box;
+  }
   function accountPanel() {
     if (document.getElementById('slate-acct-panel')) return;
     const msg = el('div', { class: 'msg', role: 'status' });
@@ -344,6 +425,7 @@
     const close = el('button', { class: 'link', type: 'button' }, 'Close');
     const form = el('form', { class: 'box', novalidate: '' },
       el('div', { class: 'brand' }, el('b', {}, 'Account'), el('i', {}), el('span', {}, authUser ? authUser.email : '')),
+      notifRow(),
       el('label', {}, 'New password (8+ characters)', pw1), el('label', {}, 'Type it again', pw2), save,
       el('div', { class: 'row' }, out, close), msg);
     const root = el('div', { id: 'slate-acct-panel', class: 'slate-sheet', role: 'dialog', 'aria-label': 'Account' }, form);
@@ -383,6 +465,7 @@
     authUser = session.user;
     try { await loadAll(); } catch (e) { started = false; authScreen('signin'); return; }
     hideAuth(); goLive(); addCss(); window.slateAccount = accountPanel;
+    setupNotifications();
     // Dashboard averages: anonymous score inputs for tasks this person can't see.
     window.slateDashRows = async (from, to) => {
       const { data, error } = await sb.rpc('dash_rows', { p_from: from, p_to: to });

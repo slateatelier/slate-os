@@ -1,7 +1,7 @@
 /* SLATE OS service worker: lets the app open from the home screen.
    The page and its scripts are fetched fresh whenever online (so updates arrive at once);
    the saved copy is used only when the network is unavailable. Data calls are never cached. */
-const CACHE = 'slate-os-v1';
+const CACHE = 'slate-os-v2';
 const SHELL = ['/', '/slate-db.js', '/config.js', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
@@ -30,4 +30,25 @@ self.addEventListener('fetch', e => {
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req.mode === 'navigate' ? '/' : req, copy)); }
     return res;
   }).catch(() => caches.match(req.mode === 'navigate' ? '/' : req)));
+});
+
+/* Notifications: shown (with the phone's sound) even when SLATE OS is closed, and the icon number updated. */
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = { title: 'SLATE OS', body: e.data ? e.data.text() : '' }; }
+  const jobs = [self.registration.showNotification(d.title || 'SLATE OS', {
+    body: d.body || '', tag: d.tag, renotify: true, silent: false,
+    icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: d.url || '/' } })];
+  if (typeof d.badge === 'number' && self.navigator && 'setAppBadge' in self.navigator) {
+    jobs.push(d.badge > 0 ? self.navigator.setAppBadge(d.badge) : self.navigator.clearAppBadge());
+  }
+  e.waitUntil(Promise.all(jobs).catch(() => {}));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) if ('focus' in c) return c.focus();
+    return self.clients.openWindow(url);
+  }));
 });
