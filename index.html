@@ -1063,7 +1063,10 @@ const paceOf=p=>(p&&p.std&&PACE[p.std.pace])?p.std.pace:'std';
 const paceName=(p,k)=>{ k=k||paceOf(p); return k==='fast'&&p&&(p.type==='proposal'||(p.std&&p.std.type==='proposal'))?'Proposal sprint':PACE[k]; };
 const canPace=()=>S.canWrite&&(S.isOwner||amApprover());
 const SPRINT_NA=['1-0','1-2','1-6','1-8','1-11','1-12','1-13'];
-const PACE_NOTE={fast:'Shorter dates agreed with the COO, decided the same day, other work gives way. Gate deliverables and tasks count ×1.25.',std:'Standard target days.',relaxed:'Longer dates. Finishing early earns no extra points.',sprint:'Proposal due within days: one pod lead and one junior, one design option, renders only if asked. Phase 0 is folded into phase 1 and the checklist is cut to essentials. Counts ×1.25.'};
+const PACE_BASE={fast:'Shorter dates agreed with the COO, decided the same day, other work gives way.',std:'Standard target days.',relaxed:'Longer dates.',sprint:'Proposal due within days: one pod lead and one junior, one design option, renders only if asked. Phase 0 is folded into phase 1 and the checklist is cut to essentials.'};
+const PACE_SCORE={fast:' Gate deliverables and tasks count ×1.25.',std:'',relaxed:' Finishing early earns no extra points.',sprint:' Counts ×1.25.'};
+const paceNote=k=>(PACE_BASE[k]||'')+(canSeeScoring()?(PACE_SCORE[k]||''):'');
+const PACE_NOTE=new Proxy({},{get:(_,k)=>paceNote(k)});
 const stepsOf=(type,k)=>type==='proposal'&&k==='1'?[['sub','Proposal design submitted for internal review'],['final','Proposal presented to the client']]:(PH[k]?PH[k].steps:[]);
 const TEMPLATES=Object.fromEntries([...Object.entries(STD_DEF).map(([key,d])=>[key,{...d,std:true,items:d.phases.flatMap(k=>stepsOf(key,k).map(([s,txt])=>[txt,'lead',phLabel(k),0,1]))}])]);
 /* interior design: its own task list (not the architectural phase spine). Categories become the project's phases. */
@@ -1801,7 +1804,7 @@ function overallDash(r){
     kpi('Due',c.total),kpi('In advance',c.early,'early'),kpi('On time',c.ontime,'ontime'),kpi('Late',c.late,'late'),kpi('Overdue',c.overdue,'overdue'))];
   const W=[];
   const prow=x=>h('tr',{style:x.k===mp?'font-weight:600':''},h('td',{text:podLabel(x.k)+(x.k===mp?' (your pod)':'')}),h('td',{class:'n',text:x.pos.toFixed(1)}),h('td',{class:'n',text:x.earn.toFixed(1)}),h('td',{class:'n',text:Math.round(x.q*100)+'%'}),h('td',{class:'n',text:x.bc?'+'+x.bc.toFixed(1):'—'}),h('td',{class:'n',text:x.bs?'+'+x.bs.toFixed(1):'—'}),h('td',{class:'n',style:'font-weight:600'+(x.idx<100?';color:var(--overdue)':''),text:String(x.idx)}));
-  W.push(widget('Pod performance index',`${r.label} · 100 = studio average`,ptPods.length?h('div',{},h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
+  if(canSeeScoring()) W.push(widget('Pod performance index',`${r.label} · 100 = studio average`,ptPods.length?h('div',{},h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
     h('thead',{},h('tr',{},h('th',{text:'Pod'}),h('th',{class:'n',text:'Workload'}),h('th',{class:'n',text:'Points'}),h('th',{class:'n',text:'Timeliness'}),h('th',{class:'n',text:'Pod support'}),h('th',{class:'n',text:'Studio'}),h('th',{class:'n',text:'Index'}))),
     h('tbody',{},ptPods.map(prow)))),
     h('p',{class:'f-hint',style:'margin:10px 0 0',text:'Index = timeliness against the studio average (100 = average), plus bonuses for helping other pods and studio jobs. Workload is shown for context and does not change the index. Pod totals only: no individual tasks or names.'}))
@@ -1841,7 +1844,7 @@ function viewDash(){
   const pt=perfTable(r), mine=perf(items);
   const idxOf=D.person?(pt.people.find(x=>x.k===D.person)||{}).idx:(D.pod&&/^pod\b/i.test(D.pod)?(pt.pods.find(x=>x.k===D.pod)||{}).idx:null);
   out.push(h('div',{class:'kpis'},
-    h('div',{class:'kpi dark','data-tip':'Index: people against others in the same role (50% workload + 50% timeliness); pods on timeliness. Points: deliverable 3, task 1, × project size, ×1.25 on fast track; full on time, +10% early (not on relaxed projects), less the later it is, none while overdue.'},h('div',{class:'lbl',text:'Performance points'}),h('div',{class:'num',text:mine.pos?mine.earn.toFixed(1):'—'}),
+    canSeeScoring()&&h('div',{class:'kpi dark','data-tip':'Index: people against others in the same role (50% workload + 50% timeliness); pods on timeliness. Points: deliverable 3, task 1, × project size, ×1.25 on fast track; full on time, +10% early (not on relaxed projects), less the later it is, none while overdue.'},h('div',{class:'lbl',text:'Performance points'}),h('div',{class:'num',text:mine.pos?mine.earn.toFixed(1):'—'}),
       h('div',{class:'lbl',text:idxOf!=null&&idxOf!==undefined?`Index ${idxOf} · 100 = studio average`:(mine.pos?`${Math.round(mine.q*100)}% of ${mine.pos.toFixed(1)} possible`:'Nothing due and past yet')})),
     h('div',{class:'kpi dark'},h('div',{class:'lbl',text:'On-time rate'}),h('div',{class:'num',text:rt==null?'—':Math.round(rt*100)+'%'}),h('div',{class:'lbl',style:rt!=null&&rt*100<tg?'color:#FF6B61':'',text:`Target ${tg}%`+(rt==null?'':rt*100>=tg?' · met':' · below')})),
     kpi('Due',c.total),kpi('In advance',c.early,'early'),kpi('On time',c.ontime,'ontime'),kpi('Late',c.late,'late'),kpi('Overdue',c.overdue,'overdue')));
@@ -1850,7 +1853,7 @@ function viewDash(){
   { const row=(name,sub,x,me)=>h('tr',{style:me?'font-weight:600':''},h('td',{},h('div',{text:name}),sub&&h('div',{class:'sub2',text:sub})),h('td',{class:'n',text:x.pos.toFixed(1)}),h('td',{class:'n',text:x.earn.toFixed(1)}),h('td',{class:'n',text:Math.round(x.q*100)+'%'}),h('td',{class:'n',text:x.bc?'+'+x.bc.toFixed(1):'—'}),h('td',{class:'n',text:x.bs?'+'+x.bs.toFixed(1):'—'}),h('td',{class:'n',style:'font-weight:600'+(x.idx!=null&&x.idx<100?';color:var(--overdue)':''),title:x.ns?'Interns and other staff are not scored':x.solo?'Only one person in this role: timeliness against the studio average':null,text:x.idx==null?(x.ns?'Not scored':'—'):String(x.idx)}));
     const hdT=myHeadTeam(), peopleRows=fullView()?pt.people.filter(x=>!isCOO(x.k)&&(!isPriv(x.k)||S.isOwner)):amPodLead()?pt.people.filter(x=>teamOf(x.k)===mp||x.k===S.uid):hdT?pt.people.filter(x=>teamOf(x.k)===hdT||x.k===S.uid):pt.people.filter(x=>x.k===S.uid);
     const podRowsT=fullView()?pt.pods:pt.pods.filter(x=>x.k===mp);
-    W.push(widget('Performance index',`${r.label} · 100 = studio average`,
+    if(canSeeScoring()) W.push(widget('Performance index',`${r.label} · 100 = studio average`,
       (podRowsT.length||peopleRows.length)?h('div',{},h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
         h('thead',{},h('tr',{},h('th',{text:''}),h('th',{class:'n',text:'Workload'}),h('th',{class:'n',text:'Points'}),h('th',{class:'n',text:'Timeliness'}),h('th',{class:'n',text:'Pod support'}),h('th',{class:'n',text:'Studio'}),h('th',{class:'n',text:'Index'}))),
         h('tbody',{},podRowsT.length?h('tr',{},h('td',{colspan:7,class:'sub2',style:'padding-top:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600',text:fullView()?'Pods':'Your pod'})):null,podRowsT.map(x=>row(podLabel(x.k),null,x,x.k===myPod())),
@@ -2579,7 +2582,7 @@ function viewSetup(){
       h('li',{text:'Approvers (COO) approve or return proposed timelines, date changes and support assignments. Only approved dates count on the dashboard. The COO is not assigned tasks here.'}),
       h('li',{text:'Members mark their own tasks done and request revised dates with a reason.'}),
       h('li',{text:'Pod leads and members see only their own pod: its tasks, log and dashboard. The Principal and the COO see every pod.'}),
-      h('li',{text:'Everyone can open the Overall dashboard: studio-wide totals and the pod performance index, with no individual tasks or names from other pods.'}),
+      h('li',{text:'Everyone can open the Overall dashboard: studio-wide totals and on-time rates, with no individual tasks or names from other pods. Points and the performance index are seen only by the Principal and the COO.'}),
       h('li',{text:'Pod leads can request a nickname for their pod; the COO approves it before it shows. The Principal and the COO can set any pod’s nickname directly.'}),
       h('li',{text:'Pod leads can request to add a team member to their pod from their pod tab. The COO approves or declines it; the Principal can still set anyone’s team directly here.'}),
       h('li',{text:'Tasks you assign to someone marked Private are stored separately: only you and that person can read them, and they never appear for anyone else.'}),
@@ -3417,7 +3420,7 @@ function hxLoad(){
 }
 /* where things are: the tab bar, explained */
 function hxTabs(){
-  const t=[['home','Home','Your work, approvals and messages'],['list','Tasks','Every task, the Board and the Timeline'],['layers','Projects','Phases, gates, meetings, agreement'],['cal','Calendar','Dates, gates and meetings by day'],['chart','Dashboard','On-time rate and performance index'],['bell','Notifications','What changed, what is due']];
+  const t=[['home','Home','Your work, approvals and messages'],['list','Tasks','Every task, the Board and the Timeline'],['layers','Projects','Phases, gates, meetings, agreement'],['cal','Calendar','Dates, gates and meetings by day'],['chart','Dashboard',canSeeScoring()?'On-time rate and performance index':'On-time rate and what is due'],['bell','Notifications','What changed, what is due']];
   if(amApprover()) t.splice(5,0,['users','People','Message the team · accounts']);
   return h('div',{class:'hx-tabs'},t.map(([i,n,d])=>h('div',{class:'hx-tab'},h('span',{class:'hx-tab-ic'},hxIco(i)),h('b',{text:n}),h('span',{text:d}))));
 }
