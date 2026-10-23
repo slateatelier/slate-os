@@ -1370,8 +1370,8 @@ function renderHeader(){
 
 function buildView(){
   if(S.state==='loading') return h('div',{class:'state'},h('strong',{text:'Opening SLATE OS…'}),h('span',{text:'Connecting to SLATE’s shared task data.'}));
-  if(S.state==='nohost') return h('div',{class:'state'},h('strong',{text:'Open SLATE OS in Claude'}),h('span',{text:'SLATE OS keeps its data in Claude. Open the shared link at claude.ai while signed in to see and update tasks.'}));
-  if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in to Claude, then reload this page to see your tasks.'}));
+  if(S.state==='nohost') return h('div',{class:'state'},h('strong',{text:'SLATE OS can’t reach its database'}),h('span',{text:'Check your internet connection, then reload the page. If it keeps happening, tell the Principal.'}));
+  if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
   const v={far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,mine:viewMine,all:viewAll,projects:viewProjects,team:viewTeam,meet:viewMeetings,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,setup:viewSetup,more:viewMore}[S.view]||viewMine;
@@ -1384,7 +1384,8 @@ function viewMore(){
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
     h('div',{class:'list'},item('help','How to use','A one-screen guide for your role'),item('team','Team','Full team, pods and who works on each project'),item('meet','Weekly meeting','Sundays 11:00 · organiser rotation and minutes'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log','Every change, who made it and when'),
-      amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null)];
+      amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
+    h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
 
 /* ---------- task row ---------- */
@@ -1438,8 +1439,8 @@ function onboarding(){
   return h('div',{class:'empty'},
     h('h3',{text:mgr?'Set up the register':'Nothing assigned yet'}),
     mgr?h('ol',{},
-      h('li',{text:'Share this page and invite each team member by email with Editor access.'}),
-      h('li',{text:'Each person opens it once while signed in to Claude. They then appear under Projects & team.'}),
+      h('li',{text:'Team accounts are created by the Principal; each person signs in with their studio email.'}),
+      h('li',{text:'Everyone with an account appears under More → Settings → People.'}),
       h('li',{text:'Set each person’s team and designation, then add your projects.'}),
       h('li',{text:'Add tasks and deliverables with a target date and an assignee.'}))
     :h('p',{class:'muted',style:'margin:0',text:'When a manager assigns you a task or deliverable, it appears here.'}),
@@ -2373,13 +2374,13 @@ function viewSetup(){
   const pend=id=>{ const p=proposalFor(id); return p?p.d:null; };
   const teamSel=id=>{ const s=h('select',{id:'tm-'+id,'aria-label':'Team',onchange:e=>run(()=>settingsRef().update({roster:{[id]:{team:e.target.value,teamAt:new Date().toISOString()}}}),'Team updated')},h('option',{value:'',text:'No team set'}),teams().map(t=>h('option',{value:t,text:podLabel(t)}))); s.value=roster(id).team||''; return s; };
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'People'}),h('span',{class:'cnt',text:String(ids.length)})),
-    h('p',{class:'f-hint',style:'margin:0',text:own?'People appear here after they open SLATE OS once. Set a display name if their Claude name doesn’t show.':prop?'Set each person’s team, designation and manager right. Your changes go to the Principal for approval.':'Only the owner can change teams, designations and manager rights.'}),
+    h('p',{class:'f-hint',style:'margin:0',text:own?'Everyone with a SLATE OS account is listed here. Set a display name if theirs doesn’t look right.':prop?'Set each person’s team, designation and manager right. Your changes go to the Principal for approval.':'Only the owner can change teams, designations and manager rights.'}),
     h('datalist',{id:'role-list'},ROLE_SUGGEST.map(x=>h('option',{value:x}))),
     h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Person'}),h('th',{text:'Display name'}),h('th',{text:'Team'}),h('th',{text:'Designation'}),h('th',{text:'Manager'}),h('th',{text:'Approver'}),h('th',{text:'Private tasks'}))),
       h('tbody',{},ids.map(id=>{ const r=roster(id); const isOwn=id===ownerId(); const joined=S.members[id]&&S.members[id].joinedAt;
         return h('tr',{},
           h('td',{},h('div',{text:(S.profiles[id]&&S.profiles[id].name)||nameOf(id)}),h('div',{class:'sub2',text:[isOwn?'Owner':'',id===S.uid?'You':'',joined?'Joined '+fmtD(joined.slice(0,10)):''].filter(Boolean).join(' · ')})),
-          h('td',{},own?h('input',{id:'lb-'+id,value:r.label||'',placeholder:'Use Claude name',onchange:e=>run(()=>settingsRef().update({roster:{[id]:{label:e.target.value.trim()}}}),'Name updated')}):(r.label||'—')),
+          h('td',{},own?h('input',{id:'lb-'+id,value:r.label||'',placeholder:'Use account name',onchange:e=>run(()=>settingsRef().update({roster:{[id]:{label:e.target.value.trim()}}}),'Name updated')}):(r.label||'—')),
           h('td',{},own?teamSel(id):prop&&!isOwn?(()=>{ const pd=pend(id); const el=h('select',{id:'ptm-'+id,'aria-label':'Team',onchange:e=>proposeRole(id,{team:e.target.value})},h('option',{value:'',text:'No team set'}),teams().map(t=>h('option',{value:t,text:podLabel(t)}))); el.value=pd?pd.team||'':r.team||''; return [el,pd?h('div',{class:'sub2',style:'color:var(--late)',text:'Pending approval'}):null]; })():(r.team?podLabel(r.team):'—')),
           h('td',{},prop&&!isOwn?(()=>{ const pd=pend(id); return [roleSelect('prl-'+id,pd?pd.role||'':r.role||'',v=>proposeRole(id,{role:v})),pd&&pd.role!==(r.role||'')?h('div',{class:'sub2',style:'color:var(--late)',text:'Pending approval'}):null]; })():own?roleSelect('rl-'+id,r.role||'',v=>run(()=>settingsRef().update({roster:{[id]:{role:v}}}),'Designation updated')):(r.role||'—')),
           h('td',{},isOwn?h('span',{class:'muted',text:'Always'}):prop?(()=>{ const pd=pend(id); return h('input',{type:'checkbox',id:'pmg-'+id,'aria-label':'Manager',checked:pd?!!pd.manager:isMgr(id),style:'width:auto',onchange:e=>proposeRole(id,{manager:e.target.checked})}); })():own?h('input',{type:'checkbox',id:'mg-'+id,'aria-label':'Manager',checked:isMgr(id),style:'width:auto',onchange:e=>{const m=new Set((S.settings&&S.settings.managers)||[]); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({managers:[...m]}),'Manager rights updated');}}):(isMgr(id)?'Yes':'—')),
@@ -2424,7 +2425,7 @@ function viewSetup(){
   }
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'How access works'})),
     h('div',{class:'card'},h('ol',{style:'margin:0;padding-left:20px;display:grid;gap:6px'},
-      h('li',{text:'Everyone signs in with their own Claude account, so every change carries their name and the time.'}),
+      h('li',{text:'Everyone signs in with their own studio account, so every change carries their name and the time.'}),
       h('li',{text:'Task titles are typed, with suggestions from earlier tasks and the standard lists, so the same work keeps the same name.'}),
       h('li',{text:'Client projects run on the SLATE standard phases (0 to 9); the project type decides which phases are on. Setting up phases creates the gate deliverables for each phase (submission and final), assigned to the pod lead, plus the phase checklist. Only gate deliverables carry dates.'}),
       h('li',{text:'Checklist items are ticked, not dated. The pod lead assigns them; each person sees their own items on Home. A phase’s final gate can be marked done only when every item is ticked or marked N/A (the Principal and the COO can override).'}),

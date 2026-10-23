@@ -378,7 +378,7 @@
     if (started) return; started = true;
     authUser = session.user;
     try { await loadAll(); } catch (e) { started = false; authScreen('signin'); return; }
-    hideAuth(); goLive(); accountButton();
+    hideAuth(); goLive(); addCss(); window.slateAccount = accountPanel;
     resolveReady({ db, user });
   }
 
