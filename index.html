@@ -965,6 +965,35 @@ const SPRINT_NA=['1-0','1-2','1-6','1-8','1-11','1-12','1-13'];
 const PACE_NOTE={fast:'Shorter dates agreed with the COO, decided the same day, other work gives way. Gate deliverables and tasks count ×1.25.',std:'Standard target days.',relaxed:'Longer dates. Finishing early earns no extra points.',sprint:'Proposal due within days: one pod lead and one junior, one design option, renders only if asked. Phase 0 is folded into phase 1 and the checklist is cut to essentials. Counts ×1.25.'};
 const stepsOf=(type,k)=>type==='proposal'&&k==='1'?[['sub','Proposal design submitted for internal review'],['final','Proposal presented to the client']]:(PH[k]?PH[k].steps:[]);
 const TEMPLATES=Object.fromEntries([...Object.entries(STD_DEF).map(([key,d])=>[key,{...d,std:true,items:d.phases.flatMap(k=>stepsOf(key,k).map(([s,txt])=>[txt,'lead',phLabel(k),0,1]))}])]);
+/* interior design: its own task list (not the architectural phase spine). Categories become the project's phases. */
+TEMPLATES.interior={name:'Interior design',note:'Apartment, office, retail or common area interiors: brief, concept, design development, working drawings, procurement and handover',items:[
+  ['Client brief, lifestyle and space requirements meeting','lead','Brief and survey',0],
+  ['Site measurement and photo survey','junior','Brief and survey',0],
+  ['Measured base drawings from the survey','draft','Brief and survey',0],
+  ['Interior scope, room list and budget range agreed','lead','Brief and survey',0,1],
+  ['Mood boards and material direction','junior','Concept',0],
+  ['Space planning and furniture layout options','lead','Concept',0],
+  ['Concept presentation to the client','lead','Concept',0,1],
+  ['Final furniture layout signed by the client','lead','Design development',0,1],
+  ['3D views of key spaces','viz','Design development',0,1],
+  ['Material, finish and colour schedule','junior','Design development',0],
+  ['Lighting concept and fixture selection','junior','Design development',0],
+  ['Loose furniture, fittings and décor selection','junior','Design development',0],
+  ['Common area concept: lobby, lift lobbies, corridors and amenity spaces (if in scope)','lead','Design development',0],
+  ['Design freeze signed by the client','lead','Design development',0,1],
+  ['False ceiling and lighting layouts','draft','Working drawings',0],
+  ['Electrical, switch and socket layouts','draft','Working drawings',0],
+  ['Floor and wall finish layouts','draft','Working drawings',0],
+  ['Joinery and custom furniture details','draft','Working drawings',0],
+  ['Toilet and kitchen interior details','draft','Working drawings',0],
+  ['Internal review of interior drawings','lead','Working drawings',0],
+  ['Interior working drawing set issued','lead','Working drawings',0,1],
+  ['Bill of quantities and specification','junior','Procurement',0],
+  ['Contractor and vendor quotations compared','lead','Procurement',0],
+  ['Material samples approved by the client','lead','Procurement',0,1],
+  ['Site visit during execution','lead','Execution and handover',0,0,'weekly'],
+  ['Snag list and final inspection','lead','Execution and handover',0],
+  ['Handover with as-built drawings and care notes','lead','Execution and handover',0,1]]};
 function personFor(role,pod){
   const ids=people(), r=id=>roster(id);
   const pick=f=>ids.find(f)||'';
@@ -1353,7 +1382,7 @@ function renderHeader(){
   { const nn=newCount(); slot.replaceChildren(h('button',{class:'bell',type:'button','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
       nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null)); }
-  const reqs=amApprover()?activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+minutesToApprove().length+extraReqs().length:0;
+  const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+minutesToApprove().length+extraReqs().length:0;
   const full=fullView(), mp=myPod();
   const list=[['mine','Home',reqs],['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['dash','Dashboard'],...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',S.isOwner?roleProposals().length:0]];
   const TASKV=['all','board','gantt'], MOREV=['more','team','activity','setup','meet','std','help','far'];
@@ -1383,7 +1412,7 @@ function buildView(){
 function viewMore(){
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
-    h('div',{class:'list'},item('help','How to use','A one-screen guide for your role'),item('team','Team','Full team, pods and who works on each project'),item('meet','Weekly meeting','Sundays 11:00 · organiser rotation and minutes'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log','Every change, who made it and when'),
+    h('div',{class:'list'},item('help','How to use','A one-screen guide for your role'),item('team','Team','Full team, pods and who works on each project'),item('meet','Weekly meeting','Sundays 11:00 · organiser rotation and minutes'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log','Audit trail: every change, notification and message'),
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
@@ -1476,9 +1505,10 @@ function viewMine(){
   if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Dates to approve'}),h('span',{class:'cnt',text:String(reqs.length)})),approvalBlocks(reqs)));
   if(!pref.helpSeen) out.splice(1,0,h('div',{class:'banner'},h('span',{text:'New here? See how to use SLATE OS for your role.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Dismiss'}))));
   const xrq=amApprover()?extraReqCards():null; if(xrq) out.push(xrq);
+  const drq=delReqCards(); if(drq) out.push(drq);
   const pmq=pmHomeSec(); if(pmq) out.push(pmq);
   const mcl=myChecklist(); if(mcl.length) out.push(myChecklistSec(mcl));
-  if(!mine.length){ if(!reqs.length&&!areq.length&&!prq&&!nkq&&!pjq&&!lbq&&!phq&&!mcl.length&&!xrq&&!pmq) out.push(onboarding()); return out; }
+  if(!mine.length){ if(!reqs.length&&!areq.length&&!prq&&!nkq&&!pjq&&!lbq&&!phq&&!mcl.length&&!xrq&&!pmq&&!drq) out.push(onboarding()); return out; }
   const r=range('month',0); const mm=mine.filter(t=>{const g=t.target;return g>=r.s&&g<=r.e});
   const c=count(mm,'approved');
   out.push(h('div',{class:'tiles'},
@@ -2089,7 +2119,7 @@ const initials=id=>nameOf(id).split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0
 function personNums(id){ const c=loadOf(id), r=range('month',0), m=count(periodRaw(r).filter(t=>t.assignee===id),'approved'), rt=rate(m); return {open:c.open,over:c.overdue,week:c.week,rt}; }
 const showNums=id=>fullView()||id===S.uid||(!!myPod()&&teamOf(id)===myPod());
 function personRow(id,opts={}){
-  const n=showNums(id)&&!isCOO(id)&&id!==ownerId()?personNums(id):null, lead=pods().some(p=>isPodLead(id,p));
+  const n=showNums(id)&&!isCOO(id)&&id!==ownerId()?personNums(id):null, lead=pods().some(p=>isPodLead(id,p))||roleGroup(id)==='dhead';
   const role=[roleOf(id)||(lead?'Pod lead':''),opts.sub].filter(Boolean).join(' · ');
   return h('div',{class:'prow'},avaEl(id,lead||id===ownerId()||isCOO(id)),
     h('div',{style:'min-width:0'},h('div',{class:'nm',text:nameOf(id)+(id===S.uid?' (you)':'')}),h('div',{class:'rl',text:role||opts.fallback||'—'})),
@@ -2311,7 +2341,10 @@ const histText=e=>{
 };
 function viewActivity(){
   const a=S.act;
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Audit trail'}),h('h1',{class:'h1',text:'Activity log'}),h('p',{class:'lead',text:'Every assignment, date request, approval, completion and edit, with who made it and when.'})))];
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Audit trail'}),h('h1',{class:'h1',text:'Activity log'}),h('p',{class:'lead',text:'Every change, notification and message, with who made it and when.'})))];
+  if(!a.tab) a.tab='audit';
+  out.push(seg('Log',[['audit','Full audit trail'],['tasks','Task history']],a.tab,v=>{ a.tab=v; if(v==='audit'&&window.slateAuditReload) window.slateAuditReload(); render(true); }));
+  if(a.tab==='audit'&&window.slateAuditView) return out.concat(window.slateAuditView());
   const pSel=h('select',{id:'a-project','aria-label':'Project',onchange:e=>{a.project=e.target.value;render(true)}},h('option',{value:'',text:'All projects'}),projects().filter(p=>fullView()||inMyPodProject(p)).map(p=>h('option',{value:p.id,text:projLabel(p)})));pSel.value=a.project;
   const uSel=h('select',{id:'a-person','aria-label':'Person',onchange:e=>{a.person=e.target.value;render(true)}},h('option',{value:'',text:'Everyone'}),visiblePeople().map(id=>h('option',{value:id,text:nameOf(id)})));uSel.value=a.person;
   out.push(h('div',{class:'bar'},pSel,uSel));
@@ -2460,7 +2493,7 @@ function viewSetup(){
 function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
 function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&!S.projects[id].closed, okA=id=>id&&memberOpts().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:''||'',target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
 const PFIELDS=['code','name','client','contact','phone','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
-const SCOPES=['Architectural design','Structural design','MEP design','Interior design','Landscape design','3D visualization','Authority (RAJUK) drawings','Working drawings','Site supervision'];
+const SCOPES=['Architectural design','Structural design','MEP design','Interior design','Common area interior design','Landscape design','3D visualization','Authority (RAJUK) drawings','Working drawings','Site supervision'];
 const AGS=[['','Select…'],['none','Not signed yet'],['loi','Letter of intent'],['signed','Signed agreement'],['internal','Internal (no agreement)']];
 function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.scope=[...(p.scope||[])]; S.sheet={type:'project',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{const el=document.getElementById('sh-code');el&&el.focus()},30); }
 function closeSheet(){ S.sheet=null; renderSheet(); }
@@ -3424,7 +3457,7 @@ function sheetProjView(){
   const st=projStats(p), [hl,hk]=HEALTH[st.health], ap=amApprover(), det=canSeeProjectDetail(p), tp=p.type&&(T()[p.type]||LEGACY[p.type]);
   const fact=(l,v,sub)=>v?h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v',text:v}),sub&&h('div',{class:'s',text:sub})):null;
   const out=[head(`${p.code} · ${podText(p)}`,p.name),
-    h('div',{class:'sh-status'},h('span',{class:'pill s-'+hk,text:p.closed?'Closed':hl}),tp&&h('span',{class:'tag',text:tp.name}),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'})),
+    h('div',{class:'sh-status'},h('span',{class:'pill s-'+hk,text:p.closed?'Closed':hl}),tp&&h('span',{class:'tag',text:tp.name}),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:st.tot?`${st.pct}% complete`:'No tasks yet'}),h('span',{class:'muted',text:st.tot?`${st.ts.filter(t=>t.doneAt).length} of ${st.ts.length} done`:''})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${st.pct}%`})),
       h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%'],['Overdue',String(st.over)],['Open',String(st.open)],['No date',String(st.noDate)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
     h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),
@@ -3450,7 +3483,52 @@ function sheetProjView(){
   if(det&&amMgr()&&S.canWrite&&!p.closed) acts.push(h('button',{class:'btn',type:'button',onclick:()=>p.type?openPlan(p.id,p.type,p.pod):openPlanPick(p.id),text:planLabel(p)}));
   if(ap&&S.canWrite){ acts.push(h('button',{class:'btn',type:'button',onclick:()=>openProject(p.id),text:'Edit'})); acts.push(h('button',{class:'btn',type:'button',onclick:()=>run(()=>S.db.doc('projects/'+p.id).update({closed:!p.closed}),p.closed?'Project reopened':'Project closed'),text:p.closed?'Reopen':'Close project'})); }
   if(acts.length) out.push(h('div',{class:'actions'},acts));
+  { const dz=deleteZone(p); if(dz) out.push(dz); }
   return out;
+}
+/* ---------- deleting a project: the Principal deletes; the COO asks and the Principal approves ---------- */
+function projTaskPaths(pid){ return Object.entries(S.tasks).filter(([k,t])=>t&&t.projectId===pid).map(([k])=>S.paths[k]||('tasks/'+k)); }
+function deleteProject(pid){
+  const p=S.projects[pid]; if(!p||!S.isOwner) return;
+  const sh=S.sheet, reason=((sh&&sh.del&&sh.del.reason)||'').trim();
+  return run(async()=>{
+    if(!p.delReq&&reason) await S.db.doc('projects/'+pid).update({delReq:{by:S.uid,at:new Date().toISOString(),reason}});
+    for(const path of projTaskPaths(pid)) await S.db.doc(path).delete();
+    for(const [k,m] of Object.entries(S.pmeet)) if(m&&m.projectId===pid) await S.db.doc('pmeetings/'+k).delete();
+    await S.db.doc('projects/'+pid).delete();
+  },'Project deleted').then(ok=>{ if(ok&&S.sheet&&S.sheet.id===pid) closeSheet(); });
+}
+function askDelete(pid){ const sh=S.sheet, reason=((sh&&sh.del&&sh.del.reason)||'').trim();
+  if(!reason) return toast('Write why the project should be deleted.');
+  return run(()=>S.db.doc('projects/'+pid).update({delReq:{by:S.uid,at:new Date().toISOString(),reason}}),'Sent to the Principal for approval').then(ok=>{ if(ok&&sh) sh.del=null; }); }
+function clearDelete(pid,msg){ return run(()=>S.db.doc('projects/'+pid).update({delReq:null}),msg); }
+function deleteZone(p){
+  if(!S.canWrite||!amApprover()) return null;
+  const sh=S.sheet, r=p.delReq, n=projTaskPaths(p.id).length, what=`${n} task${n===1?'':'s'}`;
+  const box=(...kids)=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Delete project'})),h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--overdue)'},kids));
+  const reasonIn=ph=>h('input',{id:'pdel-reason',maxlength:200,placeholder:ph,value:(sh.del&&sh.del.reason)||'',style:'background:#fff',oninput:e=>{ sh.del=sh.del||{}; sh.del.reason=e.target.value; }});
+  if(S.isOwner){
+    if(r&&r.by!==S.uid) return box(h('div',{class:'lbl',text:`${nameOf(r.by)} asked to delete this project · ${fmtTs(r.at)}`}),r.reason?h('p',{class:'quote',text:r.reason}):null,
+      h('div',{class:'f-hint',text:`Deleting removes the project and its ${what} for everyone. The audit trail keeps a full copy.`}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-accent btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!sh.delOk){ sh.delOk=true; renderSheet(); return; } deleteProject(p.id); },text:sh.delOk?'Tap again to delete':'Approve and delete'}),
+        h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>clearDelete(p.id,'Deletion declined'),text:'Decline'})));
+    if(!sh.del) return h('button',{class:'btn btn-danger',type:'button',style:'justify-self:start',onclick:()=>{ sh.del={reason:''}; renderSheet(); },text:'Delete project'});
+    return box(h('div',{class:'f-hint',text:`This permanently removes the project and its ${what} for everyone. The audit trail keeps a full copy of what was deleted.`}),reasonIn('Reason (optional)'),
+      h('div',{class:'actions'},h('button',{class:'btn btn-accent btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!sh.delOk){ sh.delOk=true; renderSheet(); return; } deleteProject(p.id); },text:sh.delOk?'Tap again to delete':'Delete permanently'}),
+        h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.del=null; sh.delOk=false; renderSheet(); },text:'Cancel'})));
+  }
+  if(r) return box(h('div',{class:'lbl',text:r.by===S.uid?'You asked the Principal to delete this project':`${nameOf(r.by)} asked to delete this project`}),r.reason?h('p',{class:'quote',text:r.reason}):null,
+    h('div',{class:'f-hint',text:'Waiting for the Principal’s approval.'}),r.by===S.uid?h('div',{class:'actions'},h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>clearDelete(p.id,'Request withdrawn'),text:'Withdraw'})):null);
+  if(!sh.del) return h('button',{class:'btn btn-danger',type:'button',style:'justify-self:start',onclick:()=>{ sh.del={reason:''}; renderSheet(); },text:'Ask to delete project'});
+  return box(h('div',{class:'f-hint',text:`The Principal approves every deletion. If approved, the project and its ${what} are removed for everyone.`}),reasonIn('Why should it be deleted? *'),
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>askDelete(p.id),text:'Send to the Principal'}),
+      h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.del=null; renderSheet(); },text:'Cancel'})));
+}
+function delReqCards(){
+  if(!S.isOwner) return null; const xs=Object.entries(S.projects).filter(([k,p])=>p&&p.delReq&&p.delReq.by!==S.uid); if(!xs.length) return null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project deletions to approve'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('div',{class:'list'},xs.map(([k,p])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openProjectView(k)},
+      h('div',{style:'min-width:0'},h('div',{class:'row-title',text:projLabel(p)}),h('div',{class:'row-meta',text:`${nameOf(p.delReq.by)} · ${p.delReq.reason||'No reason given'}`})),h('span',{class:'mi-a',text:'›'})))));
 }
 
 (function(){ const tip=document.getElementById('tip'); if(!tip) return;

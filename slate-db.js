@@ -360,7 +360,7 @@
     if (old && !force && old.previousElementSibling === head) return;
     const others = onlineIds.filter(id => id !== authUser.id && people.has(id) && people.get(id).active);
     const name = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
-    const chip = id => { let a = null; try { a = avaEl(id, false); } catch (_) {}
+    const chip = id => { let a = null; try { a = avaEl(id, isLeadP(people.get(id))); } catch (_) {}
       return el('span', { class: 'chip', style: 'padding:4px 12px 4px 4px;background:#fff;gap:8px' },
         el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []),
           el('i', { style: 'position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#34C759;border:2px solid #fff' })),
@@ -450,6 +450,10 @@
     if (!me || !p || !p.active || p.id === me.id) return false;
     return me.designation === 'principal' || me.designation === 'coo' || !!me.is_approver;   // only the Principal and the COO send
   }
+  const isLeadP = p => !!p && ['principal', 'coo', 'pod_leader', 'design_associate_lead'].includes(p.designation);
+  const REPLIES = [['on_it', 'On it'], ['done', 'Already done'], ['later', 'Will do it later'], ['help', 'Need help']];
+  const REPLY_L = Object.fromEntries([...REPLIES, ['remind', 'Reminder set']]);
+  const when = t => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   function peopleView() {
     const nm = p => { try { return nameOf(p.id); } catch (_) { return displayName(p); } };
     const rerender = () => { try { render(true); } catch (_) {} };
@@ -457,27 +461,28 @@
       .filter(p => !PS.q || (nm(p) + ' ' + (p.role_label || '') + ' ' + (p.team || '')).toLowerCase().includes(PS.q.toLowerCase()));
     const order = t => t === "Principal's Office" ? '0' : /^Pod/.test(t || '') ? '1' + t : t ? '2' + t : '9';
     const groups = new Map();
-    all.sort((a, b) => order(a.team).localeCompare(order(b.team)) || nm(a).localeCompare(nm(b)))
+    all.sort((a, b) => order(a.team).localeCompare(order(b.team)) || (isLeadP(b) - isLeadP(a)) || nm(a).localeCompare(nm(b)))
        .forEach(p => { const t = p.team || 'No team'; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(p); });
     for (const id of [...PS.sel]) if (!people.has(id) || !canMessageClient(people.get(id))) PS.sel.delete(id);
     const onlineSet = new Set(onlineIds);
-    const row = p => {
-      const box = el('input', { type: 'checkbox', 'aria-label': 'Select ' + nm(p) }); box.checked = PS.sel.has(p.id);
-      box.addEventListener('change', () => { box.checked ? PS.sel.add(p.id) : PS.sel.delete(p.id); rerender(); });
-      let a = null; try { a = avaEl(p.id, false); } catch (_) {}
-      const r = el('label', { class: 'slate-prow' }, box,
-        el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []),
-          ...(onlineSet.has(p.id) ? [el('i', { style: 'position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#34C759;border:2px solid var(--group)' })] : [])),
-        el('span', { style: 'min-width:0;display:grid;gap:1px' }, el('span', { style: 'font-weight:500' }, nm(p)),
-          el('span', { style: 'font-size:13px;color:var(--muted)' }, [p.role_label || 'No designation', onlineSet.has(p.id) ? 'online' : ''].filter(Boolean).join(' · '))));
-      return r;
+    const bubble = p => {
+      const on = PS.sel.has(p.id);
+      let a = null; try { a = avaEl(p.id, isLeadP(p), 'md'); } catch (_) {}
+      const b = el('button', { class: 'slate-bub' + (on ? ' on' : ''), type: 'button', 'aria-pressed': String(on), 'aria-label': nm(p) + (on ? ', selected' : '') },
+        el('span', { class: 'slate-bub-a' }, ...(a ? [a] : []),
+          ...(onlineSet.has(p.id) ? [el('i', { class: 'slate-bub-on', title: 'Online now' })] : []),
+          ...(on ? [el('b', { class: 'slate-bub-ck', 'aria-hidden': 'true' }, '✓')] : [])),
+        el('span', { class: 'slate-bub-n' }, nm(p)),
+        el('span', { class: 'slate-bub-r' }, p.role_label || 'No designation'));
+      b.addEventListener('click', () => { on ? PS.sel.delete(p.id) : PS.sel.add(p.id); rerender(); });
+      return b;
     };
     const secs = [...groups.entries()].map(([t, ps]) => {
       const allOn = ps.every(p => PS.sel.has(p.id));
       const tog = el('button', { class: 'linkish', type: 'button', style: 'font-size:13px' }, allOn ? 'Clear' : 'Select all');
       tog.addEventListener('click', () => { ps.forEach(p => allOn ? PS.sel.delete(p.id) : PS.sel.add(p.id)); rerender(); });
       let label = t; try { label = podLabel(t); } catch (_) {}
-      return el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, label), tog), el('div', { class: 'list' }, ...ps.map(row)));
+      return el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, label), tog), el('div', { class: 'slate-bubs' }, ...ps.map(bubble)));
     });
     const search = el('input', { type: 'search', placeholder: 'Search by name, designation or team', value: PS.q, 'aria-label': 'Search people' });
     search.addEventListener('input', () => { PS.q = search.value; rerender(); setTimeout(() => { const s2 = document.querySelector('#slate-people-search'); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }, 0); });
@@ -495,22 +500,55 @@
       const { data, error } = await sb.rpc('send_message', { p_to: [...PS.sel], p_message: PS.msg });
       PS.busy = false;
       if (error) PS.note = '!' + friendly(error).message;
-      else { PS.note = `Sent to ${data} ${data === 1 ? 'person' : 'people'}. They’ll get it as a notification, and on their Home screen.`; PS.msg = ''; PS.sel.clear(); }
+      else { PS.note = `Sent to ${data} ${data === 1 ? 'person' : 'people'}. It’s in the audit trail, and their replies show below.`; PS.msg = ''; PS.sel.clear(); loadSent(); }
       rerender();
     });
     const compose = el('div', { class: 'form', style: 'position:sticky;bottom:0;z-index:2;box-shadow:0 -6px 18px rgba(0,0,0,.06)' },
-      el('div', { class: 'form-title' }, n ? `To: ${[...PS.sel].map(id => nm(people.get(id))).join(', ')}` : 'Select people above'),
+      el('div', { class: 'form-title' }, n ? `To: ${[...PS.sel].map(id => nm(people.get(id))).join(', ')}` : 'Tap people above to select them'),
       ta, el('div', { class: 'bar', style: 'justify-content:space-between' }, count, send), note);
+    if (!sentLoaded) loadSent();
     return [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Studio'), el('h1', { class: 'h1' }, 'People'),
-              el('p', { class: 'lead' }, 'Select people, write a short message and tap Notify. It arrives as a notification, with sound, even if their app is closed.'))),
-            search, ...secs, compose];
+              el('p', { class: 'lead' }, 'Tap people to select them, write a short message and tap Notify. It arrives with sound even if their app is closed; they reply with one tap.'))),
+            search, ...secs, sentView(), compose];
+  }
+  /* what I sent, with each person's reply */
+  let sent = [], sentLoaded = false;
+  async function loadSent() {
+    sentLoaded = true;
+    const { data } = await sb.rpc('my_sent_messages', { p_limit: 60 });
+    sent = data || []; try { if (S.view === 'people') render(true); } catch (_) {}
+  }
+  function sentView() {
+    if (!sent.length) return el('span');
+    const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const groups = new Map();
+    sent.forEach(r => { const k = r.body + '|' + r.created_at; if (!groups.has(k)) groups.set(k, { body: r.body, at: r.created_at, rows: [] }); groups.get(k).rows.push(r); });
+    const items = [...groups.values()].slice(0, 12).map(g => {
+      const replied = g.rows.filter(r => r.reply && r.reply !== 'remind').length;
+      return el('div', { class: 'card', style: 'border-radius:0;border-bottom:1px solid var(--line);gap:8px' },
+        el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', { style: 'overflow-wrap:anywhere' }, g.body), el('span', { class: 'f-hint' }, when(g.at))),
+        el('div', { class: 'f-hint' }, `${replied} of ${g.rows.length} replied`),
+        el('div', { class: 'chips' }, ...g.rows.map(r => {
+          const st = r.reply && r.reply !== 'remind' ? REPLY_L[r.reply] : r.reply === 'remind' ? 'Set a reminder' : r.read_at ? 'Seen' : 'Not seen yet';
+          const col = r.reply === 'done' ? 'var(--ontime)' : r.reply === 'help' ? 'var(--overdue)' : r.reply ? 'var(--early)' : 'var(--muted)';
+          return el('span', { class: 'chip', style: 'padding-right:12px;background:#fff' }, el('b', { style: 'font-weight:600' }, nm(r.to_user)), el('span', { style: 'color:' + col }, '· ' + st));
+        })));
+    });
+    return el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, 'Sent and replies')), el('div', { class: 'list' }, ...items));
   }
 
-  /* messages to me: a card on Home until dismissed */
+  /* messages, replies and reminders for me: cards on Home until answered or dismissed */
   let myMessages = [];
   async function loadMessages() {
-    const { data } = await sb.from('notifications').select('id,title,body,created_at').eq('kind', 'message').is('read_at', null).order('created_at', { ascending: false }).limit(10);
+    const { data } = await sb.from('notifications').select('id,kind,title,body,created_at,ref_id,reply').in('kind', ['message', 'reply', 'reminder']).is('read_at', null).order('created_at', { ascending: false }).limit(15);
     myMessages = data || []; placeMessages(true);
+  }
+  function remindChoices() {
+    const now = new Date(), at = (d, h, m) => { const x = new Date(now); x.setDate(x.getDate() + d); x.setHours(h, m || 0, 0, 0); return x; };
+    const out = [['In 1 hour', new Date(now.getTime() + 3600e3)], ['In 3 hours', new Date(now.getTime() + 3 * 3600e3)]];
+    if (now.getHours() < 17) out.push(['This evening, 6 pm', at(0, 18)]);
+    out.push(['Tomorrow, 10 am', at(1, 10)]);
+    return out;
   }
   function placeMessages(force) {
     const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
@@ -518,25 +556,113 @@
     if (!home || !myMessages.length) { if (old) old.remove(); return; }
     const main = document.querySelector('main'); if (!main) return;
     if (old && !force && main.contains(old)) return;
-    const when = t => { const d = new Date(t); return d.toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); };
-    const box = el('section', { id: 'slate-messages', class: 'sec' },
-      ...myMessages.map(m => {
+    const gone = id => { myMessages = myMessages.filter(y => y.id !== id); placeMessages(true); syncBadge(); };
+    const card = m => {
+      const msgId = m.kind === 'reminder' ? m.ref_id : m.kind === 'message' ? m.id : null;
+      const status = el('div', { class: 'f-hint', role: 'status' });
+      const actions = el('div', { class: 'actions' });
+      const reply = async (choice, label, remindAt) => {
+        actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        const { error } = await sb.rpc('message_reply', { p_id: msgId, p_choice: choice, p_remind_at: remindAt ? remindAt.toISOString() : null });
+        if (error) { status.textContent = friendly(error).message; status.className = 'err'; actions.querySelectorAll('button').forEach(b => { b.disabled = false; }); return; }
+        if (m.kind === 'reminder') await sb.rpc('message_read', { p_id: m.id });
+        try { toast(choice === 'remind' ? 'Reminder set for ' + when(remindAt) : 'Reply sent: ' + label); } catch (_) {}
+        gone(m.id);
+      };
+      if (msgId) {
+        REPLIES.forEach(([k, l]) => { const b = el('button', { class: 'btn btn-sm' + (k === 'on_it' ? ' btn-primary' : ''), type: 'button', style: k === 'on_it' ? '' : 'background:#fff' }, l); b.addEventListener('click', () => reply(k, l)); actions.append(b); });
+        const rb = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Remind me…');
+        rb.addEventListener('click', () => {
+          const pick = el('div', { class: 'actions' }, ...remindChoices().map(([l, d]) => { const b = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, l); b.addEventListener('click', () => reply('remind', l, d)); return b; }));
+          rb.replaceWith(pick);
+        });
+        actions.append(rb);
+      } else {
         const x = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Dismiss');
-        x.addEventListener('click', async () => { myMessages = myMessages.filter(y => y.id !== m.id); placeMessages(true); await sb.rpc('message_read', { p_id: m.id }); syncBadge(); });
-        return el('div', { class: 'callout', style: 'box-shadow:inset 3px 0 0 #d7262b' },
-          el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', {}, m.title), el('span', { class: 'f-hint' }, when(m.created_at))),
-          el('div', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, m.body), el('div', { class: 'actions' }, x));
-      }));
+        x.addEventListener('click', async () => { gone(m.id); await sb.rpc('message_read', { p_id: m.id }); });
+        actions.append(x);
+      }
+      const color = m.kind === 'reply' ? '#007AFF' : m.kind === 'reminder' ? '#FF9500' : '#d7262b';
+      return el('div', { class: 'callout', style: 'box-shadow:inset 3px 0 0 ' + color },
+        el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', {}, m.title), el('span', { class: 'f-hint' }, when(m.created_at))),
+        el('div', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, m.body), actions, status);
+    };
+    const box = el('section', { id: 'slate-messages', class: 'sec' }, ...myMessages.map(card));
     if (old) old.replaceWith(box); else main.prepend(box);
   }
   function setupMessages() {
     window.slatePeopleView = peopleView;
     loadMessages();
     sb.channel('slate-my-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + authUser.id },
-      ev => { if (ev.new && ev.new.kind === 'message') { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); } }).subscribe();
+      ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); if (ev.new.kind === 'reply') loadSent(); } }).subscribe();
     new MutationObserver(() => placeMessages(false)).observe(document.body, { childList: true, subtree: true });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadMessages(); });
   }
+
+  /* ---------------- audit trail: every change, notification and message, from the database log ---------------- */
+  const AU = { rows: [], loaded: false, busy: false, kind: '', more: true, err: '' };
+  const AU_KINDS = [['', 'Everything'], ['msg', 'Messages'], ['notification', 'Notifications'], ['projects', 'Projects'], ['tasks', 'Tasks'], ['people', 'People'], ['other', 'Other']];
+  const AU_TABLES = { msg: ['message'], notification: ['notification'], projects: ['projects', 'project', 'pmeetings'], tasks: ['tasks', 'lead', 'tasklib'], people: ['profiles', 'podnames', 'podreq', 'podjoin', 'rolereq'] };
+  async function loadAudit(reset) {
+    if (AU.busy) return; AU.busy = true; if (reset) { AU.rows = []; AU.more = true; }
+    let q = sb.from('activity_log').select('id,at,actor,table_name,row_id,action,subject_user,before,after').order('id', { ascending: false }).limit(150);
+    if (AU.rows.length) q = q.lt('id', AU.rows[AU.rows.length - 1].id);
+    if (AU.kind && AU_TABLES[AU.kind]) q = q.in('table_name', AU_TABLES[AU.kind]);
+    else if (AU.kind === 'other') q = q.not('table_name', 'in', '(' + Object.values(AU_TABLES).flat().join(',') + ')');
+    const { data, error } = await q;
+    AU.busy = false; AU.loaded = true; AU.err = error ? friendly(error).message : '';
+    if (data) { AU.rows = AU.rows.concat(data); AU.more = data.length === 150; }
+    try { if (S.view === 'activity') render(true); } catch (_) {}
+  }
+  const AU_COLL = { projects: 'project', tasks: 'task', lead: 'private task', pmeetings: 'client meeting minutes', meetings: 'weekly meeting minutes', tasklib: 'standard task', types: 'project type', podnames: 'pod nickname', podreq: 'pod member request', podjoin: 'pod move decision', rolereq: 'designation request', farlog: 'FAR calculation', config: 'studio settings', meetcfg: 'meeting rotation', members: 'profile' };
+  const SKIP_KEYS = ['history', 'updatedAt', 'updatedBy', 'at'];
+  function auditLine(r) {
+    const nm = id => { if (!id) return 'SLATE OS'; try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const a = r.after || {}, b = r.before || {}, d = Object.keys(a).length ? a : b;
+    const label = x => (x && (x.title || [x.code, x.name].filter(Boolean).join(' · ') || x.pod || x.nick)) || '';
+    const changed = () => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => !SKIP_KEYS.includes(k) && JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+    if (r.table_name === 'message') {
+      if (r.action === 'send') return [`${nm(r.actor)} sent a message to ${(a.to || []).map(nm).join(', ')}`, a.message];
+      if (r.action === 'read') return [`${nm(r.actor)} read ${nm(a.from)}’s message`, a.message];
+      if (r.action === 'reply') return [`${nm(r.actor)} replied “${a.reply}” to ${nm(a.from)}`, a.message];
+      if (r.action === 'remind') return [`${nm(r.actor)} set a reminder${a.remind_at ? ' for ' + when(a.remind_at) : ''}`, a.message];
+    }
+    if (r.table_name === 'notification') return [`Notification to ${nm(r.subject_user)}${r.actor ? ' · from ' + nm(r.actor) : ''}: ${a.title || ''}`, a.body];
+    if (r.table_name === 'profiles') {
+      const who = nm((a.id || b.id) || r.subject_user);
+      if (r.action === 'insert') return [`${who} joined SLATE OS`, a.email];
+      const ks = changed().filter(k => !['updated_at', 'last_seen_at'].includes(k));
+      return [`${nm(r.actor)} updated ${who}’s profile`, ks.map(k => `${k.replace(/_/g, ' ')}: ${b[k] == null ? '—' : b[k]} → ${a[k] == null ? '—' : a[k]}`).join(' · ')];
+    }
+    const what = AU_COLL[r.table_name] || r.table_name.replace(/_/g, ' ');
+    const verb = { insert: 'created', update: 'updated', delete: 'deleted', delete_project: 'deleted' }[r.action] || r.action;
+    const name = label(d);
+    let note = '';
+    if (r.action === 'update') {
+      const ks = changed();
+      if (r.table_name === 'projects' && ks.includes('delReq')) return [a.delReq ? `${nm(r.actor)} asked to delete project ${name}` : `${nm(r.actor)} cleared the deletion request on ${name}`, a.delReq && a.delReq.reason];
+      const ev = (a.history || []).slice((b.history || []).length);
+      note = ev.length ? ev.map(e => [e.type, e.to, e.note].filter(Boolean).join(' ')).join(' · ') : ks.length ? 'Changed: ' + ks.join(', ') : '';
+    }
+    if (r.action === 'delete' && r.table_name === 'projects') note = 'Full copy kept here' + (b.delReq && b.delReq.reason ? ' · ' + b.delReq.reason : '');
+    return [`${nm(r.actor)} ${verb} ${what}${name ? ' “' + name + '”' : ''}`, note];
+  }
+  function auditView() {
+    if (!AU.loaded && !AU.busy) loadAudit(true);
+    const seg = el('div', { class: 'chips' }, ...AU_KINDS.map(([k, l]) => { const b = el('button', { class: 'chip' + (AU.kind === k ? ' on' : ''), type: 'button', style: 'border:0;cursor:pointer;padding:6px 12px' }, l);
+      b.addEventListener('click', () => { AU.kind = k; loadAudit(true); }); return b; }));
+    const out = [seg, el('p', { class: 'f-hint', style: 'margin:0' }, 'Recorded by the database for every change, notification and message. Nothing here can be edited or removed. You see the entries your role allows.')];
+    if (AU.err) out.push(el('div', { class: 'err' }, AU.err));
+    if (!AU.rows.length) { out.push(el('p', { class: 'muted' }, AU.busy || !AU.loaded ? 'Loading…' : 'Nothing recorded yet.')); return out; }
+    out.push(el('div', { class: 'tl' }, ...AU.rows.map(r => { const [t, n] = auditLine(r);
+      const it = el('div', { class: 'tl-item' }, el('time', {}, when(r.at)), el('div', {}, t));
+      if (n) it.append(el('div', { class: 'tl-note' }, String(n).slice(0, 400)));
+      return it; })));
+    if (AU.more) { const m = el('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start' }, AU.busy ? 'Loading…' : 'Load more'); m.addEventListener('click', () => loadAudit(false)); out.push(m); }
+    return out;
+  }
+  window.slateAuditView = auditView;
+  window.slateAuditReload = () => loadAudit(true);
 
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
@@ -559,6 +685,18 @@
   .slate-sheet button[disabled]{opacity:.5}
   .slate-prow{display:grid;grid-template-columns:22px 38px minmax(0,1fr);gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);cursor:pointer}
   .slate-prow:last-child{border-bottom:0}
+  .slate-bubs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;background:var(--group);border-radius:12px;padding:12px 8px}
+  .slate-bub{appearance:none;border:0;background:transparent;border-radius:12px;padding:8px 4px;display:grid;justify-items:center;gap:3px;cursor:pointer;font:inherit;color:inherit;min-width:0}
+  .slate-bub:hover{background:rgba(0,0,0,.04)}
+  .slate-bub-a{position:relative;display:inline-grid;border-radius:50%;padding:3px;box-shadow:inset 0 0 0 2px transparent}
+  .slate-bub-a .ava{width:56px;height:56px;font-size:19px}
+  .slate-bub-a .ava:not(.lead):not(.ic){background:#fff;color:#3a3a3c;box-shadow:inset 0 0 0 1px var(--border)}
+  .slate-bub.on .slate-bub-a{box-shadow:inset 0 0 0 2.5px #000}
+  .slate-bub-on{position:absolute;right:3px;bottom:3px;width:13px;height:13px;border-radius:50%;background:#34C759;border:2px solid var(--group)}
+  .slate-bub-ck{position:absolute;right:-2px;top:-2px;width:22px;height:22px;border-radius:50%;background:#000;color:#fff;font-size:12px;display:grid;place-items:center;border:2px solid var(--group)}
+  .slate-bub-n{font-size:14px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+  .slate-bub-r{font-size:11.5px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-bub.on .slate-bub-n{color:#000}
   .slate-prow input{width:20px;height:20px;margin:0;accent-color:#000}
   #slate-acct{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));z-index:6;
     font:500 12.5px -apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#000;border:0;border-radius:999px;padding:6px 12px;cursor:pointer}
