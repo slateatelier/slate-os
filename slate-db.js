@@ -688,12 +688,12 @@
   .slate-bubs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;background:var(--group);border-radius:12px;padding:12px 8px}
   .slate-bub{appearance:none;border:0;background:transparent;border-radius:12px;padding:8px 4px;display:grid;justify-items:center;gap:3px;cursor:pointer;font:inherit;color:inherit;min-width:0}
   .slate-bub:hover{background:rgba(0,0,0,.04)}
-  .slate-bub-a{position:relative;display:inline-grid;border-radius:50%;padding:3px;box-shadow:inset 0 0 0 2px transparent}
-  .slate-bub-a .ava{width:56px;height:56px;font-size:19px}
+  .slate-bub-a{position:relative;display:grid;place-items:center;box-sizing:border-box;width:66px;height:66px;border-radius:50%;border:2.5px solid transparent;line-height:0;transition:border-color .15s}
+  .slate-bub-a .ava{width:56px;height:56px;font-size:19px;line-height:1;margin:0;vertical-align:top}
   .slate-bub-a .ava:not(.lead):not(.ic){background:#fff;color:#3a3a3c;box-shadow:inset 0 0 0 1px var(--border)}
-  .slate-bub.on .slate-bub-a{box-shadow:inset 0 0 0 2.5px #000}
+  .slate-bub.on .slate-bub-a{border-color:#34C759}
   .slate-bub-on{position:absolute;right:3px;bottom:3px;width:13px;height:13px;border-radius:50%;background:#34C759;border:2px solid var(--group)}
-  .slate-bub-ck{position:absolute;right:-2px;top:-2px;width:22px;height:22px;border-radius:50%;background:#000;color:#fff;font-size:12px;display:grid;place-items:center;border:2px solid var(--group)}
+  .slate-bub-ck{position:absolute;right:-2px;top:-2px;width:22px;height:22px;border-radius:50%;background:#34C759;color:#fff;font-size:12px;line-height:1;display:grid;place-items:center;border:2px solid var(--group)}
   .slate-bub-n{font-size:14px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
   .slate-bub-r{font-size:11.5px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slate-bub.on .slate-bub-n{color:#000}
