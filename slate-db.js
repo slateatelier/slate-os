@@ -333,6 +333,39 @@
     setInterval(syncBadge, 4000);
   }
 
+
+  /* ---------------- who is online (Home) ---------------- */
+  let onlineIds = [];
+  function setupPresence(session) {
+    try { if (session && session.access_token && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(session.access_token); } catch (_) {}
+    const ch = sb.channel('slate:presence', { config: { private: true, presence: { key: authUser.id } } });
+    const track = () => { if (document.visibilityState === 'visible') ch.track({ at: Date.now() }).catch(() => {}); else ch.untrack().catch(() => {}); };
+    ch.on('presence', { event: 'sync' }, () => { onlineIds = Object.keys(ch.presenceState()); placeOnline(true); })
+      .subscribe(st => { if (st === 'SUBSCRIBED') track(); });
+    document.addEventListener('visibilitychange', track);
+    window.addEventListener('pagehide', () => { try { ch.untrack(); } catch (_) {} });
+    new MutationObserver(() => placeOnline(false)).observe(document.body, { childList: true, subtree: true });
+  }
+  function placeOnline(force) {
+    const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
+    const old = document.getElementById('slate-online');
+    if (!home) { if (old) old.remove(); return; }
+    const head = document.querySelector('main .page-h'); if (!head) return;
+    if (old && !force && old.previousElementSibling === head) return;
+    const others = onlineIds.filter(id => id !== authUser.id && people.has(id) && people.get(id).active);
+    const name = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const chip = id => { let a = null; try { a = avaEl(id, false); } catch (_) {}
+      return el('span', { class: 'chip', style: 'padding:4px 12px 4px 4px;background:#fff;gap:8px' },
+        el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []),
+          el('i', { style: 'position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#34C759;border:2px solid #fff' })),
+        name(id)); };
+    const box = el('section', { id: 'slate-online', class: 'sec' },
+      el('div', { class: 'sec-h' }, el('h2', {}, 'Online now'), el('span', { class: 'cnt' }, String(others.length))),
+      others.length ? el('div', { class: 'chips', style: 'background:var(--group);border-radius:10px;padding:10px' }, ...others.sort((a, b) => name(a).localeCompare(name(b))).map(chip))
+                    : el('div', { class: 'list' }, el('p', { class: 'muted', style: 'margin:0' }, 'No one else has SLATE OS open right now.')));
+    if (old) old.replaceWith(box); else head.after(box);
+  }
+
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
   .slate-sheet{position:fixed;inset:0;z-index:1000;background:#fff;display:grid;place-items:center;
@@ -484,6 +517,7 @@
     try { await loadAll(); } catch (e) { started = false; authScreen('signin'); return; }
     hideAuth(); goLive(); addCss(); window.slateAccount = accountPanel;
     setupNotifications();
+    setupPresence(session);
     // Dashboard averages: anonymous score inputs for tasks this person can't see.
     window.slateDashRows = async (from, to) => {
       const { data, error } = await sb.rpc('dash_rows', { p_from: from, p_to: to });
