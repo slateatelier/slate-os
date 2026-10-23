@@ -4,6 +4,10 @@
    database; this file only moves documents and keeps the screen live. */
 (function () {
   'use strict';
+  // Installable app: register the service worker (home-screen launch, offline shell).
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
   // An invite or password-reset link lands here with its type in the URL; read it before the client clears it.
   const LINK_TYPE = (/[#&?]type=(recovery|invite)\b/.exec(location.hash + location.search) || [])[1] || null;
   let needPassword = !!LINK_TYPE;
