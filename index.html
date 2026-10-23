@@ -2683,6 +2683,7 @@ function sheetTask(){
     if(S.canWrite&&!t.archived&&!t.doneAt&&(mine||mgr)&&!t.request&&!ap&&(t.target||mgr)) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:'',reason:''}),text:t.target?'Request new date':'Propose date'}));
     if(mgr&&!t.archived){
       if(!t.doneAt&&ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('target',{date:t.target||(t.request&&t.request.date)||'',reason:''}),text:t.target?'Change target date':'Set target date'}));
+      if(!t.doneAt||amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('rename',{title:t.title}),text:'Rename'}));
       if(!t.doneAt||amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('edit',{title:t.title,phase:t.phase||'',kind:t.kind||'Task',projectId:t.projectId,assignee:t.assignee,repeat:t.repeat||'',start:t.start||''}),text:'Edit or reassign'}));
       // completed tasks are locked; only the Principal and the COO can reopen or correct them, with a reason
       if(t.doneAt&&amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('reopen',{note:''}),text:'Reopen'}),h('button',{class:'btn',type:'button',onclick:()=>setMode('donedate',{date:t.doneAt,note:''}),text:'Correct completion date'}));
@@ -2722,13 +2723,16 @@ function sheetTask(){
       const rev=(t.revisions||0)+1;
       run(()=>taskUpdate(t.id,{target:d.date,revisions:rev,request:null},[{type:'target',from:t.target,to:d.date,rev,note:d.reason.trim()}]),'Target date changed').then(ok=>ok&&setMode(null));
     }));
+  if(m==='rename') out.push(form('Rename',[field('Task name',inp('title',{maxlength:140,autocomplete:'off'}),'The old name stays in the history.')],'Save name',()=>{
+      const title=(d.title||'').trim().replace(/\s+/g,' '); if(!title) return fail('The name can’t be empty.'); if(title===t.title) return setMode(null);
+      run(()=>taskUpdate(t.id,{title},[{type:'renamed',from:t.title,to:title}]),'Task renamed').then(ok=>ok&&setMode(null)); }));
   if(m==='edit') out.push(form('Edit or reassign',[
     titleField(d),
     h('div',{class:'form-row'},field('Type',sel('kind',[['Task','Task'],['Deliverable','Deliverable']])),field('Project',(()=>{ const el=sel('projectId',ck?chalkProjOpts(t.projectId):projectOpts(t.projectId)); el.addEventListener('change',()=>renderSheet()); return el; })())),
     field('Assigned to',ck?(()=>{ const el=sel('assignee',chalkAssignOpts(t.assignee)); if(!canChalkAssign()) el.disabled=true; return el; })():sel('assignee',memberOpts(t.assignee))),
     h('div',{class:'form-row'},field('Start date (optional)',inp('start',{type:'date'}),'Used for the Timeline bar.'),field('Repeat',sel('repeat',Object.entries(REPEATS))))],'Save changes',()=>{
       const title=(d.title||'').trim(); if(!title) return fail('The title can’t be empty.');
-      if(!d.projectId||!d.assignee) return fail('Choose a project and a person.');
+      if(!d.projectId) return fail('Choose a project.'); if(!d.assignee&&t.assignee) return fail('Choose who it’s assigned to.');
       const patch={},ev=[];
       if((d.phase||'')!==(t.phase||'')){patch.phase=d.phase||'';ev.push({type:'category',from:t.phase||'',to:d.phase||''})}
       if(title!==t.title){patch.title=title;ev.push({type:'renamed',from:t.title,to:title})}
@@ -3795,15 +3799,15 @@ function viewChalk(){
       h('div',{class:'legend',style:'justify-content:flex-start'},h('span',{class:'s-overdue',text:'Overdue'}),h('span',{class:'s-late',text:'Due in 7 days'}),h('span',{class:'s-early',text:'Later'}),h('span',{class:'s-open',text:'No date'})))
     :h('div',{class:'card'},h('span',{class:'muted',text:'Set people’s team to Chalk Create in Settings › People to see them here.'}))));
   if(overdue.length) out.push(sec('Overdue',overdue.map(t=>row(t))));
-  out.push(sec('Due in the next 7 days',soon.length?soon.map(t=>row(t)):[h('p',{class:'muted',style:'margin:0',text:'Nothing due this week.'})]));
+  out.push(sec('Due in the next 7 days',soon.length?soon.map(t=>row(t)):[h('p',{class:'muted',style:'margin:0',text:'Nothing due this week.'})],h('span',{class:'cnt',text:String(soon.length)})));
   const nod=open.filter(t=>!t.target); if(nod.length) out.push(sec('No date yet',nod.map(t=>row(t))));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Projects'}),h('span',{class:'cnt',text:String(ps.filter(p=>!p.closed).length)})),
     ps.length?h('div',{class:'pgrid'},ps.map(p=>{ const pt=ts.filter(t=>t.projectId===p.id), done=pt.filter(t=>t.doneAt).length, nx=pt.filter(t=>!t.doneAt&&t.target).sort(byTarget)[0], od=pt.filter(t=>!t.doneAt&&t.target&&t.target<td).length;
       return h('button',{class:'pcard',type:'button',onclick:()=>openChalkProjView(p.id)},
-        h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{class:'pill '+(p.closed?'s-open':od?'s-overdue':'s-ontime'),text:p.closed?'Closed':od?`${od} overdue`:'On track'})),
+        h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{class:'pill '+(p.closed?'s-open':od?'s-overdue':pt.some(t=>!t.doneAt&&!t.target)?'s-open':'s-ontime'),text:p.closed?'Closed':od?`${od} overdue`:pt.some(t=>!t.doneAt&&!t.target)?'Needs dates':'On track'})),
         h('div',{class:'pc-name',text:p.name}),h('div',{class:'pc-meta',text:[chalkTypeName(p.type),p.client,p.dueDate?'Due '+fmtD(p.dueDate):''].filter(Boolean).join(' · ')}),
         h('div',{class:'pc-bar'},h('span',{style:`width:${pt.length?Math.round(done/pt.length*100):0}%`})),
-        h('div',{class:'pc-row muted'},h('span',{text:nx?'Next: '+nx.title:(pt.length?'All tasks done':'No tasks yet')}),h('span',{class:'mono',text:nx?fmtD(nx.target):''}))); }))
+        h('div',{class:'pc-row muted'},h('span',{text:nx?'Next: '+nx.title:!pt.length?'No tasks yet':done===pt.length?'All tasks done':`${pt.length-done} open · no dates yet`}),h('span',{class:'mono',text:nx?fmtD(nx.target):''}))); }))
     :h('div',{class:'card'},h('span',{class:'muted',text:'No Chalk projects yet.'}))));
   return out;
 }
