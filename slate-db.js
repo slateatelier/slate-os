@@ -11,6 +11,11 @@
   // An invite or password-reset link lands here with its type in the URL; read it before the client clears it.
   const LINK_TYPE = (/[#&?]type=(recovery|invite)\b/.exec(location.hash + location.search) || [])[1] || null;
   let needPassword = !!LINK_TYPE;
+  // Chrome / Edge / Samsung offer an install prompt; keep it for our own button.
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; try { window.dispatchEvent(new Event('slate-installable')); } catch (_) {} });
+  window.addEventListener('appinstalled', () => { installEvt = null; try { localStorage.setItem('slate-installed', '1'); } catch (_) {}
+    const b = document.getElementById('slate-install-banner'); if (b) b.remove(); });
   const CFG = window.SLATE_CONFIG;
   // "Keep me signed in": ticked (default) keeps the session on this device; unticked ends it when the app is closed.
   const remember = () => { try { return localStorage.getItem('slate-remember') !== '0'; } catch (_) { return true; } };
@@ -310,10 +315,10 @@
   function markSeen() { if (document.visibilityState === 'visible') sb.rpc('notifications_seen').then(() => {}, () => {}); }
   function notifBanner() {
     const st = notifStatus();
-    if (ls.get('slate-notif-asked') || !(st === 'default' || st === 'install-first')) return;
+    if (ls.get('slate-notif-asked') || st !== 'default') return;          // iPhone not yet installed: the install banner covers it
     let done = false;
     const place = () => {
-      if (done || ls.get('slate-notif-asked') || notifStatus() === 'granted' || notifStatus() === 'denied') return;
+      if (done || ls.get('slate-notif-asked') || notifStatus() !== 'default') return;
       const main = document.querySelector('main'); if (!main || document.getElementById('slate-notif-banner')) return;
       const msg = st === 'install-first' ? 'Get notifications on this iPhone: tap Share → Add to Home Screen, then open SLATE OS from the icon.' : 'Get notified about tasks and approvals, even when SLATE OS is closed.';
       const on = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Turn on');
@@ -328,7 +333,7 @@
   function alertMsg(box, text) { let m = box.querySelector('.slate-err'); if (!m) { m = el('div', { class: 'slate-err', style: 'color:#ff3b30;font-size:13px;width:100%' }); box.append(m); } m.textContent = text; }
   function setupNotifications() {
     window.slateNotif = { status: notifStatus, enable: enableNotifications };
-    refreshSubscription(); markSeen(); syncBadge(); notifBanner();
+    refreshSubscription(); markSeen(); syncBadge(); notifBanner(); installBanner();
     document.addEventListener('visibilitychange', () => { markSeen(); syncBadge(); });
     setInterval(syncBadge, 4000);
   }
@@ -364,6 +369,76 @@
       others.length ? el('div', { class: 'chips', style: 'background:var(--group);border-radius:10px;padding:10px' }, ...others.sort((a, b) => name(a).localeCompare(name(b))).map(chip))
                     : el('div', { class: 'list' }, el('p', { class: 'muted', style: 'margin:0' }, 'No one else has SLATE OS open right now.')));
     if (old) old.replaceWith(box); else head.after(box);
+  }
+
+
+  /* ---------------- install button, by device ---------------- */
+  function installKind() {
+    if (isStandalone()) return 'installed';
+    const ua = navigator.userAgent;
+    if (installEvt) return 'prompt';                                         // Chrome, Edge, Samsung: real install prompt
+    if (isIOS()) return 'ios';                                               // iPhone / iPad: Share → Add to Home Screen
+    if (/Macintosh/.test(ua) && /Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) return 'mac-safari';
+    if (/Android/.test(ua) && /Firefox/.test(ua)) return 'android-firefox';
+    if (/Android/.test(ua)) return 'android-menu';                           // Chrome before its prompt is ready
+    if (/Firefox/.test(ua)) return 'none';                                   // desktop Firefox cannot install web apps
+    return 'desktop-menu';
+  }
+  const INSTALL_STEPS = {
+    ios: ['Tap the Share button <svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:-4px" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Share"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> — at the bottom of Safari on iPhone, at the top right on iPad.', 'Scroll down and tap <b>Add to Home Screen</b>.', 'Tap <b>Add</b>. Then open SLATE OS from the red icon and turn on notifications.'],
+    'mac-safari': ['In the menu bar choose <b>File → Add to Dock</b>.', 'Click <b>Add</b>. SLATE OS gets its own Dock icon and window.'],
+    'android-menu': ['Tap the <b>⋮</b> menu at the top right of Chrome.', 'Tap <b>Install app</b> (or <b>Add to Home screen</b> → <b>Install</b>).', 'Open SLATE OS from the new red icon.'],
+    'android-firefox': ['Tap the <b>⋮</b> menu.', 'Tap <b>Install</b> (or <b>Add to Home screen</b>).'],
+    'desktop-menu': ['Click the install icon at the right end of the address bar, or open the browser menu.', 'Choose <b>Install SLATE OS</b> (Edge: <b>Apps → Install this site as an app</b>).']
+  };
+  const installLabel = k => k === 'ios' ? 'Add to Home Screen' : k === 'mac-safari' ? 'Add to Dock' : 'Install SLATE OS';
+  async function runInstall(k) {
+    if (k === 'prompt' && installEvt) {
+      const e = installEvt; installEvt = null;
+      e.prompt(); const r = await e.userChoice.catch(() => ({ outcome: 'dismissed' }));
+      return r.outcome === 'accepted';
+    }
+    showInstallSteps(k); return false;
+  }
+  function showInstallSteps(k) {
+    const steps = INSTALL_STEPS[k]; if (!steps) return;
+    addCss();
+    const close = el('button', { class: 'primary', type: 'button' }, 'Got it');
+    const list = el('ol', { style: 'margin:0;padding-left:22px;display:grid;gap:10px;font-size:16px;line-height:1.4' });
+    steps.forEach(s => { const li = document.createElement('li'); li.innerHTML = s; list.append(li); });
+    const root = el('div', { id: 'slate-install-sheet', class: 'slate-sheet', role: 'dialog', 'aria-label': installLabel(k) },
+      el('div', { class: 'box' }, el('div', { class: 'brand' }, el('b', { style: 'font-size:22px;letter-spacing:.04em' }, installLabel(k)), el('i', {}), el('span', {}, 'SLATE OS on this device')), list, close));
+    close.addEventListener('click', () => root.remove());
+    document.body.append(root);
+  }
+  function installBanner() {
+    let done = false;
+    const place = () => {
+      const k = installKind();
+      if (done || k === 'installed' || k === 'none' || ls.get('slate-install-later') || ls.get('slate-installed')) return;
+      const main = document.querySelector('main'); if (!main || document.getElementById('slate-install-banner')) return;
+      const text = k === 'ios' ? 'Add SLATE OS to your Home Screen: it opens like an app and can send you notifications.'
+                 : 'Install SLATE OS on this device: it opens in its own window with its own icon.';
+      const go = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, installLabel(k));
+      const later = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Not now');
+      const b = el('div', { id: 'slate-install-banner', class: 'banner' }, el('span', {}, text), el('div', { class: 'actions' }, go, later));
+      go.addEventListener('click', async () => { if (await runInstall(installKind())) { done = true; b.remove(); } });
+      later.addEventListener('click', () => { done = true; ls.set('slate-install-later', '1'); b.remove(); });
+      main.prepend(b);
+    };
+    new MutationObserver(place).observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('slate-installable', () => { const b = document.getElementById('slate-install-banner'); if (b) b.remove(); place(); });
+    place();
+  }
+  function installRow() {
+    const k = installKind();
+    if (k === 'none') return el('span');
+    const box = el('div', { style: 'display:grid;gap:8px;background:#f2f2f7;border-radius:10px;padding:12px 14px;font-size:14px' }, el('b', {}, 'App'));
+    if (k === 'installed') { box.append(el('span', { style: 'color:#3c3c43' }, 'SLATE OS is installed on this device.')); return box; }
+    const b = el('button', { class: 'primary', type: 'button' }, installLabel(k));
+    b.addEventListener('click', () => runInstall(installKind()));
+    box.append(el('span', { style: 'color:#3c3c43' }, 'Open SLATE OS like an app, with its own icon.'), b);
+    return box;
   }
 
   /* ---------------- sign-in gate ---------------- */
@@ -476,7 +551,7 @@
     const close = el('button', { class: 'link', type: 'button' }, 'Close');
     const form = el('form', { class: 'box', novalidate: '' },
       el('div', { class: 'brand' }, el('b', {}, 'Account'), el('i', {}), el('span', {}, authUser ? authUser.email : '')),
-      notifRow(),
+      installRow(), notifRow(),
       el('label', {}, 'New password (8+ characters)', pw1), el('label', {}, 'Type it again', pw2), save,
       el('div', { class: 'row' }, out, close), msg);
     const root = el('div', { id: 'slate-acct-panel', class: 'slate-sheet', role: 'dialog', 'aria-label': 'Account' }, form);
