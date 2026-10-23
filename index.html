@@ -1498,9 +1498,9 @@ function renderHeader(){
   { const nn=newCount(); slot.replaceChildren(h('button',{class:'bell',type:'button','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
       nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null)); }
-  const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+minutesToApprove().length+extraReqs().length:0;
+  const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+minutesToApprove().length+extraReqs().length+(S.isOwner?chalkReqs().length:0):0;
   const full=fullView(), mp=myPod();
-  const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',chalkReqs().length]]:[];
+  const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
   const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar']]:[['mine','Home',reqs],['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',S.isOwner?roleProposals().length:0]];
   const TASKV=['all','board','gantt'], MOREV=cmem?[]:['more','team','activity','setup','meet','std','help','far'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
@@ -1611,7 +1611,7 @@ function viewMine(){
     if(amApprover()&&S.canWrite&&routine>1) out.push(h('div',{class:'banner'},h('span',{text:`${routine} dates and assignments are waiting. Review them below, or approve them all at once.`}),
       h('button',{class:'btn '+(S.confirmAll?'btn-accent':'btn-primary')+' btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!S.confirmAll){ S.confirmAll=true; render(true); setTimeout(()=>{ S.confirmAll=false; render(true); },5000); return; } S.confirmAll=false; approveAllRoutine(reqs,areq); },text:S.confirmAll?`Tap again to approve ${routine}`:`Approve all ${routine}`}))); }
   if(areq.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Support assignments to approve'}),h('span',{class:'cnt',text:String(areq.length)})),h('div',{class:'list'},areq.map(t=>assignCard(t,false)))));
-  if(amChalkLead()&&!S.isOwner){ const cr=chalkReqs().length, co=chalkTasks().filter(t=>!t.doneAt&&t.target&&t.target<today()).length; out.push(h('div',{class:'banner'},h('span',{text:`Chalk Create: ${cr} date request${cr===1?'':'s'} · ${co} overdue`}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.view='chalk'; render(true); window.scrollTo(0,0); },text:'Open Chalk Create'}))); }
+  if(amChalkLead()&&!S.isOwner){ const cr=chalkReqs().length, co=chalkTasks().filter(t=>!t.doneAt&&t.target&&t.target<today()).length; out.push(h('div',{class:'banner'},h('span',{text:`Chalk Create: ${co} overdue`+(cr?` · ${cr} date request${cr===1?'':'s'} with the Principal`:'')}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.view='chalk'; render(true); window.scrollTo(0,0); },text:'Open Chalk Create'}))); }
   { const pl=pmLogCard(); if(pl) out.push(pl); }
   if(!amChalkMember()){ const up=upcomingSunday(); if(organiserFor(up)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{S.view='meet';render(true)},text:'All minutes'})),meetingCard(up,true))); }
   { const ma=amApprover()?minutesToApprove():[]; if(ma.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Meeting minutes to approve'}),h('span',{class:'cnt',text:String(ma.length)})),h('div',{class:'list'},ma.map(([d,m])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openMeeting(d)},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:`Meeting of ${wd(d)} ${fmtD(d)}`}),h('div',{class:'row-meta who'},avaEl(organiserFor(d),false,'sm'),`Submitted by ${nameOf(m.submittedBy||organiserFor(d))}`)),h('span',{class:'mi-a',text:'›'})))))); }
@@ -1620,6 +1620,7 @@ function viewMine(){
   const pjq=amApprover()?projReqCards():null; if(pjq) out.push(pjq);
   const phq=amApprover()?phaseReqCards():null; if(phq) out.push(phq);
   const lbq=amApprover()?libReqCards():null; if(lbq) out.push(lbq);
+  { const cr=S.isOwner?chalkReqs():[]; if(cr.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Chalk Create dates to approve'}),h('span',{class:'cnt',text:String(cr.length)})),S.canWrite?approvalCards(cr):h('div',{class:'list'},cr.map(t=>row(t))))); }
   if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Dates to approve'}),h('span',{class:'cnt',text:String(reqs.length)})),approvalBlocks(reqs)));
   if(!pref.helpSeen&&!amChalkMember()) out.splice(1,0,h('div',{class:'banner'},h('span',{text:'New here? See how to use SLATE OS for your role.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Dismiss'}))));
   const xrq=amApprover()?extraReqCards():null; if(xrq) out.push(xrq);
@@ -2601,7 +2602,7 @@ function viewSetup(){
       h('li',{text:'Pod leads can request a nickname for their pod; the COO approves it before it shows. The Principal and the COO can set any pod’s nickname directly.'}),
       h('li',{text:'Pod leads can request to add a team member to their pod from their pod tab. The COO approves or declines it; the Principal can still set anyone’s team directly here.'}),
       h('li',{text:'Tasks you assign to someone marked Private are stored separately: only you and that person can read them, and they never appear for anyone else.'}),
-      h('li',{text:'Chalk Create is a separate unit. Its lead (ticked in the Chalk lead column) and the Principal create Chalk projects and assign Chalk work, with no COO approval. The COO can view and edit it. Chalk people see only their own work; SLATE staff do not see Chalk at all, and Chalk work never counts in SLATE scoring, workload or dashboards. Only the Principal can give a SLATE task to a Chalk person.'}),
+      h('li',{text:'Chalk Create is a separate unit. Its lead (ticked in the Chalk lead column) and the Principal create Chalk projects and assign Chalk work, with no COO approval. Once a Chalk task has a date, only the Principal changes it or approves a date request. The COO can view and edit the rest. Chalk people see only their own work; SLATE staff do not see Chalk at all, and Chalk work never counts in SLATE scoring, workload or dashboards. Only the Principal can give a SLATE task to a Chalk person.'}),
       h('li',{text:'The bell shows notifications. The Principal and the COO get every team update and anything waiting for approval; pod leads get their pod’s activity and deadlines; members get their own. Everyone gets upcoming submissions, a Sunday weekly update and a Thursday list of next week’s submissions. Items move to the archive when archived, or after 14 days.'}),
       h('li',{text:'Everyone can pick a profile icon from 30 options (tap your picture at the top left). Each icon belongs to one person at a time; the Principal can reset anyone’s.'}),
       h('li',{text:'A completed task is locked: only the Principal and the COO can reopen it, edit it or correct its completion date, and each needs a written reason kept in the history. Client feedback after completion is added with “+ Client revision”, which creates a linked revision task with its own submission date; the original on-time record stays.'}),
@@ -2647,7 +2648,7 @@ const projectOpts=(incl)=>[['','Select project…'],...projects().filter(p=>!p.c
 function sheetTask(){
   const raw=S.tasks[S.sheet.id];
   if(!raw) return [head('Task','Not found'),h('p',{class:'muted',text:'This task is no longer in the register.'})];
-  const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((amMgr()&&!ck)||amApprover()||cctl)&&S.canWrite, ap=(amApprover()||cctl)&&S.canWrite, mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
+  const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((amMgr()&&!ck)||amApprover()||cctl)&&S.canWrite, ap=(ck?(S.isOwner||(canChalkAssign()&&!t.target&&!t.request)):amApprover())&&S.canWrite, boss=ck?'the Principal':'the COO', mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
   const canAct=S.canWrite&&!t.archived&&(mine||mgr);
   const out=[head(`${projLabel(p)} · ${t.kind||'Task'}`,t.title)];
   out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',text:`Target revised ${t.revisions}×`})));
@@ -2672,7 +2673,7 @@ function sheetTask(){
       r.reason&&h('p',{class:'quote',text:r.reason}),h('div',{class:'f-hint',text:`${nameOf(r.by)} · ${fmtTs(r.at)}`}),
       ap&&!t.archived&&h('div',{class:'bar'},h('input',{id:'sh-dn',placeholder:'Note (optional)',value:S.declineNote[t.id]||'',oninput:e=>{S.declineNote[t.id]=e.target.value}}),
         h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>approve(t),text:'Approve'}),h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>decline(t),text:'Decline'})),
-      !ap&&h('div',{class:'f-hint',text:t.target?'Waiting for the COO’s approval. The current target stays until it is approved.':'Waiting for the COO’s approval.'})));
+      !ap&&h('div',{class:'f-hint',text:t.target?`Waiting for ${boss}’s approval. The current target stays until it is approved.`:`Waiting for ${boss}’s approval.`})));
   }
 
   if(!m&&S.canWrite){
@@ -2703,7 +2704,7 @@ function sheetTask(){
   if(m==='request') out.push(form(t.target?'Request a revised date':'Propose a target date',[
     field('Proposed date',h('div',{style:'display:grid;gap:8px'},dateChips(d.date,x=>{ d.date=x; renderSheet(); },t.target&&t.target>today()?t.target:null),inp('date',{type:'date',min:today()}))),
     t.target&&h('div',{class:'chips'},['Client changed the brief','Waiting for client input','Waiting for consultant input','Authority comments','Workload clash'].map(r=>h('button',{type:'button',class:'chip'+(d.reason===r?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ d.reason=r; renderSheet(); },text:r}))),
-    field(t.target?'Reason':'Note (optional)',ta('reason',{placeholder:t.target?'e.g. Client changed the brief on 18 Oct; structural input pending':''}),t.target?'The COO reviews this. Your current target stays until it is approved.':'The COO reviews this before it counts.')],'Send for approval',()=>{
+    field(t.target?'Reason':'Note (optional)',ta('reason',{placeholder:t.target?'e.g. Client changed the brief on 18 Oct; structural input pending':''}),t.target?`${boss[0].toUpperCase()+boss.slice(1)} reviews this. Your current target stays until it is approved.`:`${boss[0].toUpperCase()+boss.slice(1)} reviews this before it counts.`)],'Send for approval',()=>{
       if(!d.date) return fail('Choose the date you’re proposing.');
       if(d.date===t.target) return fail('That is already the target date.');
       const reason=(d.reason||'').trim();
@@ -3780,11 +3781,11 @@ function viewChalk(){
   const overdue=open.filter(t=>t.target&&t.target<td).sort(byTarget), soon=open.filter(t=>t.target&&t.target>=td&&t.target<=wk).sort(byTarget);
   const reqs=chalkReqs(), ps=chalkProjects(), lead=chalkLeads().filter(Boolean);
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Separate unit · '+(lead.length?'Led by '+lead.map(nameOf).join(', '):'No lead set')}),h('h1',{class:'h1',text:'Chalk Create'}),
-      h('p',{class:'lead',text:'3D visualisation, brochures, fencing and graphic design. Runs outside the SLATE process: no COO approval and no scoring.'+(isCOO(S.uid)&&!S.isOwner?' You can view and edit; the Chalk lead and the Principal assign work.':'')})),
+      h('p',{class:'lead',text:'3D visualisation, brochures, fencing and graphic design. Runs outside the SLATE process and is not scored. Date changes are approved by the Principal only.'+(isCOO(S.uid)&&!S.isOwner?' You can view and edit; the Chalk lead and the Principal assign work.':'')})),
     S.canWrite&&canChalkEdit()?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New project'}),canChalkAssign()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openChalkTask(),text:'New task'}):null):null)];
   out.push(h('div',{class:'kpis'},kpi('Open',open.length),kpi('Due in 7 days',soon.length,'late'),kpi('Overdue',overdue.length,'overdue'),kpi('Done this month',ts.filter(t=>t.doneAt&&t.doneAt>=mstart).length,'ontime')));
-  if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Date requests'}),h('span',{class:'cnt',text:String(reqs.length)})),
-    canChalkEdit()?approvalCards(reqs):h('div',{class:'list'},reqs.map(t=>row(t)))));
+  if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:S.isOwner?'Date requests to approve':'Date requests · with the Principal'}),h('span',{class:'cnt',text:String(reqs.length)})),
+    S.isOwner&&S.canWrite?approvalCards(reqs):h('div',{class:'list'},reqs.map(t=>row(t)))));
   const ppl=chalkPeople().filter(id=>isChalkP(id));
   const rows=ppl.map(id=>({id,c:chalkLoad(id)})).sort((a,b)=>b.c.open-a.c.open), mx=Math.max(1,...rows.map(x=>x.c.open));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Team load'}),h('span',{class:'cnt',text:`${ppl.length} ${ppl.length===1?'person':'people'}`})),
@@ -3853,7 +3854,7 @@ function sheetChalkTask(){
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'ck-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
       field('Note (optional)',inp('note',{maxlength:160})),
       sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
-      h('div',{class:'f-hint',text:'No approval needed: the date counts straight away.'}),
+      h('div',{class:'f-hint',text:'No approval needed for the first date: it counts straight away. Any later change is a date request the Principal approves.'}),
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Add task'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Close'}))),
     sh.added.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Added just now'})),h('div',{class:'list'},sh.added.map(x=>h('div',{class:'f-hint',text:x})))):null];
 }
