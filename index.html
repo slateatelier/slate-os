@@ -2906,7 +2906,7 @@ function sheetProject(){
       sec('Project'),
       h('div',{class:'form-row'},field('Project code',h('input',{id:'sh-code',value:d.code||'',readonly:true,tabindex:'-1',placeholder:'Set automatically when saved',style:'color:var(--muted)'}),'Area · plot · size · year and number, e.g. GUL2-24A-10K-2603'),field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'}))),
       field('Project type'+(isStudio?'':' *'),typeSel(d,'Select project type…')),
-      field('Pod *',(()=>{ const el=sel('pod',[['','Select pod…'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)']]); el.addEventListener('change',()=>renderSheet()); return el; })(),'The lead pod: its lead architect is accountable for the project.'),
+      field('Pod *',(()=>{ const el=sel('pod',[['','Select pod…'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)'],...(!id&&canChalkEdit()?[['__chalk','Chalk Create (separate unit) →']]:[])]); el.addEventListener('change',()=>{ if(el.value==='__chalk'){ D().pod=''; openChalkProject(); return; } renderSheet(); }); return el; })(),'The lead pod: its lead architect is accountable for the project.'),
       !isStudio&&[
         h('div',{class:'form-row'},field('Land size (katha) *',h('input',{id:'sh-katha',type:'number',min:0,step:'any',inputmode:'decimal',value:d.katha||'',oninput:e=>{const was=parseFloat(d.katha)>30;d.katha=e.target.value;if((parseFloat(d.katha)>30)!==was)renderSheet()}})),
           field(parseFloat(d.katha)>30?'Second pod *':'Second pod (optional)',sel('pod2',[['','None'],...pods().filter(x=>x!==d.pod).map(x=>[x,podLabel(x)])]))),
@@ -3653,7 +3653,7 @@ function viewProjects(){
   const all=projects(), act=all.filter(p=>!p.closed&&p.pod!=='Studio'), stats=new Map(all.map(p=>[p.id,projStats(p)]));
   const hc=k=>act.filter(p=>stats.get(p.id).health===k).length;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Studio list'}),h('h1',{class:'h1',text:'Projects'}),h('p',{class:'lead',text:'Every project, its agreement and its progress. New projects are approved by the COO before they join the list.'})),
-    S.canWrite&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:ap?'New project':'Request a project'}))];
+    S.canWrite&&h('div',{class:'actions'},canChalkEdit()?h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New Chalk project'}):null,h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:ap?'New project':'Request a project'})))];
   out.push(h('div',{class:'kpis'},kpi('Active projects',act.length),kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open')));
   const pr=ap?projReqCards():null; if(pr) out.push(pr);
   const phr=ap?phaseReqCards():null; if(phr) out.push(phr);
