@@ -580,7 +580,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .cal-key i{width:9px;height:9px;border-radius:3px;background:var(--kc)}
 .cal-key b{font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
 .cal-key.off{opacity:.45}.cal-key.off i{background:var(--faint)}
-.ce-gate{--kc:var(--ink)}.ce-task{--kc:var(--early)}.ce-meet{--kc:#8E8E93}.ce-fb{--kc:var(--late)}
+.ce-gate{--kc:var(--ink)}.ce-task{--kc:var(--early)}.ce-meet{--kc:#8E8E93}.ce-fb{--kc:var(--late)}.ce-remind{--kc:#AF52DE}
 .cal{background:var(--group);border-radius:12px;overflow:hidden}
 .cal-h{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));font-size:12px;font-weight:600;color:var(--muted);text-align:center;padding:8px 0}
 .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line)}
@@ -594,7 +594,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .cal-c.today .cal-n span{background:var(--overdue);color:#fff}
 .cal-items{display:grid;gap:3px;min-width:0}
 .ce{appearance:none;border:0;text-align:left;font:inherit;font-size:11.5px;line-height:1.25;padding:3px 6px;border-radius:5px;background:var(--group);color:var(--ink);cursor:pointer;min-width:0;box-shadow:inset 3px 0 0 var(--c,var(--kc))}
-.ce.ce-meet,.ce.ce-fb{box-shadow:inset 3px 0 0 var(--kc)}
+.ce.ce-meet,.ce.ce-fb,.ce.ce-remind{box-shadow:inset 3px 0 0 var(--kc)}
 .ce.ce-gate{font-weight:600}
 .ce.done .ce-t{text-decoration:line-through;color:var(--muted)}
 .ce.prop{background:transparent;outline:1px dashed var(--faint);outline-offset:-1px}
@@ -605,7 +605,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .cal-row:last-child{border-bottom:0}
 .cal-row:hover{background:rgba(0,0,0,.03)}
 .cr-bar{align-self:stretch;border-radius:2px;background:var(--c,var(--kc))}
-.cal-row.ce-meet .cr-bar,.cal-row.ce-fb .cr-bar{background:var(--kc)}
+.cal-row.ce-meet .cr-bar,.cal-row.ce-fb .cr-bar,.cal-row.ce-remind .cr-bar{background:var(--kc)}
 .cr-t{font-weight:500;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .cal-row.done .cr-t>span:first-child{text-decoration:line-through;color:var(--muted)}
 .cr-m{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 5px;margin-top:2px}
@@ -615,7 +615,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
   .cal-items{display:none}
   .cal-dots{display:flex;gap:3px;justify-content:center;flex-wrap:wrap}
   .cal-dots i{width:6px;height:6px;border-radius:50%;background:var(--c,var(--kc))}
-  .cal-dots i.ce-meet,.cal-dots i.ce-fb{background:var(--kc)}
+  .cal-dots i.ce-meet,.cal-dots i.ce-fb,.cal-dots i.ce-remind{background:var(--kc)}
   .cal-c.sel{box-shadow:none}.cal-c.sel .cal-n span{background:var(--ink);color:#fff}
   .cal-c.today.sel .cal-n span{background:var(--overdue)}
   .cal-row{grid-template-columns:4px minmax(0,1fr)}
@@ -3414,7 +3414,7 @@ function hxMessages(){
     h('div',{class:'hx-bub in'},h('div',{class:'hx-bub-h'},avaEl(ownerId(),true,'sm'),h('b',{text:'Principal'}),h('span',{text:'9:05'})),h('div',{text:'Site visit moved to 3 pm today.'})),
     h('div',{class:'hx-msg-arrow','aria-hidden':'true'},hxIco('down')),
     h('div',{class:'hx-replies'},chip('On it','var(--ink)'),chip('Already done','var(--ontime)'),chip('Will do it later','var(--early)'),chip('Need help','var(--overdue)'),chip('Remind me…','var(--late)')),
-    h('p',{class:'hx-foot',text:'The message stays on Home until you answer. Your reply goes straight back to the sender, and both are kept in the log. Remind me brings it back in 1 hour, 3 hours, this evening or tomorrow morning.'}));
+    h('p',{class:'hx-foot',text:'The message stays on Home until you answer. Your reply goes straight back to the sender, and both are kept in the log. Remind me brings it back in 1 hour, 3 hours, this evening or tomorrow morning, and puts it on your Calendar at that time.'}));
 }
 /* infographic: how points are earned */
 function hxScore(){
@@ -3469,7 +3469,7 @@ function viewHelp(){
 
 
 /* ---------- calendar: every visible task, gate, meeting and feedback date by day ---------- */
-const CALK={gate:'Gate deliverables',task:'Tasks',meet:'Meetings',fb:'Client feedback'};
+const CALK={gate:'Gate deliverables',task:'Tasks',meet:'Meetings',fb:'Client feedback',remind:'My reminders'};
 function calState(){ if(!S.cal) S.cal={m:today().slice(0,7),sel:today(),who:'',proj:'',off:{}}; return S.cal; }
 function calItems(from,to){
   const C=calState(), out=[], inR=d=>d&&d>=from&&d<=to;
@@ -3486,6 +3486,10 @@ function calItems(from,to){
     if(C.who&&!(m.attendees||[]).includes(C.who)&&m.createdBy!==C.who) continue;
     out.push({d:m.date,k:'meet',t:`${PMT[m.type]||'Project'} meeting`,p,who:m.createdBy,st:m.status==='final'?'ontime':'late',go:()=>openPMeet(id)});
   }
+  // my own reminders, set with "Remind me…" on a message: they sit on the day and time chosen
+  if(!C.proj&&(!C.who||C.who===S.uid)&&window.slateReminders) for(const r of window.slateReminders()){ const at=new Date(r.remind_at), d=ymd(at); if(!inR(d)) continue;
+    const hm=at.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+    out.push({d,k:'remind',t:`${hm} · ${(r.body||r.title||'Reminder').replace(/\s+/g,' ').slice(0,80)}`,who:r.sender||null,st:r.reminded_at?'ontime':'open',done:!!r.reminded_at,time:hm,go:()=>{ S.view='mine'; render(true); window.scrollTo(0,0); }}); }
   for(const p of projects()){
     if(!p.std||p.closed||!projOk(p.id)||!canSeeProjectDetail(p)) continue;
     for(const [k,d] of Object.entries((p.std&&p.std.fb)||{})){ if(!inR(d)||C.who) continue;
@@ -3493,7 +3497,7 @@ function calItems(from,to){
       out.push({d,k:'fb',t:`Client feedback due · phase ${PH[k]?PH[k].no:k}`,p,st:got?'ontime':'open',done:!!got,go:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); }}); }
   }
   if(!C.proj&&!C.who&&!amChalkMember()){ let d=from; while(d<=to){ if(new Date(d+'T00:00').getDay()===0&&organiserFor(d)){ const dd=d; out.push({d:dd,k:'meet',t:'Weekly studio meeting · '+MEET_TIME,who:organiserFor(dd),st:'open',weekly:true,go:()=>openMeeting(dd)}); } d=addDays(d,1); } }
-  const ord={gate:0,meet:1,fb:2,task:3};
+  const ord={remind:0,gate:1,meet:2,fb:3,task:4};
   return out.filter(x=>!C.off[x.k]).sort((a,b)=>a.d.localeCompare(b.d)||ord[a.k]-ord[b.k]||a.t.localeCompare(b.t));
 }
 function calChip(x,full){
@@ -3504,7 +3508,7 @@ function calChip(x,full){
     h('span',{class:'cr-bar'}),
     h('div',{class:'cr-main'},h('div',{class:'cr-t'},h('span',{text:x.t}),x.k==='gate'?h('span',{class:'tag',text:'Gate'}):null,x.prop?h('span',{class:'tag',text:'Proposed date'}):null),
       h('div',{class:'cr-m'},h('span',{text:CALK[x.k]}),code?h('span',{text:'· '+code}):null,x.who?h('span',{text:'· '+nameOf(x.who)}):null)),
-    x.task?pill(x.task,'approved'):h('span',{class:'pill s-'+(x.done||x.st==='ontime'?'ontime':'open'),text:x.k==='fb'?(x.done?'Received':'Due'):(x.weekly?'Sunday':(x.st==='ontime'?'Minutes final':'Minutes to finish'))}));
+    x.task?pill(x.task,'approved'):h('span',{class:'pill s-'+(x.done||x.st==='ontime'?'ontime':'open'),text:x.k==='remind'?(x.done?'Reminded':x.time):x.k==='fb'?(x.done?'Received':'Due'):(x.weekly?'Sunday':(x.st==='ontime'?'Minutes final':'Minutes to finish'))}));
 }
 function viewCal(){
   const C=calState(), [y,mo]=C.m.split('-').map(Number), first=new Date(y,mo-1,1), last=new Date(y,mo,0);

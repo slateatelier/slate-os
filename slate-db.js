@@ -540,6 +540,14 @@
     return el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, 'Sent and replies')), el('div', { class: 'list' }, ...items));
   }
 
+  /* my reminders (from "Remind me…"), shown on my Calendar at the chosen time */
+  let myReminders = [];
+  async function loadReminders() {
+    const { data } = await sb.from('notifications').select('id,title,body,remind_at,reminded_at,sender').eq('user_id', authUser.id).not('remind_at', 'is', null).order('remind_at', { ascending: true }).limit(300);
+    myReminders = data || [];
+    try { if (S.view === 'cal') render(true); } catch (_) {}
+  }
+  window.slateReminders = () => myReminders;
   /* messages, replies and reminders for me: cards on Home until answered or dismissed */
   let myMessages = [];
   async function loadMessages() {
@@ -569,7 +577,8 @@
         const { error } = await sb.rpc('message_reply', { p_id: msgId, p_choice: choice, p_remind_at: remindAt ? remindAt.toISOString() : null });
         if (error) { status.textContent = friendly(error).message; status.className = 'err'; actions.querySelectorAll('button').forEach(b => { b.disabled = false; }); return; }
         if (m.kind === 'reminder') await sb.rpc('message_read', { p_id: m.id });
-        try { toast(choice === 'remind' ? 'Reminder set for ' + when(remindAt) : 'Reply sent: ' + label); } catch (_) {}
+        if (choice === 'remind') loadReminders();
+        try { toast(choice === 'remind' ? 'Reminder set for ' + when(remindAt) + ' · added to your Calendar' : 'Reply sent: ' + label); } catch (_) {}
         gone(m.id);
       };
       if (msgId) {
@@ -595,11 +604,11 @@
   }
   function setupMessages() {
     window.slatePeopleView = peopleView;
-    loadMessages();
+    loadMessages(); loadReminders();
     sb.channel('slate-my-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + authUser.id },
-      ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); if (ev.new.kind === 'reply') loadSent(); } }).subscribe();
+      ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); if (ev.new.kind === 'reply') loadSent(); if (ev.new.kind === 'reminder') loadReminders(); } }).subscribe();
     new MutationObserver(() => placeMessages(false)).observe(document.body, { childList: true, subtree: true });
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadMessages(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); } });
   }
 
   /* ---------------- accounts: the Principal and the COO reset passwords and add people ---------------- */
