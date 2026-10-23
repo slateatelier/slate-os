@@ -3330,7 +3330,7 @@ const HOWTO=[
    ['clock','Need more time?','Open the task, pick the reason and the new date. The COO decides; your old date stays until then.','Request new date'],
    ['chat','Answer messages','A message from the Principal or the COO sits on Home until you reply with one tap or set a reminder.',['On it','p']],
    ['meet','Log meetings','Went to a client, consultant, authority or site meeting? Log the minutes within 24 hours.','+ Log meeting']],
-  rules:['You are compared only with people in the same role. Interns are not scored.','Tick only what is complete and checked.','Raise a risk the day you know it, not the day it is due.','If the client or a consultant caused a delay, say so in the reason. It will not count against you.']},
+  rules:[['score','You are compared only with people in the same role. Interns are not scored.'],'Tick only what is complete and checked.','Raise a risk the day you know it, not the day it is due.','If the client or a consultant caused a delay, say so in the reason. It will not count against you.']},
  {key:'lead',title:'Pod lead',who:'Accountable for the project from brief to as-built',steps:[
    ['layers','Set up phases','Projects › open the project. Choose the phases; gate deliverables and checklists are created for you.',['Set up phases','p']],
    ['cal','Propose the gate dates','Enter a date for each gate deliverable. They count once the COO approves them.','Send for approval'],
@@ -3345,7 +3345,7 @@ const HOWTO=[
    ['users','Balance the work','Pod leads request drafters and the COO approves. Tell the COO who should take each job, and why.','Ask the COO'],
    ['list','Check before it leaves','Drafting checklist items in each phase are your team’s. Check the sets before the pod lead submits.','Show checklist'],
    ['bell','Raise clashes early','Two pods need the same drafter on the same days? Tell the COO the day you see it.','bell']],
-  rules:['You are scored on your own tasks, against other drafting leads, or on timeliness if you are the only one.','Drafters are compared only with other drafters.','Interns in the pool are not scored.']},
+  rules:[['score','You are scored on your own tasks, against other drafting leads, or on timeliness if you are the only one.'],['score','Drafters are compared only with other drafters.'],['score','Interns in the pool are not scored.'],'Check every set against its checklist before it leaves the pool.']},
  {key:'boss',title:'Principal and COO',who:'Approve, steer and keep the standard',steps:[
    ['home','Clear your Home','Timelines, date changes, support requests, extra revision rounds and phase dates wait on Home.',['Approve all','p']],
    ['chat','Message the team','People › tap people, write and tap Notify. Replies (On it, Already done, Need help) come back under Sent and replies.',['Notify 3 people','p']],
@@ -3354,6 +3354,8 @@ const HOWTO=[
    ['key','Look after accounts','People › Accounts and passwords: reset a forgotten password or add a new person.','Accounts and passwords'],
    ['shield','Check the record','More › Log shows every change, notification and message. Nothing in it can be edited.','Log']],
   rules:['Only approved dates count on the dashboard.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
+/* scoring is explained only to the Principal and the COO */
+const canSeeScoring=()=>S.isOwner||isCOO(S.uid);
 const myGuide=()=>amApprover()||S.isOwner?'boss':(amMgr()||amPodLead())?'lead':myHeadTeam()?'head':'member';
 
 function hxSec(eyebrow,title,lead,...body){ return h('section',{class:'hx-sec'},h('div',{class:'hx-sec-h'},h('div',{class:'eyebrow',text:eyebrow}),h('h2',{class:'hx-h2',text:title}),lead?h('p',{class:'hx-lead',text:lead}):null),...body); }
@@ -3422,10 +3424,11 @@ function hxTabs(){
 function viewHelp(){
   const me=myGuide(); if(!S.helpRole) S.helpRole=me; const k=S.helpRole, g=HOWTO.find(x=>x.key===k);
   if(!pref.helpSeen) savePref('helpSeen',1);
-  const roleExtra={member:[hxSec('Scoring','How your points work','Every item carries points. Delivering on time earns them in full.',hxScore())],
-    lead:[hxSec('Scoring','How the pod is scored','Your pod is ranked on timeliness against the studio average.',hxScore())],
+  const sc=canSeeScoring();
+  const roleExtra={member:sc?[hxSec('Scoring','How points work','Every item carries points. Delivering on time earns them in full. Only you and the COO see this section.',hxScore())]:[],
+    lead:sc?[hxSec('Scoring','How pods are scored','Pods are ranked on timeliness against the studio average. Only you and the COO see this section.',hxScore())]:[],
     head:[hxSec('Load','Reading the support team load','Dashboard › Support team load shows every drafter’s open work.',hxLoad())],
-    boss:[hxSec('Approvals','What lands on your Home','Anything that needs a decision comes to you. Nothing counts until it is approved.',hxInbox())]}[k];
+    boss:[hxSec('Approvals','What lands on your Home','Anything that needs a decision comes to you. Nothing counts until it is approved.',hxInbox()),...(sc?[hxSec('Scoring','How points work','Deliverable 3, task 1, scaled by project size and pace. Only you and the COO see this section.',hxScore())]:[])]}[k];
   return [h('div',{class:'hx-hero'},
       h('div',{class:'hx-mark','aria-hidden':'true'},h('i')),
       h('div',{class:'eyebrow',text:'Guide'}),h('h1',{class:'h1',text:'How to use SLATE OS'}),
@@ -3437,7 +3440,7 @@ function viewHelp(){
     hxSec('Tasks','The life of a task','Only dates the COO approves count. Every step is kept in the task’s history.',hxTaskFlow()),
     hxSec('Messages','One message, one tap','The Principal and the COO can message anyone. You answer from Home.',hxMessages()),
     hxSec('Find your way','Where things are',null,hxTabs()),
-    hxSec('Remember','Ground rules',g.title,h('div',{class:'hx-rules'},g.rules.map(r=>h('div',{class:'hx-rule'},h('span',{class:'hx-rule-ic'},hxIco('check')),h('span',{text:r})))))];
+    hxSec('Remember','Ground rules',g.title,h('div',{class:'hx-rules'},g.rules.filter(r=>!Array.isArray(r)||sc).map(r=>Array.isArray(r)?r[1]:r).map(r=>h('div',{class:'hx-rule'},h('span',{class:'hx-rule-ic'},hxIco('check')),h('span',{text:r})))))];
 }
 
 
