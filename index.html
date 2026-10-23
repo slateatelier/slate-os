@@ -2706,7 +2706,7 @@ function sheetProject(){
     if(isStudio){ v.pod='Studio'; v.pod2=''; v.katha=''; if(!v.agStatus) v.agStatus='internal'; }
     const k=parseFloat(v.katha)||0;
     /* project code is set by the database from area, plot, size and year */
-    v.name=v.name.toUpperCase();
+    v.name=v.name.toUpperCase(); ['client','contact','location','agRef'].forEach(f=>{ if(v[f]) v[f]=v[f].toUpperCase(); });
     if(!v.name) return fail('Give the project a name.');
     if(!v.pod) return fail('Choose the pod that owns this project, or Studio / internal.');
     if(!isStudio){
@@ -2749,11 +2749,11 @@ function sheetProject(){
           field(parseFloat(d.katha)>30?'Second pod *':'Second pod (optional)',sel('pod2',[['','None'],...pods().filter(x=>x!==d.pod).map(x=>[x,podLabel(x)])]))),
         farFormSection(d,sec),
         sec('Client and site'),
-        h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:80,placeholder:'Company or owner'})),field('Contact person (optional)',inp('contact',{maxlength:60}))),
-        h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Site location *',inp('location',{maxlength:120,placeholder:'e.g. Road 71, Gulshan 2, Dhaka'}))),
+        h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:80,placeholder:'Company or owner',style:'text-transform:uppercase',autocapitalize:'characters'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
+        h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Site location *',inp('location',{maxlength:120,placeholder:'e.g. Road 71, Gulshan 2, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
         sec('Agreement'),
         h('div',{class:'form-row'},field('Agreement status *',(()=>{ const el=sel('agStatus',AGS); el.addEventListener('change',()=>renderSheet()); return el; })()),field(d.agStatus==='signed'?'Agreement date *':'Agreement date (optional)',inp('agDate',{type:'date'}))),
-        field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40})),
+        field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40,style:'text-transform:uppercase',autocapitalize:'characters'})),
         field('Scope of services *',scopeBox),
         h('div',{class:'form-row'},field('Contractual completion (optional)',inp('dueDate',{type:'date'}),'Used to flag a project whose plan runs past it.'),field('Agreement document link (optional)',inp('docUrl',{type:'url',placeholder:'https://…'})))],
       field('Note (optional)',ta('note',{placeholder:!ap&&!id?'Anything the COO should know':''})),
