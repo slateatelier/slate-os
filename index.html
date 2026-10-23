@@ -541,8 +541,8 @@ const MONL=['January','February','March','April','May','June','July','August','S
 const TEAMS_DEFAULT=['Pod 1','Pod 2','Pod 3','Pod 4','Drafting Pool','Visualization',"Principal's Office"];
 const pods=()=>teams().filter(t=>/^pod\b/i.test(t));
 const podsOfProject=p=>p?[p.pod,p.pod2].filter(x=>x&&x!=='Studio'):[];
-const podsOf=t=>{ const ps=podsOfProject(S.projects[t.projectId]); return ps.length?ps:[podOf(t)]; };
-const podOf=t=>{const p=S.projects[t.projectId]; const pp=p&&p.pod; if(pp&&pp!=='Studio') return pp; const tm=teamOf(t.assignee); return /^pod\b/i.test(tm)?tm:'Studio';};
+const podsOf=t=>{ const ps=podsOfProject(t._p||S.projects[t.projectId]); return ps.length?ps:[podOf(t)]; };
+const podOf=t=>{const p=t._p||S.projects[t.projectId]; const pp=p&&p.pod; if(pp&&pp!=='Studio') return pp; const tm=t._team||teamOf(t.assignee); return /^pod\b/i.test(tm)?tm:'Studio';};
 const target=()=>(S.settings&&+S.settings.target)||90;
 const ST={early:'Done in advance',ontime:'Done on time',late:'Done late',overdue:'Overdue',soon:'Due soon',open:'In progress'};
 const KEYS=['early','ontime','late','overdue','open'];
@@ -1622,10 +1622,18 @@ function buckets(kind,r){
 }
 /* ---------- performance index ---------- */
 function scaleOf(p){ if(!p||p.pod==='Studio') return 1; const k=parseFloat(p.katha)||0; if(k<=5) return 1; if(k<=10) return 1.25; if(k<=20) return 1.5; if(k<=30) return 1.75; return 2; }
-function weightOf(t){ const p=S.projects[t.projectId]; return (t.kind==='Deliverable'?3:1)*scaleOf(p)*(paceOf(p)==='fast'?1.25:1); }
-function creditOf(t){ const s=status(t); if(s==='early') return paceOf(S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
+function weightOf(t){ const p=t._p||S.projects[t.projectId]; return (t.kind==='Deliverable'?3:1)*scaleOf(p)*(paceOf(p)==='fast'?1.25:1); }
+function creditOf(t){ const s=status(t); if(s==='early') return paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
-function periodRaw(r){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)); }
+function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
+/* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
+S.dashAnon={}; S.anonInfo={};
+function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
+  if((!c||Date.now()-c.at>60000)&&!(c&&c.busy)&&window.slateDashRows){ S.dashAnon[k]={rows:c?c.rows:[],at:c?c.at:0,busy:true};
+    window.slateDashRows(r.s,r.e).then(rows=>{ S.dashAnon[k]={rows:rows||[],at:Date.now()}; (rows||[]).forEach(x=>{ if(x.assignee) S.anonInfo[x.assignee]={team:x.team,rg:x.rg}; }); schedule(); })
+      .catch(()=>{ S.dashAnon[k]={rows:c?c.rows:[],at:Date.now()}; }); }
+  return ((S.dashAnon[k]&&S.dashAnon[k].rows)||[]).filter(x=>!seen.has(x.id)).map(x=>({id:x.id,target:x.target,originalTarget:x.originalTarget,doneAt:x.doneAt,kind:x.kind,assignee:x.assignee,_anon:true,_team:x.team,_p:{pod:x.studio?'Studio':x.pod,pod2:x.pod2,katha:x.katha,std:x.pace?{pace:x.pace}:null}})); }
+const rgK=k=>(S.anonInfo[k]&&S.anonInfo[k].rg)||roleGroup(k), teamK=k=>(S.anonInfo[k]&&S.anonInfo[k].team)||teamOf(k);
 function perfTable(r){
   const raw=periodRaw(r), byP=new Map(), byPod=new Map();
   raw.forEach(t=>{ if(t.assignee){ if(!byP.has(t.assignee)) byP.set(t.assignee,[]); byP.get(t.assignee).push(t);} podsOf(t).filter(p=>/^pod\b/i.test(p)).forEach(p=>{ if(!byPod.has(p)) byPod.set(p,[]); byPod.get(p).push(t); }); });
@@ -1633,28 +1641,28 @@ function perfTable(r){
   const people=mk(byP), podsP=mk(byPod);
   const avg=(a,f)=>a.length?a.reduce((x,y)=>x+f(y),0)/a.length:0;
   /* people: 50% workload + 50% timeliness, against others in the same role; alone in a role → timeliness against the studio */
-  const scored=people.filter(x=>!unscored(x.k)), sq=avg(scored,x=>x.q);
-  people.forEach(x=>{ x.rg=roleGroup(x.k); if(unscored(x.k)){ x.idx=null; x.ns=true; } });
+  const unsK=k=>['intern','other','boss'].includes(rgK(k)); const scored=people.filter(x=>!unsK(x.k)), sq=avg(scored,x=>x.q);
+  people.forEach(x=>{ x.rg=rgK(x.k); if(unsK(x.k)){ x.idx=null; x.ns=true; } });
   const byG=new Map(); scored.forEach(x=>{ if(!byG.has(x.rg)) byG.set(x.rg,[]); byG.get(x.rg).push(x); });
   for(const g of byG.values()){ if(g.length>1){ const ap=avg(g,x=>x.pos), aq=avg(g,x=>x.q); g.forEach(x=>{ x.vol=ap?x.pos/ap*100:100; x.tim=aq?x.q/aq*100:100; x.idx=Math.round(0.5*x.vol+0.5*x.tim); }); }
     else g.forEach(x=>{ x.vol=null; x.tim=sq?x.q/sq*100:100; x.idx=Math.round(x.tim); x.solo=true; }); }
   /* pods: ranked on timeliness against the studio average; workload is shown beside it, not blended in */
   { const aq=avg(podsP,x=>x.q); podsP.forEach(x=>{ x.tim=aq?x.q/aq*100:100; x.idx=Math.round(x.tim); }); }
   const pts=t=>{ const c=creditOf(t); return c==null?0:weightOf(t)*c; };
-  const isStudioT=t=>{ const p=S.projects[t.projectId]; return !p||!p.pod||p.pod==='Studio'; };
-  const crossFor=(t,pod)=>{ const ps=podsOfProject(S.projects[t.projectId]); return ps.length>0&&!ps.includes(pod); };
-  people.forEach(x=>{ const mine=raw.filter(t=>t.assignee===x.k), tm=teamOf(x.k);
+  const isStudioT=t=>{ const p=t._p||S.projects[t.projectId]; return !p||!p.pod||p.pod==='Studio'; };
+  const crossFor=(t,pod)=>{ const ps=podsOfProject(t._p||S.projects[t.projectId]); return ps.length>0&&!ps.includes(pod); };
+  people.forEach(x=>{ const mine=raw.filter(t=>t.assignee===x.k), tm=teamK(x.k);
     x.bc=Math.min(10,/^pod\b/i.test(tm)?mine.filter(t=>crossFor(t,tm)).reduce((a,t)=>a+pts(t),0):0);
     x.bs=Math.min(5,mine.filter(isStudioT).reduce((a,t)=>a+pts(t),0)); if(x.idx!=null) x.idx=Math.round(x.idx+x.bc+x.bs); });
-  podsP.forEach(x=>{ const mem=raw.filter(t=>teamOf(t.assignee)===x.k);
+  podsP.forEach(x=>{ const mem=raw.filter(t=>(t._team||teamOf(t.assignee))===x.k);
     x.bc=Math.min(10,mem.filter(t=>crossFor(t,x.k)).reduce((a,t)=>a+pts(t),0));
     x.bs=Math.min(5,mem.filter(isStudioT).reduce((a,t)=>a+pts(t),0)); x.idx=Math.round(x.idx+x.bc+x.bs); });
-  return {people:people.sort((a,b)=>(b.idx??-1)-(a.idx??-1)),pods:podsP.sort((a,b)=>b.idx-a.idx)};
+  return {people:people.filter(x=>!String(x.k).startsWith('anon:')).sort((a,b)=>(b.idx??-1)-(a.idx??-1)),pods:podsP.sort((a,b)=>b.idx-a.idx)};
 }
 /* overall dashboard: studio-wide totals and pod comparison only, visible to everyone */
 function overallDash(r){
   const tg=target(), raw=periodRaw(r), c=count(raw,'approved'), rt=rate(c), pt=perfTable(r), mp=myPod();
-  const podRates=pods().map(p=>{ const cc=count(raw.filter(t=>podsOf(t).includes(p)),'approved'); return {p,c:cc,rt:rate(cc)}; });
+  const podSeen=p=>amApprover()||amPodLead()||p===myPod(); const ptPods=pt.pods.filter(x=>podSeen(x.k)); const podRates=pods().filter(podSeen).map(p=>{ const cc=count(raw.filter(t=>podsOf(t).includes(p)),'approved'); return {p,c:cc,rt:rate(cc)}; });
   const rated=podRates.filter(x=>x.rt!=null), met=rated.filter(x=>x.rt*100>=tg).length;
   const out=[h('div',{class:'kpis'},
     h('div',{class:'kpi dark'},h('div',{class:'lbl',text:'Studio on-time rate'}),h('div',{class:'num',text:rt==null?'—':Math.round(rt*100)+'%'}),h('div',{class:'lbl',style:rt!=null&&rt*100<tg?'color:#FF6B61':'',text:`Target ${tg}%`+(rt==null?'':rt*100>=tg?' · met':' · below')})),
@@ -1662,9 +1670,9 @@ function overallDash(r){
     kpi('Due',c.total),kpi('In advance',c.early,'early'),kpi('On time',c.ontime,'ontime'),kpi('Late',c.late,'late'),kpi('Overdue',c.overdue,'overdue'))];
   const W=[];
   const prow=x=>h('tr',{style:x.k===mp?'font-weight:600':''},h('td',{text:podLabel(x.k)+(x.k===mp?' (your pod)':'')}),h('td',{class:'n',text:x.pos.toFixed(1)}),h('td',{class:'n',text:x.earn.toFixed(1)}),h('td',{class:'n',text:Math.round(x.q*100)+'%'}),h('td',{class:'n',text:x.bc?'+'+x.bc.toFixed(1):'—'}),h('td',{class:'n',text:x.bs?'+'+x.bs.toFixed(1):'—'}),h('td',{class:'n',style:'font-weight:600'+(x.idx<100?';color:var(--overdue)':''),text:String(x.idx)}));
-  W.push(widget('Pod performance index',`${r.label} · 100 = studio average`,pt.pods.length?h('div',{},h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
+  W.push(widget('Pod performance index',`${r.label} · 100 = studio average`,ptPods.length?h('div',{},h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
     h('thead',{},h('tr',{},h('th',{text:'Pod'}),h('th',{class:'n',text:'Workload'}),h('th',{class:'n',text:'Points'}),h('th',{class:'n',text:'Timeliness'}),h('th',{class:'n',text:'Pod support'}),h('th',{class:'n',text:'Studio'}),h('th',{class:'n',text:'Index'}))),
-    h('tbody',{},pt.pods.map(prow)))),
+    h('tbody',{},ptPods.map(prow)))),
     h('p',{class:'f-hint',style:'margin:10px 0 0',text:'Index = timeliness against the studio average (100 = average), plus bonuses for helping other pods and studio jobs. Workload is shown for context and does not change the index. Pod totals only: no individual tasks or names.'}))
     :h('div',{class:'w-empty',text:'Nothing due and past in this period yet.'}),true));
   const pr=podRates.filter(x=>x.c.total);

@@ -379,6 +379,12 @@
     authUser = session.user;
     try { await loadAll(); } catch (e) { started = false; authScreen('signin'); return; }
     hideAuth(); goLive(); addCss(); window.slateAccount = accountPanel;
+    // Dashboard averages: anonymous score inputs for tasks this person can't see.
+    window.slateDashRows = async (from, to) => {
+      const { data, error } = await sb.rpc('dash_rows', { p_from: from, p_to: to });
+      if (error) throw friendly(error);
+      return data || [];
+    };
     resolveReady({ db, user });
   }
 
