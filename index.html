@@ -3788,8 +3788,7 @@ function viewChalk(){
   const td=today(), wk=addDays(td,7), ts=chalkTasks(), open=ts.filter(t=>!t.doneAt), mstart=td.slice(0,8)+'01';
   const overdue=open.filter(t=>t.target&&t.target<td).sort(byTarget), soon=open.filter(t=>t.target&&t.target>=td&&t.target<=wk).sort(byTarget);
   const reqs=chalkReqs(), ps=chalkProjects(), lead=chalkLeads().filter(Boolean);
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Separate unit · '+(lead.length?'Led by '+lead.map(nameOf).join(', '):'No lead set')}),h('h1',{class:'h1',text:'Chalk Create'}),
-      h('p',{class:'lead',text:'3D visualisation, brochures, fencing and graphic design. Runs outside the SLATE process and is not scored. Date changes are approved by the Principal only.'+(isCOO(S.uid)&&!S.isOwner?' You can view and edit; the Chalk lead and the Principal assign work.':'')})),
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'SLATE SBU'}),h('h1',{class:'h1',text:'Chalk Create'})),
     S.canWrite&&canChalkEdit()?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New project'}),canChalkAssign()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openChalkTask(),text:'New task'}):null):null)];
   out.push(h('div',{class:'kpis'},kpi('Open',open.length),kpi('Due in 7 days',soon.length,'late'),kpi('Overdue',overdue.length,'overdue'),kpi('Done this month',ts.filter(t=>t.doneAt&&t.doneAt>=mstart).length,'ontime')));
   if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:S.isOwner?'Date requests to approve':'Date requests · with the Principal'}),h('span',{class:'cnt',text:String(reqs.length)})),
