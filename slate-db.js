@@ -172,6 +172,11 @@
     const cur = store.get(path);
     store.set(path, mode === 'set' ? clone(data) : deepMerge(cur || {}, data));
     touch(path);
+    // The database fills some fields itself (project codes); show its version straight away.
+    if (/^projects\/[^/]+$/.test(path)) {
+      const { data: row } = await sb.from('docs').select('data').eq('path', path).maybeSingle();
+      if (row) { store.set(path, row.data); touch(path); }
+    }
   }
   async function writeSettings(data) {
     const peoplePart = {}, rest = {};

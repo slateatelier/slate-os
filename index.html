@@ -2705,7 +2705,7 @@ function sheetProject(){
     const v={}; PFIELDS.forEach(k=>{v[k]=(d[k]||'').trim()}); v.scope=[...d.scope];
     if(isStudio){ v.pod='Studio'; v.pod2=''; v.katha=''; if(!v.agStatus) v.agStatus='internal'; }
     const k=parseFloat(v.katha)||0;
-    if(!v.code) return fail('Give the project a code, e.g. GUL-24A.');
+    /* project code is set by the database from area, plot, size and year */
     v.name=v.name.toUpperCase();
     if(!v.name) return fail('Give the project a name.');
     if(!v.pod) return fail('Choose the pod that owns this project, or Studio / internal.');
@@ -2741,7 +2741,7 @@ function sheetProject(){
     !id&&!ap&&h('p',{class:'lead',style:'margin:0',text:'Projects come from one studio list. Fill in what you know; the COO checks it and approves it before it appears in the menus.'}),
     h('form',{class:'form',onsubmit:submit},
       sec('Project'),
-      h('div',{class:'form-row'},field('Project code *',inp('code',{maxlength:24,placeholder:'e.g. GUL-24A'})),field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'}))),
+      h('div',{class:'form-row'},field('Project code',h('input',{id:'sh-code',value:d.code||'',readonly:true,tabindex:'-1',placeholder:'Set automatically when saved',style:'color:var(--muted)'}),'Area · plot · size · year and number, e.g. GUL2-24A-10K-2603'),field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'}))),
       field('Project type'+(isStudio?'':' *'),typeSel(d,'Select project type…')),
       field('Pod *',(()=>{ const el=sel('pod',[['','Select pod…'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)']]); el.addEventListener('change',()=>renderSheet()); return el; })(),'The lead pod: its lead architect is accountable for the project.'),
       !isStudio&&[
