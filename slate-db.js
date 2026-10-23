@@ -12,8 +12,18 @@
   const LINK_TYPE = (/[#&?]type=(recovery|invite)\b/.exec(location.hash + location.search) || [])[1] || null;
   let needPassword = !!LINK_TYPE;
   const CFG = window.SLATE_CONFIG;
+  // "Keep me signed in": ticked (default) keeps the session on this device; unticked ends it when the app is closed.
+  const remember = () => { try { return localStorage.getItem('slate-remember') !== '0'; } catch (_) { return true; } };
+  const safe = s => ({ getItem: k => { try { return s.getItem(k); } catch (_) { return null; } },
+                       setItem: (k, v) => { try { s.setItem(k, v); } catch (_) {} }, removeItem: k => { try { s.removeItem(k); } catch (_) {} } });
+  const L_ = safe(window.localStorage), S_ = safe(window.sessionStorage);
+  const authStore = {
+    getItem: k => (remember() ? L_.getItem(k) : null) || S_.getItem(k),
+    setItem: (k, v) => { if (remember()) { L_.setItem(k, v); S_.removeItem(k); } else { S_.setItem(k, v); L_.removeItem(k); } },
+    removeItem: k => { L_.removeItem(k); S_.removeItem(k); }
+  };
   const sb = window.supabase.createClient(CFG.url, CFG.key, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: authStore }
   });
   window.slateSupabase = sb;
 
@@ -301,14 +311,16 @@
   function notifBanner() {
     const st = notifStatus();
     if (ls.get('slate-notif-asked') || !(st === 'default' || st === 'install-first')) return;
+    let done = false;
     const place = () => {
+      if (done || ls.get('slate-notif-asked') || notifStatus() === 'granted' || notifStatus() === 'denied') return;
       const main = document.querySelector('main'); if (!main || document.getElementById('slate-notif-banner')) return;
       const msg = st === 'install-first' ? 'Get notifications on this iPhone: tap Share → Add to Home Screen, then open SLATE OS from the icon.' : 'Get notified about tasks and approvals, even when SLATE OS is closed.';
       const on = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Turn on');
       const later = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Not now');
       const b = el('div', { id: 'slate-notif-banner', class: 'banner' }, el('span', {}, msg), el('div', { class: 'actions' }, ...(st === 'default' ? [on] : []), later));
-      on.addEventListener('click', async () => { on.disabled = true; try { await enableNotifications(); b.remove(); } catch (e) { on.disabled = false; alertMsg(b, e.message); } });
-      later.addEventListener('click', () => { ls.set('slate-notif-asked', '1'); b.remove(); });
+      on.addEventListener('click', async () => { on.disabled = true; try { await enableNotifications(); done = true; b.remove(); } catch (e) { on.disabled = false; alertMsg(b, e.message); } });
+      later.addEventListener('click', () => { done = true; ls.set('slate-notif-asked', '1'); b.remove(); });
       main.prepend(b);
     };
     new MutationObserver(place).observe(document.body, { childList: true, subtree: true }); place();
@@ -374,12 +386,18 @@
     }
     const email = el('input', { type: 'email', autocomplete: 'username', required: '', inputmode: 'email' });
     const pw = el('input', { type: 'password', autocomplete: 'current-password', required: '' });
+    const keep = el('input', { type: 'checkbox', style: 'width:20px;height:20px;accent-color:#000;margin:0' });
+    keep.checked = remember();
+    const keepRow = el('label', { style: 'display:flex;gap:10px;align-items:center;font-size:15px;font-weight:500;color:#000' }, keep, 'Keep me signed in');
     const go = el('button', { class: 'primary', type: 'submit' }, 'Sign in');
     const magic = el('button', { class: 'link', type: 'button' }, 'Email me a sign-in link');
     const forgot = el('button', { class: 'link', type: 'button' }, 'Forgot password?');
-    box.append(brand, el('label', {}, 'Studio email', email), el('label', {}, 'Password', pw), go, el('div', { class: 'row' }, magic, forgot), msg);
+    box.append(brand, el('label', {}, 'Studio email', email), el('label', {}, 'Password', pw), keepRow, go, el('div', { class: 'row' }, magic, forgot), msg);
+    const setKeep = () => { try { localStorage.setItem('slate-remember', keep.checked ? '1' : '0'); } catch (_) {} };
+    keep.addEventListener('change', setKeep);
+    magic.addEventListener('click', setKeep);
     box.addEventListener('submit', async e => {
-      e.preventDefault(); if (!email.value || !pw.value) return say('Enter your email and password.', true);
+      e.preventDefault(); setKeep(); if (!email.value || !pw.value) return say('Enter your email and password.', true);
       go.disabled = true; say('Signing in…');
       const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pw.value });
       go.disabled = false; if (error) return say(error.message === 'Invalid login credentials' ? 'That email and password don’t match.' : friendly(error).message, true);
