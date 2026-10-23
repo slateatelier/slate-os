@@ -702,12 +702,27 @@ const amApprover=()=>S.isOwner||isApprover(S.uid);
 /* the COO approves but is never assigned tasks in the register */
 /* only the Principal and the COO can give work to the Principal's Office */
 const isPO=id=>!!id&&(id===ownerId()||/principal/i.test(teamOf(id)));
-const canAssignTo=id=>!isPO(id)||amApprover();
+const canAssignTo=id=>(!isPO(id)||amApprover())&&(!isChalkP(id)||S.isOwner);
 const isCOO=id=>!!id&&id!==ownerId()&&(isApprover(id)||/\bcoo\b|chief operat/i.test(roleOf(id)));
+/* Chalk Create: a separate SBU. Its lead and the Principal assign Chalk work; the COO views and edits; no SLATE process or scoring */
+const isChalkName=t=>/^\s*chalk\s*create\s*$/i.test(t||'');
+const chalkTeam=()=>teams().find(isChalkName)||'Chalk Create';
+const isChalkP=id=>!!id&&isChalkName(teamOf(id));
+const isChalkProj=p=>!!p&&isChalkName(p.pod);
+const isChalkTask=t=>!!t&&isChalkProj(t._p||S.projects[t.projectId]);
+const chalkLeads=()=>(S.settings&&S.settings.chalkLeads)||[];
+const isChalkLead=id=>!!id&&chalkLeads().includes(id);
+const amChalkLead=()=>isChalkLead(S.uid);
+const amChalkMember=()=>!S.isOwner&&isChalkP(S.uid);
+const canChalkView=()=>S.isOwner||isCOO(S.uid)||amChalkLead();
+const canChalkAssign=()=>!!S.canWrite&&(S.isOwner||amChalkLead());
+const canChalkEdit=()=>!!S.canWrite&&canChalkView();
+const chalkPeople=()=>people().filter(id=>isChalkP(id)||isChalkLead(id));
+const chalkProjects=()=>Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>isLive(p)&&isChalkProj(p)).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
 function people(){ const ids=new Set(Object.keys(S.members)); if(ownerId()) ids.add(ownerId()); if(S.uid) ids.add(S.uid); return [...ids].sort((a,b)=>nameOf(a).localeCompare(nameOf(b))); }
 const isLive=p=>!!p&&(!p.status||p.status==='active');
 function projectReqs(){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>p.status==='pending'||p.status==='declined').sort((a,b)=>(a.requestedAt||'').localeCompare(b.requestedAt||'')); }
-function projects(){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(isLive).sort((a,b)=>(a.code||a.name||'').localeCompare(b.code||b.name||'')); }
+function projects(){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>isLive(p)&&!isChalkProj(p)).sort((a,b)=>(a.code||a.name||'').localeCompare(b.code||b.name||'')); }
 const privIds=()=>(S.settings&&S.settings.privateIds)||[];
 const isPriv=id=>privIds().includes(id);
 const fullView=()=>S.isOwner||isApprover(S.uid)||(isMgr(S.uid)&&!myPod());
@@ -754,7 +769,7 @@ function nickCards(){
         S.canWrite&&h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>decideNick(x,true),text:'Approve'}),h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>decideNick(x,false),text:'Decline'}))); })));
 }
 function canSee(t){ if(fullView()) return true; if(t.assignee===S.uid) return true; const hd=myHeadTeam(); if(hd&&t.assignee&&teamOf(t.assignee)===hd) return true; const mp=myPod(); return !!mp&&podsOf(t).includes(mp); }
-function allTasks(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(canSee); }
+function allTasks(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>canSee(t)&&(!isChalkTask(t)||amChalkMember())); }
 function activeTasks(){ return allTasks().filter(t=>!t.archived); }
 const projLabel=p=>p?((p.code?p.code+' · ':'')+p.name):'No project';
 
@@ -851,7 +866,7 @@ async function taskUpdate(id,patch,entries){
   await S.db.doc(S.paths[id]||('tasks/'+id)).update({...patch,history:hist});
 }
 async function createTask(d){
-  if(d.assignee&&!canAssignTo(d.assignee)&&!S.spawning) throw new Error('Only the Principal and the COO can assign tasks to the Principal’s Office.');
+  if(d.assignee&&!(d.chalk?canChalkAssign():canAssignTo(d.assignee))&&!S.spawning) throw new Error('Only the Principal and the COO can assign tasks to the Principal’s Office.');
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
   const ask=d.assignee&&needsAssignApproval(d.assignee,d.projectId);
@@ -863,7 +878,7 @@ async function createTask(d){
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
-const supportTeams=()=>teams().filter(t=>!/^pod\b/i.test(t)&&!/leader|principal/i.test(t));
+const supportTeams=()=>teams().filter(t=>!/^pod\b/i.test(t)&&!/leader|principal/i.test(t)&&!isChalkName(t));
 /* role groups: people are scored only against others in the same group; interns and others are not scored */
 const RG={lead:'Pod Lead',junior:'Junior Architect',dhead:'Drafting Head',draft:'Drafting Associate',viz:'Visualizer',intern:'Intern',other:'Other',boss:''};
 function roleGroup(id){ const r=roleOf(id)||'', t=teamOf(id);
@@ -880,7 +895,7 @@ const isCrossPod=(id,pid)=>{ const tm=teamOf(id); if(!/^pod\b/i.test(tm)) return
 const needsAssignApproval=(id,pid)=>!!id&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning;
 function loadOf(id,excl){
   const td=today(), wk=addDays(td,7);
-  const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id)));
+  const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id))&&(!isChalkTask(t)||isChalkP(id)));
   const c={open:0,overdue:0,week:0,later:0,nodate:0,pending:0,list:[]};
   for(const t of ts){ if(t.assignReq&&t.assignReq.to===id&&t.assignee!==id){c.pending++;continue;} c.open++;
     if(!t.target) c.nodate++; else if(t.target<td) c.overdue++; else if(t.target<=wk) c.week++; else c.later++; c.list.push(t); }
@@ -1485,8 +1500,9 @@ function renderHeader(){
       nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null)); }
   const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+minutesToApprove().length+extraReqs().length:0;
   const full=fullView(), mp=myPod();
-  const list=[['mine','Home',reqs],['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['dash','Dashboard'],...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',S.isOwner?roleProposals().length:0]];
-  const TASKV=['all','board','gantt'], MOREV=['more','team','activity','setup','meet','std','help','far'];
+  const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',chalkReqs().length]]:[];
+  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar']]:[['mine','Home',reqs],['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',S.isOwner?roleProposals().length:0]];
+  const TASKV=['all','board','gantt'], MOREV=cmem?[]:['more','team','activity','setup','meet','std','help','far'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
@@ -1504,7 +1520,7 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,mine:viewMine,all:viewAll,projects:viewProjects,team:viewTeam,meet:viewMeetings,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,setup:viewSetup,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,mine:viewMine,all:viewAll,projects:viewProjects,team:viewTeam,meet:viewMeetings,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,setup:viewSetup,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
   if(['team','activity','setup','meet','std','help','far'].includes(S.view)) out.push(h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{S.view='more';render(true)},text:'‹ More'}));
   return out.concat(v());
@@ -1595,8 +1611,9 @@ function viewMine(){
     if(amApprover()&&S.canWrite&&routine>1) out.push(h('div',{class:'banner'},h('span',{text:`${routine} dates and assignments are waiting. Review them below, or approve them all at once.`}),
       h('button',{class:'btn '+(S.confirmAll?'btn-accent':'btn-primary')+' btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!S.confirmAll){ S.confirmAll=true; render(true); setTimeout(()=>{ S.confirmAll=false; render(true); },5000); return; } S.confirmAll=false; approveAllRoutine(reqs,areq); },text:S.confirmAll?`Tap again to approve ${routine}`:`Approve all ${routine}`}))); }
   if(areq.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Support assignments to approve'}),h('span',{class:'cnt',text:String(areq.length)})),h('div',{class:'list'},areq.map(t=>assignCard(t,false)))));
+  if(amChalkLead()&&!S.isOwner){ const cr=chalkReqs().length, co=chalkTasks().filter(t=>!t.doneAt&&t.target&&t.target<today()).length; out.push(h('div',{class:'banner'},h('span',{text:`Chalk Create: ${cr} date request${cr===1?'':'s'} · ${co} overdue`}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.view='chalk'; render(true); window.scrollTo(0,0); },text:'Open Chalk Create'}))); }
   { const pl=pmLogCard(); if(pl) out.push(pl); }
-  { const up=upcomingSunday(); if(organiserFor(up)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{S.view='meet';render(true)},text:'All minutes'})),meetingCard(up,true))); }
+  if(!amChalkMember()){ const up=upcomingSunday(); if(organiserFor(up)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{S.view='meet';render(true)},text:'All minutes'})),meetingCard(up,true))); }
   { const ma=amApprover()?minutesToApprove():[]; if(ma.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Meeting minutes to approve'}),h('span',{class:'cnt',text:String(ma.length)})),h('div',{class:'list'},ma.map(([d,m])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openMeeting(d)},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:`Meeting of ${wd(d)} ${fmtD(d)}`}),h('div',{class:'row-meta who'},avaEl(organiserFor(d),false,'sm'),`Submitted by ${nameOf(m.submittedBy||organiserFor(d))}`)),h('span',{class:'mi-a',text:'›'})))))); }
   const prq=amApprover()?podReqCards():null; if(prq) out.push(prq);
   const nkq=amApprover()?nickCards():null; if(nkq) out.push(nkq);
@@ -1604,7 +1621,7 @@ function viewMine(){
   const phq=amApprover()?phaseReqCards():null; if(phq) out.push(phq);
   const lbq=amApprover()?libReqCards():null; if(lbq) out.push(lbq);
   if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Dates to approve'}),h('span',{class:'cnt',text:String(reqs.length)})),approvalBlocks(reqs)));
-  if(!pref.helpSeen) out.splice(1,0,h('div',{class:'banner'},h('span',{text:'New here? See how to use SLATE OS for your role.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Dismiss'}))));
+  if(!pref.helpSeen&&!amChalkMember()) out.splice(1,0,h('div',{class:'banner'},h('span',{text:'New here? See how to use SLATE OS for your role.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Dismiss'}))));
   const xrq=amApprover()?extraReqCards():null; if(xrq) out.push(xrq);
   const drq=delReqCards(); if(drq) out.push(drq);
   const pmq=pmHomeSec(); if(pmq) out.push(pmq);
@@ -1630,7 +1647,7 @@ function viewMine(){
 function viewAll(){
   const f=S.f, q=f.q.trim().toLowerCase();
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'All projects'}),h('h1',{class:'h1',text:'Tasks & deliverables'})),
-    S.canWrite&&h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openProject(),text:amApprover()?'New project':'Request a project'}),amMgr()&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'})))];
+    S.canWrite&&!amChalkMember()&&h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openProject(),text:amApprover()?'New project':'Request a project'}),amMgr()&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'})))];
   if(!fullView()&&myPod()){ const pc=podTeamCard(); if(pc) out.push(pc); }
   { const mr=myProjReqs(); if(mr) out.push(mr); const nt=newProjectsCard(); if(nt) out.push(nt); }
   if(!projects().length&&!allTasks().length){ out.push(onboarding()); return out; }
@@ -1756,7 +1773,7 @@ function scaleOf(p){ if(!p||p.pod==='Studio') return 1; const k=parseFloat(p.kat
 function weightOf(t){ const p=t._p||S.projects[t.projectId]; return (t.kind==='Deliverable'?3:1)*scaleOf(p)*(paceOf(p)==='fast'?1.25:1); }
 function creditOf(t){ const s=status(t); if(s==='early') return paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
-function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
+function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!isChalkP(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
 /* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
 S.dashAnon={}; S.anonInfo={};
 function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
@@ -1811,7 +1828,7 @@ function overallDash(r){
     h('div',{class:'track',style:'overflow:visible','data-tip':`${podLabel(x.p)}\n${x.rt==null?'Nothing due and past yet':Math.round(x.rt*100)+'% on time or early'}\n${x.c.total} due`},x.rt!=null&&h('span',{class:x.rt*100>=tg?'s-ontime':'s-overdue',style:`flex:0 0 ${x.rt*100}%`}),h('i',{class:'goal',style:`left:${tg}%`})),
     h('span',{class:'v',text:x.rt==null?'—':Math.round(x.rt*100)+'%'})))):h('div',{class:'w-empty',text:'No pod has tasks due in this period.'})));
   W.push(widget('Studio status',`${c.total} due this ${S.dash.kind}`,c.total?h('div',{class:'donut-wrap'},donut(c),legendList(c)):h('div',{class:'w-empty',text:'Nothing is due in this period.'})));
-  const all=Object.values(S.tasks).filter(t=>!t.archived&&!isPriv(t.assignee)&&t.target&&t.doneAt);
+  const all=Object.values(S.tasks).filter(t=>!t.archived&&!isPriv(t.assignee)&&t.target&&t.doneAt&&!isChalkTask(t));
   const bk=buckets(S.dash.kind,r).map(b=>{ const done=all.filter(t=>t.doneAt>=b.s&&t.doneAt<=b.e); const cc={early:0,ontime:0,late:0}; done.forEach(t=>{cc[status(t)]++}); return {...b,c:cc,n:done.length}; });
   const mx=Math.max(1,...bk.map(b=>b.n)), top=Math.ceil(mx/2)*2||2;
   W.push(widget('Completed across the studio',`${bk.reduce((a,b)=>a+b.n,0)} completed`,
@@ -1831,7 +1848,7 @@ function viewDash(){
   const items=inPeriod(r,'approved').filter(inPod), c=count(items,'approved'), rt=rate(c), tg=target();
   const podSel=h('select',{id:'d-pod','aria-label':'Pod',style:'flex:0 1 160px',onchange:e=>{D.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),h('optgroup',{label:'Pods'},pods().map(p=>h('option',{value:p,text:podLabel(p)}))),h('optgroup',{label:'Support teams'},teams().filter(t=>!/^pod\b/i.test(t)).map(p=>h('option',{value:p,text:p})))); podSel.value=D.pod||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:r.label}),h('h1',{class:'h1',text:'Dashboard'})),
-    h('div',{class:'bar'},seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall']],D.scope,v=>{D.scope=v;render(true)}),seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),fullView()&&!ov?podSel:null,ov?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&(!isPriv(id)||S.isOwner)).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
+    h('div',{class:'bar'},seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall']],D.scope,v=>{D.scope=v;render(true)}),seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),fullView()&&!ov?podSel:null,ov?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&!isChalkP(id)&&(!isPriv(id)||S.isOwner)).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
         const el=h('select',{id:'d-person','aria-label':'Person',style:'flex:0 1 170px',onchange:e=>{ const v=e.target.value; if(hd){ D.pod=v==='@team'?hd:''; D.person=v==='@team'?'':v; } else D.person=v; render(true)}},opts.map(([v,l])=>h('option',{value:v,text:l}))); el.value=hd&&!D.person&&D.pod===hd?'@team':(D.person||''); return el; })(),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous period',onclick:()=>{D.offset--;render(true)},text:'‹'}),
       D.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{D.offset=0;render(true)},text:'Today'}),
@@ -2246,7 +2263,7 @@ function viewTeam(){
         h('div',{},h('div',{class:'sub-h',text:'Lead and members'}),mem.length?[...leads,...others].map(id=>personRow(id,{fallback:leads.includes(id)?'Pod lead':'Member'})):h('div',{class:'w-empty',text:'No one in this pod yet.'})),
         help.length?h('div',{},h('div',{class:'sub-h',text:'Support working on this pod'}),help.map(id=>personRow(id,{sub:teamLabel(id)}))):null,
         prj.length?h('div',{},h('div',{class:'sub-h',text:'Projects'}),h('div',{class:'chips',style:'margin-top:6px'},prj.map(x=>h('button',{type:'button',class:'chip',style:'padding-right:12px;border:0;cursor:pointer',onclick:()=>openProjectView(x.id),text:x.code||x.name})))):null); });
-    const sup=teams().filter(t=>!/^pod\b/i.test(t)&&!/principal/i.test(t)).map(t=>{ const mem=ppl.filter(id=>teamOf(id)===t); if(!mem.length) return null;
+    const sup=teams().filter(t=>!/^pod\b/i.test(t)&&!/principal/i.test(t)&&!isChalkName(t)).map(t=>{ const mem=ppl.filter(id=>teamOf(id)===t); if(!mem.length) return null;
       return h('div',{class:'tcard'},h('div',{class:'tc-h'},h('div',{class:'tc-t',text:t}),h('div',{class:'tc-s',text:'Support team · shared by all pods'})),
         h('div',{},mem.map(id=>{ const forP=[...new Set(Object.values(S.tasks).filter(x=>!x.archived&&!x.doneAt&&x.assignee===id).flatMap(x=>podsOf(x)).filter(x=>/^pod\b/i.test(x)))];
           return personRow(id,{sub:forP.length?'on '+forP.map(podLabel).join(', '):'free'}); }))); }).filter(Boolean);
@@ -2281,7 +2298,7 @@ const atLocal=(d,hh)=>{ const [y,m,dd]=d.split('-').map(Number); return new Date
 const weekStart=d=>{ const [y,m,dd]=d.split('-').map(Number); const x=new Date(y,m-1,dd); return addDays(d,-x.getDay()); };
 const wd=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00').getDay()];
 const isBoss=()=>amApprover();
-function scopeRaw(){ const all=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived);
+function scopeRaw(){ const all=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&(!isChalkTask(t)||amChalkMember()));
   if(isBoss()) return all.filter(t=>S.isOwner||!isPriv(t.assignee)); return all.filter(canSee); }
 function wkLine(label,ts,s,e){ const c=count(ts.filter(t=>t.target&&t.target>=s&&t.target<=e),'approved'), r=rate(c);
   return c.total?`${label}: ${c.total} due · ${c.early+c.ontime} on time or early${r==null?'':' ('+Math.round(r*100)+'%)'} · ${c.late} late · ${c.overdue} overdue`:`${label}: nothing was due`; }
@@ -2518,7 +2535,7 @@ function viewSetup(){
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'People'}),h('span',{class:'cnt',text:String(ids.length)})),
     h('p',{class:'f-hint',style:'margin:0',text:own?'Everyone with a SLATE OS account is listed here. Set a display name if theirs doesn’t look right.':prop?'Set each person’s team, designation and manager right. Your changes go to the Principal for approval.':'Only the owner can change teams, designations and manager rights.'}),
     h('datalist',{id:'role-list'},ROLE_SUGGEST.map(x=>h('option',{value:x}))),
-    h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Person'}),h('th',{text:'Display name'}),h('th',{text:'Team'}),h('th',{text:'Designation'}),h('th',{text:'Manager'}),h('th',{text:'Approver'}),h('th',{text:'Private tasks'}))),
+    h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Person'}),h('th',{text:'Display name'}),h('th',{text:'Team'}),h('th',{text:'Designation'}),h('th',{text:'Manager'}),h('th',{text:'Approver'}),h('th',{text:'Private tasks'}),h('th',{text:'Chalk lead'}))),
       h('tbody',{},ids.map(id=>{ const r=roster(id); const isOwn=id===ownerId(); const joined=S.members[id]&&S.members[id].joinedAt;
         return h('tr',{},
           h('td',{},h('div',{text:(S.profiles[id]&&S.profiles[id].name)||nameOf(id)}),h('div',{class:'sub2',text:[isOwn?'Owner':'',id===S.uid?'You':'',joined?'Joined '+fmtD(joined.slice(0,10)):''].filter(Boolean).join(' · ')})),
@@ -2527,7 +2544,8 @@ function viewSetup(){
           h('td',{},prop&&!isOwn?(()=>{ const pd=pend(id); return [roleSelect('prl-'+id,pd?pd.role||'':r.role||'',v=>proposeRole(id,{role:v})),pd&&pd.role!==(r.role||'')?h('div',{class:'sub2',style:'color:var(--late)',text:'Pending approval'}):null]; })():own?roleSelect('rl-'+id,r.role||'',v=>run(()=>settingsRef().update({roster:{[id]:{role:v}}}),'Designation updated')):(r.role||'—')),
           h('td',{},isOwn?h('span',{class:'muted',text:'Always'}):prop?(()=>{ const pd=pend(id); return h('input',{type:'checkbox',id:'pmg-'+id,'aria-label':'Manager',checked:pd?!!pd.manager:isMgr(id),style:'width:auto',onchange:e=>proposeRole(id,{manager:e.target.checked})}); })():own?h('input',{type:'checkbox',id:'mg-'+id,'aria-label':'Manager',checked:isMgr(id),style:'width:auto',onchange:e=>{const m=new Set((S.settings&&S.settings.managers)||[]); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({managers:[...m]}),'Manager rights updated');}}):(isMgr(id)?'Yes':'—')),
           h('td',{},isOwn?h('span',{class:'muted',text:'Always'}):own?h('input',{type:'checkbox',id:'ap-'+id,'aria-label':'Approver',checked:isApprover(id),style:'width:auto',onchange:e=>{const m=new Set((S.settings&&S.settings.approvers)||[]); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({approvers:[...m]}),'Approver rights updated');}}):(isApprover(id)?'Yes':'—')),
-          h('td',{},isOwn?h('span',{class:'muted',text:'—'}):own?h('input',{type:'checkbox',id:'pv-'+id,'aria-label':'Private tasks',checked:isPriv(id),style:'width:auto',onchange:e=>{const m=new Set(privIds()); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({privateIds:[...m]}),e.target.checked?'Their new tasks are now private':'Private setting removed');}}):(isPriv(id)?'Yes':'—')));
+          h('td',{},isOwn?h('span',{class:'muted',text:'—'}):own?h('input',{type:'checkbox',id:'pv-'+id,'aria-label':'Private tasks',checked:isPriv(id),style:'width:auto',onchange:e=>{const m=new Set(privIds()); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({privateIds:[...m]}),e.target.checked?'Their new tasks are now private':'Private setting removed');}}):(isPriv(id)?'Yes':'—')),
+          h('td',{},isOwn?h('span',{class:'muted',text:'—'}):own?h('input',{type:'checkbox',id:'cl-'+id,'aria-label':'Chalk Create lead',title:'Runs Chalk Create: assigns Chalk work without COO approval',checked:isChalkLead(id),style:'width:auto',onchange:e=>{const m=new Set(chalkLeads()); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({chalkLeads:[...m]}),e.target.checked?`${nameOf(id)} now leads Chalk Create`:'Chalk lead removed');}}):(isChalkLead(id)?'Yes':'—')));
       }))))));
 
   if(canTypes()&&S.canWrite){ const types=Object.entries(T());
@@ -2583,6 +2601,7 @@ function viewSetup(){
       h('li',{text:'Pod leads can request a nickname for their pod; the COO approves it before it shows. The Principal and the COO can set any pod’s nickname directly.'}),
       h('li',{text:'Pod leads can request to add a team member to their pod from their pod tab. The COO approves or declines it; the Principal can still set anyone’s team directly here.'}),
       h('li',{text:'Tasks you assign to someone marked Private are stored separately: only you and that person can read them, and they never appear for anyone else.'}),
+      h('li',{text:'Chalk Create is a separate unit. Its lead (ticked in the Chalk lead column) and the Principal create Chalk projects and assign Chalk work, with no COO approval. The COO can view and edit it. Chalk people see only their own work; SLATE staff do not see Chalk at all, and Chalk work never counts in SLATE scoring, workload or dashboards. Only the Principal can give a SLATE task to a Chalk person.'}),
       h('li',{text:'The bell shows notifications. The Principal and the COO get every team update and anything waiting for approval; pod leads get their pod’s activity and deadlines; members get their own. Everyone gets upcoming submissions, a Sunday weekly update and a Thursday list of next week’s submissions. Items move to the archive when archived, or after 14 days.'}),
       h('li',{text:'Everyone can pick a profile icon from 30 options (tap your picture at the top left). Each icon belongs to one person at a time; the Principal can reset anyone’s.'}),
       h('li',{text:'A completed task is locked: only the Principal and the COO can reopen it, edit it or correct its completion date, and each needs a written reason kept in the history. Client feedback after completion is added with “+ Client revision”, which creates a linked revision task with its own submission date; the original on-time record stays.'}),
@@ -2604,7 +2623,7 @@ function renderSheet(fromData){
   if(!S.sheet){ el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked'); return; }
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():sheetProject();
+  const body=S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const panel=h('div',{class:'panel',role:'dialog','aria-modal':'true','aria-label':'Details'},body);
   el.replaceChildren(h('div',{class:'backdrop',onclick:closeSheet}),panel);
   el.hidden=false; document.body.classList.add('locked'); panel.scrollTop=top; restoreFocus(k);
@@ -2628,7 +2647,7 @@ const projectOpts=(incl)=>[['','Select project…'],...projects().filter(p=>!p.c
 function sheetTask(){
   const raw=S.tasks[S.sheet.id];
   if(!raw) return [head('Task','Not found'),h('p',{class:'muted',text:'This task is no longer in the register.'})];
-  const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], mgr=(amMgr()||amApprover())&&S.canWrite, ap=amApprover()&&S.canWrite, mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
+  const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((amMgr()&&!ck)||amApprover()||cctl)&&S.canWrite, ap=(amApprover()||cctl)&&S.canWrite, mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
   const canAct=S.canWrite&&!t.archived&&(mine||mgr);
   const out=[head(`${projLabel(p)} · ${t.kind||'Task'}`,t.title)];
   out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',text:`Target revised ${t.revisions}×`})));
@@ -2704,8 +2723,8 @@ function sheetTask(){
     }));
   if(m==='edit') out.push(form('Edit or reassign',[
     titleField(d),
-    h('div',{class:'form-row'},field('Type',sel('kind',[['Task','Task'],['Deliverable','Deliverable']])),field('Project',(()=>{ const el=sel('projectId',projectOpts(t.projectId)); el.addEventListener('change',()=>renderSheet()); return el; })())),
-    field('Assigned to',sel('assignee',memberOpts(t.assignee))),
+    h('div',{class:'form-row'},field('Type',sel('kind',[['Task','Task'],['Deliverable','Deliverable']])),field('Project',(()=>{ const el=sel('projectId',ck?chalkProjOpts(t.projectId):projectOpts(t.projectId)); el.addEventListener('change',()=>renderSheet()); return el; })())),
+    field('Assigned to',ck?(()=>{ const el=sel('assignee',chalkAssignOpts(t.assignee)); if(!canChalkAssign()) el.disabled=true; return el; })():sel('assignee',memberOpts(t.assignee))),
     h('div',{class:'form-row'},field('Start date (optional)',inp('start',{type:'date'}),'Used for the Timeline bar.'),field('Repeat',sel('repeat',Object.entries(REPEATS))))],'Save changes',()=>{
       const title=(d.title||'').trim(); if(!title) return fail('The title can’t be empty.');
       if(!d.projectId||!d.assignee) return fail('Choose a project and a person.');
@@ -2716,7 +2735,7 @@ function sheetTask(){
       if((d.repeat||'')!==(t.repeat||'')){patch.repeat=d.repeat||'';ev.push({type:'repeat',from:t.repeat||'',to:d.repeat||''})}
       if((d.start||'')!==(t.start||'')){ if(d.start&&t.target&&d.start>t.target) return fail('The start date can’t be after the target date.'); patch.start=d.start||null;ev.push({type:'start',from:t.start||'',to:d.start||''})}
       if(d.projectId!==t.projectId){patch.projectId=d.projectId;ev.push({type:'moved',from:t.projectId,to:d.projectId})}
-      if(d.assignee!==t.assignee&&!canAssignTo(d.assignee)) return fail('Only the Principal and the COO can assign tasks to the Principal’s Office.');
+      if(d.assignee!==t.assignee&&!(ck?canChalkAssign():canAssignTo(d.assignee))) return fail(ck?'Only the Principal and the Chalk Create lead assign Chalk work.':'Only the Principal and the COO can assign tasks to the Principal’s Office.');
       if(d.assignee!==t.assignee&&(isPriv(d.assignee)||isPriv(t.assignee))) return fail('Private tasks stay with their person. Archive this one and create a new task instead.');
       if(d.assignee!==t.assignee&&needsAssignApproval(d.assignee,d.projectId)){patch.assignReq={to:d.assignee,by:S.uid,at:new Date().toISOString()};ev.push({type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''})}
       else if(d.assignee!==t.assignee){patch.assignee=d.assignee;patch.assignReq=null;ev.push({type:'reassigned',from:t.assignee,to:d.assignee})}
@@ -3468,7 +3487,7 @@ function calItems(from,to){
       const got=((p.std.fbGot)||{})[k];
       out.push({d,k:'fb',t:`Client feedback due · phase ${PH[k]?PH[k].no:k}`,p,st:got?'ontime':'open',done:!!got,go:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); }}); }
   }
-  if(!C.proj&&!C.who){ let d=from; while(d<=to){ if(new Date(d+'T00:00').getDay()===0&&organiserFor(d)){ const dd=d; out.push({d:dd,k:'meet',t:'Weekly studio meeting · '+MEET_TIME,who:organiserFor(dd),st:'open',weekly:true,go:()=>openMeeting(dd)}); } d=addDays(d,1); } }
+  if(!C.proj&&!C.who&&!amChalkMember()){ let d=from; while(d<=to){ if(new Date(d+'T00:00').getDay()===0&&organiserFor(d)){ const dd=d; out.push({d:dd,k:'meet',t:'Weekly studio meeting · '+MEET_TIME,who:organiserFor(dd),st:'open',weekly:true,go:()=>openMeeting(dd)}); } d=addDays(d,1); } }
   const ord={gate:0,meet:1,fb:2,task:3};
   return out.filter(x=>!C.off[x.k]).sort((a,b)=>a.d.localeCompare(b.d)||ord[a.k]-ord[b.k]||a.t.localeCompare(b.t));
 }
@@ -3659,7 +3678,7 @@ function viewProjects(){
       st.over?h('div',{class:'pc-row',style:'color:var(--overdue)'},h('span',{text:`${st.over} overdue`+(st.overDel?` · ${st.overDel} deliverable${st.overDel>1?'s':''}`:'')}),h('span',{})):null); })));
   return out;
 }
-function openProjectView(id){ S.sheet={type:'projView',id}; renderSheet(); }
+function openProjectView(id){ if(isChalkProj(S.projects[id])) return openChalkProjView(id); S.sheet={type:'projView',id}; renderSheet(); }
 function sheetProjView(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
   const st=projStats(p), [hl,hk]=HEALTH[st.health], ap=amApprover(), det=canSeeProjectDetail(p), tp=p.type&&(T()[p.type]||LEGACY[p.type]);
@@ -3711,7 +3730,7 @@ function askDelete(pid){ const sh=S.sheet, reason=((sh&&sh.del&&sh.del.reason)||
   return run(()=>S.db.doc('projects/'+pid).update({delReq:{by:S.uid,at:new Date().toISOString(),reason}}),'Sent to the Principal for approval').then(ok=>{ if(ok&&sh) sh.del=null; }); }
 function clearDelete(pid,msg){ return run(()=>S.db.doc('projects/'+pid).update({delReq:null}),msg); }
 function deleteZone(p){
-  if(!S.canWrite||!amApprover()) return null;
+  if(!S.canWrite||!(amApprover()||(isChalkProj(p)&&amChalkLead()))) return null;
   const sh=S.sheet, r=p.delReq, n=projTaskPaths(p.id).length, what=`${n} task${n===1?'':'s'}`;
   const box=(...kids)=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Delete project'})),h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--overdue)'},kids));
   const reasonIn=ph=>h('input',{id:'pdel-reason',maxlength:200,placeholder:ph,value:(sh.del&&sh.del.reason)||'',style:'background:#fff',oninput:e=>{ sh.del=sh.del||{}; sh.del.reason=e.target.value; }});
@@ -3737,6 +3756,124 @@ function delReqCards(){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project deletions to approve'}),h('span',{class:'cnt',text:String(xs.length)})),
     h('div',{class:'list'},xs.map(([k,p])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openProjectView(k)},
       h('div',{style:'min-width:0'},h('div',{class:'row-title',text:projLabel(p)}),h('div',{class:'row-meta',text:`${nameOf(p.delReq.by)} · ${p.delReq.reason||'No reason given'}`})),h('span',{class:'mi-a',text:'›'})))));
+}
+
+/* ---------- Chalk Create: a separate SBU inside SLATE OS ----------
+   Its lead (ticked by the Principal in Settings) and the Principal assign Chalk work, with no COO approval.
+   The COO can view and edit. Chalk work never counts in SLATE scoring, workload or dashboards. */
+const CHALK_TYPES={
+  viz:{name:'3D visualisation',items:['Brief, drawings and references received','Base model set up','Camera views agreed with the client','Draft renders for review','Client comments incorporated','Final renders delivered']},
+  brochure:{name:'Brochure design',items:['Brief, content and images received','Layout concept','Draft brochure for review','Client comments incorporated','Print-ready files issued']},
+  fencing:{name:'Fencing design',items:['Site measurements and brief','Concept options','Draft artwork for review','Client comments incorporated','Final artwork and print files issued']},
+  graphic:{name:'Graphic design',items:['Brief received','Concept','Draft for review','Revisions','Final files delivered']}};
+const chalkTypeName=k=>(CHALK_TYPES[k]||{}).name||'Chalk project';
+function chalkTasks(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&isChalkTask(t)); }
+function chalkReqs(){ return chalkTasks().filter(t=>t.request&&!t.doneAt); }
+function chalkLoad(id){ const td=today(), wk=addDays(td,7), c={open:0,overdue:0,week:0,later:0,nodate:0};
+  chalkTasks().filter(t=>t.assignee===id&&!t.doneAt).forEach(t=>{ c.open++; if(!t.target) c.nodate++; else if(t.target<td) c.overdue++; else if(t.target<=wk) c.week++; else c.later++; }); return c; }
+const chalkAssignOpts=keep=>[['','Select person…'],...chalkPeople().filter(id=>isChalkP(id)||isChalkLead(id)||id===keep).map(id=>[id,nameOf(id)+(roleOf(id)?' — '+roleOf(id):'')])];
+const chalkProjOpts=incl=>[['','Select project…'],...chalkProjects().filter(p=>!p.closed||p.id===incl).map(p=>[p.id,projLabel(p)])];
+
+function viewChalk(){
+  if(!canChalkView()) return [h('p',{class:'muted',text:'Chalk Create is open to its lead, the Principal and the COO.'})];
+  const td=today(), wk=addDays(td,7), ts=chalkTasks(), open=ts.filter(t=>!t.doneAt), mstart=td.slice(0,8)+'01';
+  const overdue=open.filter(t=>t.target&&t.target<td).sort(byTarget), soon=open.filter(t=>t.target&&t.target>=td&&t.target<=wk).sort(byTarget);
+  const reqs=chalkReqs(), ps=chalkProjects(), lead=chalkLeads().filter(Boolean);
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Separate unit · '+(lead.length?'Led by '+lead.map(nameOf).join(', '):'No lead set')}),h('h1',{class:'h1',text:'Chalk Create'}),
+      h('p',{class:'lead',text:'3D visualisation, brochures, fencing and graphic design. Runs outside the SLATE process: no COO approval and no scoring.'+(isCOO(S.uid)&&!S.isOwner?' You can view and edit; the Chalk lead and the Principal assign work.':'')})),
+    S.canWrite&&canChalkEdit()?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New project'}),canChalkAssign()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openChalkTask(),text:'New task'}):null):null)];
+  out.push(h('div',{class:'kpis'},kpi('Open',open.length),kpi('Due in 7 days',soon.length,'late'),kpi('Overdue',overdue.length,'overdue'),kpi('Done this month',ts.filter(t=>t.doneAt&&t.doneAt>=mstart).length,'ontime')));
+  if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Date requests'}),h('span',{class:'cnt',text:String(reqs.length)})),
+    canChalkEdit()?approvalCards(reqs):h('div',{class:'list'},reqs.map(t=>row(t)))));
+  const ppl=chalkPeople().filter(id=>isChalkP(id));
+  const rows=ppl.map(id=>({id,c:chalkLoad(id)})).sort((a,b)=>b.c.open-a.c.open), mx=Math.max(1,...rows.map(x=>x.c.open));
+  out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Team load'}),h('span',{class:'cnt',text:`${ppl.length} ${ppl.length===1?'person':'people'}`})),
+    rows.length?h('div',{class:'card',style:'gap:10px'},h('div',{class:'hbars'},rows.map(({id,c})=>h('div',{class:'hb'},h('span',{class:'nm who'},avaEl(id,false,'sm'),nameOf(id)),
+        h('div',{class:'track','data-tip':`${nameOf(id)}\nOverdue ${c.overdue} · Due in 7 days ${c.week}\nLater ${c.later} · No date ${c.nodate}`},[['overdue',c.overdue],['late',c.week],['early',c.later],['open',c.nodate]].filter(x=>x[1]).map(([k,n])=>h('span',{class:'s-'+k,style:`flex:0 0 calc(${n/mx*100}% - 2px)`}))),
+        h('span',{class:'v',text:String(c.open)})))),
+      h('div',{class:'legend',style:'justify-content:flex-start'},h('span',{class:'s-overdue',text:'Overdue'}),h('span',{class:'s-late',text:'Due in 7 days'}),h('span',{class:'s-early',text:'Later'}),h('span',{class:'s-open',text:'No date'})))
+    :h('div',{class:'card'},h('span',{class:'muted',text:'Set people’s team to Chalk Create in Settings › People to see them here.'}))));
+  if(overdue.length) out.push(sec('Overdue',overdue.map(t=>row(t))));
+  out.push(sec('Due in the next 7 days',soon.length?soon.map(t=>row(t)):[h('p',{class:'muted',style:'margin:0',text:'Nothing due this week.'})]));
+  const nod=open.filter(t=>!t.target); if(nod.length) out.push(sec('No date yet',nod.map(t=>row(t))));
+  out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Projects'}),h('span',{class:'cnt',text:String(ps.filter(p=>!p.closed).length)})),
+    ps.length?h('div',{class:'pgrid'},ps.map(p=>{ const pt=ts.filter(t=>t.projectId===p.id), done=pt.filter(t=>t.doneAt).length, nx=pt.filter(t=>!t.doneAt&&t.target).sort(byTarget)[0], od=pt.filter(t=>!t.doneAt&&t.target&&t.target<td).length;
+      return h('button',{class:'pcard',type:'button',onclick:()=>openChalkProjView(p.id)},
+        h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{class:'pill '+(p.closed?'s-open':od?'s-overdue':'s-ontime'),text:p.closed?'Closed':od?`${od} overdue`:'On track'})),
+        h('div',{class:'pc-name',text:p.name}),h('div',{class:'pc-meta',text:[chalkTypeName(p.type),p.client,p.dueDate?'Due '+fmtD(p.dueDate):''].filter(Boolean).join(' · ')}),
+        h('div',{class:'pc-bar'},h('span',{style:`width:${pt.length?Math.round(done/pt.length*100):0}%`})),
+        h('div',{class:'pc-row muted'},h('span',{text:nx?'Next: '+nx.title:(pt.length?'All tasks done':'No tasks yet')}),h('span',{class:'mono',text:nx?fmtD(nx.target):''}))); }))
+    :h('div',{class:'card'},h('span',{class:'muted',text:'No Chalk projects yet.'}))));
+  return out;
+}
+/* new or edited Chalk project */
+function openChalkProject(id){ const p=id?S.projects[id]:{}; S.sheet={type:'chalkProject',id:id||null,err:'',d:{name:p.name||'',client:p.client||'',type:p.type||'',dueDate:p.dueDate||'',note:p.note||'',who:'',addStd:!id}}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-name'); el&&el.focus(); },30); }
+function sheetChalkProject(){
+  const sh=S.sheet, d=sh.d, id=sh.id;
+  const types=[['','Select type…'],...Object.entries(CHALK_TYPES).map(([k,t])=>[k,t.name])];
+  const tsel=sel('type',types); tsel.addEventListener('change',()=>renderSheet());
+  const who=h('select',{id:'ck-who','aria-label':'Assign the suggested tasks to',onchange:e=>{d.who=e.target.value}},chalkAssignOpts().map(([v,l])=>h('option',{value:v,text:v?l:'Leave unassigned'}))); who.value=d.who||'';
+  return [head('Chalk Create',id?'Edit project':'New project'),
+    h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); saveChalkProject(); }},
+      field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Bashundhara tower brochure'})),
+      h('div',{class:'form-row'},field('Type *',tsel),field('Client',inp('client',{maxlength:80}))),
+      field('Due date (optional)',inp('dueDate',{type:'date'})),
+      !id&&d.type&&canChalkAssign()?h('div',{class:'card',style:'background:#fff;gap:8px'},
+        h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'ck-std',checked:d.addStd,onchange:e=>{ d.addStd=e.target.checked; renderSheet(); }}),`Add the ${CHALK_TYPES[d.type].items.length} suggested tasks`),
+        d.addStd?h('div',{class:'f-hint',text:CHALK_TYPES[d.type].items.join(' → ')}):null,
+        d.addStd?field('Assign them to',who):null):null,
+      field('Note (optional)',ta('note',{rows:2})),
+      h('div',{class:'f-hint',text:'Chalk projects get a CHK code and are seen only by the Chalk lead, the Principal, the COO and the people working on them.'}),
+      sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save project':'Create project'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))];
+}
+function saveChalkProject(){
+  const sh=S.sheet, d=sh.d, id=sh.id, name=(d.name||'').trim();
+  if(!name) return fail('Give the project a name.'); if(!d.type) return fail('Choose the type.');
+  const now=new Date().toISOString(), ref=id?S.db.doc('projects/'+id):S.db.collection('projects').doc();
+  const v={name:name.toUpperCase(),client:(d.client||'').trim(),type:d.type,dueDate:d.dueDate||'',note:(d.note||'').trim()};
+  run(async()=>{
+    if(id) await ref.update(v);
+    else { await ref.set({...v,pod:chalkTeam(),code:'',closed:false,status:'active',createdAt:now,createdBy:S.uid,approvedBy:S.uid,approvedAt:now});
+      if(d.addStd&&canChalkAssign()){ const items=CHALK_TYPES[d.type].items; for(let i=0;i<items.length;i++) await createTask({chalk:true,projectId:ref.id,title:items[i],kind:i===items.length-1?'Deliverable':'Task',assignee:d.who||'',phase:chalkTypeName(d.type),target:''}); } }
+  },id?'Project updated':'Chalk project created').then(ok=>{ if(ok) openChalkProjView(ref.id); });
+}
+/* new Chalk task: the Chalk lead or the Principal; the date counts at once */
+function openChalkTask(pid){ S.sheet={type:'chalkTask',err:'',added:[],d:{projectId:pid||'',title:'',assignee:'',target:'',kind:'Task',note:''}}; renderSheet(); setTimeout(()=>{ const el=document.getElementById(pid?'sh-title':'sh-projectId'); el&&el.focus(); },30); }
+function sheetChalkTask(){
+  const sh=S.sheet, d=sh.d;
+  if(!chalkProjects().filter(p=>!p.closed).length) return [head('Chalk Create','New task'),h('p',{class:'muted',style:'margin:0',text:'Create a Chalk project first.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openChalkProject(),text:'New project'}))];
+  return [head('Chalk Create','New task'),
+    h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); const title=(d.title||'').trim();
+        if(!d.projectId) return fail('Choose a project.'); if(!title) return fail('Write the task.'); if(!d.assignee) return fail('Choose who does it.');
+        run(()=>createTask({...d,chalk:true,title}),'Task added').then(ok=>{ if(ok){ sh.added.unshift(`${title} → ${nameOf(d.assignee)}${d.target?', '+fmtD(d.target):''}`); d.title=''; d.note=''; sh.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } }); }},
+      field('Task *',inp('title',{maxlength:140,placeholder:'e.g. Draft renders for review'})),
+      h('div',{class:'form-row'},field('Project *',sel('projectId',chalkProjOpts())),field('Assign to *',sel('assignee',chalkAssignOpts()))),
+      field('Due',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
+      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'ck-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
+      field('Note (optional)',inp('note',{maxlength:160})),
+      sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
+      h('div',{class:'f-hint',text:'No approval needed: the date counts straight away.'}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Add task'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Close'}))),
+    sh.added.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Added just now'})),h('div',{class:'list'},sh.added.map(x=>h('div',{class:'f-hint',text:x})))):null];
+}
+/* a Chalk project and its tasks */
+function openChalkProjView(id){ S.sheet={type:'chalkProj',id}; renderSheet(); }
+function sheetChalkProj(){
+  const id=S.sheet.id, raw=S.projects[id]; if(!raw) return [head('Chalk Create','Not found')];
+  const p={...raw,id}, ts=chalkTasks().filter(t=>t.projectId===id).sort(byTarget), done=ts.filter(t=>t.doneAt).length;
+  const fact=(l,v)=>v?h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v',text:v})):null;
+  const out=[head(`${p.code||'CHK'} · Chalk Create`,p.name),
+    h('div',{class:'sh-status'},h('span',{class:'tag',text:chalkTypeName(p.type)}),p.closed?h('span',{class:'tag',text:'Closed'}):null,p.delReq?h('span',{class:'tag tag-req',text:'Deletion requested'}):null),
+    h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:ts.length?`${done} of ${ts.length} done`:'No tasks yet'})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${ts.length?Math.round(done/ts.length*100):0}%`}))),
+    h('div',{class:'facts'},fact('Client',p.client),fact('Due',p.dueDate?fmtD(p.dueDate):''),fact('Created by',p.createdBy?nameOf(p.createdBy):'')),
+    p.note?h('p',{class:'quote',text:p.note}):null,
+    h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Tasks'}),canChalkAssign()&&!p.closed?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openChalkTask(id),text:'+ Task'}):h('span',{class:'cnt',text:String(ts.length)})),
+      ts.length?h('div',{class:'list'},ts.map(t=>row(t,{project:false}))):h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'No tasks yet.'}))];
+  if(canChalkEdit()) out.push(h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(id),text:'Edit'}),
+    h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>run(()=>S.db.doc('projects/'+id).update({closed:!p.closed}),p.closed?'Project reopened':'Project closed'),text:p.closed?'Reopen':'Close project'})));
+  { const dz=deleteZone(p); if(dz) out.push(dz); }
+  return out;
 }
 
 (function(){ const tip=document.getElementById('tip'); if(!tip) return;

@@ -61,7 +61,7 @@
   let me = null;                    // my profile row
   let authUser = null;
 
-  const PEOPLE_KEYS = ['roster', 'managers', 'approvers', 'privateIds', 'ownerId'];
+  const PEOPLE_KEYS = ['roster', 'managers', 'approvers', 'privateIds', 'chalkLeads', 'ownerId'];
 
   function ownerProfile() {
     for (const p of people.values()) if (p.designation === 'principal' && p.active) return p;
@@ -71,7 +71,7 @@
     const base = store.get('config/settings');
     const owner = ownerProfile();
     if (!base && !owner) return null;
-    const roster = {}, managers = [], approvers = [], privateIds = [];
+    const roster = {}, managers = [], approvers = [], privateIds = [], chalkLeads = [];
     for (const p of people.values()) {
       const r = { team: p.team || '', role: p.role_label || '' };
       if (p.label) r.label = p.label;
@@ -80,8 +80,9 @@
       if (p.is_manager || p.designation === 'pod_leader') managers.push(p.id);
       if (p.is_approver || p.designation === 'coo') approvers.push(p.id);
       if (p.is_private) privateIds.push(p.id);
+      if (p.is_chalk_lead) chalkLeads.push(p.id);
     }
-    return { target: 90, ...(base || {}), ownerId: owner ? owner.id : null, roster, managers, approvers, privateIds };
+    return { target: 90, ...(base || {}), ownerId: owner ? owner.id : null, roster, managers, approvers, privateIds, chalkLeads };
   }
   function membersDocs() {
     const out = [];
