@@ -2924,7 +2924,7 @@ function sheetProject(){
         field('Scope of services *',scopeBox),
         h('div',{class:'form-row'},field('Contractual completion (optional)',inp('dueDate',{type:'date'}),'Used to flag a project whose plan runs past it.'),field('Agreement document link (optional)',inp('docUrl',{type:'url',placeholder:'https://…'})))],
       field('Note (optional)',ta('note',{placeholder:!ap&&!id?'Anything the COO should know':''})),
-      h('div',{class:'f-hint',text:'No fees or payment figures are kept here. Only the Principal and the COO can see agreement details after approval.'}),
+      h('div',{class:'f-hint',text:'No fees or payment figures are kept here. Agreement status, date, reference and document link are stored separately and only the Principal and the COO can read them.'}),
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
       h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save project':ap?'Add project':'Send for approval'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))];
 }
@@ -3731,6 +3731,7 @@ function deleteProject(pid){
     if(!p.delReq&&reason) await S.db.doc('projects/'+pid).update({delReq:{by:S.uid,at:new Date().toISOString(),reason}});
     for(const path of projTaskPaths(pid)) await S.db.doc(path).delete();
     for(const [k,m] of Object.entries(S.pmeet)) if(m&&m.projectId===pid) await S.db.doc('pmeetings/'+k).delete();
+    try{ await S.db.doc('agreements/'+pid).delete(); }catch(e){}
     await S.db.doc('projects/'+pid).delete();
   },'Project deleted').then(ok=>{ if(ok&&S.sheet&&S.sheet.id===pid) closeSheet(); });
 }

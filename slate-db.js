@@ -91,6 +91,12 @@
     }
     return out;
   }
+  // Agreement details live in agreements/<id>, readable only by the Principal and the COO; show them on the project for them.
+  function withAgreement(path, d) {
+    if (!d || !/^projects\/[^/]+$/.test(path)) return d;
+    const a = store.get('agreements/' + lastOf(path));
+    return a ? { ...d, ...a } : d;
+  }
   function readDoc(path) {
     if (path === 'config/settings') return settingsData();
     const seg = path.split('/');
@@ -99,13 +105,13 @@
       return p ? { icon: p.icon || null, iconAt: p.icon_at || null, joinedAt: p.created_at, active: p.active } : null;
     }
     const d = store.get(path);
-    return d === undefined ? null : d;
+    return d === undefined ? null : withAgreement(path, d);
   }
   function readColl(collPath) {
     if (collPath === 'members') return membersDocs();
     const pre = collPath + '/', depth = collPath.split('/').length + 1, out = [];
     for (const [path, data] of store) {
-      if (path.startsWith(pre) && path.split('/').length === depth) out.push([lastOf(path), data]);
+      if (path.startsWith(pre) && path.split('/').length === depth) out.push([lastOf(path), withAgreement(path, data)]);
     }
     return out;
   }
@@ -122,7 +128,7 @@
 
   /* ---------------- change notification (batched) ---------------- */
   const dirty = new Set(); let flushQueued = false;
-  function touch(path) { dirty.add(path); if (!flushQueued) { flushQueued = true; queueMicrotask(flush); } }
+  function touch(path) { dirty.add(path); if (path.startsWith('agreements/')) dirty.add('projects/' + lastOf(path)); if (!flushQueued) { flushQueued = true; queueMicrotask(flush); } }
   function touchPeople() { touch('config/settings'); touch('members/*'); }
   function flush() {
     flushQueued = false;
@@ -196,6 +202,9 @@
     if (/^projects\/[^/]+$/.test(path)) {
       const { data: row } = await sb.from('docs').select('data').eq('path', path).maybeSingle();
       if (row) { store.set(path, row.data); touch(path); }
+      const ag = 'agreements/' + lastOf(path);
+      const { data: arow } = await sb.from('docs').select('data').eq('path', ag).maybeSingle();
+      if (arow) { store.set(ag, arow.data); touch(ag); }
     }
   }
   async function writeSettings(data) {
