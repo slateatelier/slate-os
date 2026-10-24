@@ -1501,13 +1501,13 @@ function renderHeader(){
   const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+minutesToApprove().length+extraReqs().length+(S.isOwner?chalkReqs().length:0):0;
   const full=fullView(), mp=myPod();
   const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
-  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar']]:[['mine','Home',reqs],['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',S.isOwner?roleProposals().length:0]];
+  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home',reqs],['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',S.isOwner?roleProposals().length:0]];
   const TASKV=['all','board','gantt'], MOREV=cmem?[]:['more','team','activity','setup','meet','std','help','far'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
-  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},l,n?h('span',{class:'badge',text:String(n)}):null)),
+  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},l,n?h('span',{class:'badge',text:String(n)}):null)),
     (()=>{ const nn=newCount(); return h('button',{class:'tab tab-notif',type:'button','data-k':'notifs','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
       'Notifications',nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null); })());
@@ -2090,7 +2090,8 @@ function sheetProfile(){
         (()=>{ const a=h('span',{class:'ava ic ava-md',style:'--c:'+ic[2]}); a.append(iconSvg(ic)); return a; })(),
         h('span',{class:'icn',text:taken?nameOf(holder):ic[1]}));
       return b; })),
-    mine&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>run(()=>S.db.doc('members/'+S.uid).update({icon:null,iconAt:null}),'Using initials'),text:'Use my initials instead'}):null];
+    mine&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>run(()=>S.db.doc('members/'+S.uid).update({icon:null,iconAt:null}),'Using initials'),text:'Use my initials instead'}):null,
+    h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ closeSheet(); window.slateAccount&&window.slateAccount(); },text:'Account · change password or sign out'})];
   if(S.isOwner){ const held=Object.entries(S.members).filter(([id,x])=>x&&x.icon&&id!==S.uid);
     if(held.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Reset someone’s icon'})),h('div',{class:'list'},held.map(([id,x])=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:auto minmax(0,1fr) auto;align-items:center'},avaEl(id),h('span',{text:nameOf(id)}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>run(()=>S.db.doc('members/'+id).update({icon:null,iconAt:null}),'Icon reset'),text:'Reset'})))))); }
   return out;
