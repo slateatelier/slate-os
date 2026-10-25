@@ -792,7 +792,7 @@ function status(t,basis='approved'){
 const goLive=()=>(S.settings&&S.settings.goLive)||'2026-11-01';
 const preLive=()=>addDays(goLive(),-1);
 function pill(t,basis='approved'){
-  if(t.legacy) return h('span',{class:'pill s-open',title:'Finished before SLATE OS; not scored',text:'Before SLATE OS'});
+  if(t.legacy) return h('span',{class:'pill '+(t.legacyOk?'s-open':'s-late'),title:'Finished before SLATE OS; not scored',text:t.legacyOk?'Before SLATE OS':'Before SLATE OS · COO to approve'});
   const s=status(t,basis), g=tgt(t,basis); let txt;
   if(s==='early') txt=`Done ${diff(t.doneAt,g)}d early`;
   else if(s==='ontime') txt='Done on time';
@@ -883,7 +883,7 @@ async function createTask(d){
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
   const ask=d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
-  const lg=d.legacy?{legacy:true,doneAt:d.doneAt,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
+  const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
   const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
@@ -1521,7 +1521,7 @@ function renderHeader(){
   { const nn=newCount(); slot.replaceChildren(h('button',{class:'bell',type:'button','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
       nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null)); }
-  const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+memberReqs().length+minutesToApprove().length+extraReqs().length+(S.isOwner?chalkReqs().length:0):0;
+  const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+memberReqs().length+historyReqs().length+minutesToApprove().length+extraReqs().length+(S.isOwner?chalkReqs().length:0):0;
   const full=fullView(), mp=myPod();
   const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
   const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home',reqs],['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['team','Team'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',S.isOwner?roleProposals().length:0]];
@@ -1645,6 +1645,7 @@ function viewMine(){
   const pjq=amApprover()?projReqCards():null; if(pjq) out.push(pjq);
   const phq=amApprover()?phaseReqCards():null; if(phq) out.push(phq);
   const mrq=amApprover()?memberReqCards():null; if(mrq) out.push(mrq);
+  const hrq=amApprover()?historyCards():null; if(hrq) out.push(hrq);
   const lbq=amApprover()?libReqCards():null; if(lbq) out.push(lbq);
   { const cr=S.isOwner?chalkReqs():[]; if(cr.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Chalk Create dates to approve'}),h('span',{class:'cnt',text:String(cr.length)})),S.canWrite?approvalCards(cr):h('div',{class:'list'},cr.map(t=>row(t))))); }
   if(reqs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Dates to approve'}),h('span',{class:'cnt',text:String(reqs.length)})),approvalBlocks(reqs)));
@@ -1653,7 +1654,7 @@ function viewMine(){
   const drq=delReqCards(); if(drq) out.push(drq);
   const pmq=pmHomeSec(); if(pmq) out.push(pmq);
   const mcl=myChecklist(); if(mcl.length) out.push(myChecklistSec(mcl));
-  if(!mine.length){ if(!reqs.length&&!areq.length&&!prq&&!nkq&&!pjq&&!lbq&&!phq&&!mcl.length&&!xrq&&!pmq&&!drq&&!mrq) out.push(onboarding()); return out; }
+  if(!mine.length){ if(!reqs.length&&!areq.length&&!prq&&!nkq&&!pjq&&!lbq&&!phq&&!mcl.length&&!xrq&&!pmq&&!drq&&!mrq&&!hrq) out.push(onboarding()); return out; }
   const r=range('month',0); const mm=mine.filter(t=>{const g=t.target;return g>=r.s&&g<=r.e});
   const c=count(mm,'approved');
   out.push(h('div',{class:'tiles'},
@@ -3273,7 +3274,7 @@ function subsSection(p){
   const sh=S.sheet, f=sh.subAdd||null, save=list=>run(()=>S.db.doc('projects/'+p.id).update({subs:list}),'Submissions log saved');
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Submissions log'}),h('span',{class:'cnt',text:String(xs.length)})),
     xs.length?h('div',{class:'list'},xs.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:10px'},
-      h('span',{class:'mono',text:x.date?fmtD(x.date):'—'}),h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:x.what+(x.rev?` · R${x.rev}`:'')}),x.note?h('div',{class:'f-hint',text:x.note}):null,h('div',{class:'f-hint',text:(x.date&&x.date<goLive()?'Before SLATE OS · ':'')+'Logged by '+nameOf(x.by)})),
+      h('span',{class:'mono',text:x.date?fmtD(x.date):'—'}),h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:x.what+(x.rev?` · R${x.rev}`:'')}),x.note?h('div',{class:'f-hint',text:x.note}):null,h('div',{class:'f-hint',text:(x.date&&x.date<goLive()?'Before SLATE OS · ':'')+'Logged by '+nameOf(x.by)+(x.ok===false?' · waiting for the COO':'')})),
       can?h('button',{class:'icon-btn',type:'button','aria-label':'Remove',onclick:()=>save((p.subs||[]).filter(y=>y!==x&&!(y.id&&y.id===x.id))),text:'×'}):h('span')))):h('p',{class:'muted',style:'margin:0 4px',text:'Nothing logged yet.'}),
     can?(!f?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ sh.subAdd={date:'',what:'',rev:'',note:''}; renderSheet(); },text:'+ Log a submission'})
       :h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Log a submission'}),
@@ -3282,9 +3283,35 @@ function subsSection(p){
         h('div',{class:'form-row'},h('input',{id:'sb-date',type:'date',max:today(),value:f.date,style:'background:#fff','aria-label':'Date',oninput:e=>{f.date=e.target.value}}),h('input',{id:'sb-rev',type:'number',min:0,placeholder:'Revision no. (optional)',value:f.rev,style:'background:#fff',oninput:e=>{f.rev=e.target.value}})),
         h('input',{id:'sb-note',maxlength:120,placeholder:'Note (optional), e.g. to the client by email',value:f.note,style:'background:#fff',oninput:e=>{f.note=e.target.value}}),
         h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!(f.what||'').trim()) return toast('Write what was submitted.'); if(f.date&&f.date>today()) return toast('The date can’t be in the future.');
-            const x={id:Math.random().toString(36).slice(2,10),what:f.what.trim(),date:f.date||'',rev:f.rev?String(parseInt(f.rev)):'',note:(f.note||'').trim(),by:S.uid,at:new Date().toISOString()};
+            const x={id:Math.random().toString(36).slice(2,10),ok:amApprover(),what:f.what.trim(),date:f.date||'',rev:f.rev?String(parseInt(f.rev)):'',note:(f.note||'').trim(),by:S.uid,at:new Date().toISOString()};
             save([...(Array.isArray(p.subs)?p.subs:[]),x]).then(ok=>{ if(ok){ sh.subAdd=null; renderSheet(); } }); },text:'Save'}),
           h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.subAdd=null; renderSheet(); },text:'Cancel'})))):null);
+}
+/* history entered by a pod leader (phases finished before SLATE OS, past submissions) waits for the COO */
+function historyReqs(){ const by=new Map(), add=(pid,k,x)=>{ if(!by.has(pid)) by.set(pid,{pid,tasks:[],subs:[]}); by.get(pid)[k].push(x); };
+  Object.entries(S.tasks).forEach(([id,t])=>{ if(t&&t.legacy&&!t.legacyOk&&!t.archived&&S.projects[t.projectId]) add(t.projectId,'tasks',{...t,id}); });
+  Object.entries(S.projects).forEach(([pid,p])=>{ (Array.isArray(p&&p.subs)?p.subs:[]).forEach(x=>{ if(x&&x.ok===false) add(pid,'subs',x); }); });
+  return [...by.values()]; }
+function decideHistory(r,ok){ const p=S.projects[r.pid], note=(S.declineNote['hy:'+r.pid]||'').trim();
+  if(!ok&&!note) return toast('Add a note so the pod leader knows what to fix.');
+  return run(async()=>{
+    for(const t of r.tasks) ok?await taskUpdate(t.id,{legacyOk:true},[{type:'approved',to:t.doneAt,note:'History approved'+(note?': '+note:'')}])
+      :await taskUpdate(t.id,{doneAt:null,doneBy:null,stage:'todo',legacy:false,legacyNoDate:false,legacyOk:false},[{type:'reopened',from:t.doneAt,note:'History returned: '+note}]);
+    if(r.subs.length){ const ids=new Set(r.subs.map(x=>x.id)); await S.db.doc('projects/'+r.pid).update({subs:(p.subs||[]).filter(x=>!(ok===false&&ids.has(x.id))).map(x=>ids.has(x.id)?{...x,ok:true,okBy:S.uid,okAt:new Date().toISOString()}:x)}); }
+  },ok?'History approved':'History returned').then(x=>{ if(x) delete S.declineNote['hy:'+r.pid]; }); }
+function historyCards(){
+  const xs=historyReqs(); if(!xs.length) return null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'History to approve'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('p',{class:'f-hint',style:'margin:0 4px',text:'Work recorded as finished before SLATE OS went live. It never counts in scores; approving confirms the record.'}),
+    h('div',{class:'list'},xs.map(r=>{ const p=S.projects[r.pid];
+      return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:6px'},
+        h('div',{class:'row-title'},h('button',{class:'linkish',type:'button',onclick:()=>openProjectView(r.pid),text:projLabel(p)})),
+        r.tasks.sort((a,b)=>(a.doneAt||'').localeCompare(b.doneAt||'')).map(t=>h('div',{class:'pc-row',style:'font-size:14px'},h('span',{text:t.title+(t.gate?' · phase '+phLabel(t.gate.k):'')}),h('span',{class:'mono',text:t.legacyNoDate?'no date':fmtD(t.doneAt)}))),
+        r.subs.map(x=>h('div',{class:'pc-row',style:'font-size:14px'},h('span',{text:'Submission: '+x.what+(x.rev?' · R'+x.rev:'')}),h('span',{class:'mono',text:x.date?fmtD(x.date):'no date'}))),
+        h('div',{class:'f-hint',text:'Entered by '+[...new Set([...r.tasks.map(t=>t.doneBy||t.createdBy),...r.subs.map(x=>x.by)].filter(Boolean))].map(nameOf).join(', ')}),
+        S.canWrite&&h('div',{class:'bar'},h('input',{id:'hyn-'+r.pid,placeholder:'Note (needed to return)',value:S.declineNote['hy:'+r.pid]||'',style:'background:#fff',oninput:e=>{S.declineNote['hy:'+r.pid]=e.target.value}}),
+          h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>decideHistory(r,true),text:'Approve'}),
+          h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>decideHistory(r,false),text:'Return'}))); })));
 }
 function memberPatch(pid,patch){ return {members:{[pid]:patch}}; }
 function teamSection(p){
@@ -3446,7 +3473,7 @@ function stdSection(p){
       det&&amMgr()&&S.canWrite&&!p.closed?h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Set up phases'})):h('div',{class:'f-hint',text:'The pod lead sets the phases up.'}))); }
   const ks=stdPhases(p), act=activePhases(p), cur=act[0]||null, manage=det&&canManageCl(p), open=S.sheet&&S.sheet.openPh!==undefined?S.sheet.openPh:cur, fbEdit=S.canWrite&&(amApprover()||isProjLead(p));
   const closed=ks.filter(k=>stdState(p,k).done).length;
-  const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub='before SLATE OS'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
+  const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub=t.legacyOk?'before SLATE OS':'before SLATE OS · COO to approve'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
     return h('div',{},h('span',{text:lbl}),extra||h('b',{style:t&&!t.doneAt&&status(t)==='overdue'?'color:var(--overdue)':'',text:v}),!extra&&sub?h('span',{style:'font-weight:500',text:sub}):null); };
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'}),h('span',{class:'cnt',text:`${closed}/${ks.length} gates closed`})),
     paceRow(p),
@@ -3475,7 +3502,7 @@ function preBox(p,k){
     h('div',{class:'f-hint',text:'Its gate shows as closed with these dates and its checklist is closed. It never counts in scores.'}),
     h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{
         for(const t of gateTasks(p.id).filter(t=>t.gate.k===k&&!t.doneAt)){ const dt=f[t.gate.step]||(t.gate.step==='sub'?f.final:f.sub)||'';
-          await taskUpdate(t.id,{doneAt:dt||preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:!dt,request:null},[{type:'done',to:dt||preLive(),note:'Finished before SLATE OS'+(dt?'':' (date not recorded)')}]); }
+          await taskUpdate(t.id,{doneAt:dt||preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:!dt,...(amApprover()?{legacyOk:true}:{}),request:null},[{type:'done',to:dt||preLive(),note:'Finished before SLATE OS'+(dt?'':' (date not recorded)')}]); }
         const m={}; clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(!x.done&&!x.na) m[it.id]={...x,done:f.final||f.sub||preLive(),legacy:true}; });
         if(Object.keys(m).length) await S.db.doc('projects/'+p.id).update({cl:{[k]:m}});
       },'Phase recorded as finished before SLATE OS').then(ok=>{ if(ok){ sh.preEdit=null; renderSheet(); } }),text:'Close phase'}),

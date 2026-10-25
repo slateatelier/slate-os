@@ -5,3 +5,6 @@
 -- * docs_guard: a project's pod leader may create a legacy-done task (doneAt before go-live, target empty or equal),
 --   may mark an open task legacy-done only with a doneAt before go-live, and may edit the project's submissions log (subs).
 --   A task flagged legacy can never carry a doneAt on or after go-live.
+-- (history_needs_coo_approval, history_subs_keep_approved) History entered by a pod leader waits for the COO:
+--   tasks carry legacyOk (only an approver sets it); logged submissions carry ok (only an approver sets it,
+--   and approved entries can only be changed or removed by an approver).
