@@ -248,7 +248,7 @@ const fileSafe = s => String(s || '').replace(/[^\w.-]+/g, '-');
 /* ---------- render ---------- */
 let rq = 0;
 const schedule = () => { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); };
-const TABS = [['overview', 'Overview'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['workorders', 'Work orders'], ['payroll', 'Payroll'], ['petty', 'Petty cash'], ['cash', 'Cash & bank'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['dash', 'Dashboard'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['workorders', 'Work orders'], ['payroll', 'Payroll'], ['petty', 'Petty cash'], ['cash', 'Cash & bank'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings']];
 function renderChrome() {
   const fys = new Set([fyOf(today()), S.fy]);
   [...S.invoices.map(i => i.date), ...S.receipts.map(r => r.date), ...S.moves.map(m => m.date), ...S.expenses.map(x => x.date), ...S.wopays.map(x => x.date), ...S.payruns.map(r => (r.month || '') + '-01')].forEach(d => d && fys.add(fyOf(d)));
@@ -262,7 +262,7 @@ function renderChrome() {
 function render() {
   renderChrome();
   if (!S.loaded) return;
-  const v = { overview, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, petty: pettyView, cash: cashbook, reports, activity, settings }[S.tab] || overview;
+  const v = { overview, dash: dashboard, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, petty: pettyView, cash: cashbook, reports, activity, settings }[S.tab] || overview;
   $('#app').innerHTML = v();
 }
 function notice(title, body, link) {
@@ -1839,6 +1839,272 @@ function exportPL() {
 /* ----- Change log (audit trail, visible only to the Principal and the COO) ----- */
 const FIELD = { lines: 'Lines', rates: 'Salary', payDate: 'Paid on', installment: 'Monthly recovery', payMethod: 'Paid by', category: 'Category', payee: 'Paid to', paidOn: 'Paid on', vendor: 'Vendor', scope: 'Scope', gross: 'Settled', paid: 'Paid', rejectReason: 'Reason', opening: 'Opening balance', openingDate: 'Opening date', accountId: 'Account', mrNo: 'Receipt no', mode: 'Payment', net: 'SLATE keeps', entered: 'Entered', actual: 'Counted / statement', from: 'From', to: 'Into', active: 'Active', kind: 'Type', amount: 'Amount', vatPct: 'VAT %', no: 'Number', date: 'Date', due: 'Due date', desc: 'Description', status: 'Status', fee: 'Fee', milestones: 'Milestones', name: 'Name', code: 'Code', client: 'Client', received: 'Received', ait: 'AIT', vds: 'VDS', method: 'Method', ref: 'Reference', note: 'Note', voidReason: 'Void reason', bin: 'BIN', bank: 'Bank details', prefix: 'Number prefix', termsDays: 'Payment terms', lockedFYs: 'Closed years', clientAddress: 'Billing address', location: 'Site', rate: 'Rate', areaSft: 'Area', osId: 'SLATE OS link', type: 'Type', invNote: 'Invoice note', signName: 'Signatory', signTitle: 'Signatory title', projectId: 'Project', milestoneId: 'Milestone', invoiceId: 'Invoice' };
 const SKIP = ['createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
+/* ----- Dashboard: where income comes from and where the money goes ----- */
+// categorical slots, fixed order (validated: adjacent CVD ΔE ≥ 9.1, normal-vision ≥ 19.6); values carry direct labels/tooltips
+const DPAL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
+const CGROUPS = [
+  ['Salaries & bonuses', DPAL[0], ['Salaries & bonuses']],
+  ['Consultants & vendors', DPAL[1], ['Consultants & vendors']],
+  ['Office & running', DPAL[2], ['Office rent', 'Utilities', 'Internet & software', 'Repairs & maintenance', 'Office supplies', 'Bank charges']],
+  ['Projects & site', DPAL[3], ['Printing & plotting', 'Transport & site visits', 'Authority & approval fees']],
+  ['Clients & people', DPAL[4], ['Client meetings & entertainment', 'Marketing', 'Staff welfare']],
+  ['Other', '#8E959C', ['Other']]];
+const groupOf = c => (CGROUPS.find(g => g[2].includes(c)) || CGROUPS[CGROUPS.length - 1])[0];
+const pctTxt = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
+const monthIdx = d => { const m = +String(d).slice(5, 7); return (m + 5) % 12; };
+
+/* every income and cost item of a financial year, on the same basis as Profit & loss */
+function ledgerItems(fy, basis) {
+  const inc = [], cost = [];
+  const wo = id => S.workorders.find(o => o.id === id) || {};
+  if (basis === 'cash') {
+    S.receipts.forEach(r => { if (!inFY(r.date, fy)) return; const i = S.invoices.find(v => v.id === r.invoiceId); if (!i) return;
+      const share = (+i.amount || 0) / (invTotal(i) || 1), settled = (+r.received || 0) + (+r.ait || 0) + (+r.vds || 0);
+      const parts = recParts(r), cashPart = parts.filter(x => isCashLike(acct(x.accountId))).reduce((u, x) => u + (+x.amount || 0), 0);
+      const cashShare = (+r.received || 0) ? cashPart / (+r.received || 1) : (i.mode === 'cash' ? 1 : 0);
+      const fee = settled * share;
+      if (fee * cashShare) inc.push({ d: r.date, pid: i.projectId, amt: fee * cashShare, mode: 'cash' });
+      if (fee * (1 - cashShare)) inc.push({ d: r.date, pid: i.projectId, amt: fee * (1 - cashShare), mode: 'bank' }); });
+    S.expenses.filter(x => x.status !== 'rejected' && x.accountId && inFY(x.paidOn, fy) && !NOT_COST.includes(x.category))
+      .forEach(x => cost.push({ d: x.paidOn, cat: x.category, amt: +x.amount || 0, payee: x.payee || '', pid: x.projectId || '' }));
+    S.payruns.filter(r => r.status === 'paid' && inFY(r.payDate, fy)).forEach(r => (r.lines || []).forEach(l =>
+      cost.push({ d: r.payDate, cat: 'Salaries & bonuses', amt: lineCost(l), payee: '', pid: '', staff: l.staffId, kind: r.kind })));
+  } else {
+    S.invoices.filter(i => !['void', 'draft'].includes(invStatus(i)) && inFY(i.date, fy))
+      .forEach(i => inc.push({ d: i.date, pid: i.projectId, amt: +i.amount || 0, mode: i.mode === 'cash' ? 'cash' : 'bank' }));
+    S.expenses.filter(x => x.status !== 'rejected' && inFY(x.date, fy) && !NOT_COST.includes(x.category))
+      .forEach(x => cost.push({ d: x.date, cat: x.category, amt: +x.amount || 0, payee: x.payee || '', pid: x.projectId || '' }));
+    S.payruns.filter(r => ['approved', 'paid'].includes(r.status) && inFY(r.month + '-01', fy)).forEach(r => (r.lines || []).forEach(l =>
+      cost.push({ d: r.month + '-01', cat: 'Salaries & bonuses', amt: lineCost(l), payee: '', pid: '', staff: l.staffId, kind: r.kind })));
+  }
+  S.wopays.filter(x => inFY(x.date, fy)).forEach(x => { const w = wo(x.woId); cost.push({ d: x.date, cat: 'Consultants & vendors', amt: +x.gross || 0, payee: w.vendor || '', pid: w.projectId || '', wtype: w.type || '' }); });
+  return { inc: inc.filter(x => x.amt), cost: cost.filter(x => x.amt) };
+}
+const sumBy = (arr, key, val = x => x.amt) => { const m = new Map(); arr.forEach(x => { const k = typeof key === 'function' ? key(x) : x[key]; m.set(k, (m.get(k) || 0) + val(x)); }); return m; };
+const topN = (m, n) => { const a = [...m.entries()].filter(([, v]) => v).sort((x, y) => y[1] - x[1]); if (a.length <= n) return a; const rest = a.slice(n - 1).reduce((u, [, v]) => u + v, 0); return [...a.slice(0, n - 1), ['__other', rest, a.length - n + 1]]; };
+
+/* rounded data-end bar (top corners), anchored to the baseline */
+function barPath(x, y, w, h, r = 3) { if (h <= 0) return ''; r = Math.min(r, w / 2, h);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
+function axis(max, W, L, R, y) { const step = niceStep(max / 3); let g = '';
+  for (let v = 0; v <= max + 1; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono, monospace">${axisLbl(v)}</text>`;
+  return g; }
+/* monthly bars: grouped (side by side) or stacked; one hover target per month */
+function monthBars(fy, series, { stack = false, H = 230, label = '', W = 720 } = {}) {
+  const tot = i => stack ? series.reduce((u, s) => u + (s.vals[i] || 0), 0) : Math.max(...series.map(s => s.vals[i] || 0));
+  const raw = Math.max(0, ...MONTHS.map((_, i) => tot(i)));
+  if (!raw) return '';
+  const step = niceStep(raw / 3), max = step * Math.ceil(raw / step);
+  const L = 56, R = 6, T = 12, B = 28, cw = (W - L - R) / 12;
+  const y = v => T + (H - T - B) * (1 - v / max), cur = today().slice(0, 7);
+  let out = axis(max, W, L, R, y);
+  for (let i = 0; i < 12; i++) {
+    const x0 = L + cw * i, isCur = monthKey(fy, i) === cur;
+    if (stack) { const bw = Math.min(26, cw * 0.56), x = x0 + (cw - bw) / 2; let base = 0; const segs = series.filter(s => s.vals[i]);
+      segs.forEach((s, k) => { const v = s.vals[i], top = y(base + v), h = y(base) - top - (k ? 2 : 0);
+        out += k === segs.length - 1 ? `<path d="${barPath(x, top, bw, Math.max(0, h))}" fill="${s.color}"/>` : `<rect x="${x}" y="${top}" width="${bw}" height="${Math.max(0, h)}" fill="${s.color}"/>`; base += v; }); }
+    else { const n = series.length, bw = Math.min(16, (cw * 0.7 - (n - 1) * 2) / n), gx = x0 + (cw - (bw * n + (n - 1) * 2)) / 2;
+      series.forEach((s, k) => { const v = s.vals[i] || 0; out += `<path d="${barPath(gx + k * (bw + 2), y(v), bw, y(0) - y(v))}" fill="${s.color}"/>`; }); }
+    out += `<text x="${x0 + cw / 2}" y="${H - 9}" text-anchor="middle" font-size="11" fill="${isCur ? 'var(--ink)' : 'var(--muted)'}" font-weight="${isCur ? 600 : 400}">${MONTHS[i]}</text>`;
+    const tip = `${MONTHS[i]} ${monthKey(fy, i).slice(0, 4)}\n` + series.filter(s => s.vals[i] || !stack).map(s => `${s.name}: ${tk(s.vals[i] || 0)}`).join('\n') + (stack ? `\nTotal: ${tk(tot(i))}` : '') + (series[0].extra ? series[0].extra(i) : '');
+    out += `<rect x="${x0}" y="${T}" width="${cw}" height="${H - T - B}" fill="transparent" data-tip="${esc(tip)}"/>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${out}<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)"/></svg>`;
+}
+/* lines over the 12 months of a financial year */
+function monthLines(fy, series, { H = 220, label = '', W = 720 } = {}) {
+  const raw = Math.max(0, ...series.flatMap(s => s.vals.slice(0, s.upto ?? 12)));
+  const lo = Math.min(0, ...series.flatMap(s => s.vals.slice(0, s.upto ?? 12)));
+  if (!raw && !lo) return '';
+  const step = niceStep((raw - lo) / 3), max = step * Math.ceil(raw / step), min = lo < 0 ? -step * Math.ceil(-lo / step) : 0;
+  const L = 56, R = 6, T = 12, B = 28, cw = (W - L - R) / 12;
+  const y = v => T + (H - T - B) * (1 - (v - min) / (max - min || 1));
+  let out = '';
+  for (let v = min; v <= max + 1; v += step) out += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 ? 'var(--muted)' : 'var(--grid)'}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono, monospace">${v < 0 ? '−' : ''}${axisLbl(Math.abs(v))}</text>`;
+  series.forEach(s => { const n = s.upto ?? 12, pts = s.vals.slice(0, n).map((v, i) => `${(L + cw * i + cw / 2).toFixed(1)},${y(v).toFixed(1)}`);
+    if (!pts.length) return;
+    out += `<polyline points="${pts.join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"${s.dash ? ' stroke-dasharray="5 4"' : ''}/>`;
+    const last = pts[pts.length - 1].split(','); out += `<circle cx="${last[0]}" cy="${last[1]}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`; });
+  for (let i = 0; i < 12; i++) { const x0 = L + cw * i;
+    out += `<text x="${x0 + cw / 2}" y="${H - 9}" text-anchor="middle" font-size="11" fill="var(--muted)">${MONTHS[i]}</text>`;
+    const vis = series.filter(s => i < (s.upto ?? 12)); if (!vis.length) continue;
+    out += `<rect x="${x0}" y="${T}" width="${cw}" height="${H - T - B}" fill="transparent" data-tip="${esc(`${MONTHS[i]}\n` + vis.map(s => `${s.name}: ${tk(s.vals[i])}`).join('\n'))}"/>`; }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${out}</svg>`;
+}
+/* ranked horizontal bars with the value and share written beside each bar */
+function rankBars(rows, total, color = 'var(--inflow)') {
+  if (!rows.length) return '<div class="empty" style="padding:14px">Nothing in this period.</div>';
+  const max = Math.max(1, ...rows.map(r => r.v));
+  return `<div class="rk">${rows.map(r => `<div class="rk-r" data-tip="${esc(r.tip || `${r.label}\n${tk(r.v)} · ${pctTxt(r.v, total)} of total`)}">
+    <div class="rk-l"><span class="t">${esc(r.label)}</span>${r.sub ? `<span class="sub">${esc(r.sub)}</span>` : ''}</div>
+    <div class="rk-b"><i style="width:${Math.max(1, r.v / max * 100).toFixed(1)}%;background:${r.color || color}"></i></div>
+    <div class="rk-v"><span class="num">${compact(r.v)}</span><small>${pctTxt(r.v, total)}</small></div></div>`).join('')}</div>`;
+}
+function shareBar(parts) {   // 100% bar; every part labelled underneath
+  const tot = parts.reduce((u, p) => u + p.v, 0); if (!tot) return '<div class="empty" style="padding:14px">Nothing in this period.</div>';
+  return `<div class="sbar">${parts.filter(p => p.v).map(p => `<i style="flex:${p.v} 1 0;background:${p.color}" data-tip="${esc(`${p.label}\n${tk(p.v)} · ${pctTxt(p.v, tot)}`)}"></i>`).join('')}</div>
+    <div class="slegend">${parts.filter(p => p.v).map(p => `<span><i style="background:${p.color}"></i>${esc(p.label)} <b class="num">${pctTxt(p.v, tot)}</b> <span class="muted">${compact(p.v)}</span></span>`).join('')}</div>`;
+}
+const legendHTML = items => `<div class="legend" style="flex-wrap:wrap">${items.map(([l, c]) => `<span style="--c:${c}">${esc(l)}</span>`).join('')}</div>`;
+const delta = (now, then) => { if (!then) return now ? '<span class="muted">new this year</span>' : ''; const p = Math.round((now - then) / Math.abs(then) * 100);
+  return `<b class="${p >= 0 ? 'good' : 'bad'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}%</b> vs last FY`; };
+const deltaCost = (now, then) => { if (!then) return now ? '<span class="muted">new this year</span>' : ''; const p = Math.round((now - then) / Math.abs(then) * 100);
+  return `<b class="${p <= 0 ? 'good' : 'bad'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}%</b> vs last FY`; };
+
+function dashboard() {
+  const fy = S.fy, basis = S.f.basis, t = today(), curFY = fyOf(t) === fy;
+  const span = curFY ? monthIdx(t) + 1 : 12;                 // months of this FY so far
+  const like = x => !curFY || monthIdx(x.d) < span;           // last FY, same months, for a fair comparison
+  const A = ledgerItems(fy, basis), Pv = ledgerItems(fy - 1, basis);
+  const P = { inc: Pv.inc.filter(like), cost: Pv.cost.filter(like) };
+  const incT = A.inc.reduce((u, x) => u + x.amt, 0), costT = A.cost.reduce((u, x) => u + x.amt, 0), profit = incT - costT;
+  const incP = P.inc.reduce((u, x) => u + x.amt, 0), costP = P.cost.reduce((u, x) => u + x.amt, 0);
+  const segBasis = `<div class="seg">${[['billed', 'Billed'], ['cash', 'Cash']].map(([k, l]) => `<button data-act="f-basis" data-v="${k}" aria-pressed="${basis === k}">${l}</button>`).join('')}</div>`;
+  const head = `<div class="head"><div><h2>Dashboard · FY ${fyLabel(fy)}</h2><p>${basis === 'cash' ? 'Cash basis: income when clients pay (fee share, before VAT), costs when money leaves an account.' : 'Billed basis: income when invoiced (before VAT), costs when incurred.'} Compared with the same ${span === 12 ? 'months' : span + ' months'} of FY ${fyLabel(fy - 1)}.</p></div><div class="actions">${segBasis}</div></div>`;
+  if (!A.inc.length && !A.cost.length && !P.inc.length && !P.cost.length)
+    return head + `<div class="panel"><div class="empty"><strong>Nothing to analyse yet</strong>Invoices, payments, expenses, work orders and salary sheets for FY ${fyLabel(fy)} will build this dashboard.</div></div>`;
+
+  // monthly series
+  const mInc = Array(12).fill(0), mCost = Array(12).fill(0), mIncP = Array(12).fill(0);
+  A.inc.forEach(x => mInc[monthIdx(x.d)] += x.amt); A.cost.forEach(x => mCost[monthIdx(x.d)] += x.amt);
+  Pv.inc.forEach(x => mIncP[monthIdx(x.d)] += x.amt);
+  const cum = a => a.reduce((o, v, i) => (o.push((o[i - 1] || 0) + v), o), []);
+  const mProfit = mInc.map((v, i) => v - mCost[i]);
+
+  // cash position and runway (money actually leaving accounts; transfers between accounts don't count)
+  const accts = activeAccts(), cashNow = accts.reduce((u, a) => u + acctBal(a, t), 0);
+  const outByMonth = new Map(), inByMonth = new Map();
+  S.accounts.forEach(a => acctEntries(a).forEach(e => { if (e.kind === 'move') { const m = S.moves.find(x => x.id === e.id); if (m && m.type === 'transfer') return; }
+    const k = (e.date || '').slice(0, 7); if (e.amt < 0) outByMonth.set(k, (outByMonth.get(k) || 0) - e.amt); else inByMonth.set(k, (inByMonth.get(k) || 0) + e.amt); }));
+  const last3 = [1, 2, 3].map(n => nextMonth(t.slice(0, 7), -n)), burn = last3.reduce((u, k) => u + (outByMonth.get(k) || 0), 0) / 3;
+  const runway = burn ? cashNow / burn : null;
+
+  // collections
+  const recFY = S.receipts.filter(r => inFY(r.date, fy));
+  let wDays = 0, wAmt = 0; recFY.forEach(r => { const i = S.invoices.find(v => v.id === r.invoiceId); if (!i || !i.date) return; const a = +r.received || 0; wDays += Math.max(0, daysBetween(i.date, r.date)) * a; wAmt += a; });
+  const dso = wAmt ? Math.round(wDays / wAmt) : null;
+  const invFY = S.invoices.filter(i => !['void', 'draft'].includes(invStatus(i)) && inFY(i.date, fy));
+  const billedTot = invFY.reduce((u, i) => u + invTotal(i), 0), settledTot = invFY.reduce((u, i) => u + Math.min(invSettled(i), invTotal(i)), 0);
+  const receivable = S.invoices.filter(invOpen).reduce((u, i) => u + invDue(i), 0);
+  const unbilled = S.projects.filter(p => (p.status || 'active') === 'active').reduce((u, p) => u + projStats(p).unbilled, 0);
+
+  // income breakdowns
+  const byPid = sumBy(A.inc, 'pid'), byPidP = sumBy(P.inc, 'pid');
+  const clientOf = pid => { const p = prj(pid); return p ? (p.client || p.name || 'Unknown client') : 'Unknown project'; };
+  const byClient = sumBy(A.inc, x => clientOf(x.pid));
+  const byType = sumBy(A.inc, x => (prj(x.pid) || {}).type || 'Not set');
+  const byMode = sumBy(A.inc, 'mode');
+  const clientsSorted = [...byClient.entries()].sort((a, b) => b[1] - a[1]);
+  const top1 = clientsSorted[0] ? clientsSorted[0][1] : 0, top3 = clientsSorted.slice(0, 3).reduce((u, x) => u + x[1], 0);
+  const clientRows = topN(byClient, 8).map(([k, v, n]) => ({ label: k === '__other' ? `${n} other clients` : k, v }));
+  const typeRows = [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: k, v }));
+  const projRows = topN(byPid, 10).map(([k, v, n]) => { if (k === '__other') return { label: `${n} other projects`, v };
+    const p = prj(k) || {}, was = byPidP.get(k) || 0; return { label: p.name || 'Unknown project', sub: [p.code, p.client].filter(Boolean).join(' · '), v, tip: `${p.name || ''}\n${tk(v)} · ${pctTxt(v, incT)} of income${was ? `\nSame months last FY: ${tk(was)}` : ''}` }; });
+
+  // cost breakdowns
+  const byCat = sumBy(A.cost, 'cat'), byCatP = sumBy(P.cost, 'cat');
+  const catRows = [...byCat.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => { const was = byCatP.get(k) || 0, g = CGROUPS.find(x => x[0] === groupOf(k));
+    return { label: k, v, color: g[1], sub: was ? `${v >= was ? '+' : '−'}${compact(Math.abs(v - was)).replace('৳ ', '৳')} vs last FY` : 'new this year', tip: `${k}\n${tk(v)} · ${pctTxt(v, costT)} of costs\nSame months last FY: ${tk(was)}` }; });
+  const grpSeries = CGROUPS.map(([name, color]) => ({ name, color, vals: Array(12).fill(0) }));
+  A.cost.forEach(x => { const g = grpSeries.find(s => s.name === groupOf(x.cat)); g.vals[monthIdx(x.d)] += x.amt; });
+  const grpTot = grpSeries.map(s => ({ label: s.name, v: s.vals.reduce((u, v) => u + v, 0), color: s.color }));
+  const payees = sumBy(A.cost.filter(x => x.payee), x => x.payee);
+  const payeeRows = topN(payees, 8).map(([k, v, n]) => ({ label: k === '__other' ? `${n} others` : k, v }));
+  const woTypes = sumBy(A.cost.filter(x => x.wtype), 'wtype');
+  // payroll
+  const sal = Array(12).fill(0), heads = Array.from({ length: 12 }, () => new Set()), bonus = Array(12).fill(0);
+  A.cost.filter(x => x.cat === 'Salaries & bonuses').forEach(x => { const i = monthIdx(x.d); if (x.kind === 'bonus') bonus[i] += x.amt; else { sal[i] += x.amt; if (x.staff) heads[i].add(x.staff); } });
+  const salT = sal.reduce((u, v) => u + v, 0) + bonus.reduce((u, v) => u + v, 0);
+  const salSeries = [{ name: 'Salaries', color: DPAL[0], vals: sal, extra: i => heads[i].size ? `\nStaff paid: ${heads[i].size}` : '' }, { name: 'Bonuses', color: DPAL[1], vals: bonus }];
+  // taxes
+  const vatBilled = invFY.reduce((u, i) => u + invTotal(i) - (+i.amount || 0), 0);
+  const aitBy = recFY.reduce((u, r) => u + (+r.ait || 0), 0), vdsBy = recFY.reduce((u, r) => u + (+r.vds || 0), 0);
+  const wpFY = S.wopays.filter(x => inFY(x.date, fy)), withheld = wpFY.reduce((u, x) => u + (+x.ait || 0) + (+x.vds || 0), 0);
+  const deposited = S.expenses.filter(x => x.category === 'Tax deposited (AIT/VDS withheld)' && x.status !== 'rejected' && inFY(x.paidOn || x.date, fy)).reduce((u, x) => u + (+x.amount || 0), 0);
+  // projects: income against direct costs (consultants and expenses tagged to the project)
+  const direct = sumBy(A.cost.filter(x => x.pid), 'pid');
+  const projIds = [...new Set([...byPid.keys(), ...direct.keys()])].filter(Boolean);
+  const projTbl = projIds.map(id => { const p = prj(id) || {}, st = p.id ? projStats(p) : { fee: 0, unbilled: 0, outstanding: 0 }, inc = byPid.get(id) || 0, dc = direct.get(id) || 0;
+    return { p, inc, dc, net: inc - dc, fee: st.fee, out: st.outstanding, unb: st.unbilled }; }).sort((a, b) => b.inc - a.inc);
+  // cash flow
+  const cIn = MONTHS.map((_, i) => inByMonth.get(monthKey(fy, i)) || 0), cOut = MONTHS.map((_, i) => outByMonth.get(monthKey(fy, i)) || 0);
+  const openFY = S.accounts.reduce((u, a) => u + acctBal(a, (fy) + '-06-30') , 0);
+  const closing = cum(cIn.map((v, i) => v - cOut[i])).map(v => v + openFY);
+  const curIdx = curFY ? span : 12;
+
+  const kpi = (lb, v, s, style = '') => `<div class="kpi"><div class="lb">${lb}</div><div class="v"${style}>${v}</div><div class="s">${s}</div></div>`;
+  const margin = incT ? Math.round(profit / incT * 100) : null;
+  const n = v => v ? nf.format(Math.round(v)) : '–';
+
+  return head + `
+  <div class="kpis">
+    ${kpi('Income', compact(incT), delta(incT, incP))}
+    ${kpi('Costs', compact(costT), deltaCost(costT, costP))}
+    ${kpi('Profit', compact(profit), margin == null ? 'no income yet' : `${margin}% margin · ${delta(profit, incP - costP).replace(' vs last FY', '')}`, ` style="color:var(${profit < 0 ? '--bad' : '--good'})"`)}
+    ${kpi('Average month', compact(incT / span), `income · ${compact(costT / span)} costs`)}
+  </div>
+  <div class="kpis">
+    ${kpi('Cash & bank now', compact(cashNow), runway == null ? 'no spending in the last 3 months' : `<b class="${runway < 3 ? 'bad' : runway < 6 ? '' : 'good'}">${runway.toFixed(1)} months</b> of spending covered`)}
+    ${kpi('Days to get paid', dso == null ? '—' : dso + ' days', 'invoice date to payment, weighted by amount')}
+    ${kpi('Collected', billedTot ? pctTxt(settledTot, billedTot) : '—', `of ${compact(billedTot)} invoiced this FY`)}
+    ${kpi('Receivable · not yet billed', compact(receivable), `${compact(unbilled)} of active fees still to bill`)}
+  </div>
+
+  <div class="panel"><div class="ph"><h3>Income and costs by month</h3>${legendHTML([['Income', 'var(--inflow)'], ['Costs', 'var(--red)']])}</div>
+    <div class="pb chart">${monthBars(fy, [{ name: 'Income', color: 'var(--inflow)', vals: mInc, extra: i => `\nProfit: ${tk(mProfit[i])}` }, { name: 'Costs', color: 'var(--red)', vals: mCost }], { label: 'Income and costs by month' }) || '<div class="empty">Nothing yet.</div>'}</div></div>
+
+  <div class="grid2">
+    <div class="panel"><div class="ph"><h3>Income building up</h3>${legendHTML([['FY ' + fyLabel(fy), DPAL[0]], ['FY ' + fyLabel(fy - 1), '#8E959C']])}</div>
+      <div class="pb chart">${monthLines(fy, [{ name: 'FY ' + fyLabel(fy), color: DPAL[0], vals: cum(mInc), upto: curIdx }, { name: 'FY ' + fyLabel(fy - 1), color: '#8E959C', vals: cum(mIncP), dash: true }], { label: 'Cumulative income', W: 440, H: 240 }) || '<div class="empty">Nothing yet.</div>'}</div></div>
+    <div class="panel"><div class="ph"><h3>Profit building up</h3><span class="meta">income less costs, running total</span></div>
+      <div class="pb chart">${monthLines(fy, [{ name: 'Profit so far', color: DPAL[2], vals: cum(mProfit), upto: curIdx }], { label: 'Cumulative profit', W: 440, H: 240 }) || '<div class="empty">Nothing yet.</div>'}</div></div>
+  </div>
+
+  <div class="sec-h"><h3>Where income comes from</h3></div>
+  <div class="grid2">
+    <div class="panel"><div class="ph"><h3>By client</h3><span class="meta">${byClient.size} client${byClient.size === 1 ? '' : 's'}</span></div><div class="pb">${rankBars(clientRows, incT)}
+      ${incT ? `<p class="hint" style="margin:12px 0 0">Largest client: <b>${pctTxt(top1, incT)}</b> of income · top three: <b>${pctTxt(top3, incT)}</b>${top1 / incT > 0.4 ? ' · <span class="bad">heavy reliance on one client</span>' : ''}</p>` : ''}</div></div>
+    <div class="panel"><div class="ph"><h3>By project</h3><span class="meta">top 10</span></div><div class="pb">${rankBars(projRows, incT)}</div></div>
+  </div>
+  <div class="grid2">
+    <div class="panel"><div class="ph"><h3>By project type</h3></div><div class="pb">${rankBars(typeRows, incT)}</div></div>
+    <div class="panel"><div class="ph"><h3>How clients pay</h3><span class="meta">${basis === 'cash' ? 'by the account the money went into' : 'by invoice type'}</span></div><div class="pb">
+      ${shareBar([{ label: 'Bank', v: byMode.get('bank') || 0, color: DPAL[0] }, { label: 'Cash', v: byMode.get('cash') || 0, color: DPAL[2] }])}
+      <dl class="kv" style="margin-top:14px">
+        <dt>VAT on invoices</dt><dd class="num">${tk(vatBilled)}</dd>
+        <dt>AIT deducted by clients</dt><dd class="num">${tk(aitBy)}</dd>
+        <dt>VDS deducted by clients</dt><dd class="num">${tk(vdsBy)}</dd>
+        <dt>AIT/VDS we withheld from vendors</dt><dd class="num">${tk(withheld)}</dd>
+        <dt>Tax deposited</dt><dd class="num">${tk(deposited)}</dd>
+      </dl></div></div>
+  </div>
+
+  <div class="sec-h"><h3>Where the money goes</h3></div>
+  <div class="panel"><div class="ph"><h3>Cost mix by month</h3>${legendHTML(CGROUPS.map(g => [g[0], g[1]]))}</div>
+    <div class="pb chart">${monthBars(fy, grpSeries, { stack: true, label: 'Cost mix by month' }) || '<div class="empty">No costs yet.</div>'}</div>
+    <div class="pb" style="border-top:1px solid var(--line)">${shareBar(grpTot)}</div></div>
+  <div class="grid2">
+    <div class="panel"><div class="ph"><h3>By category</h3><span class="meta">${compact(costT)} total</span></div><div class="pb">${rankBars(catRows, costT)}</div></div>
+    <div class="panel"><div class="ph"><h3>Who gets paid most</h3><span class="meta">vendors and payees, excluding salaries</span></div><div class="pb">${rankBars(payeeRows, costT, DPAL[1])}
+      ${woTypes.size ? `<div class="sec-t" style="margin:16px 0 8px">Consultants by type</div>${rankBars([...woTypes.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: k, v })), costT, DPAL[1])}` : ''}</div></div>
+  </div>
+  <div class="panel"><div class="ph"><h3>Payroll</h3><span class="meta">${compact(salT)} · ${pctTxt(salT, incT)} of income · ${pctTxt(salT, costT)} of costs</span></div>
+    <div class="pb chart">${monthBars(fy, salSeries, { stack: true, label: 'Payroll cost by month', H: 180 }) || '<div class="empty">No salary sheets in this period yet.</div>'}</div></div>
+
+  <div class="sec-h"><h3>Projects and cash</h3></div>
+  <div class="panel"><div class="ph"><h3>Project income against direct costs</h3><span class="meta">direct costs = consultants and expenses tagged to the project</span></div>
+    ${projTbl.length ? `<div class="tbl"><table><thead><tr><th>Project</th><th>Fee</th><th>Income · FY</th><th>Direct costs · FY</th><th>After direct costs</th><th>Outstanding</th><th>Not yet billed</th></tr></thead><tbody>
+      ${projTbl.map(r => `<tr><td><b>${esc(r.p.name || 'Unknown project')}</b><div class="sub">${esc([r.p.code, r.p.client].filter(Boolean).join(' · '))}</div></td><td>${n(r.fee)}</td><td>${n(r.inc)}</td><td>${n(r.dc)}</td><td class="${r.net < 0 ? 'neg' : ''}">${n(r.net)}${r.inc ? ` <small class="muted">${pctTxt(r.net, r.inc)}</small>` : ''}</td><td>${n(r.out)}</td><td>${n(r.unb)}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="empty">No project income or direct costs in this period.</div>'}</div>
+  <div class="grid2">
+    <div class="panel"><div class="ph"><h3>Money in and out of accounts</h3>${legendHTML([['In', 'var(--inflow)'], ['Out', 'var(--red)']])}</div>
+      <div class="pb chart">${monthBars(fy, [{ name: 'In', color: 'var(--inflow)', vals: cIn, extra: i => `\nNet: ${tk(cIn[i] - cOut[i])}` }, { name: 'Out', color: 'var(--red)', vals: cOut }], { label: 'Cash in and out', W: 440, H: 240 }) || '<div class="empty">No account movements yet.</div>'}</div></div>
+    <div class="panel"><div class="ph"><h3>Cash and bank at month end</h3><span class="meta">all accounts</span></div>
+      <div class="pb chart">${monthLines(fy, [{ name: 'Balance', color: DPAL[0], vals: closing, upto: curIdx }], { label: 'Month-end balance', W: 440, H: 240 }) || '<div class="empty">No accounts yet.</div>'}</div></div>
+  </div>
+  <p class="hint">Transfers between your own accounts are left out of money in and out. Capital you put in counts as money in; drawings as money out. VAT, tax deposits and drawings are not income or cost.</p>`;
+}
+
 function auditLine(a) {
   const [coll] = a.path.split('/'), d = a.after || a.before || {};
   const an = id => (acct(id) || {}).name || 'an account';
@@ -1903,6 +2169,15 @@ function settings() {
 }
 
 /* ---------- events ---------- */
+/* chart tooltips: hover on desktop, tap on touch */
+const tipEl = Object.assign(document.createElement('div'), { id: 'tip', hidden: true }); tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl);
+function showTip(el, x, y) { tipEl.textContent = el.getAttribute('data-tip'); tipEl.hidden = false;
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight; let l = x + 14, t = y + 14;
+  if (l + w > innerWidth - 8) l = x - w - 14; if (t + h > innerHeight - 8) t = y - h - 14;
+  tipEl.style.left = Math.max(8, l) + 'px'; tipEl.style.top = Math.max(8, t) + 'px'; }
+document.addEventListener('mousemove', e => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el) showTip(el, e.clientX, e.clientY); else tipEl.hidden = true; });
+document.addEventListener('touchstart', e => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el) { const p = e.touches[0]; showTip(el, p.clientX, p.clientY); } else tipEl.hidden = true; }, { passive: true });
+document.addEventListener('scroll', () => { tipEl.hidden = true; }, { passive: true, capture: true });
 document.addEventListener('click', async ev => {
   const b = ev.target.closest('[data-act],[data-tab]'); if (!b) return;
   if (b.dataset.tab) { S.tab = b.dataset.tab; S.f.q = ''; try { localStorage.setItem('slate-fin-tab', S.tab); } catch (_) {} schedule(); window.scrollTo(0, 0); return; }

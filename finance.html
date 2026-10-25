@@ -96,7 +96,7 @@ main{padding-block:20px 64px}
 
 /* Panels */
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
-.panel>.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.panel>.ph{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
 .panel>.ph h3{font-size:15px}
 .panel>.ph .meta{font-size:12px;color:var(--muted)}
 .panel>.pb{padding:14px 16px}
@@ -153,8 +153,19 @@ main{padding-block:20px 64px}
 .ag .bar2 i{display:block;height:100%}
 .chart{overflow-x:auto}
 .chart svg{display:block;width:100%;min-width:520px;height:auto}
+.grid2 .chart svg{min-width:380px}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
 .legend span::before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+.sec-h{margin:10px 0 -6px}.sec-h h3{font-family:var(--f-display);font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0}
+.rk{display:flex;flex-direction:column;gap:10px}
+.rk-r{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr) 92px;align-items:center;gap:12px;cursor:default}
+.rk-l{display:flex;flex-direction:column;min-width:0}.rk-l .t{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rk-l .sub{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rk-b{height:10px;background:var(--sunk);border-radius:2px;overflow:hidden}.rk-b i{display:block;height:100%;border-radius:0 3px 3px 0}
+.rk-v{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2}.rk-v .num{font-family:var(--f-mono);font-size:13px}.rk-v small{font-size:11px;color:var(--muted)}
+.sbar{display:flex;gap:2px;height:14px;border-radius:3px;overflow:hidden}.sbar i{display:block;min-width:2px}
+.slegend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12px}.slegend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}.slegend b{font-weight:500}
+@media (max-width:560px){.rk-r{grid-template-columns:minmax(0,1fr) 84px}.rk-b{grid-column:1/-1;grid-row:2}}
+#tip{position:fixed;z-index:80;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;line-height:1.45;padding:7px 10px;border-radius:5px;white-space:pre-line;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,.18);font-variant-numeric:tabular-nums}
 
 /* Table (reports) */
 .tbl{overflow-x:auto}
@@ -175,11 +186,18 @@ td.neg{color:var(--bad)}
 .sheet-h h2{font-size:20px}
 .sheet-h p{margin:3px 0 0;font-size:12px;color:var(--muted)}
 form{display:flex;flex-direction:column;gap:14px}
-.fg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:end}
 @media (max-width:480px){.fg{grid-template-columns:minmax(0,1fr)}}
 label.f{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);min-width:0}
 label.f input,label.f select,label.f textarea{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;font-size:14px;color:var(--ink);width:100%;min-width:0}
 label.f textarea{min-height:60px;resize:vertical}
+/* one height for every single-line field; iOS draws selects and date pickers its own way unless told not to */
+label.f input:not([type=checkbox]):not([type=radio]),label.f select{height:42px;line-height:20px;-webkit-appearance:none;appearance:none;margin:0;display:block}
+label.f select{padding-right:32px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%235F6670' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+label.f input[type=date],label.f input[type=month]{text-align:left;min-width:0;max-width:100%}
+label.f input::-webkit-date-and-time-value{text-align:left;margin:0}
+label.f input::-webkit-datetime-edit{padding:0}
+label.f .hint{font-size:11px}
 .check{display:flex;align-items:center;gap:8px;font-size:13px}
 .hint{font-size:12px;color:var(--muted)}
 .hint.err{color:var(--bad)}
