@@ -533,20 +533,24 @@
     });
     const compose = el('div', { class: 'form', style: 'gap:10px' }, ta,
       el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, n ? `To ${n}: ${[...PS.sel].map(id => nm(people.get(id))).join(', ')}` : 'Choose people below', ' · ', count), send), note);
-    // team shortcuts: tap to select or clear a whole team
-    const short = el('div', { class: 'chips' }, ...[['All', all], ...groups.entries()].map(([t, ps]) => {
-      const on = ps.length && ps.every(p => PS.sel.has(p.id)); let label = t; try { label = t === 'All' ? 'Everyone' : podLabel(t); } catch (_) {}
-      const b = el('button', { class: 'chip' + (on ? ' on' : ''), type: 'button', style: 'border:0;cursor:pointer;padding:6px 12px' }, label);
-      b.addEventListener('click', () => { ps.forEach(p => on ? PS.sel.delete(p.id) : PS.sel.add(p.id)); rerender(); }); return b; }));
+    // one card per team in a grid; tap the card's heading to select or clear the whole team
     const DOT = { on: '#34C759', away: '#FF9F0A' };
-    const chip = p => { const on = PS.sel.has(p.id), sn = seenOf(p.id); let a = null; try { a = avaEl(p.id, false, 'sm'); } catch (_) {}
-      const b = el('button', { class: 'chip who' + (on ? ' on' : ''), type: 'button', 'aria-pressed': String(on), title: (p.role_label || '') + ' · ' + sn.label, style: 'border:0;cursor:pointer;padding:4px 12px 4px 4px;gap:6px' },
-        el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []), ...(DOT[sn.st] ? [el('i', { style: `position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:50%;background:${DOT[sn.st]};border:1.5px solid #fff` })] : [])), nm(p));
+    const everyone = (() => { const on = all.length && all.every(p => PS.sel.has(p.id));
+      const b = el('button', { class: 'linkish', type: 'button', style: 'font-size:13.5px' }, on ? 'Clear everyone' : 'Select everyone');
+      b.addEventListener('click', () => { all.forEach(p => on ? PS.sel.delete(p.id) : PS.sel.add(p.id)); rerender(); }); return b; })();
+    const tile = p => { const on = PS.sel.has(p.id), sn = seenOf(p.id); let a = null; try { a = avaEl(p.id, false); } catch (_) {}
+      const b = el('button', { class: 'slate-pt' + (on ? ' on' : ''), type: 'button', 'aria-pressed': String(on), title: sn.label },
+        el('span', { class: 'slate-pt-a' }, ...(a ? [a] : []), ...(DOT[sn.st] ? [el('i', { style: `background:${DOT[sn.st]}` })] : [])),
+        el('span', { class: 'slate-pt-t' }, el('b', {}, nm(p)), el('span', {}, p.role_label || '')),
+        el('span', { class: 'slate-pt-c', 'aria-hidden': 'true' }, on ? '✓' : ''));
       b.addEventListener('click', () => { on ? PS.sel.delete(p.id) : PS.sel.add(p.id); rerender(); }); return b; };
-    const list = el('div', { style: 'display:grid;gap:10px;background:var(--group);border-radius:12px;padding:12px' },
-      ...[...groups.entries()].map(([t, ps]) => { let label = t; try { label = podLabel(t); } catch (_) {}
-        return el('div', { style: 'display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:start' }, el('span', { class: 'f-hint', style: 'padding-top:7px' }, label), el('div', { class: 'chips' }, ...ps.map(chip))); }));
-    return [headEl, tabs, compose, short, list];
+    const card = ([t, ps]) => { let label = t; try { label = podLabel(t); } catch (_) {}
+      const allOn = ps.every(p => PS.sel.has(p.id)), n2 = ps.filter(p => PS.sel.has(p.id)).length;
+      const hb = el('button', { class: 'slate-pc-h', type: 'button' }, el('b', {}, label), el('span', {}, allOn ? 'Clear' : n2 ? `${n2} of ${ps.length} · select all` : 'Select all'));
+      hb.addEventListener('click', () => { ps.forEach(p => allOn ? PS.sel.delete(p.id) : PS.sel.add(p.id)); rerender(); });
+      return el('div', { class: 'slate-pc' + (allOn ? ' on' : '') }, hb, el('div', { class: 'slate-pc-b' }, ...ps.map(tile))); };
+    const grid = el('div', { class: 'slate-pgrid' }, ...[...groups.entries()].map(card));
+    return [headEl, tabs, compose, el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, 'Tap a person, or a team’s heading to choose the whole team.'), everyone), grid];
   }
   /* what I sent, with each person's reply; follow up anyone who hasn't finished */
   let sent = [], sentLoaded = false;
@@ -1130,6 +1134,23 @@
   .slate-sheet button[disabled]{opacity:.5}
   .slate-prow{display:grid;grid-template-columns:22px 38px minmax(0,1fr);gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);cursor:pointer}
   .slate-prow:last-child{border-bottom:0}
+.slate-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .slate-pc{background:var(--group);border-radius:14px;padding:6px;display:grid;gap:4px;align-content:start;box-shadow:inset 0 0 0 1.5px transparent}
+  .slate-pc.on{box-shadow:inset 0 0 0 1.5px #34C759}
+  .slate-pc-h{appearance:none;border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:8px 10px 6px;text-align:left}
+  .slate-pc-h b{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#3a3a3c}
+  .slate-pc-h span{font-size:12.5px;color:var(--muted)}
+  .slate-pc-b{display:grid;gap:4px}
+  .slate-pt{appearance:none;border:0;background:#fff;border-radius:10px;font:inherit;color:inherit;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) 22px;gap:10px;align-items:center;padding:8px 10px;text-align:left}
+  .slate-pt:hover{background:#fafafa}
+  .slate-pt.on{background:#fff;box-shadow:inset 0 0 0 1.5px #34C759}
+  .slate-pt-a{position:relative;display:inline-grid;line-height:0}
+  .slate-pt-a i{position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;border:2px solid #fff}
+  .slate-pt-t{display:grid;min-width:0;line-height:1.25}
+  .slate-pt-t b{font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-pt-t span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-pt-c{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;color:#fff;background:transparent;box-shadow:inset 0 0 0 1.5px #d1d1d6}
+  .slate-pt.on .slate-pt-c{background:#34C759;box-shadow:none}
   .slate-bubs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;background:var(--group);border-radius:12px;padding:12px 8px}
   .slate-bub{appearance:none;border:0;background:transparent;border-radius:12px;padding:8px 4px;display:grid;justify-items:center;gap:3px;cursor:pointer;font:inherit;color:inherit;min-width:0}
   .slate-bub:hover{background:rgba(0,0,0,.04)}
