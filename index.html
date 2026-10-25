@@ -877,7 +877,7 @@ async function createTask(d){
   if(d.assignee&&!(d.chalk?canChalkAssign():canAssignTo(d.assignee))&&!S.spawning) throw new Error('Only the Principal and the COO can assign tasks to the Principal’s Office.');
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
-  const ask=d.assignee&&!d.fromMsg&&needsAssignApproval(d.assignee,d.projectId);
+  const ask=d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
   const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
@@ -1528,7 +1528,7 @@ function renderHeader(){
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
       'Notifications',nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null); })());
   try{ document.body.dataset.view=S.view; }catch(e){}
-  const fab=$('#fab'); fab.hidden=!(amMgr()&&S.canWrite&&['mine','all','board','gantt','projects'].includes(S.view)); fab.onclick=()=>openNewTask();
+  const fab=$('#fab'); fab.hidden=!(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view)); fab.onclick=()=>openNewTask();
 }
 
 function buildView(){
@@ -1623,7 +1623,7 @@ function viewMine(){
   const reqs=amApprover()?activeTasks().filter(t=>t.request).sort((a,b)=>(a.request.at||'').localeCompare(b.request.at||'')):[];
   const role=S.isOwner?'Owner':(isMgr(S.uid)?'Manager':'Member');
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${nameOf(S.uid)} · ${roleOf(S.uid)||role}`}),h('h1',{class:'h1',text:'Home'})),
-    amMgr()&&S.canWrite&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'}))];
+    canNewTask()&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'}))];
   const areq=amApprover()?activeTasks().filter(t=>t.assignReq).sort((a,b)=>(a.assignReq.at||'').localeCompare(b.assignReq.at||'')):[];
   { const routine=reqs.length+areq.length+(amApprover()?phaseReqs().length:0);
     if(amApprover()&&S.canWrite&&routine>1) out.push(h('div',{class:'banner'},h('span',{text:`${routine} dates and assignments are waiting. Review them below, or approve them all at once.`}),
@@ -1965,7 +1965,7 @@ function scopeFilters(st,idp){
 function viewBoard(){
   const b=S.board, td=today(), cut=addDays(td,-14);
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:fullView()?'All projects':(myPod()?podLabel(myPod()):'My tasks')}),h('h1',{class:'h1',text:'Board'}),h('p',{class:'lead',text:narrow()?'Use the arrows on a card to move it. Moving to Done asks for the completion date.':'Drag a card to move it. Dropping on Done asks for the completion date.'})),
-    amMgr()&&S.canWrite&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'}))];
+    canNewTask()&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'}))];
   out.push(h('div',{class:'bar'},scopeFilters(b,'b')));
   const ts=activeTasks().filter(t=>(!b.project||t.projectId===b.project)&&(!b.person||t.assignee===b.person||(t.assignReq&&t.assignReq.to===b.person)));
   let drag=null;
@@ -2694,7 +2694,7 @@ function viewSetup(){
 
 /* ---------- sheet ---------- */
 function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
-function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&!S.projects[id].closed, okA=id=>id&&memberOpts().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:''||'',target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
+function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&!S.projects[id].closed, okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
 const PFIELDS=['code','name','client','contact','phone','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
 const SCOPES=['Architectural design','Structural design','MEP design','Interior design','Common area interior design','Landscape design','3D visualization','Authority (RAJUK) drawings','Working drawings','Site supervision'];
 const AGS=[['','Select…'],['none','Not signed yet'],['loi','Letter of intent'],['signed','Signed agreement'],['internal','Internal (no agreement)']];
@@ -2725,8 +2725,13 @@ function form(title,fields,submit,onSubmit,danger){
     h('div',{class:'actions'},h('button',{class:'btn '+(danger?'btn-accent':'btn-primary'),type:'submit',disabled:S.busy,text:submit}),h('button',{class:'btn',type:'button',onclick:()=>setMode(null),text:'Cancel'})));
 }
 function head(eyebrow,title){ return h('div',{class:'sh-head'},h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:eyebrow,style:keepCase(eyebrow)}),h('h2',{class:'sh-title',text:title})),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})); }
-const memberOpts=keep=>[['','Select person…'],...people().filter(id=>((!isCOO(id)&&canAssignTo(id))||id===keep)&&(!isPriv(id)||S.isOwner||id===S.uid)).map(id=>[id,nameOf(id)+(roleOf(id)?' — '+roleOf(id):'')+(isPriv(id)?' (private)':'')])];
-const projectOpts=(incl)=>[['','Select project…'],...projects().filter(p=>!p.closed||p.id===incl).map(p=>[p.id,projLabel(p)])];
+const memberOpts=keep=>[['','Select person…'],...people().filter(id=>(((!isCOO(id)||amApprover())&&canAssignTo(id))||id===keep)&&(!isPriv(id)||S.isOwner||id===S.uid)).map(id=>[id,nameOf(id)+(roleOf(id)?' — '+roleOf(id):'')+(isPriv(id)?' (private)':'')])];
+const projectOpts=(incl)=>{ const ps=projects().filter(p=>!p.closed||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2})[p.type];
+  const st=ps.filter(p=>isInternalP(p)).sort((a,b)=>rank(a)-rank(b)||(a.name||'').localeCompare(b.name||'')), rest=ps.filter(p=>!isInternalP(p));
+  return [['','Select project…'],...st.map(p=>[p.id,'Studio work · '+(/^STUDIO (MANAGEMENT|OPERATION|DEVELOPMENT)$/.test(p.name||'')?areaName(p.type):p.name)]),...rest.map(p=>[p.id,projLabel(p)])]; };
+/* everyone can add a task for themselves; managers assign to others */
+const canNewTask=()=>!!S.canWrite&&!amChalkMember();
+const newTaskPeople=()=>amMgr()?memberOpts():[['','Select person…'],...msgTaskPeople().map(id=>[id,id===S.uid?nameOf(id)+' (me)':nameOf(id)])];
 
 function sheetTask(){
   const raw=S.tasks[S.sheet.id];
@@ -2918,7 +2923,7 @@ function sheetNewTask(){
       const ap=amApprover(); run(()=>createTask({...d,target:ap?d.target:'',proposed:ap?'':d.target}),'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${nameOf(d.assignee)}${needsAssignApproval(d.assignee,d.projectId)?' (awaiting COO)':''}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
     }},
       (()=>{ const tf=titleField(d); return tf[0]; })(),
-      h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',sel('assignee',memberOpts()))),
+      h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',sel('assignee',newTaskPeople()))),
       field(amApprover()?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
       S.sheet.more?[
