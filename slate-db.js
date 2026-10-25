@@ -523,6 +523,62 @@
   const REPLY_L = { on_it: 'On it', done: 'Done', already: 'Already done', later: 'Will do it later', will: 'Will do it', help: 'Need help', remind: 'Reminder set', task: 'Made it a task' };
   const when = t => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   /* People: two tabs. Send = message box on top, team shortcuts, people as compact chips. Sent = what was sent and the replies. */
+
+  /* ---------------- adoption: who is using SLATE OS (Principal and COO) ----------------
+     One row per person: last opened, whether notifications reach their phone, unanswered messages,
+     updates this week. Anyone silent for 2 working days also gets an automatic nudge (10:30, Sun–Thu). */
+  const AD = { rows: null, at: 0, loading: false, err: '' };
+  async function loadAdoption(force) {
+    if (AD.loading || (!force && AD.rows && Date.now() - AD.at < 60000)) return;
+    AD.loading = true;
+    const { data, error } = await sb.rpc('adoption_stats');
+    AD.loading = false; AD.at = Date.now();
+    if (error) AD.err = friendly(error).message; else { AD.rows = data || []; AD.err = ''; }
+    try { if (S.view === 'people') render(true); } catch (_) {}
+  }
+  const daysAgo = t => t ? Math.floor((Date.now() - new Date(t).getTime()) / 864e5) : null;
+  const agoTxt = d => d == null ? 'Never' : d === 0 ? 'Today' : d === 1 ? 'Yesterday' : d + ' days ago';
+  const FOLLOW_UP = 'Please open SLATE OS today: answer your messages and check your tasks. From 1 Nov, work is assigned and tracked only there.';
+  function adoptionView() {
+    loadAdoption(false);
+    const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const rerender = () => { try { render(true); } catch (_) {} };
+    if (AD.err) return el('p', { class: 'err' }, AD.err);
+    if (!AD.rows) return el('p', { class: 'muted' }, 'Loading…');
+    const rows = AD.rows.filter(r => r.user_id !== authUser.id && people.has(r.user_id)).map(r => {
+      const last = [r.seen_at, r.last_action].filter(Boolean).sort().pop() || null, d = daysAgo(last), od = daysAgo(r.oldest_msg);
+      const push = r.devices_ok > 0 ? 'on' : r.devices > 0 ? 'pending' : 'off';
+      const silent = d == null || d >= 2, flag = silent || push !== 'on' || (r.msgs_open > 0 && od >= 1);
+      return { ...r, d, od, push, silent, flag };
+    }).sort((a, b) => (b.flag - a.flag) || ((b.d == null ? 999 : b.d) - (a.d == null ? 999 : a.d)) || (b.msgs_open - a.msgs_open) || nm(a.user_id).localeCompare(nm(b.user_id)));
+    const n = rows.length, opened = rows.filter(r => !r.silent).length, pushOk = rows.filter(r => r.push === 'on').length;
+    const msgs = rows.reduce((a, r) => a + r.msgs_open, 0), upd = rows.reduce((a, r) => a + r.updates_7d, 0), flagged = rows.filter(r => r.flag);
+    const tile = (num, label, bad) => el('div', { class: 'slate-ad-t' }, el('b', { style: bad ? 'color:#FF3B30' : '' }, String(num)), el('span', {}, label));
+    const chip = (text, tone) => el('span', { class: 'slate-ad-c' + (tone ? ' ' + tone : '') }, text);
+    const follow = ids => { PS.tab = 'send'; PS.sel = new Set(ids); if (!PS.msg.trim()) PS.msg = FOLLOW_UP; PS.note = ''; rerender(); window.scrollTo(0, 0); };
+    const refresh = el('button', { class: 'linkish', type: 'button', style: 'font-size:13px' }, AD.loading ? 'Refreshing…' : 'Refresh');
+    refresh.addEventListener('click', () => loadAdoption(true));
+    const all = flagged.length ? (() => { const b = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, `Follow up with ${flagged.length}`); b.addEventListener('click', () => follow(flagged.map(r => r.user_id))); return b; })() : null;
+    const card = r => {
+      const p = people.get(r.user_id) || {}; let a = null; try { a = avaEl(r.user_id, false, 'sm'); } catch (_) {}
+      const msg = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Message'); msg.addEventListener('click', () => follow([r.user_id]));
+      return el('div', { class: 'slate-ad-r' + (r.flag ? ' flag' : '') },
+        el('div', { class: 'bar', style: 'justify-content:space-between;flex-wrap:nowrap' },
+          el('div', { style: 'display:flex;gap:8px;align-items:center;min-width:0' }, ...(a ? [a] : []),
+            el('div', { style: 'min-width:0' }, el('b', {}, nm(r.user_id)), el('div', { class: 'f-hint' }, [p.team, p.role_label].filter(Boolean).join(' · ')))), msg),
+        el('div', { class: 'slate-ad-cs' },
+          chip(r.d == null ? 'Never opened' : 'Opened ' + agoTxt(r.d).toLowerCase(), r.silent ? 'bad' : 'ok'),
+          chip(r.push === 'on' ? 'Notifications on' : r.push === 'pending' ? 'Notifications on, none delivered yet' : 'Notifications off', r.push === 'on' ? 'ok' : r.push === 'pending' ? 'warn' : 'bad'),
+          r.msgs_open ? chip(`${r.msgs_open} unanswered · ${r.od === 0 ? 'from today' : r.od === 1 ? 'since yesterday' : 'oldest ' + r.od + ' days'}`, r.od >= 1 ? 'bad' : 'warn') : chip('Messages answered', 'ok'),
+          chip(`${r.updates_7d} update${r.updates_7d === 1 ? '' : 's'} this week`, r.updates_7d ? '' : 'warn'),
+          ...(r.nudged_at && daysAgo(r.nudged_at) <= 7 ? [chip('Nudged ' + agoTxt(daysAgo(r.nudged_at)).toLowerCase())] : [])));
+    };
+    return el('div', { style: 'display:grid;gap:14px' },
+      el('div', { class: 'slate-ad-ts' }, tile(`${opened}/${n}`, 'Opened in 2 days', opened < n), tile(`${pushOk}/${n}`, 'Get notifications', pushOk < n), tile(msgs, 'Unanswered messages', msgs > 0), tile(upd, 'Updates this week')),
+      el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, flagged.length ? `${flagged.length} need a follow-up. Talk to them in person; “Message” opens Send with a ready note.` : 'Everyone is using SLATE OS.'), ...(all ? [all] : []), refresh),
+      el('div', { style: 'display:grid;gap:8px' }, ...rows.map(card)),
+      el('p', { class: 'f-hint', style: 'margin:0' }, 'Anyone who hasn’t opened SLATE OS for 2 days gets one automatic reminder at 10:30 on working days, saying how many messages and tasks are waiting. “Notifications off” means no phone of theirs receives SLATE OS notifications: set it up with them.'));
+  }
   function peopleView() {
     const nm = p => { try { return nameOf(p.id); } catch (_) { return displayName(p); } };
     const rerender = () => { try { render(true); } catch (_) {} };
@@ -536,10 +592,11 @@
     if (acctBtn) acctBtn.addEventListener('click', accountsSheet);
     if (!sentLoaded) loadSent();
     const nSent = new Set(sent.map(r => r.body + '|' + r.created_at)).size;
-    const tabs = el('div', { class: 'seg', role: 'group', 'aria-label': 'People' }, ...[['send', 'Send a message'], ['sent', 'Sent and replies' + (nSent ? ' · ' + nSent : '')]].map(([k, l]) => {
+    const tabs = el('div', { class: 'seg', role: 'group', 'aria-label': 'People' }, ...[['send', 'Send a message'], ['sent', 'Sent and replies' + (nSent ? ' · ' + nSent : '')], ...(canAdmin() ? [['adopt', 'Adoption']] : [])].map(([k, l]) => {
       const b = el('button', { type: 'button', 'aria-pressed': String(tab === k) }, l); b.addEventListener('click', () => { PS.tab = k; rerender(); }); return b; }));
     const headEl = el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Studio'), el('h1', { class: 'h1' }, 'People')), ...(acctBtn ? [acctBtn] : []));
     if (tab === 'sent') return [headEl, tabs, sent.length ? sentView() : el('p', { class: 'muted' }, 'Nothing sent yet.')];
+    if (tab === 'adopt' && canAdmin()) return [headEl, tabs, adoptionView()];
     const n = PS.sel.size;
     const ta = el('textarea', { id: 'slate-people-msg', maxlength: '300', rows: '2', placeholder: 'Message, e.g. Site visit moved to 3 pm today', 'aria-label': 'Message' }); ta.value = PS.msg;
     const send = el('button', { class: 'btn btn-primary', type: 'button' }, n ? `Notify ${n} ${n === 1 ? 'person' : 'people'}` : 'Notify');
@@ -1230,6 +1287,12 @@
   .slate-pc-h b{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#3a3a3c}
   .slate-pc-h span{font-size:12.5px;color:var(--muted)}
   .slate-pc-b{display:grid;gap:4px}
+  .slate-ad-ts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  @media (min-width:700px){.slate-ad-ts{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  .slate-ad-t{background:#F2F2F7;border-radius:12px;padding:12px 14px;display:grid;gap:2px}.slate-ad-t b{font-size:22px}.slate-ad-t span{font-size:13px;color:#636366}
+  .slate-ad-r{background:#F2F2F7;border-radius:12px;padding:12px 14px;display:grid;gap:10px}.slate-ad-r.flag{box-shadow:inset 3px 0 0 #d7262b}
+  .slate-ad-cs{display:flex;flex-wrap:wrap;gap:6px}.slate-ad-c{font-size:13px;padding:4px 10px;border-radius:999px;background:#fff;color:#3a3a3c}
+  .slate-ad-c.ok{color:#1f7a35}.slate-ad-c.warn{color:#a35a00}.slate-ad-c.bad{color:#d70015;font-weight:600}
   .slate-pt{appearance:none;border:0;background:#fff;border-radius:10px;font:inherit;color:inherit;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) 22px;gap:10px;align-items:center;padding:8px 10px;text-align:left}
   .slate-pt:hover{background:#fafafa}
   .slate-pt.on{background:#fff;box-shadow:inset 0 0 0 1.5px #34C759}

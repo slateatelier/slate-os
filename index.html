@@ -1675,6 +1675,7 @@ function taskNear(n){ const t0=Date.parse(n.created_at)||0, body=n.body||''; let
 async function openNotice(id,kind){
   if(GO_INBOX.includes(kind)) return openNotifs();
   if(kind==='backup') return goView(amApprover()?'backup':'mine');
+  if(kind==='nudge') return goView('mine');
   if(kind==='issue_report') return goView('reports');
   if(/^minutes_/.test(kind)) return goView('meet');
   if(kind==='role_request') return goView(S.isOwner?'setup':'mine');
