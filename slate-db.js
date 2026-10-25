@@ -350,16 +350,47 @@
   }
 
 
-  /* ---------------- who is online (Home) ---------------- */
-  let onlineIds = [];
+  /* ---------------- who is online, away or last seen (Home and People) ----------------
+     Online: SLATE OS is open on screen. Away: still open but minimised or in the background (stays
+     connected on a computer; phones usually suspend the app, so it then shows "last seen").
+     A heartbeat records when each person last had SLATE OS open. */
+  let onlineIds = [], awayIds = [], seenMap = new Map();
+  const seenOf = id => {
+    if (onlineIds.includes(id)) return { st: 'on', label: 'Online' };
+    if (awayIds.includes(id)) return { st: 'away', label: 'Away · app open' };
+    const r = seenMap.get(id); if (!r) return { st: 'off', label: 'Not signed in yet' };
+    return { st: 'off', label: 'Last seen ' + ago(r.seen_at), at: r.seen_at };
+  };
+  window.slateSeen = seenOf;
+  function ago(t) {
+    const s = Math.max(0, (Date.now() - new Date(t).getTime()) / 1000);
+    if (s < 90) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' h ago';
+    if (s < 7 * 86400) { const d = Math.round(s / 86400); return d === 1 ? 'yesterday' : d + ' days ago'; }
+    return new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short' });
+  }
+  async function loadSeen() {
+    const { data } = await sb.from('presence_seen').select('user_id,seen_at,active_at');
+    if (data) { seenMap = new Map(data.map(r => [r.user_id, r])); placeOnline(true); try { if (S.view === 'people') render(true); } catch (_) {} }
+  }
   function setupPresence(session) {
     try { if (session && session.access_token && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(session.access_token); } catch (_) {}
     const ch = sb.channel('slate:presence', { config: { private: true, presence: { key: authUser.id } } });
-    const track = () => { if (document.visibilityState === 'visible') ch.track({ at: Date.now() }).catch(() => {}); else ch.untrack().catch(() => {}); };
-    ch.on('presence', { event: 'sync' }, () => { onlineIds = Object.keys(ch.presenceState()); placeOnline(true); })
-      .subscribe(st => { if (st === 'SUBSCRIBED') track(); });
-    document.addEventListener('visibilitychange', track);
-    window.addEventListener('pagehide', () => { try { ch.untrack(); } catch (_) {} });
+    const vis = () => document.visibilityState === 'visible';
+    const track = () => { ch.track({ at: Date.now(), st: vis() ? 'on' : 'away' }).catch(() => {}); };
+    const beat = () => sb.rpc('touch_seen', { p_active: vis() }).then(() => {}, () => {});
+    ch.on('presence', { event: 'sync' }, () => {
+        const st = ch.presenceState(); onlineIds = []; awayIds = [];
+        for (const [id, metas] of Object.entries(st)) (metas.some(m => m.st !== 'away') ? onlineIds : awayIds).push(id);
+        placeOnline(true); try { if (S.view === 'people') render(true); } catch (_) {}
+      })
+      .subscribe(s => { if (s === 'SUBSCRIBED') track(); });
+    document.addEventListener('visibilitychange', () => { track(); beat(); if (vis()) loadSeen(); });
+    window.addEventListener('pagehide', () => { try { beat(); ch.untrack(); } catch (_) {} });
+    beat(); loadSeen();
+    setInterval(beat, 60000);
+    setInterval(() => { if (vis()) loadSeen(); }, 120000);
     new MutationObserver(() => placeOnline(false)).observe(document.body, { childList: true, subtree: true });
   }
   function placeOnline(force) {
@@ -368,17 +399,23 @@
     if (!home) { if (old) old.remove(); return; }
     const head = document.querySelector('main .page-h'); if (!head) return;
     if (old && !force && old.previousElementSibling === head) return;
-    const others = onlineIds.filter(id => id !== authUser.id && people.has(id) && people.get(id).active);
+    const others = [...people.values()].filter(p => p.id !== authUser.id && p.active).map(p => p.id);
     const name = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const rank = id => { const s = seenOf(id); return s.st === 'on' ? 0 : s.st === 'away' ? 1 : 2; };
+    others.sort((a, b) => rank(a) - rank(b) || ((seenMap.get(b) || {}).seen_at || '').localeCompare((seenMap.get(a) || {}).seen_at || '') || name(a).localeCompare(name(b)));
+    const nOn = others.filter(id => rank(id) === 0).length, nAway = others.filter(id => rank(id) === 1).length;
+    const DOT = { on: '#34C759', away: '#FF9F0A', off: '#C7C7CC' };
     const chip = id => { let a = null; try { a = avaEl(id, isLeadP(people.get(id))); } catch (_) {}
-      return el('span', { class: 'chip', style: 'padding:4px 12px 4px 4px;background:#fff;gap:8px' },
+      const s = seenOf(id);
+      return el('span', { class: 'chip', style: 'padding:4px 12px 4px 4px;background:#fff;gap:8px', title: s.at ? new Date(s.at).toLocaleString() : s.label },
         el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []),
-          el('i', { style: 'position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#34C759;border:2px solid #fff' })),
-        name(id)); };
+          el('i', { style: `position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:${DOT[s.st]};border:2px solid #fff` })),
+        el('span', { style: 'display:grid;line-height:1.15' }, el('span', {}, name(id)), el('span', { style: 'font-size:11.5px;color:var(--muted)' }, s.label)));
+    };
     const box = el('section', { id: 'slate-online', class: 'sec' },
-      el('div', { class: 'sec-h' }, el('h2', {}, 'Online now'), el('span', { class: 'cnt' }, String(others.length))),
-      others.length ? el('div', { class: 'chips', style: 'background:var(--group);border-radius:10px;padding:10px' }, ...others.sort((a, b) => name(a).localeCompare(name(b))).map(chip))
-                    : el('div', { class: 'list' }, el('p', { class: 'muted', style: 'margin:0' }, 'No one else has SLATE OS open right now.')));
+      el('div', { class: 'sec-h' }, el('h2', {}, 'Team status'), el('span', { class: 'cnt' }, `${nOn} online` + (nAway ? ` · ${nAway} away` : ''))),
+      others.length ? el('div', { class: 'chips', style: 'background:var(--group);border-radius:10px;padding:10px' }, ...others.map(chip))
+                    : el('div', { class: 'list' }, el('p', { class: 'muted', style: 'margin:0' }, 'No one else on SLATE OS yet.')));
     if (old) old.replaceWith(box); else head.after(box);
   }
 
@@ -461,8 +498,7 @@
     return me.designation === 'principal' || me.designation === 'coo' || !!me.is_approver;   // only the Principal and the COO send
   }
   const isLeadP = p => !!p && ['principal', 'coo', 'pod_leader', 'design_associate_lead'].includes(p.designation);
-  const REPLIES = [['on_it', 'On it'], ['done', 'Already done'], ['later', 'Will do it later'], ['help', 'Need help']];
-  const REPLY_L = Object.fromEntries([...REPLIES, ['remind', 'Reminder set']]);
+  const REPLY_L = { on_it: 'On it', done: 'Done', already: 'Already done', later: 'Will do it later', will: 'Will do it', help: 'Need help', remind: 'Reminder set', task: 'Made it a task' };
   const when = t => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   function peopleView() {
     const nm = p => { try { return nameOf(p.id); } catch (_) { return displayName(p); } };
@@ -474,16 +510,16 @@
     all.sort((a, b) => order(a.team).localeCompare(order(b.team)) || (isLeadP(b) - isLeadP(a)) || nm(a).localeCompare(nm(b)))
        .forEach(p => { const t = p.team || 'No team'; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(p); });
     for (const id of [...PS.sel]) if (!people.has(id) || !canMessageClient(people.get(id))) PS.sel.delete(id);
-    const onlineSet = new Set(onlineIds);
     const bubble = p => {
       const on = PS.sel.has(p.id);
       let a = null; try { a = avaEl(p.id, isLeadP(p), 'md'); } catch (_) {}
       const b = el('button', { class: 'slate-bub' + (on ? ' on' : ''), type: 'button', 'aria-pressed': String(on), 'aria-label': nm(p) + (on ? ', selected' : '') },
         el('span', { class: 'slate-bub-a' }, ...(a ? [a] : []),
-          ...(onlineSet.has(p.id) ? [el('i', { class: 'slate-bub-on', title: 'Online now' })] : []),
+          ...(seenOf(p.id).st !== 'off' ? [el('i', { class: 'slate-bub-on', title: seenOf(p.id).label, style: seenOf(p.id).st === 'away' ? 'background:#FF9F0A' : '' })] : []),
           ...(on ? [el('b', { class: 'slate-bub-ck', 'aria-hidden': 'true' }, '✓')] : [])),
         el('span', { class: 'slate-bub-n' }, nm(p)),
-        el('span', { class: 'slate-bub-r' }, p.role_label || 'No designation'));
+        el('span', { class: 'slate-bub-r' }, p.role_label || 'No designation'),
+        el('span', { class: 'slate-bub-r', style: 'font-size:10.5px;' + (seenOf(p.id).st === 'on' ? 'color:#248A3D' : '') }, seenOf(p.id).label));
       b.addEventListener('click', () => { on ? PS.sel.delete(p.id) : PS.sel.add(p.id); rerender(); });
       return b;
     };
@@ -523,28 +559,62 @@
               el('p', { class: 'lead' }, 'Tap people to select them, write a short message and tap Notify. It arrives with sound even if their app is closed; they reply with one tap.')), ...(acctBtn ? [acctBtn] : [])),
             search, ...secs, sentView(), compose];
   }
-  /* what I sent, with each person's reply */
+  /* what I sent, with each person's reply; follow up anyone who hasn't finished */
   let sent = [], sentLoaded = false;
+  const FU = {};                                   // follow-up drafts by message group
   async function loadSent() {
     sentLoaded = true;
-    const { data } = await sb.rpc('my_sent_messages', { p_limit: 60 });
-    sent = data || []; try { if (S.view === 'people') render(true); } catch (_) {}
+    const { data } = await sb.rpc('my_sent_messages', { p_limit: 120 });
+    sent = data || []; try { if (S.view === 'people' || S.view === 'cal') render(true); } catch (_) {}
   }
+  const finished = r => !!r.done_at || r.reply === 'task';
+  function replyText(r) {
+    const d = x => when(x);
+    if (r.reply === 'done') return r.due_at ? (new Date(r.done_at) <= new Date(r.due_at) ? 'Done on time' : 'Done late') : 'Done';
+    if (r.reply === 'already') return 'Already done · ' + d(r.done_at);
+    if (r.reply === 'will') return (r.due_at && new Date(r.due_at) < new Date() ? 'Overdue · was due ' : 'Will do it by ') + dayOnly(r.due_at);
+    if (r.reply === 'help') return 'Needs help' + (r.reply_note ? ': ' + r.reply_note : '');
+    if (r.reply === 'task') return 'Made it a task';
+    if (r.reply === 'remind') return 'Set a reminder';
+    if (r.reply) return REPLY_L[r.reply] || r.reply;
+    return r.read_at ? 'Seen' : 'Not seen yet';
+  }
+  const replyColor = r => r.done_at || r.reply === 'task' ? 'var(--ontime)' : r.reply === 'help' || (r.reply === 'will' && r.due_at && new Date(r.due_at) < new Date()) ? 'var(--overdue)' : r.reply ? 'var(--early)' : 'var(--muted)';
   function sentView() {
     if (!sent.length) return el('span');
     const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
     const groups = new Map();
-    sent.forEach(r => { const k = r.body + '|' + r.created_at; if (!groups.has(k)) groups.set(k, { body: r.body, at: r.created_at, rows: [] }); groups.get(k).rows.push(r); });
-    const items = [...groups.values()].slice(0, 12).map(g => {
-      const replied = g.rows.filter(r => r.reply && r.reply !== 'remind').length;
-      return el('div', { class: 'card', style: 'border-radius:0;border-bottom:1px solid var(--line);gap:8px' },
+    sent.forEach(r => { const k = r.body + '|' + r.created_at; if (!groups.has(k)) groups.set(k, { k, body: r.body, at: r.created_at, rows: [] }); groups.get(k).rows.push(r); });
+    const items = [...groups.values()].slice(0, 15).map(g => {
+      const done = g.rows.filter(finished).length, open = g.rows.filter(r => !finished(r));
+      const fu = g.rows.reduce((n, r) => Math.max(n, r.followups || 0), 0);
+      const box = el('div', { class: 'card', style: 'border-radius:0;border-bottom:1px solid var(--line);gap:8px' },
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', { style: 'overflow-wrap:anywhere' }, g.body), el('span', { class: 'f-hint' }, when(g.at))),
-        el('div', { class: 'f-hint' }, `${replied} of ${g.rows.length} replied`),
-        el('div', { class: 'chips' }, ...g.rows.map(r => {
-          const st = r.reply && r.reply !== 'remind' ? REPLY_L[r.reply] : r.reply === 'remind' ? 'Set a reminder' : r.read_at ? 'Seen' : 'Not seen yet';
-          const col = r.reply === 'done' ? 'var(--ontime)' : r.reply === 'help' ? 'var(--overdue)' : r.reply ? 'var(--early)' : 'var(--muted)';
-          return el('span', { class: 'chip', style: 'padding-right:12px;background:#fff' }, el('b', { style: 'font-weight:600' }, nm(r.to_user)), el('span', { style: 'color:' + col }, '· ' + st));
-        })));
+        el('div', { class: 'f-hint' }, `${done} of ${g.rows.length} done` + (fu ? ` · followed up ${fu}×` : '')),
+        el('div', { class: 'chips' }, ...g.rows.map(r => el('span', { class: 'chip', style: 'padding-right:12px;background:#fff;max-width:100%' }, el('b', { style: 'font-weight:600' }, nm(r.to_user)), el('span', { style: 'color:' + replyColor(r) + ';overflow-wrap:anywhere' }, '· ' + replyText(r))))));
+      if (open.length) {
+        const f = FU[g.k];
+        if (!f) {
+          const b = el('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start;background:#fff' }, `Follow up ${open.length === g.rows.length ? (open.length === 1 ? '' : 'everyone') : 'the ' + open.length + ' not done'}`.trim());
+          b.addEventListener('click', () => { FU[g.k] = { note: '', ids: open.map(r => r.id) }; render(true); });
+          box.append(b);
+        } else {
+          const t = el('input', { maxlength: '300', placeholder: 'Add a note (optional), e.g. Need this by 4 pm', style: 'background:#fff' }); t.value = f.note;
+          t.addEventListener('input', () => { f.note = t.value; });
+          const pick = el('div', { class: 'chips' }, ...open.map(r => { const on = f.ids.includes(r.id);
+            const c = el('button', { class: 'chip' + (on ? ' on' : ''), type: 'button', style: 'border:0;cursor:pointer;padding-right:12px' }, nm(r.to_user));
+            c.addEventListener('click', () => { f.ids = on ? f.ids.filter(x => x !== r.id) : [...f.ids, r.id]; render(true); }); return c; }));
+          const go = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Send follow-up'); if (!f.ids.length) go.disabled = true;
+          const no = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Cancel');
+          go.addEventListener('click', async () => { go.disabled = true;
+            const { data, error } = await sb.rpc('message_followup', { p_ids: f.ids, p_note: f.note || null });
+            if (error) { go.disabled = false; try { toast(friendly(error).message); } catch (_) {} return; }
+            delete FU[g.k]; try { toast(`Follow-up sent to ${data} ${data === 1 ? 'person' : 'people'}`); } catch (_) {} loadSent(); });
+          no.addEventListener('click', () => { delete FU[g.k]; render(true); });
+          box.append(el('div', { class: 'callout', style: 'display:grid;gap:8px' }, el('div', { class: 'lbl' }, 'Follow up'), pick, t, el('div', { class: 'actions' }, go, no)));
+        }
+      }
+      return box;
     });
     return el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, 'Sent and replies')), el('div', { class: 'list' }, ...items));
   }
@@ -557,10 +627,52 @@
     try { if (S.view === 'cal') render(true); } catch (_) {}
   }
   window.slateReminders = () => myReminders;
+  /* messages I answered with Done / Already done / Will do it: on my Calendar; open "will do" items stay on Home */
+  let myAnswered = [];
+  async function loadAnswered() {
+    const { data } = await sb.from('notifications').select('id,title,body,created_at,sender,reply,replied_at,done_at,due_at,reply_note,task_ref')
+      .eq('user_id', authUser.id).eq('kind', 'message').is('ref_id', null).not('reply', 'is', null).order('created_at', { ascending: false }).limit(300);
+    myAnswered = data || [];
+    placeMessages(true);
+    try { if (S.view === 'cal') render(true); } catch (_) {}
+  }
+  /* calendar items from messages: mine as the person asked, and (Principal / COO) everything I sent */
+  window.slateMsgCal = () => {
+    const out = [];
+    for (const r of myAnswered) {
+      if (r.done_at) out.push({ at: r.done_at, done: true, ok: !r.due_at || new Date(r.done_at) <= new Date(r.due_at), body: r.body, who: r.sender, mine: true, r });
+      else if (r.reply === 'will' && r.due_at) out.push({ at: r.due_at, done: false, body: r.body, who: r.sender, mine: true, r });
+    }
+    for (const r of sent) {
+      if (r.done_at) out.push({ at: r.done_at, done: true, ok: !r.due_at || new Date(r.done_at) <= new Date(r.due_at), body: r.body, who: r.to_user, mine: false, r });
+      else if (r.reply === 'will' && r.due_at) out.push({ at: r.due_at, done: false, body: r.body, who: r.to_user, mine: false, r });
+    }
+    return out;
+  };
+  window.slateMsgOpen = item => msgSheet(item);
+  function msgSheet(item) {
+    const r = item.r; addCss();
+    const old = document.getElementById('slate-msg-sheet'); if (old) old.remove();
+    const close = el('button', { class: 'link', type: 'button' }, 'Close');
+    const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const box = el('div', { class: 'box' }, el('div', { class: 'brand' }, el('b', { style: 'font-size:20px;letter-spacing:.04em' }, item.mine ? 'Message from ' + nm(r.sender) : 'Sent to ' + nm(r.to_user)), el('i', {}), el('span', {}, when(r.created_at))),
+      el('p', { style: 'margin:0;font-size:16px;white-space:pre-wrap;overflow-wrap:anywhere' }, r.body),
+      el('div', { style: 'font-weight:600;color:' + replyColor(r) }, replyText(r)), r.reply_note && r.reply !== 'help' ? el('div', { class: 'f' }, r.reply_note) : el('span'));
+    if (item.mine && r.reply === 'will' && !r.done_at) {
+      const b = el('button', { class: 'primary', type: 'button' }, '✓ Done now');
+      b.addEventListener('click', async () => { b.disabled = true; const { error } = await sb.rpc('message_reply', { p_id: r.id, p_choice: 'done' }); if (error) { b.disabled = false; return; }
+        try { toast('Marked as done'); } catch (_) {} root.remove(); loadAnswered(); });
+      box.append(b);
+    }
+    box.append(el('div', { class: 'row' }, close));
+    const root = el('div', { id: 'slate-msg-sheet', class: 'slate-sheet', role: 'dialog', 'aria-label': 'Message' }, box);
+    close.addEventListener('click', () => root.remove());
+    document.body.append(root);
+  }
   /* messages, replies and reminders for me: cards on Home until answered or dismissed */
   let myMessages = [];
   async function loadMessages() {
-    const { data } = await sb.from('notifications').select('id,kind,title,body,created_at,ref_id,reply').in('kind', ['message', 'reply', 'reminder']).is('read_at', null).order('created_at', { ascending: false }).limit(15);
+    const { data } = await sb.from('notifications').select('id,kind,title,body,created_at,ref_id,reply,sender').in('kind', ['message', 'reply', 'reminder']).is('read_at', null).order('created_at', { ascending: false }).limit(15);
     myMessages = data || []; placeMessages(true);
   }
   function remindChoices() {
@@ -570,36 +682,72 @@
     out.push(['Tomorrow, 10 am', at(1, 10)]);
     return out;
   }
+  const pad2 = n => String(n).padStart(2, '0');
+  const localDT = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const localD = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const dayOnly = t => new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short' });
+  async function sendReply(msgId, choice, extra) {
+    const { error } = await sb.rpc('message_reply', { p_id: msgId, p_choice: choice, p_remind_at: (extra && extra.remindAt) ? extra.remindAt.toISOString() : null,
+      p_at: (extra && extra.at) ? extra.at.toISOString() : null, p_note: (extra && extra.note) || null, p_task: (extra && extra.task) || null });
+    if (error) throw friendly(error);
+  }
+  window.slateReplyTask = async (msgId, path) => { await sendReply(msgId, 'task', { task: path }); myMessages = myMessages.filter(y => y.id !== msgId); loadAnswered(); loadMessages(); };
   function placeMessages(force) {
     const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
     const old = document.getElementById('slate-messages');
-    if (!home || !myMessages.length) { if (old) old.remove(); return; }
+    const open = myAnswered.filter(r => r.reply === 'will' && !r.done_at && r.due_at).sort((a, b) => a.due_at.localeCompare(b.due_at));
+    if (!home || (!myMessages.length && !open.length)) { if (old) old.remove(); return; }
     const main = document.querySelector('main'); if (!main) return;
     if (old && !force && main.contains(old)) return;
     const gone = id => { myMessages = myMessages.filter(y => y.id !== id); placeMessages(true); syncBadge(); };
+    const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
     const card = m => {
       const msgId = m.kind === 'reminder' ? m.ref_id : m.kind === 'message' ? m.id : null;
       const status = el('div', { class: 'f-hint', role: 'status' });
       const actions = el('div', { class: 'actions' });
-      const reply = async (choice, label, remindAt) => {
-        actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
-        const { error } = await sb.rpc('message_reply', { p_id: msgId, p_choice: choice, p_remind_at: remindAt ? remindAt.toISOString() : null });
-        if (error) { status.textContent = friendly(error).message; status.className = 'err'; actions.querySelectorAll('button').forEach(b => { b.disabled = false; }); return; }
+      const lock = on => actions.querySelectorAll('button,input,textarea').forEach(b => { b.disabled = on; });
+      const reply = async (choice, label, extra) => {
+        lock(true);
+        try { await sendReply(msgId, choice, extra); }
+        catch (e) { status.textContent = e.message; status.className = 'err'; lock(false); return; }
         if (m.kind === 'reminder') await sb.rpc('message_read', { p_id: m.id });
-        if (choice === 'remind') loadReminders();
-        try { toast(choice === 'remind' ? 'Reminder set for ' + when(remindAt) + ' · added to your Calendar' : 'Reply sent: ' + label); } catch (_) {}
+        if (choice === 'remind') loadReminders(); else loadAnswered();
+        try { toast(choice === 'remind' ? 'Reminder set for ' + when(extra.remindAt) + ' · added to your Calendar'
+          : choice === 'done' || choice === 'already' ? 'Reply sent: ' + label + ' · on your Calendar'
+          : choice === 'will' ? 'Reply sent · due ' + dayOnly(extra.at) + ' on your Calendar' : 'Reply sent: ' + label); } catch (_) {}
         gone(m.id);
       };
-      if (msgId) {
-        REPLIES.forEach(([k, l]) => { const b = el('button', { class: 'btn btn-sm' + (k === 'on_it' ? ' btn-primary' : ''), type: 'button', style: k === 'on_it' ? '' : 'background:#fff' }, l); b.addEventListener('click', () => reply(k, l)); actions.append(b); });
-        const rb = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Remind me…');
-        rb.addEventListener('click', () => {
-          const pick = el('div', { class: 'actions' }, ...remindChoices().map(([l, d]) => { const b = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, l); b.addEventListener('click', () => reply('remind', l, d)); return b; }));
-          rb.replaceWith(pick);
-        });
-        actions.append(rb);
-      } else {
-        const x = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Dismiss');
+      const mini = (label, primary) => el('button', { class: 'btn btn-sm' + (primary ? ' btn-primary' : ''), type: 'button', style: primary ? '' : 'background:#fff' }, label);
+      const panel = (title, input, go, note) => {
+        const back = mini('Back');
+        back.addEventListener('click', () => { actions.replaceChildren(...buttons()); status.textContent = ''; });
+        actions.replaceChildren(el('div', { style: 'display:grid;gap:8px;width:100%' }, el('div', { class: 'lbl' }, title), input, note || el('span'), el('div', { class: 'actions' }, go, back)));
+        try { input.focus(); } catch (_) {}
+      };
+      const buttons = () => {
+        const out = [];
+        const done = mini('✓ Done', true); done.addEventListener('click', () => reply('done', 'Done')); out.push(done);
+        const al = mini('Already done…'); al.addEventListener('click', () => {
+          const i = el('input', { type: 'datetime-local', max: localDT(new Date()), style: 'background:#fff' }); i.value = localDT(new Date());
+          const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value) return (status.textContent = 'Choose when it was done.'); const at = new Date(i.value); if (at > new Date()) return (status.textContent = 'That time is in the future.'); reply('already', 'Already done', { at }); });
+          panel('When was it done?', i, go); }); out.push(al);
+        const wl = mini('Will do it…'); wl.addEventListener('click', () => {
+          const tm = new Date(); tm.setDate(tm.getDate() + 1);
+          const i = el('input', { type: 'date', min: localD(new Date()), style: 'background:#fff' }); i.value = localD(tm);
+          const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value) return (status.textContent = 'Choose the finish date.'); const at = new Date(i.value + 'T18:00'); reply('will', 'Will do it', { at }); });
+          panel('By when will you finish it?', i, go, el('div', { class: 'f-hint' }, 'It goes on your Calendar; tap ✓ Done there when it’s finished.')); }); out.push(wl);
+        const hp = mini('Need help…'); hp.addEventListener('click', () => {
+          const i = el('textarea', { maxlength: '300', rows: '2', placeholder: 'What help do you need?', style: 'background:#fff' });
+          const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value.trim()) return (status.textContent = 'Write what help you need.'); reply('help', 'Need help', { note: i.value.trim() }); });
+          panel('Need help', i, go); }); out.push(hp);
+        const rb = mini('Remind me…'); rb.addEventListener('click', () => {
+          actions.replaceChildren(...remindChoices().map(([l, d]) => { const b = mini(l); b.addEventListener('click', () => reply('remind', l, { remindAt: d })); return b; }), (() => { const b = mini('Back'); b.addEventListener('click', () => actions.replaceChildren(...buttons())); return b; })()); }); out.push(rb);
+        if (typeof window.slateMsgTaskSheet === 'function') { const tk = mini('Make it a task…'); tk.addEventListener('click', () => window.slateMsgTaskSheet({ id: msgId, body: m.kind === 'reminder' ? m.body : m.body, sender: m.sender })); out.push(tk); }
+        return out;
+      };
+      if (msgId) actions.append(...buttons());
+      else {
+        const x = mini('Dismiss');
         x.addEventListener('click', async () => { gone(m.id); await sb.rpc('message_read', { p_id: m.id }); });
         actions.append(x);
       }
@@ -608,16 +756,26 @@
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', {}, m.title), el('span', { class: 'f-hint' }, when(m.created_at))),
         el('div', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, m.body), actions, status);
     };
-    const box = el('section', { id: 'slate-messages', class: 'sec' }, ...myMessages.map(card));
+    const commit = r => {
+      const late = new Date(r.due_at) < new Date();
+      const b = el('button', { class: 'btn btn-sm btn-primary', type: 'button' }, '✓ Done');
+      b.addEventListener('click', async () => { b.disabled = true; try { await sendReply(r.id, 'done'); try { toast('Marked as done'); } catch (_) {} loadAnswered(); } catch (e) { b.disabled = false; try { toast(e.message); } catch (_) {} } });
+      return el('div', { class: 'card', style: 'border-radius:0;border-bottom:1px solid var(--line);gap:6px' },
+        el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', { style: 'overflow-wrap:anywhere;font-weight:500' }, r.body), el('span', { class: 'pill ' + (late ? 's-overdue' : 's-open') }, (late ? 'Overdue · ' : 'Due ') + dayOnly(r.due_at))),
+        el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, 'From ' + nm(r.sender)), b));
+    };
+    const box = el('section', { id: 'slate-messages', class: 'sec' }, ...myMessages.map(card),
+      ...(open.length ? [el('div', { class: 'sec-h' }, el('h2', {}, 'Messages you said you’d do'), el('span', { class: 'cnt' }, String(open.length))), el('div', { class: 'list' }, ...open.map(commit))] : []));
     if (old) old.replaceWith(box); else main.prepend(box);
   }
   function setupMessages() {
     window.slatePeopleView = peopleView;
-    loadMessages(); loadReminders();
+    loadMessages(); loadReminders(); loadAnswered();
+    if (canAdmin()) loadSent();
     sb.channel('slate-my-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + authUser.id },
       ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); if (ev.new.kind === 'reply') loadSent(); if (ev.new.kind === 'reminder') loadReminders(); } }).subscribe();
     new MutationObserver(() => placeMessages(false)).observe(document.body, { childList: true, subtree: true });
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); } });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); loadAnswered(); } });
   }
 
   /* ---------------- accounts: the Principal and the COO reset passwords and add people ---------------- */
@@ -711,8 +869,8 @@
 
   /* ---------------- audit trail: every change, notification and message, from the database log ---------------- */
   const AU = { rows: [], loaded: false, busy: false, kind: '', more: true, err: '' };
-  const AU_KINDS = [['', 'Everything'], ['msg', 'Messages'], ['notification', 'Notifications'], ['projects', 'Projects'], ['tasks', 'Tasks'], ['people', 'People'], ['other', 'Other']];
-  const AU_TABLES = { msg: ['message'], notification: ['notification'], projects: ['projects', 'project', 'pmeetings'], tasks: ['tasks', 'lead', 'tasklib'], people: ['profiles', 'podnames', 'podreq', 'podjoin', 'rolereq', 'account'] };
+  const AU_KINDS = [['', 'Everything'], ['msg', 'Messages'], ['notification', 'Notifications'], ['projects', 'Projects'], ['tasks', 'Tasks'], ['people', 'People'], ['reports', 'Reports'], ['other', 'Other']];
+  const AU_TABLES = { msg: ['message'], notification: ['notification'], projects: ['projects', 'project', 'pmeetings'], tasks: ['tasks', 'lead', 'tasklib'], people: ['profiles', 'podnames', 'podreq', 'podjoin', 'rolereq', 'account'], reports: ['issue'] };
   async function loadAudit(reset) {
     if (AU.busy) return; AU.busy = true; if (reset) { AU.rows = []; AU.more = true; }
     let q = sb.from('activity_log').select('id,at,actor,table_name,row_id,action,subject_user,before,after').order('id', { ascending: false }).limit(150);
@@ -736,7 +894,9 @@
       if (r.action === 'read') return [`${nm(r.actor)} read ${nm(a.from)}’s message`, a.message];
       if (r.action === 'reply') return [`${nm(r.actor)} replied “${a.reply}” to ${nm(a.from)}`, a.message];
       if (r.action === 'remind') return [`${nm(r.actor)} set a reminder${a.remind_at ? ' for ' + when(a.remind_at) : ''}`, a.message];
+      if (r.action === 'followup') return [`${nm(r.actor)} sent a follow-up`, a.note || ''];
     }
+    if (r.table_name === 'issue') return r.action === 'report' ? [`${nm(r.actor)} reported an issue${a.screen ? ' on ' + a.screen : ''}`, a.message] : [`${nm(r.actor)} marked a report ${a.status}`, [a.message, a.note].filter(Boolean).join(' · ')];
     if (r.table_name === 'account') {
       const who = nm(r.subject_user);
       if (r.action === 'password_reset') return [`${nm(r.actor)} reset ${who}’s password`, a.email];
@@ -767,7 +927,7 @@
     if (!AU.loaded && !AU.busy) loadAudit(true);
     const seg = el('div', { class: 'chips' }, ...AU_KINDS.map(([k, l]) => { const b = el('button', { class: 'chip' + (AU.kind === k ? ' on' : ''), type: 'button', style: 'border:0;cursor:pointer;padding:6px 12px' }, l);
       b.addEventListener('click', () => { AU.kind = k; loadAudit(true); }); return b; }));
-    const out = [seg, el('p', { class: 'f-hint', style: 'margin:0' }, 'Recorded by the database for every change, notification and message. Nothing here can be edited or removed. You see the entries your role allows.')];
+    const out = [seg, el('p', { class: 'f-hint', style: 'margin:0' }, (() => { let t = ''; try { t = logLine(); } catch (_) {} return 'Recorded by the database. Nothing here can be edited or removed. ' + t; })())];
     if (AU.err) out.push(el('div', { class: 'err' }, AU.err));
     if (!AU.rows.length) { out.push(el('p', { class: 'muted' }, AU.busy || !AU.loaded ? 'Loading…' : 'Nothing recorded yet.')); return out; }
     out.push(el('div', { class: 'tl' }, ...AU.rows.map(r => { const [t, n] = auditLine(r);
@@ -779,6 +939,96 @@
   }
   window.slateAuditView = auditView;
   window.slateAuditReload = () => loadAudit(true);
+
+  /* ---------------- report an issue: a floating button on every screen; reports kept in More → Report log ---------------- */
+  const RP = { rows: [], loaded: false, busy: false, err: '', notes: {} };
+  const RST = { open: 'Open', fixing: 'Being fixed', fixed: 'Fixed', closed: 'Closed' };
+  async function loadReports() {
+    RP.busy = true;
+    const { data, error } = await sb.from('issue_reports').select('*').order('created_at', { ascending: false }).limit(200);
+    RP.busy = false; RP.loaded = true; RP.err = error ? friendly(error).message : '';
+    if (data) RP.rows = data;
+    try { if (S.view === 'reports' || S.view === 'more') render(true); } catch (_) {}
+  }
+  window.slateOpenReports = () => RP.rows.filter(r => r.status === 'open').length;
+  function screenName() {
+    try {
+      const v = S.view, names = { mine: 'Home', all: 'Tasks', board: 'Board', gantt: 'Timeline', projects: 'Projects', cal: 'Calendar', dash: 'Dashboard', people: 'People', more: 'More', team: 'Team', activity: 'Log', setup: 'Settings', meet: 'Weekly meeting', std: 'Standard process', help: 'How to use', far: 'FAR calculator', chalk: 'Chalk Create', reports: 'Report log' };
+      const sh = S.sheet && S.sheet.type ? ' · ' + ({ task: 'task', newTask: 'new task', project: 'project form', projView: 'project page', meeting: 'meeting minutes', pmeet: 'project meeting', notif: 'notifications', msgTask: 'message task' }[S.sheet.type] || S.sheet.type) : '';
+      return ((names[v] || v || '') + sh).slice(0, 80);
+    } catch (_) { return ''; }
+  }
+  function reportSheet() {
+    addCss();
+    const old = document.getElementById('slate-report-sheet'); if (old) old.remove();
+    const where = screenName();
+    const msg = el('div', { class: 'msg', role: 'status' });
+    const ta = el('textarea', { maxlength: '2000', rows: '5', placeholder: 'What went wrong? What did you expect to happen?', style: 'font:inherit;font-size:16px;background:#f2f2f7;border:0;border-radius:10px;padding:12px 14px;resize:vertical' });
+    const go = el('button', { class: 'primary', type: 'submit' }, 'Send report');
+    const close = el('button', { class: 'link', type: 'button' }, 'Cancel');
+    const form = el('form', { class: 'box', novalidate: '' },
+      el('div', { class: 'brand' }, el('b', { style: 'font-size:22px;letter-spacing:.04em' }, 'Report an issue'), el('i', {}), el('span', {}, where ? 'On: ' + where : 'SLATE OS')),
+      el('label', {}, 'Describe the problem', ta),
+      el('span', { class: 'f', style: 'font-size:13px;color:#6e6e73' }, 'The screen you were on and your device are added automatically. The Principal and the COO see every report; you can follow yours in More → Report log.'),
+      go, el('div', { class: 'row' }, close), msg);
+    const root = el('div', { id: 'slate-report-sheet', class: 'slate-sheet', role: 'dialog', 'aria-label': 'Report an issue' }, form);
+    close.addEventListener('click', () => root.remove());
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const t = ta.value.trim(); if (t.length < 3) { msg.className = 'msg err'; msg.textContent = 'Write a few words about the problem.'; return; }
+      go.disabled = true; msg.className = 'msg'; msg.textContent = 'Sending…';
+      const device = `${navigator.userAgent.slice(0, 180)} · ${screen.width}×${screen.height}${isStandalone() ? ' · app' : ' · browser'}`.slice(0, 240);
+      const { error } = await sb.from('issue_reports').insert({ message: t, screen: where || null, device });
+      if (error) { go.disabled = false; msg.className = 'msg err'; msg.textContent = friendly(error).message; return; }
+      root.remove(); try { toast('Report sent. Thank you.'); } catch (_) {} loadReports();
+    });
+    document.body.append(root); ta.focus();
+  }
+  function reportButton() {
+    if (document.getElementById('slate-report')) return;
+    const b = el('button', { id: 'slate-report', type: 'button', 'aria-label': 'Report an issue', title: 'Report an issue' },
+      el('span', { 'aria-hidden': 'true', class: 'ri' }, '!'), el('span', { class: 'rt' }, 'Report an issue'));
+    b.addEventListener('click', reportSheet);
+    document.body.append(b);
+  }
+  function reportView() {
+    if (!RP.loaded && !RP.busy) loadReports();
+    const boss = canAdmin(), nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const out = [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, boss ? 'Everyone’s reports' : 'Your reports'), el('h1', { class: 'h1' }, 'Report log'),
+      el('p', { class: 'lead' }, boss ? 'Problems the team reported with the Report an issue button. Mark each one as it’s handled; the reporter is told.' : 'Problems you reported and where each one stands.')),
+      (() => { const b = el('button', { class: 'btn btn-primary', type: 'button' }, 'Report an issue'); b.addEventListener('click', reportSheet); return b; })())];
+    if (RP.err) out.push(el('div', { class: 'err' }, RP.err));
+    if (!RP.rows.length) { out.push(el('p', { class: 'muted' }, RP.busy || !RP.loaded ? 'Loading…' : 'No reports yet.')); return out; }
+    const counts = Object.keys(RST).map(k => [k, RP.rows.filter(r => r.status === k).length]).filter(x => x[1]);
+    out.push(el('div', { class: 'chips' }, ...counts.map(([k, n]) => el('span', { class: 'chip', style: 'padding:6px 12px;background:#fff' }, `${RST[k]} ${n}`))));
+    const col = { open: 'var(--overdue)', fixing: 'var(--late)', fixed: 'var(--ontime)', closed: 'var(--muted)' };
+    out.push(el('div', { class: 'list' }, ...RP.rows.map(r => {
+      const card = el('div', { class: 'card', style: 'border-radius:0;border-bottom:1px solid var(--line);gap:8px;box-shadow:inset 3px 0 0 ' + col[r.status] },
+        el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', {}, boss ? nm(r.reporter) : 'You'), el('span', { class: 'pill', style: 'color:' + col[r.status] }, RST[r.status] || r.status)),
+        el('div', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, r.message),
+        el('div', { class: 'f-hint' }, [when(r.created_at), r.screen ? 'on ' + r.screen : '', boss && r.device ? r.device.replace(/Mozilla\/5\.0 \(([^)]*)\).*/, '$1') : ''].filter(Boolean).join(' · ')),
+        r.note ? el('p', { class: 'quote' }, r.note) : el('span'),
+        r.updated_by ? el('div', { class: 'f-hint' }, `Updated by ${nm(r.updated_by)} · ${when(r.updated_at)}`) : el('span'));
+      if (boss) {
+        const note = el('input', { maxlength: '1000', placeholder: 'Note for the reporter (optional)', style: 'background:#fff' }); note.value = RP.notes[r.id] != null ? RP.notes[r.id] : (r.note || '');
+        note.addEventListener('input', () => { RP.notes[r.id] = note.value; });
+        const set = st => async () => {
+          const { error } = await sb.from('issue_reports').update({ status: st, note: (RP.notes[r.id] != null ? RP.notes[r.id] : r.note || '').trim() || null }).eq('id', r.id);
+          if (error) { try { toast(friendly(error).message); } catch (_) {} return; }
+          delete RP.notes[r.id]; try { toast('Marked ' + RST[st].toLowerCase()); } catch (_) {} loadReports();
+        };
+        const btn = (st, l, primary) => { const b = el('button', { class: 'btn btn-sm' + (primary ? ' btn-primary' : ''), type: 'button', style: primary ? '' : 'background:#fff' }, l); b.addEventListener('click', set(st)); return b; };
+        const acts = r.status === 'open' ? [btn('fixing', 'Being fixed'), btn('fixed', 'Fixed', true), btn('closed', 'Close')]
+                   : r.status === 'fixing' ? [btn('fixed', 'Fixed', true), btn('closed', 'Close'), btn('open', 'Reopen')]
+                   : [btn('open', 'Reopen')];
+        card.append(note, el('div', { class: 'actions' }, ...acts));
+      }
+      return card;
+    })));
+    return out;
+  }
+  window.slateReportView = reportView;
+  function setupReports() { reportButton(); if (canAdmin()) loadReports(); }
 
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
@@ -835,7 +1085,14 @@
   .slate-prow input{width:20px;height:20px;margin:0;accent-color:#000}
   #slate-acct{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));z-index:6;
     font:500 12.5px -apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#000;border:0;border-radius:999px;padding:6px 12px;cursor:pointer}
-  @media (max-width:560px){#slate-acct{top:auto;bottom:calc(14px + env(safe-area-inset-bottom,0px));position:fixed}}`;
+  @media (max-width:560px){#slate-acct{top:auto;bottom:calc(14px + env(safe-area-inset-bottom,0px));position:fixed}}
+  #slate-report{position:fixed;left:max(14px,env(safe-area-inset-left,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:14;display:flex;align-items:center;gap:8px;
+    font:600 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fff;color:#1c1c1e;border:0;border-radius:999px;padding:6px 14px 6px 6px;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.16),0 0 0 1px rgba(0,0,0,.06)}
+  #slate-report .ri{width:26px;height:26px;border-radius:50%;background:#d7262b;color:#fff;display:grid;place-items:center;font-size:15px;font-weight:800}
+  @media (max-width:560px){#slate-report{padding:6px}#slate-report .rt{display:none}}
+  body.locked #slate-report{display:none}
+  @media print{#slate-report{display:none}}`;
 
   function addCss() { if (!document.getElementById('slate-css')) document.head.append(el('style', { id: 'slate-css' }, CSS)); }
   function el(tag, attrs, ...kids) {
@@ -976,6 +1233,7 @@
     setupNotifications();
     setupPresence(session);
     setupMessages();
+    setupReports();
     // Dashboard averages: anonymous score inputs for tasks this person can't see.
     window.slateDashRows = async (from, to) => {
       const { data, error } = await sb.rpc('dash_rows', { p_from: from, p_to: to });
