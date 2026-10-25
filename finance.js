@@ -88,8 +88,10 @@ const invNet = i => i.net != null ? +i.net : +i.amount || 0;          // fee SLA
 const invAit = i => +i.ait || 0;                                          // AIT the client is expected to deduct
 const MODE_LABEL = { cash: 'Cash', bank: 'Bank' };
 const acct = id => S.accounts.find(a => a.id === id);
-const ACCT_KIND = { cash: 'Office vault (cash)', bank: 'Bank account', mfs: 'Mobile wallet' };
-const activeAccts = () => S.accounts.filter(a => a.active !== false).sort((a, b) => (a.kind === 'cash' ? 0 : a.kind === 'bank' ? 1 : 2) - (b.kind === 'cash' ? 0 : b.kind === 'bank' ? 1 : 2) || (a.name || '').localeCompare(b.name || ''));
+const ACCT_KIND = { cash: 'Office vault (cash)', petty: 'Petty cash box', bank: 'Bank account', mfs: 'Mobile wallet' };
+const KIND_ORDER = { cash: 0, petty: 1, bank: 2, mfs: 3 };
+const isCashLike = a => a && (a.kind === 'cash' || a.kind === 'petty');
+const activeAccts = () => S.accounts.filter(a => a.active !== false).sort((a, b) => (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9) || (a.name || '').localeCompare(b.name || ''));
 const MOVE_LABEL = { transfer: 'Transfer', drawing: 'Owner\u2019s drawing', capital: 'Capital put in', income: 'Other income' };
 function acctEntries(a) {
   const e = [];
@@ -246,7 +248,7 @@ const fileSafe = s => String(s || '').replace(/[^\w.-]+/g, '-');
 /* ---------- render ---------- */
 let rq = 0;
 const schedule = () => { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); };
-const TABS = [['overview', 'Overview'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['workorders', 'Work orders'], ['payroll', 'Payroll'], ['cash', 'Cash & bank'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['workorders', 'Work orders'], ['payroll', 'Payroll'], ['petty', 'Petty cash'], ['cash', 'Cash & bank'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings']];
 function renderChrome() {
   const fys = new Set([fyOf(today()), S.fy]);
   [...S.invoices.map(i => i.date), ...S.receipts.map(r => r.date), ...S.moves.map(m => m.date), ...S.expenses.map(x => x.date), ...S.wopays.map(x => x.date), ...S.payruns.map(r => (r.month || '') + '-01')].forEach(d => d && fys.add(fyOf(d)));
@@ -260,7 +262,7 @@ function renderChrome() {
 function render() {
   renderChrome();
   if (!S.loaded) return;
-  const v = { overview, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, cash: cashbook, reports, activity, settings }[S.tab] || overview;
+  const v = { overview, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, petty: pettyView, cash: cashbook, reports, activity, settings }[S.tab] || overview;
   $('#app').innerHTML = v();
 }
 function notice(title, body, link) {
@@ -291,8 +293,8 @@ function overview() {
     <div class="actions"><button class="btn" data-act="new-project">Add project fee</button><button class="btn pri" data-act="new-invoice" ${S.projects.length ? '' : 'disabled'}>New invoice</button></div></div>
   ${starter}
   <div class="kpis">
-    ${(() => { const ac = activeAccts(), tot = ac.reduce((s, a) => s + acctBal(a, t), 0), v = ac.filter(a => a.kind === 'cash').reduce((s, a) => s + acctBal(a, t), 0);
-      return ac.length ? `<div class="kpi" data-tab="cash" role="link" tabindex="0" style="cursor:pointer"><div class="lb">Cash & bank now</div><div class="v">${compact(tot)}</div><div class="s">${compact(v)} vault · ${compact(tot - v)} bank</div></div>`
+    ${(() => { const ac = activeAccts(), tot = ac.reduce((s, a) => s + acctBal(a, t), 0), v = ac.filter(isCashLike).reduce((s, a) => s + acctBal(a, t), 0);
+      return ac.length ? `<div class="kpi" data-tab="cash" role="link" tabindex="0" style="cursor:pointer"><div class="lb">Cash & bank now</div><div class="v">${compact(tot)}</div><div class="s">${compact(v)} cash · ${compact(tot - v)} bank</div></div>`
         : `<div class="kpi" data-tab="cash" role="link" tabindex="0" style="cursor:pointer"><div class="lb">Cash & bank</div><div class="v">—</div><div class="s"><b class="bad">Set up vault and bank</b></div></div>`; })()}
     <div class="kpi"><div class="lb">Receivable now</div><div class="v">${compact(recv)}</div><div class="s">${overdue.length ? `<b class="bad">${compact(overdueAmt)}</b> overdue on ${overdue.length}` : `${open.length} open invoice${open.length === 1 ? '' : 's'}`}</div></div>
     <div class="kpi"><div class="lb">Received · FY</div><div class="v">${compact(cashIn)}</div><div class="s">${compact(withheld)} withheld (AIT/VDS)</div></div>
@@ -642,19 +644,18 @@ function receiptForm(i) {
 
 /* ----- printable documents (open in a new tab: print or save as PDF) ----- */
 /* SLATE letterhead pad: address block top left, black tab with the white SLATE mark top right, and the
-   faint DESIGN WITH PURPOSE at the foot. Same measurements as the printed pad; set in SLATE Gothic. */
+   faint DESIGN WITH PURPOSE at the foot. Same measurements as the printed pad. Text in Didact Gothic (free, Century Gothic-like),
+   headings and figures in bold in Jost (free, Futura-like); both are open-licensed Google Fonts. */
 const LH_ADDR_DEFAULT = 'SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
 const LOGO_SVG = '<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const letterhead = () => `<div class="lh-addr">${lines(S.settings.lhAddress || LH_ADDR_DEFAULT).map(esc).join('<br>')}</div><div class="lh-tab"><div class="lh-mark">${LOGO_SVG}</div><div class="lh-name">SLATE</div></div><div class="lh-wm">DESIGN<br>WITH<br>PURPOSE</div>`;
 function docShell(title, ref, body, more = []) {
-  const F = location.origin + '/fonts/slate-gothic-';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Didact+Gothic&family=Jost:wght@400;500;600&display=swap">
 <style>
-@font-face{font-family:"SLATE Gothic";font-weight:400;font-style:normal;src:local("Century Gothic"),local("CenturyGothic"),url(${F}400.woff) format("woff")}
-@font-face{font-family:"SLATE Gothic";font-weight:700;font-style:normal;src:local("Century Gothic Bold"),local("CenturyGothic-Bold"),url(${F}700.woff) format("woff")}
-@font-face{font-family:"SLATE Gothic";font-weight:400;font-style:italic;src:local("Century Gothic Italic"),local("CenturyGothic-Italic"),url(${F}400-italic.woff) format("woff")}
 @page{size:A4;margin:0}*{box-sizing:border-box}
-body{margin:0;background:#E6E8EA;color:#000;font:10pt/1.42 "SLATE Gothic","Century Gothic",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
+body{margin:0;background:#E6E8EA;color:#000;font:10pt/1.42 "Didact Gothic","Century Gothic",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
 .bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;justify-content:center;padding:10px;background:#231f20}.bar button{font:500 13px system-ui;padding:8px 14px;border-radius:6px;border:0;cursor:pointer}.bar .p{background:#C41E29;color:#fff}
 .page{width:210mm;min-height:297mm;margin:8mm auto;background:#fff;padding:43.5mm 14mm 16mm 12.6mm;position:relative;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.12)}
 .page>*{position:relative;z-index:1}
@@ -665,18 +666,20 @@ body{margin:0;background:#E6E8EA;color:#000;font:10pt/1.42 "SLATE Gothic","Centu
 .lh-mark{position:absolute;left:4.7mm;top:20.6mm;width:10.6mm}.lh-mark svg{display:block;width:100%;height:auto}
 .lh-name{position:absolute;left:0;right:0;top:32.15mm;text-align:center;color:#fff;font-size:5.6pt;line-height:1;letter-spacing:.32em;padding-left:.32em}
 .lh-wm{left:12.2mm;top:239.6mm;font-weight:400;font-size:32pt;line-height:12.35mm;color:#f0f0f0;letter-spacing:.02em}
-h1{font-size:15pt;font-weight:700;letter-spacing:.08em;margin:0 0 1.5mm;text-transform:uppercase}.dr{color:#C41E29;font-size:9pt;border:1pt solid #C41E29;padding:1px 6px;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
-.ref{display:flex;justify-content:space-between;gap:6mm;font-size:9pt;color:#545454;margin-bottom:7mm;flex-wrap:wrap}.ref span b{color:#000;font-weight:700}
-.to{margin-bottom:6mm}.to b{display:block;font-weight:700;font-size:11pt}.pre{white-space:pre-line}
-h2{font-size:8.5pt;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:7mm 0 2.5mm}
+b,strong,h1,h2,th,tr.tot td,.to b,.ref span b,.sig b,.amtbox b,.lh-addr,.lh-name,.lh-wm,.dr{font-family:"Jost","Futura",sans-serif}
+b,strong{font-weight:600}
+h1{font-size:15pt;font-weight:600;letter-spacing:.08em;margin:0 0 1.5mm;text-transform:uppercase}.dr{color:#C41E29;font-size:9pt;border:1pt solid #C41E29;padding:1px 6px;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
+.ref{display:flex;justify-content:space-between;gap:6mm;font-size:9pt;color:#545454;margin-bottom:7mm;flex-wrap:wrap}.ref span b{color:#000;font-weight:600}
+.to{margin-bottom:6mm}.to b{display:block;font-weight:600;font-size:11pt}.pre{white-space:pre-line}
+h2{font-size:8.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:7mm 0 2.5mm}
 table{width:100%;border-collapse:collapse;font-size:9.5pt}
-th{font-size:7.5pt;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#545454;text-align:left;padding:2mm 1mm 2mm 0;border-bottom:.75pt solid #000}
+th{font-size:7.5pt;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#545454;text-align:left;padding:2mm 1mm 2mm 0;border-bottom:.75pt solid #000}
 td{padding:2.2mm 1mm 2.2mm 0;border-bottom:.5pt solid #CFCFCF;vertical-align:top}td.n,th.n{text-align:right;padding-right:0}
-tr.tot td{border-bottom:0;border-top:1pt solid #000;font-weight:700}tr.sub td{color:#545454;border-bottom:0}
+tr.tot td{border-bottom:0;border-top:1pt solid #000;font-weight:600}tr.sub td{color:#545454;border-bottom:0}
 .words{font-size:9pt;color:#545454;margin:3mm 0 0}
-.sig{display:flex;flex-wrap:wrap;gap:12mm 20mm;margin-top:16mm}.sig div{min-width:60mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.sig b{display:block;font-weight:700}
+.sig{display:flex;flex-wrap:wrap;gap:12mm 20mm;margin-top:16mm}.sig div{min-width:60mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.sig b{display:block;font-weight:600}
 .note{font-size:8.5pt;color:#545454;margin-top:5mm}pre{font:inherit;white-space:pre-wrap;margin:0}
-.amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #000;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font-size:16pt;font-weight:700}
+.amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #000;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font-size:16pt;font-weight:600}
 .docref{position:absolute;left:12.6mm;right:14mm;bottom:7mm;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9A9A9A;text-align:right}
 </style></head><body><div class="bar"><button class="p" onclick="print()">Print or save as PDF</button><button onclick="close()">Close</button></div>
 ${[body, ...more].map(b => `<div class="page">${letterhead()}${b}<div class="docref">${esc(ref)}</div></div>`).join('')}
@@ -1308,6 +1311,93 @@ function slipsDoc(r, staffId) {
   return docShell(`Payslips · ${runLabel(r)}`, runLabel(r), pages[0] || '', pages.slice(1));
 }
 
+/* ----- Petty cash (imprest: a fixed float, topped back up from the vault) ----- */
+const PETTY_CATS = ['Transport & site visits', 'Printing & plotting', 'Office supplies', 'Client meetings & entertainment', 'Staff welfare', 'Repairs & maintenance', 'Utilities', 'Other'];
+const pettyBox = () => S.accounts.filter(a => a.kind === 'petty' && a.active !== false)[0] || null;
+function pettyView() {
+  const box = pettyBox(), t = today(), mo = S.f.pettyMonth || t.slice(0, 7);
+  if (!box) return `
+  <div class="head"><div><h2>Petty cash</h2><p>Small day-to-day spending from a cash box with a fixed float.</p></div></div>
+  <div class="panel"><div class="empty"><strong>Set up the petty cash box</strong>Choose the float, the fixed amount the box is kept at (for example ৳10,000), and count what's in it now. Bills are recorded against the box and go to the Principal for approval like any expense. When it runs low, top it back up to the float from the office vault.
+    <div class="actions" style="justify-content:center"><button class="btn pri" data-act="new-acct" data-v="petty">Set up petty cash</button></div></div></div>`;
+  const bal = acctBal(box, t), fl = +box.float || 0, low = fl && bal < fl * 0.25;
+  const bills = S.expenses.filter(x => x.accountId === box.id);
+  const spentMo = bills.filter(x => (x.paidOn || x.date || '').startsWith(t.slice(0, 7)) && x.status !== 'rejected').reduce((u, x) => u + (+x.amount || 0), 0);
+  const pend = bills.filter(x => (x.status || 'pending') === 'pending');
+  const all = acctEntries(box), start = mo + '-01', end = monthEnd(mo);
+  const opening = all.filter(e => e.date < start).reduce((u, e) => u + e.amt, +box.opening || 0);
+  const rows = all.filter(e => e.date >= start && e.date <= end);
+  const months = [...new Set([t.slice(0, 7), ...all.map(e => (e.date || '').slice(0, 7))])].filter(Boolean).sort().reverse();
+  let run = opening;
+  const lines = rows.map(e => { run += e.amt; return { ...e, bal: run }; }).reverse();
+  const rc = S.recons.find(r => r.accountId === box.id && r.month === mo);
+  return `
+  <div class="head"><div><h2>Petty cash</h2><p>${esc(box.name)}${box.note ? ' · ' + esc(box.note) : ''}. Bills go to the Principal for approval; top-ups come from the office vault.</p></div>
+    <div class="actions"><button class="btn" data-act="petty-statement">Statement</button><button class="btn" data-act="recon-acct" data-id="${box.id}">Count the box</button>${isPrincipal() && pend.length ? `<button class="btn" data-act="approve-all">Approve all ${pend.length}</button>` : ''}<button class="btn" data-act="petty-topup">Top up</button><button class="btn pri" data-act="petty-bills">Record bills</button></div></div>
+  <div class="kpis">
+    <div class="kpi"><div class="lb">In the box</div><div class="v" style="${bal < 0 ? 'color:var(--bad)' : ''}">${tk(bal)}</div><div class="s">${low ? '<b class="bad">running low · top it up</b>' : fl ? `of a ${tk(fl)} float` : 'no float set'}</div></div>
+    <div class="kpi"><div class="lb">Top-up needed</div><div class="v">${tk(Math.max(0, fl - bal))}</div><div class="s">to bring it back to the float</div></div>
+    <div class="kpi"><div class="lb">Spent this month</div><div class="v">${compact(spentMo)}</div><div class="s">${monthName(t.slice(0, 7))}</div></div>
+    <div class="kpi"><div class="lb">Awaiting approval</div><div class="v">${pend.length}</div><div class="s">${pend.length ? `${tk(pend.reduce((u, x) => u + (+x.amount || 0), 0))}${isPrincipal() ? ' · <b class="bad">needs you</b>' : ' with the Principal'}` : 'nothing waiting'}</div></div>
+  </div>
+  <div class="filters"><select id="pettyMonth" aria-label="Month">${months.map(m => opt(m, monthName(m), m === mo)).join('')}</select>
+    <span class="hint">Opening ${tk(opening)} · in ${tk(rows.filter(e => e.amt > 0).reduce((u, e) => u + e.amt, 0))} · out ${tk(-rows.filter(e => e.amt < 0).reduce((u, e) => u + e.amt, 0))} · closing ${tk(run)}${rc ? ` · counted ${tk(rc.actual)}${Math.abs(+rc.diff || 0) < 1 ? ' ✓' : ` (${rc.diff > 0 ? 'short' : 'over'} ${tk(Math.abs(rc.diff))})`}` : ''}</span></div>
+  <div class="panel"><div class="ph"><h3>Book · ${monthName(mo)}</h3><span class="meta">latest first</span></div>
+    ${lines.length ? `<div class="rows">${lines.map(e => { const x = e.kind === 'expense' ? S.expenses.find(b => b.id === e.id) : null;
+      return `<button class="row r-inv" data-act="${ENTRY_ACT[e.kind]}" data-id="${e.id}"><div style="min-width:0"><div class="t">${esc(e.what)}</div><div class="sub">${esc(e.sub || '')}</div></div><div class="c2 sub">${fmtDate(e.date)}</div>${x ? expChip(x) : '<span></span>'}<div class="amt" style="color:var(${e.amt < 0 ? '--bad' : '--good'})">${e.amt < 0 ? '− ' : '+ '}${tk(Math.abs(e.amt))}<small>bal ${tk(e.bal)}</small></div></button>`; }).join('')}</div>`
+      : `<div class="empty">Nothing in or out of the box in ${monthName(mo)}.</div>`}</div>`;
+}
+function pettyBillsForm() {
+  const box = pettyBox(); if (!box) return;
+  const row = () => `<div class="pb-row" style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.6fr) minmax(0,.9fr) 28px;gap:6px;align-items:center">
+    <input type="date" name="d" value="${today()}" aria-label="Date"><select name="c" aria-label="Category">${PETTY_CATS.map(c => opt(c, c)).join('')}</select>
+    <input name="w" placeholder="What for" aria-label="What for"><input name="a" type="number" min="1" step="1" placeholder="Taka" aria-label="Amount"><button class="btn ghost sm" type="button" data-pb="del" aria-label="Remove">×</button></div>`;
+  openSheet(`${sheetHead('Record petty cash bills', `${esc(box.name)} · ${tk(acctBal(box, today()))} in the box`)}
+  <form id="pbf"><style>#pbf .pb-row input,#pbf .pb-row select{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px;min-width:0;width:100%;font-size:13px}@media (max-width:560px){#pbf .pb-row{grid-template-columns:1fr 1fr!important}#pbf .pb-row [name=w]{grid-column:1/-1}}</style>
+    <div id="pbRows" style="display:flex;flex-direction:column;gap:10px">${row()}${row()}${row()}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" type="button" data-pb="add">Add a line</button><span class="hint" id="pbTot"></span></div>
+    <p class="hint">${isPrincipal() ? 'Bills you record are approved straight away.' : 'Each bill goes to the Principal for approval. Keep the paper voucher with the box.'} Empty lines are skipped.</p>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Save bills</button></div></form>`, root => {
+    const f = $('#pbf', root), box2 = $('#pbRows', root);
+    const read = () => [...box2.querySelectorAll('.pb-row')].map(r => ({ d: r.querySelector('[name=d]').value, c: r.querySelector('[name=c]').value, w: r.querySelector('[name=w]').value.trim(), a: +r.querySelector('[name=a]').value || 0 })).filter(x => x.a > 0 || x.w);
+    const upd = () => { const L = read(), t = L.reduce((u, x) => u + x.a, 0); $('#pbTot', root).textContent = L.length ? `${L.length} bill${L.length === 1 ? '' : 's'} · ${tk(t)}${t > acctBal(box, today()) ? ' · more than is in the box' : ''}` : ''; };
+    f.addEventListener('input', upd);
+    f.addEventListener('click', e => { const b = e.target.closest('[data-pb]'); if (!b) return; if (b.dataset.pb === 'add') box2.insertAdjacentHTML('beforeend', row()); else b.closest('.pb-row').remove(); upd(); });
+    f.addEventListener('submit', async ev => { ev.preventDefault(); const L = read();
+      if (!L.length) { toast('Enter at least one bill.'); return; }
+      const bad = L.find(x => !x.w || !(x.a > 0) || !x.d); if (bad) { toast('Each bill needs what it was for and an amount.'); return; }
+      const early = L.find(x => x.d < box.openingDate); if (early) { toast(`The box starts on ${fmtDate(box.openingDate)}.`); return; }
+      const lk = L.find(x => locked(x.d)); if (lk) { toast(`FY ${fyLabel(fyOf(lk.d))} is closed.`); return; }
+      const st = isPrincipal() ? { status: 'approved', decidedBy: S.uid, decidedOn: today() } : { status: 'pending' };
+      if (await run(async () => { for (const x of L) await addDoc('expenses', { date: x.d, category: x.c, desc: x.w, payee: '', amount: x.a, projectId: '', note: 'Petty cash', accountId: box.id, paidOn: x.d, ref: '', ...st }); },
+        `${L.length} bill${L.length === 1 ? '' : 's'} saved${isPrincipal() ? '' : ' · sent for approval'}`)) closeSheet(); });
+  });
+}
+function pettyTopupForm() {
+  const box = pettyBox(); if (!box) return;
+  const src = activeAccts().filter(a => a.id !== box.id); if (!src.length) { toast('Add the office vault under Cash & bank first.'); return; }
+  const need = Math.max(0, (+box.float || 0) - acctBal(box, today()));
+  moveForm('transfer', null, { from: (src.find(a => a.kind === 'cash') || src[0]).id, to: box.id, amount: need || '', note: 'Petty cash top-up' });
+}
+function pettyStatementDoc(mo) {
+  const box = pettyBox(), all = acctEntries(box), start = mo + '-01', end = monthEnd(mo), n = v => nf.format(Math.round(+v || 0));
+  const opening = all.filter(e => e.date < start).reduce((u, e) => u + e.amt, +box.opening || 0);
+  const rows = all.filter(e => e.date >= start && e.date <= end);
+  let run = opening; const cats = {};
+  rows.forEach(e => { if (e.kind === 'expense') { const x = S.expenses.find(b => b.id === e.id); if (x && x.status !== 'rejected') cats[x.category] = (cats[x.category] || 0) + (+x.amount || 0); } });
+  const rc = S.recons.find(r => r.accountId === box.id && r.month === mo);
+  const body = `<h1>Petty cash statement</h1>
+  <div class="ref"><span>Month <b>${monthName(mo)}</b></span><span>Float <b>BDT ${n(box.float)}</b></span><span>Opening <b>BDT ${n(opening)}</b></span></div>
+  <table style="font-size:8.8pt"><thead><tr><th>Date</th><th>Particulars</th><th class="n">In</th><th class="n">Out</th><th class="n">Balance</th></tr></thead><tbody>
+  <tr class="sub"><td>${fmtShort(start)}</td><td>Opening balance</td><td></td><td></td><td class="n">${n(opening)}</td></tr>
+  ${rows.map(e => { run += e.amt; const x = e.kind === 'expense' ? S.expenses.find(b => b.id === e.id) : null; return `<tr><td>${fmtShort(e.date)}</td><td>${esc(e.what)}${x ? `<br><span style="color:#545454;font-size:7.5pt">${esc(x.category)}${x.status === 'pending' ? ' · awaiting approval' : x.status === 'rejected' ? ' · rejected' : ''}</span>` : ''}</td><td class="n">${e.amt > 0 ? n(e.amt) : ''}</td><td class="n">${e.amt < 0 ? n(-e.amt) : ''}</td><td class="n">${n(run)}</td></tr>`; }).join('')}
+  <tr class="tot"><td></td><td>Closing balance</td><td class="n">${n(rows.filter(e => e.amt > 0).reduce((u, e) => u + e.amt, 0))}</td><td class="n">${n(-rows.filter(e => e.amt < 0).reduce((u, e) => u + e.amt, 0))}</td><td class="n">${n(run)}</td></tr></tbody></table>
+  ${Object.keys(cats).length ? `<h2>Spent by category</h2><table style="font-size:8.8pt"><tbody>${Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<tr><td>${esc(c)}</td><td class="n">${n(v)}</td></tr>`).join('')}</tbody></table>` : ''}
+  ${rc ? `<p class="note">Cash counted on ${fmtDate(monthEnd(mo))}: BDT ${n(rc.actual)} · ${Math.abs(+rc.diff || 0) < 1 ? 'matches the book' : `${rc.diff > 0 ? 'short' : 'over'} by BDT ${n(Math.abs(rc.diff))}`}${rc.note ? ' · ' + esc(rc.note) : ''}</p>` : ''}
+  <div class="sig"><div><b>Kept by</b>${esc(box.note || 'Petty cash holder')}</div><div><b>Checked by</b>COO</div><div><b>Approved by</b>Principal</div></div>`;
+  return docShell(`Petty cash · ${monthName(mo)}`, `Petty cash · ${monthName(mo)}`, body);
+}
+
 /* ----- Cash & bank ----- */
 const ENTRY_ACT = { receipt: 'open-receipt-inv', move: 'edit-move', expense: 'open-exp', wopay: 'open-wopay', advance: 'open-adv', payrun: 'open-run' };
 const fyStart = fy => `${fy}-07-01`, fyEnd = fy => `${fy + 1}-06-30`;
@@ -1349,13 +1439,13 @@ function entryRow(e, a) {
     <div class="c2 sub">${fmtDate(e.date)}</div><span></span><div class="amt" style="color:var(${e.amt < 0 ? '--bad' : '--good'})">${e.amt < 0 ? '− ' : '+ '}${tk(Math.abs(e.amt))}</div></button>`;
 }
 function accountForm(a, kind) {
-  const src = a || { kind: kind || 'bank', openingDate: fyStart(fyOf(today())), opening: 0 };
+  const src = a || { kind: kind || 'bank', openingDate: kind === 'petty' ? today() : fyStart(fyOf(today())), opening: 0 };
   const used = a && acctEntries(a).length;
   openSheet(`${sheetHead(a ? 'Edit account' : 'Add account', a ? esc(a.name) : 'Enter what the account held on the date you start counting from.')}
   <form id="af">
     <div class="fg">
       <label class="f" for="a_kind">Type<select id="a_kind" name="kind">${Object.entries(ACCT_KIND).map(([k, l]) => opt(k, l, src.kind === k)).join('')}</select></label>
-      <label class="f" for="a_name">Name<input id="a_name" name="name" required value="${esc(src.name || (src.kind === 'cash' ? 'Office vault' : ''))}" placeholder="e.g. City Bank current"></label>
+      <label class="f" for="a_name">Name<input id="a_name" name="name" required value="${esc(src.name || (src.kind === 'cash' ? 'Office vault' : src.kind === 'petty' ? 'Petty cash' : ''))}" placeholder="e.g. City Bank current"></label>
     </div>
     <div class="fg" id="aBank">
       <label class="f" for="a_bank">Bank / provider<input id="a_bank" name="bank" value="${esc(src.bank)}" placeholder="e.g. City Bank, Gulshan branch"></label>
@@ -1365,18 +1455,20 @@ function accountForm(a, kind) {
       <label class="f" for="a_open">Opening balance (BDT)<input id="a_open" name="opening" type="number" step="1" required value="${esc(src.opening)}"></label>
       <label class="f" for="a_od">As of<input id="a_od" name="openingDate" type="date" required value="${esc(src.openingDate)}"></label>
     </div>
+    <label class="f" for="a_float" id="aFloat">Petty cash float (the fixed amount the box is topped up to)<input id="a_float" name="float" type="number" min="0" step="1" value="${esc(src.float || 10000)}"></label>
     <p class="hint">Start from a date you can verify: a bank statement balance, or cash counted in the drawer. Entries can't be dated before it.</p>
     ${a ? `<label class="check" for="a_act"><input id="a_act" name="active" type="checkbox" ${a.active !== false ? 'checked' : ''}> Active <span class="hint">(inactive accounts keep their history but can't take new entries)</span></label>` : ''}
     <label class="f" for="a_note">Notes<textarea id="a_note" name="note" rows="2">${esc(src.note)}</textarea></label>
     <div class="foot">${a && !used ? `<button class="btn danger" type="button" data-act="del-acct" data-id="${a.id}">Delete</button>` : ''}<button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${a ? 'Save' : 'Add account'}</button></div>
   </form>`, root => {
     const f = $('#af', root);
-    const sync = () => { $('#aBank', root).hidden = f.kind.value === 'cash'; }; sync();
-    f.kind.addEventListener('change', () => { if (!a && (!f.name.value || f.name.value === 'Office vault')) f.name.value = f.kind.value === 'cash' ? 'Office vault' : ''; sync(); });
+    const sync = () => { $('#aBank', root).hidden = f.kind.value === 'cash' || f.kind.value === 'petty'; $('#aFloat', root).hidden = f.kind.value !== 'petty'; }; sync();
+    f.kind.addEventListener('change', () => { if (!a && (!f.name.value || ['Office vault', 'Petty cash'].includes(f.name.value))) f.name.value = f.kind.value === 'cash' ? 'Office vault' : f.kind.value === 'petty' ? 'Petty cash' : ''; sync(); });
     f.addEventListener('submit', async ev => { ev.preventDefault();
       const first = a && acctEntries(a)[0];
       if (first && f.openingDate.value > first.date) { toast(`This account already has an entry on ${fmtDate(first.date)}. The opening date must be on or before it.`); return; }
-      const data = { kind: f.kind.value, name: f.name.value.trim(), bank: f.kind.value === 'cash' ? '' : f.bank.value.trim(), number: f.kind.value === 'cash' ? '' : f.number.value.trim(),
+      const cashy = ['cash', 'petty'].includes(f.kind.value);
+      const data = { kind: f.kind.value, name: f.name.value.trim(), bank: cashy ? '' : f.bank.value.trim(), number: cashy ? '' : f.number.value.trim(), float: f.kind.value === 'petty' ? +f.float.value || 0 : 0,
         opening: +f.opening.value || 0, openingDate: f.openingDate.value, active: a ? f.active.checked : true, note: f.note.value.trim() };
       const ok = a ? await run(() => putDoc('accounts', a.id, { ...strip(a), ...data }), 'Account saved') : await run(() => addDoc('accounts', data), 'Account added');
       if (ok) closeSheet(); });
@@ -1399,11 +1491,11 @@ function accountSheet(a) {
     <div class="mini-list rows" style="margin-top:10px">${lines.length ? lines.map(e => `<button class="row" style="grid-template-columns:minmax(0,1fr) auto" data-act="${ENTRY_ACT[e.kind]}" data-id="${e.id}"><div style="min-width:0"><div class="t">${esc(e.what)}</div><div class="sub">${fmtDate(e.date)}${e.sub ? ' · ' + esc(e.sub) : ''}</div></div>
       <div class="amt" style="color:var(${e.amt < 0 ? '--bad' : '--good'})">${e.amt < 0 ? '− ' : '+ '}${tk(Math.abs(e.amt))}<small>bal ${tk(e.bal)}</small></div></button>`).join('') : `<div class="empty" style="padding:14px">No entries in FY ${fyLabel(fy)}.</div>`}</div>
     <div class="sec-t" style="margin-top:18px">Month-end checks</div>
-    <div class="mini-list rows" style="margin-top:10px">${checks.length ? checks.map(r => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${fmtDate(monthEnd(r.month))}</div><div class="sub">Book ${tk(r.book)} · ${a.kind === 'cash' ? 'counted' : 'statement'} ${tk(r.actual)}${r.note ? ' · ' + esc(r.note) : ''} · by ${who(r.createdBy)}</div></div>${Math.abs(+r.diff || 0) < 1 ? chip('paid', 'Matched') : chip('overdue', (r.diff > 0 ? 'Short ' : 'Over ') + tk(Math.abs(r.diff)))}<span></span></div>`).join('') : `<div class="empty" style="padding:14px">No checks yet. At each month end, compare the book with the ${a.kind === 'cash' ? 'cash in the drawer' : 'bank statement'}.</div>`}</div>
+    <div class="mini-list rows" style="margin-top:10px">${checks.length ? checks.map(r => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${fmtDate(monthEnd(r.month))}</div><div class="sub">Book ${tk(r.book)} · ${isCashLike(a) ? 'counted' : 'statement'} ${tk(r.actual)}${r.note ? ' · ' + esc(r.note) : ''} · by ${who(r.createdBy)}</div></div>${Math.abs(+r.diff || 0) < 1 ? chip('paid', 'Matched') : chip('overdue', (r.diff > 0 ? 'Short ' : 'Over ') + tk(Math.abs(r.diff)))}<span></span></div>`).join('') : `<div class="empty" style="padding:14px">No checks yet. At each month end, compare the book with the ${isCashLike(a) ? 'cash in the box' : 'bank statement'}.</div>`}</div>
     <div class="foot"><button class="btn" data-act="export-acct" data-id="${a.id}">Export CSV</button><button class="btn" data-act="edit-acct" data-id="${a.id}">Edit</button><button class="btn pri" data-act="recon-acct" data-id="${a.id}">Month-end check</button></div>`);
 }
-function moveForm(type, m) {
-  const accts = activeAccts(), src = m || { type, date: today() };
+function moveForm(type, m, preset) {
+  const accts = activeAccts(), src = m || { type, date: today(), ...(preset || {}) };
   type = src.type;
   const needFrom = ['transfer', 'drawing'].includes(type), needTo = ['transfer', 'capital', 'income'].includes(type);
   if (accts.length < (type === 'transfer' ? 2 : 1)) { toast(type === 'transfer' ? 'Add at least two accounts to transfer between them.' : 'Add an account first.'); return; }
@@ -1441,11 +1533,11 @@ function moveForm(type, m) {
 function reconForm(a) {
   const d = new Date(); d.setDate(0);                       // last month by default
   const ym0 = iso(d).slice(0, 7);
-  openSheet(`${sheetHead('Month-end check', `${esc(a.name)} · compare the book with ${a.kind === 'cash' ? 'the cash you count' : 'the bank statement'}`)}
+  openSheet(`${sheetHead('Month-end check', `${esc(a.name)} · compare the book with ${isCashLike(a) ? 'the cash you count' : 'the bank statement'}`)}
   <form id="cf">
     <div class="fg">
       <label class="f" for="c_m">Month<input id="c_m" name="month" type="month" required value="${ym0}" max="${today().slice(0, 7)}"></label>
-      <label class="f" for="c_a">${a.kind === 'cash' ? 'Cash counted' : 'Statement balance'} on the last day (BDT)<input id="c_a" name="actual" type="number" step="1" required></label>
+      <label class="f" for="c_a">${isCashLike(a) ? 'Cash counted' : 'Statement balance'} on the last day (BDT)<input id="c_a" name="actual" type="number" step="1" required></label>
     </div>
     <dl class="kv" id="cTot"></dl>
     <label class="f" for="c_n">Note<input id="c_n" name="note" placeholder="Explain any difference"></label>
@@ -1605,6 +1697,9 @@ document.addEventListener('click', async ev => {
     case 'export-inv': exportInv(); break;
     case 'new-acct': accountForm(null, b.dataset.v); break;
     case 'new-staff': staffForm(); break;
+    case 'petty-bills': pettyBillsForm(); break;
+    case 'petty-topup': pettyTopupForm(); break;
+    case 'petty-statement': { if (pettyBox()) openDoc(pettyStatementDoc(S.f.pettyMonth || today().slice(0, 7)), 'Petty-cash-statement.html'); break; }
     case 'open-staff': { const t = staffOf(id); if (t) staffSheet(t); break; }
     case 'edit-staff': staffForm(staffOf(id)); break;
     case 'del-staff': if (armed(b) && await run(() => delDoc('staff', id), 'Staff record deleted')) closeSheet(); break;
@@ -1667,7 +1762,7 @@ document.addEventListener('click', async ev => {
 document.addEventListener('input', ev => {
   if (ev.target.id === 'q') { S.f.q = ev.target.value; const pos = ev.target.selectionStart; render(); const q = $('#q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (_) {} } }
 });
-document.addEventListener('change', ev => { if (ev.target.id === 'fySel') { S.fy = +ev.target.value; schedule(); } if (ev.target.id === 'expCat') { S.f.expCat = ev.target.value; schedule(); } });
+document.addEventListener('change', ev => { if (ev.target.id === 'fySel') { S.fy = +ev.target.value; schedule(); } if (ev.target.id === 'expCat') { S.f.expCat = ev.target.value; schedule(); } if (ev.target.id === 'pettyMonth') { S.f.pettyMonth = ev.target.value; schedule(); } });
 document.addEventListener('submit', async ev => {
   if (ev.target.id !== 'setForm') return; ev.preventDefault();
   const f = ev.target;
