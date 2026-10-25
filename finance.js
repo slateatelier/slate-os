@@ -181,7 +181,7 @@ async function loadAux() {
   S.os = (os.data || []).filter(r => !INTERNAL_TYPES.includes((r.data || {}).type) && (r.data || {}).pod !== 'Chalk Create').map(r => ({ id: r.doc_id, ...r.data }))
     .sort((a, b) => (a.code || '').localeCompare(b.code || ''));
   S.people = {}; (ppl.data || []).forEach(p => { S.people[p.id] = p.label || p.full_name || 'Someone'; });
-  S.profiles = (ppl.data || []).filter(p => p.active && p.designation !== 'principal' && p.team !== 'Chalk Create');
+  S.profiles = (ppl.data || []).filter(p => p.active && p.team !== 'Chalk Create');
 }
 async function loadAudit() {
   const { data, error } = await sb.from('fin_audit').select('*').order('id', { ascending: false }).limit(300);
