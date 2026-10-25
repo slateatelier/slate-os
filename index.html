@@ -1563,6 +1563,9 @@ function viewMore(){
 
 /* ---------- task row ---------- */
 const rootOf=t=>t.parentId&&S.tasks[t.parentId]?{...S.tasks[t.parentId],id:t.parentId}:t;
+/* permanent task ID: project code + T and the task's number; revisions add R and their number; private tasks run a P series */
+const taskShort=t=>{ const r=rootOf(t); if(!r||!r.seq) return ''; const priv=String(S.paths&&S.paths[r.id]||'').startsWith('lead/'); const b=(priv?'P':'T')+String(r.seq).padStart(2,'0'); return t.parentId?`${b}.R${t.revNo||1}`:b; };
+const taskNo=t=>{ const sh=taskShort(t); if(!sh) return ''; const p=S.projects[rootOf(t).projectId]; return p&&p.code?`${p.code}-${sh}`:sh; };
 const revsOf=id=>Object.entries(S.tasks).map(([k,x])=>({...x,id:k})).filter(x=>x.parentId===id&&!x.archived).sort((a,b)=>(a.revNo||0)-(b.revNo||0));
 const canQuickDone=t=>S.canWrite&&!t.archived&&!t.doneAt&&(t.assignee===S.uid||amMgr());
 function quickDone(t){
@@ -1579,7 +1582,8 @@ function quickDone(t){
 function row(t,o={}){
   const p=S.projects[t.projectId];
   const meta=[];
-  if(o.project!==false&&p){ if(p.code) meta.push(h('span',{class:'mono',text:p.code})); meta.push(h('span',{text:p.name})); }
+  if(o.project!==false&&p){ const no=taskNo(t); if(no||p.code) meta.push(h('span',{class:'mono',text:no||p.code})); meta.push(h('span',{text:p.name})); }
+  else if(taskShort(t)) meta.push(h('span',{class:'mono',text:taskShort(t)}));
   if(t.phase) meta.push(h('span',{text:t.phase}));
   if(o.person!==false){ const pid=t.assignReq?t.assignReq.to:t.assignee; meta.push(h('span',{class:'who'},pid?avaEl(pid,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (awaiting approval)`:nameOf(t.assignee))); }
   const metaEls=meta.flatMap((x,i)=>i?[h('span',{'aria-hidden':'true',text:'·'}),x]:[x]);
@@ -1695,7 +1699,7 @@ function viewAll(){
     if(f.status==='done'&&!t.doneAt) return false;
     if(f.status==='requests'&&!t.request) return false;
     if(['overdue','soon','early','ontime','late'].includes(f.status)&&s!==f.status) return false;
-    if(q){ const p=S.projects[t.projectId]; const hay=(t.title+' '+(p?(p.name+' '+(p.code||'')):'')+' '+nameOf(t.assignee)).toLowerCase(); if(!hay.includes(q)) return false; }
+    if(q){ const p=S.projects[t.projectId]; const hay=(t.title+' '+(p?(p.name+' '+(p.code||'')):'')+' '+taskNo(t)+' '+nameOf(t.assignee)).toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
   };
   const list=allTasks().filter(match).sort(byTarget);
@@ -2934,7 +2938,7 @@ function sheetTask(){
   if(!raw) return [head('Task','Not found'),h('p',{class:'muted',text:'This task is no longer in the register.'})];
   const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((amMgr()&&!ck)||amApprover()||cctl)&&S.canWrite, ap=(ck?(S.isOwner||(canChalkAssign()&&!t.target&&!t.request)):amApprover())&&S.canWrite, boss=ck?'the Principal':'the COO', mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
   const canAct=S.canWrite&&!t.archived&&(mine||mgr);
-  const out=[head(`${projLabel(p)} · ${t.kind||'Task'}`,t.title)];
+  const out=[head(`${taskNo(t)?taskNo(t)+' · '+(p?p.name:''):projLabel(p)} · ${t.kind||'Task'}`,t.title)];
   out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',text:`Target revised ${t.revisions}×`})));
   const fact=(l,v,s,mono)=>h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v'+(mono?' mono':''),text:v}),s&&h('div',{class:'s',text:s}));
   out.push(h('div',{class:'facts'},
