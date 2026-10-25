@@ -394,9 +394,9 @@
     new MutationObserver(() => placeOnline(false)).observe(document.body, { childList: true, subtree: true });
   }
   function placeOnline(force) {
-    const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
-    const old = document.getElementById('slate-online');
-    if (!home) { if (old) old.remove(); return; }
+    const old = document.getElementById('slate-online'); if (old) old.remove();
+    if (force) { try { if (S.view === 'team' && !(S.sheet)) render(true); } catch (_) {} }
+    return;
     const head = document.querySelector('main .page-h'); if (!head) return;
     if (old && !force && old.previousElementSibling === head) return;
     const others = [...people.values()].filter(p => p.id !== authUser.id && p.active).map(p => p.id);
@@ -946,7 +946,7 @@
   async function loadReports() {
     RP.busy = true;
     const { data, error } = await sb.from('issue_reports').select('*').order('created_at', { ascending: false }).limit(200);
-    RP.busy = false; RP.loaded = true; RP.err = error ? friendly(error).message : '';
+    RP.busy = false; RP.loaded = true; RP.at = Date.now(); RP.err = error ? friendly(error).message : '';
     if (data) RP.rows = data;
     try { if (S.view === 'reports' || S.view === 'more') render(true); } catch (_) {}
   }
@@ -992,7 +992,7 @@
     document.body.append(b);
   }
   function reportView() {
-    if (!RP.loaded && !RP.busy) loadReports();
+    if (!RP.busy && (!RP.loaded || Date.now() - (RP.at || 0) > 10000)) loadReports();
     const boss = canAdmin(), nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
     const out = [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, boss ? 'Everyone’s reports' : 'Your reports'), el('h1', { class: 'h1' }, 'Report log'),
       el('p', { class: 'lead' }, boss ? 'Problems the team reported with the Report an issue button. Mark each one as it’s handled; the reporter is told.' : 'Problems you reported and where each one stands.')),
@@ -1028,7 +1028,11 @@
     return out;
   }
   window.slateReportView = reportView;
-  function setupReports() { reportButton(); if (canAdmin()) loadReports(); }
+  function setupReports() {
+    reportButton(); loadReports();
+    sb.channel('slate-reports').on('postgres_changes', { event: '*', schema: 'public', table: 'issue_reports' }, () => loadReports()).subscribe();
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadReports(); });
+  }
 
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
