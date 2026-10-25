@@ -60,9 +60,9 @@ const STUDIO = { name: 'SLATE Architecture & Design', addr: 'House SW (I) 3/A, R
 const INTERNAL_TYPES = ['studioops', 'studiodev', 'studiomgmt'];
 
 /* ---------- state ---------- */
-const DEFAULT_SETTINGS = { vatPct: 15, termsDays: 15, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [] };
+const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [] };
 const S = {
-  role: null, uid: null, projects: [], invoices: [], receipts: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
+  role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
   os: [], people: {}, audit: null, loaded: false, fy: fyOf(today()), tab: 'overview',
   f: { inv: 'open', prj: 'active', q: '' }
 };
@@ -71,6 +71,37 @@ const isPrincipal = () => S.role === 'principal';
 /* ---------- derived ---------- */
 const prj = id => S.projects.find(p => p.id === id);
 const invTotal = i => (+i.amount || 0) * (1 + (+i.vatPct || 0) / 100);
+/* Tax maths for an invoice.
+   Added on: the figure entered is the fee SLATE keeps. It is grossed up so that after the client deducts AIT
+   the fee is still whole, and VAT goes on top of the grossed-up value.
+   Inclusive: the figure entered is the whole invoice; VAT and AIT come out of it, so SLATE keeps less. */
+function taxCalc({ entered, vatOn, aitOn, vatRate, aitRate, taxMode }) {
+  const v = vatOn ? (+vatRate || 0) / 100 : 0, a = aitOn ? (+aitRate || 0) / 100 : 0, x = Math.max(0, +entered || 0);
+  const base = taxMode === 'inclusive' ? Math.round(x / (1 + v)) : Math.round(a < 1 ? x / (1 - a) : x);
+  const vat = base * v, ait = Math.round(base * a);
+  return { base, vat, ait, total: base + vat, net: base - ait };
+}
+const invNet = i => i.net != null ? +i.net : +i.amount || 0;          // fee SLATE keeps from this invoice
+const invAit = i => +i.ait || 0;                                          // AIT the client is expected to deduct
+const MODE_LABEL = { cash: 'Cash', bank: 'Bank' };
+const acct = id => S.accounts.find(a => a.id === id);
+const ACCT_KIND = { cash: 'Office vault (cash)', bank: 'Bank account', mfs: 'Mobile wallet' };
+const activeAccts = () => S.accounts.filter(a => a.active !== false).sort((a, b) => (a.kind === 'cash' ? 0 : a.kind === 'bank' ? 1 : 2) - (b.kind === 'cash' ? 0 : b.kind === 'bank' ? 1 : 2) || (a.name || '').localeCompare(b.name || ''));
+const MOVE_LABEL = { transfer: 'Transfer', drawing: 'Owner\u2019s drawing', capital: 'Capital put in', income: 'Other income' };
+function acctEntries(a) {
+  const e = [];
+  S.receipts.filter(r => r.accountId === a.id).forEach(r => { const i = S.invoices.find(x => x.id === r.invoiceId), p = i && prj(i.projectId);
+    e.push({ date: r.date, amt: +r.received || 0, what: `Received · ${p ? p.client || p.name : 'client'}`, sub: `${r.mrNo || ''}${i ? ' · ' + i.no : ''}`, kind: 'receipt', id: r.id, at: r.createdAt }); });
+  S.moves.forEach(m => {
+    const other = id => (acct(id) || {}).name || 'another account';
+    if (m.to === a.id) e.push({ date: m.date, amt: +m.amount || 0, what: m.type === 'transfer' ? `Transfer from ${other(m.from)}` : MOVE_LABEL[m.type], sub: m.note || m.ref || '', kind: 'move', id: m.id, at: m.createdAt });
+    if (m.from === a.id) e.push({ date: m.date, amt: -(+m.amount || 0), what: m.type === 'transfer' ? `Transfer to ${other(m.to)}` : MOVE_LABEL[m.type], sub: m.note || m.ref || '', kind: 'move', id: m.id, at: m.createdAt });
+  });
+  e.sort((x, y) => (x.date || '').localeCompare(y.date || '') || (x.at || '').localeCompare(y.at || ''));
+  let bal = +a.opening || 0; for (const x of e) { bal += x.amt; x.bal = bal; }
+  return e;
+}
+const acctBal = (a, upto) => acctEntries(a).filter(x => !upto || x.date <= upto).reduce((s, x) => s + x.amt, +a.opening || 0);
 const recsOf = i => S.receipts.filter(r => r.invoiceId === i.id);
 const invSettled = i => recsOf(i).reduce((s, r) => s + (+r.received || 0) + (+r.ait || 0) + (+r.vds || 0), 0);
 function invStatus(i) {
@@ -87,16 +118,18 @@ const ST_LABEL = { draft: 'Draft', issued: 'Issued', part: 'Part paid', paid: 'P
 function projStats(p) {
   const inv = S.invoices.filter(i => i.projectId === p.id && !['void', 'draft'].includes(invStatus(i)));
   let billed = 0, collected = 0;
-  for (const i of inv) { const t = invTotal(i) || 1; billed += +i.amount || 0; collected += Math.min(invSettled(i), t) * (+i.amount || 0) / t; }
+  for (const i of inv) { const t = invTotal(i) || 1; billed += invNet(i); collected += Math.min(invSettled(i), t) * invNet(i) / t; }
   const fee = +p.fee || 0;
   return { fee, billed, collected, outstanding: billed - collected, unbilled: Math.max(0, fee - billed) };
 }
 const locked = d => !!d && (S.settings.lockedFYs || []).map(Number).includes(fyOf(d));
-function nextInvNo(date) {
-  const pre = `${S.settings.prefix || 'SLATE'}/INV/${fyLabel(fyOf(date)).replace('–', '-')}/`;
-  const used = S.invoices.filter(x => (x.no || '').startsWith(pre)).map(x => +(x.no.slice(pre.length)) || 0);
+function nextNo(kind, list, key, date) {
+  const pre = `${S.settings.prefix || 'SLATE'}/${kind}/${fyLabel(fyOf(date)).replace('–', '-')}/`;
+  const used = list.filter(x => (x[key] || '').startsWith(pre)).map(x => +(x[key].slice(pre.length)) || 0);
   return pre + String((used.length ? Math.max(...used) : 0) + 1).padStart(3, '0');
 }
+const nextInvNo = date => nextNo('INV', S.invoices, 'no', date);
+const nextMrNo = date => nextNo('MR', S.receipts, 'mrNo', date);
 const msInvoiced = (p, m, exceptId) => S.invoices.some(x => x.projectId === p.id && x.milestoneId === m.id && invStatus(x) !== 'void' && x.id !== exceptId);
 
 /* ---------- data ---------- */
@@ -105,6 +138,7 @@ function friendly(e) {
   if (/fin_inv_no/.test(m)) return 'That invoice number is already used.';
   if (/fin_proj_code/.test(m)) return 'Another project already uses that code.';
   if (/fin_proj_os/.test(m)) return 'That SLATE OS project already has its fees set up.';
+  if (/fin_mr_no/.test(m)) return 'That money receipt number is already used.';
   if (/row-level security|permission denied/i.test(m)) return 'Finance is limited to the Principal and the COO.';
   if (/Failed to fetch|NetworkError|network/i.test(m)) return 'Couldn’t reach the server. Check the connection and try again.';
   return m || 'Couldn’t save. Try again.';
@@ -118,6 +152,7 @@ async function load() {
   }
   const by = c => rows.filter(r => r.path.startsWith(c + '/')).map(r => ({ ...r.data, id: r.path.split('/')[1] }));
   S.projects = by('projects'); S.invoices = by('invoices'); S.receipts = by('receipts');
+  S.accounts = by('accounts'); S.moves = by('moves'); S.recons = by('recons');
   const st = rows.find(r => r.path === 'config/settings');
   S.settingsRow = !!st; S.settings = { ...DEFAULT_SETTINGS, ...(st ? st.data : {}) };
   S.loaded = true;
@@ -127,7 +162,7 @@ async function loadAux() {
     sb.from('docs').select('doc_id,data').eq('coll', 'projects'),
     sb.from('profiles').select('id,full_name,label')
   ]);
-  S.os = (os.data || []).filter(r => !INTERNAL_TYPES.includes((r.data || {}).type)).map(r => ({ id: r.doc_id, ...r.data }))
+  S.os = (os.data || []).filter(r => !INTERNAL_TYPES.includes((r.data || {}).type) && (r.data || {}).pod !== 'Chalk Create').map(r => ({ id: r.doc_id, ...r.data }))
     .sort((a, b) => (a.code || '').localeCompare(b.code || ''));
   S.people = {}; (ppl.data || []).forEach(p => { S.people[p.id] = p.label || p.full_name || 'Someone'; });
 }
@@ -147,6 +182,11 @@ async function putDoc(coll, id, data) {
   const { data: out, error } = await sb.from('fin_docs').update({ data }).eq('path', coll + '/' + id).select('path');
   if (error) throw error;
   if (!out || !out.length) throw new Error('Finance is limited to the Principal and the COO.');
+}
+async function setDoc(coll, id, data, exists) {
+  if (exists) return putDoc(coll, id, data);
+  const { error } = await sb.from('fin_docs').insert({ path: coll + '/' + id, coll, doc_id: id, data });
+  if (error) throw error;
 }
 async function delDoc(coll, id) {
   const { data: out, error } = await sb.from('fin_docs').delete().eq('path', coll + '/' + id).select('path');
@@ -191,10 +231,10 @@ const fileSafe = s => String(s || '').replace(/[^\w.-]+/g, '-');
 /* ---------- render ---------- */
 let rq = 0;
 const schedule = () => { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); };
-const TABS = [['overview', 'Overview'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['cash', 'Cash & bank'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings']];
 function renderChrome() {
   const fys = new Set([fyOf(today()), S.fy]);
-  [...S.invoices.map(i => i.date), ...S.receipts.map(r => r.date)].forEach(d => d && fys.add(fyOf(d)));
+  [...S.invoices.map(i => i.date), ...S.receipts.map(r => r.date), ...S.moves.map(m => m.date)].forEach(d => d && fys.add(fyOf(d)));
   $('#fySel').innerHTML = [...fys].sort((a, b) => b - a).map(y => opt(y, 'FY ' + fyLabel(y), y === S.fy)).join('');
   $('#fyWrap').hidden = !S.loaded;
   const overdueCt = S.invoices.filter(i => invStatus(i) === 'overdue').length;
@@ -204,7 +244,7 @@ function renderChrome() {
 function render() {
   renderChrome();
   if (!S.loaded) return;
-  const v = { overview, billing, invoices, reports, activity, settings }[S.tab] || overview;
+  const v = { overview, billing, invoices, cash: cashbook, reports, activity, settings }[S.tab] || overview;
   $('#app').innerHTML = v();
 }
 function notice(title, body, link) {
@@ -231,13 +271,15 @@ function overview() {
   const starter = empty ? `<div class="panel"><div class="empty"><strong>Finance is open and empty</strong>Start by adding a project's fee and payment milestones. Pick it from SLATE OS so the project code matches, then raise invoices against each milestone.
     <div class="actions" style="justify-content:center"><button class="btn pri" data-act="new-project">Add first project fee</button></div></div></div>` : '';
   return `
-  <div class="head"><div><h2>Studio billing</h2><p>FY ${fyLabel(fy)} · July to June · figures in BDT</p></div>
+  <div class="head"><div><h2>Studio finance</h2><p>FY ${fyLabel(fy)} · July to June · figures in BDT · billed ${compact(billed)} this year</p></div>
     <div class="actions"><button class="btn" data-act="new-project">Add project fee</button><button class="btn pri" data-act="new-invoice" ${S.projects.length ? '' : 'disabled'}>New invoice</button></div></div>
   ${starter}
   <div class="kpis">
+    ${(() => { const ac = activeAccts(), tot = ac.reduce((s, a) => s + acctBal(a, t), 0), v = ac.filter(a => a.kind === 'cash').reduce((s, a) => s + acctBal(a, t), 0);
+      return ac.length ? `<div class="kpi" data-tab="cash" role="link" tabindex="0" style="cursor:pointer"><div class="lb">Cash & bank now</div><div class="v">${compact(tot)}</div><div class="s">${compact(v)} vault · ${compact(tot - v)} bank</div></div>`
+        : `<div class="kpi" data-tab="cash" role="link" tabindex="0" style="cursor:pointer"><div class="lb">Cash & bank</div><div class="v">—</div><div class="s"><b class="bad">Set up vault and bank</b></div></div>`; })()}
     <div class="kpi"><div class="lb">Receivable now</div><div class="v">${compact(recv)}</div><div class="s">${overdue.length ? `<b class="bad">${compact(overdueAmt)}</b> overdue on ${overdue.length}` : `${open.length} open invoice${open.length === 1 ? '' : 's'}`}</div></div>
     <div class="kpi"><div class="lb">Received · FY</div><div class="v">${compact(cashIn)}</div><div class="s">${compact(withheld)} withheld (AIT/VDS)</div></div>
-    <div class="kpi"><div class="lb">Billed · FY</div><div class="v">${compact(billed)}</div><div class="s">${billedFY.length} invoice${billedFY.length === 1 ? '' : 's'} · excl. VAT</div></div>
     <div class="kpi"><div class="lb">Not yet billed</div><div class="v">${compact(unbilled)}</div><div class="s">across ${active.length} active project${active.length === 1 ? '' : 's'}</div></div>
   </div>
   <div class="panel"><div class="ph"><h3>Billed and received by month</h3><div class="legend"><span style="--c:var(--muted)">Billed</span><span style="--c:var(--red)">Received</span></div></div>
@@ -415,7 +457,11 @@ function invoiceForm(i, preset = {}) {
   if (i && invStatus(i) !== 'draft') { toast('Issued invoices are fixed. Void it and issue a corrected one.'); return; }
   const active = S.projects.filter(p => (p.status || 'active') !== 'closed' || p.id === (i?.projectId || preset.pid));
   if (!active.length) { toast('Add a project fee first.'); return; }
-  const d = i?.date || today(), pid = i?.projectId || preset.pid || active[0].id;
+  const st = S.settings, d = i?.date || today(), pid = i?.projectId || preset.pid || active[0].id;
+  // tax setup: an existing draft keeps its own; a new invoice starts as a bank invoice with the government rates
+  const T = i && i.mode ? { mode: i.mode, vatOn: !!i.vatOn, aitOn: !!i.aitOn, vatRate: +i.vatRate || +st.vatPct, aitRate: +i.aitRate || +st.aitPct, taxMode: i.taxMode || 'added' }
+    : { mode: 'bank', vatOn: true, aitOn: true, vatRate: +st.vatPct || 0, aitRate: +st.aitPct || 0, taxMode: st.bankTaxMode || 'added' };
+  const segBtn = (grp, v, l) => `<button type="button" data-pick="${grp}" data-v="${v}" aria-pressed="false">${l}</button>`;
   openSheet(`${sheetHead(i ? 'Edit draft invoice' : 'New invoice', i ? esc(i.no) : 'Pick the project and the milestone you’re billing.')}
   <form id="if">
     <label class="f" for="i_proj">Project<select id="i_proj" name="projectId">${active.map(p => opt(p.id, `${p.code} · ${p.client || p.name}`, p.id === pid)).join('')}</select></label>
@@ -423,37 +469,64 @@ function invoiceForm(i, preset = {}) {
     <label class="f" for="i_desc">Description on invoice<input id="i_desc" name="desc" required value="${esc(i?.desc)}"></label>
     <div class="fg">
       <label class="f" for="i_no">Invoice number<input id="i_no" name="no" required value="${esc(i?.no || nextInvNo(d))}" class="mono"></label>
-      <label class="f" for="i_amt">Amount (BDT, excl. VAT)<input id="i_amt" name="amount" type="number" min="0" step="1" required value="${esc(i?.amount)}"></label>
       <label class="f" for="i_date">Invoice date<input id="i_date" name="date" type="date" required value="${d}"></label>
-      <label class="f" for="i_due">Due date<input id="i_due" name="due" type="date" required value="${i?.due || addDays(d, +S.settings.termsDays || 0)}"></label>
     </div>
-    <label class="check" for="i_vat"><input id="i_vat" name="vat" type="checkbox" ${i && +i.vatPct ? 'checked' : ''}> Add VAT at ${i && +i.vatPct ? i.vatPct : S.settings.vatPct}% <span class="hint">(only when the client asks for a VAT invoice)</span></label>
+    <div class="sec-t">Payment</div>
+    <div class="seg" role="group" aria-label="Payment">${segBtn('mode', 'bank', 'Bank')}${segBtn('mode', 'cash', 'Cash')}</div>
+    <p class="hint" id="iModeHint" style="margin:-6px 0 0"></p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <label class="check" for="i_vat"><input id="i_vat" type="checkbox"> VAT <span class="num">${esc(T.vatRate)}%</span></label>
+      <label class="check" for="i_ait"><input id="i_ait" type="checkbox"> AIT <span class="num">${esc(T.aitRate)}%</span></label>
+    </div>
+    <div id="iTaxModeWrap"><div class="seg" role="group" aria-label="How taxes are handled">${segBtn('taxMode', 'added', 'Added on top')}${segBtn('taxMode', 'inclusive', 'Inclusive')}</div>
+      <p class="hint" id="iTaxHint" style="margin:6px 0 0"></p></div>
+    <div class="fg">
+      <label class="f" for="i_amt"><span id="iAmtLbl">Amount (BDT)</span><input id="i_amt" name="entered" type="number" min="0" step="1" required value="${esc(i ? (i.entered ?? i.amount) : '')}"></label>
+      <label class="f" for="i_due">Due date<input id="i_due" name="due" type="date" required value="${i?.due || addDays(d, +st.termsDays || 0)}"></label>
+    </div>
     <dl class="kv" id="iTot"></dl>
     <p class="hint" id="iLock"></p>
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn" type="submit" value="draft">Save as draft</button><button class="btn pri" type="submit" value="issued">Issue invoice</button></div>
   </form>`, root => {
-    const f = $('#if', root); const vatRate = i && +i.vatPct ? +i.vatPct : +S.settings.vatPct;
+    const f = $('#if', root);
+    const showPicks = () => root.querySelectorAll('[data-pick]').forEach(b => b.setAttribute('aria-pressed', String(T[b.dataset.pick] === b.dataset.v)));
+    const calc = () => taxCalc({ entered: f.entered.value, ...T });
+    const tot = () => {
+      T.vatOn = f.querySelector('#i_vat').checked; T.aitOn = f.querySelector('#i_ait').checked;
+      const anyTax = T.vatOn || T.aitOn, c = calc();
+      $('#iTaxModeWrap', root).hidden = !anyTax;
+      $('#iModeHint', root).textContent = T.mode === 'bank' ? 'Paid into a bank account. VAT and AIT apply as per government rules.' : 'Paid in cash. VAT and AIT are optional; tick them only if this client needs them.';
+      $('#iTaxHint', root).textContent = T.taxMode === 'inclusive' ? 'The amount you enter is the whole invoice. VAT and AIT come out of it, so SLATE keeps less.' : 'The amount you enter is what SLATE keeps. The invoice is grossed up so the fee stays whole after the client deducts AIT.';
+      $('#iAmtLbl', root).textContent = !anyTax ? 'Amount (BDT)' : T.taxMode === 'inclusive' ? 'Invoice total incl. taxes (BDT)' : 'Fee SLATE keeps (BDT)';
+      $('#iTot', root).innerHTML = `<dt>Fee (taxable value)</dt><dd>${tk(c.base)}</dd>${T.vatOn ? `<dt>VAT ${T.vatRate}%</dt><dd>${tk(c.vat)}</dd>` : ''}<dt class="tot">Invoice total</dt><dd class="tot">${tk(c.total)}</dd>
+        ${T.aitOn ? `<dt>AIT ${T.aitRate}% deducted by client</dt><dd>− ${tk(c.ait)}</dd>` : ''}${anyTax ? `<dt>Client pays</dt><dd>${tk(c.total - c.ait)}${T.vatOn ? `<br><small class="muted">or ${tk(c.net)} if they deduct VAT at source (VDS)</small>` : ''}</dd>` : ''}
+        <dt class="tot">SLATE keeps</dt><dd class="tot" style="color:var(--good)">${tk(c.net)}</dd>`;
+      $('#iLock', root).textContent = locked(f.date.value) ? `FY ${fyLabel(fyOf(f.date.value))} is closed. Pick a date in an open year, or ask the Principal to reopen it.` : '';
+      $('#iLock', root).className = 'hint err'; showPicks(); };
+    const setMode = m => { T.mode = m; const on = m === 'bank'; f.querySelector('#i_vat').checked = on; f.querySelector('#i_ait').checked = on; if (on) T.taxMode = st.bankTaxMode || 'added'; tot(); };
+    f.querySelector('#i_vat').checked = T.vatOn; f.querySelector('#i_ait').checked = T.aitOn;
+    f.addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (!b) return; if (b.dataset.pick === 'mode') setMode(b.dataset.v); else { T.taxMode = b.dataset.v; tot(); } });
     const fillMs = keep => { const p = prj(f.projectId.value); const ms = p?.milestones || [];
       f.milestoneId.innerHTML = ms.map(m => opt(m.id, `${m.label} · ${m.pct}%${msInvoiced(p, m, i?.id) ? ' (invoiced)' : ''}`, (keep || preset.ms) === m.id)).join('') + opt('', 'Other / not a milestone', keep === '');
       if (!keep && keep !== '' && !preset.ms) { const first = ms.find(m => !msInvoiced(p, m, i?.id)); if (first) f.milestoneId.value = first.id; } };
     const fillAmt = () => { const p = prj(f.projectId.value), m = p?.milestones?.find(x => x.id === f.milestoneId.value);
-      if (m) { f.amount.value = Math.round((+p.fee || 0) * m.pct / 100); f.desc.value = `${m.label} (${m.pct}% of design fee) · ${p.name}`; } tot(); };
-    const tot = () => { const a = +f.amount.value || 0, v = f.vat.checked ? a * vatRate / 100 : 0;
-      $('#iTot', root).innerHTML = `<dt>Fee</dt><dd>${tk(a)}</dd><dt>VAT ${f.vat.checked ? vatRate : 0}%</dt><dd>${tk(v)}</dd><dt class="tot">Invoice total</dt><dd class="tot">${tk(a + v)}</dd>`;
-      $('#iLock', root).textContent = locked(f.date.value) ? `FY ${fyLabel(fyOf(f.date.value))} is closed. Pick a date in an open year, or ask the Principal to reopen it.` : '';
-      $('#iLock', root).className = 'hint err'; };
+      if (m) { f.entered.value = Math.round((+p.fee || 0) * m.pct / 100); f.desc.value = `${m.label} (${m.pct}% of design fee) · ${p.name}`; } tot(); };
     fillMs(i ? (i.milestoneId || '') : null); if (!i) fillAmt(); else tot();
     f.projectId.addEventListener('change', () => { preset = {}; fillMs(null); fillAmt(); });
     f.milestoneId.addEventListener('change', fillAmt);
-    f.amount.addEventListener('input', tot); f.vat.addEventListener('change', tot);
-    f.date.addEventListener('change', () => { f.due.value = addDays(f.date.value, +S.settings.termsDays || 0); if (!i) f.no.value = nextInvNo(f.date.value); tot(); });
+    f.addEventListener('input', e => { if (e.target === f.entered) tot(); });
+    f.addEventListener('change', e => { if (e.target.type === 'checkbox') tot(); });
+    f.date.addEventListener('change', () => { f.due.value = addDays(f.date.value, +st.termsDays || 0); if (!i) f.no.value = nextInvNo(f.date.value); tot(); });
     f.addEventListener('submit', async ev => { ev.preventDefault();
-      const mode = ev.submitter?.value || 'issued', no = f.no.value.trim();
+      const status = ev.submitter?.value || 'issued', no = f.no.value.trim(), c = calc();
       if (S.invoices.some(x => x.no === no && x.id !== i?.id)) { toast('That invoice number is already used.'); return; }
-      if (!(+f.amount.value > 0)) { toast('Enter the invoice amount.'); return; }
+      if (!(c.base > 0)) { toast('Enter the invoice amount.'); return; }
       if (f.due.value < f.date.value) { toast('The due date is before the invoice date.'); return; }
-      const data = { projectId: f.projectId.value, milestoneId: f.milestoneId.value, desc: f.desc.value.trim(), no, amount: +f.amount.value || 0, date: f.date.value, due: f.due.value, vatPct: f.vat.checked ? vatRate : 0, status: mode };
-      const msg = mode === 'draft' ? 'Draft saved' : 'Invoice issued';
+      const anyTax = T.vatOn || T.aitOn;
+      const data = { projectId: f.projectId.value, milestoneId: f.milestoneId.value, desc: f.desc.value.trim(), no, date: f.date.value, due: f.due.value, status,
+        mode: T.mode, vatOn: T.vatOn, aitOn: T.aitOn, vatRate: T.vatRate, aitRate: T.aitRate, taxMode: anyTax ? T.taxMode : 'added',
+        entered: +f.entered.value || 0, amount: c.base, vatPct: T.vatOn ? T.vatRate : 0, ait: c.ait, net: c.net };
+      const msg = status === 'draft' ? 'Draft saved' : 'Invoice issued';
       const ok = i ? await run(() => putDoc('invoices', i.id, { ...strip(i), ...data }), msg) : await run(() => addDoc('invoices', data), msg);
       if (ok) closeSheet(); });
   });
@@ -462,14 +535,18 @@ function invoiceSheet(i) {
   const p = prj(i.projectId), st = invStatus(i), recs = recsOf(i).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const vat = (+i.amount || 0) * (+i.vatPct || 0) / 100, bal = Math.max(0, invTotal(i) - invSettled(i));
   const lk = locked(i.date);
+  const taxLine = i.mode ? `${MODE_LABEL[i.mode]} invoice${i.vatOn || i.aitOn ? ` · ${[i.vatOn && `VAT ${i.vatRate}%`, i.aitOn && `AIT ${i.aitRate}%`].filter(Boolean).join(' + ')} ${i.taxMode === 'inclusive' ? 'inclusive' : 'added on top'}` : ' · no VAT or AIT'}` : '';
   openSheet(`${sheetHead(i.no, `${esc(p ? p.client : '')} · ${esc(p ? p.name : '')}`)}
     <div style="display:flex;gap:8px;align-items:center;margin:-6px 0 14px;flex-wrap:wrap">${chip(st, ST_LABEL[st])}<span class="hint">${st === 'draft' ? 'Draft, not sent' : 'Issued'} ${fmtDate(i.date)} · due ${fmtDate(i.due)}</span>${lk ? chip('', 'FY closed') : ''}</div>
-    <p style="margin:0 0 12px">${esc(i.desc)}</p>
-    <dl class="kv"><dt>Fee</dt><dd>${tk(i.amount)}</dd><dt>VAT ${+i.vatPct || 0}%</dt><dd>${tk(vat)}</dd><dt class="tot">Invoice total</dt><dd class="tot">${tk(invTotal(i))}</dd>
+    <p style="margin:0 0 4px">${esc(i.desc)}</p>
+    ${taxLine ? `<p class="hint" style="margin:0 0 12px">${esc(taxLine)}</p>` : ''}
+    <dl class="kv"><dt>Fee (taxable value)</dt><dd>${tk(i.amount)}</dd>${+i.vatPct ? `<dt>VAT ${+i.vatPct}%</dt><dd>${tk(vat)}</dd>` : ''}<dt class="tot">Invoice total</dt><dd class="tot">${tk(invTotal(i))}</dd>
+      ${invAit(i) ? `<dt>AIT expected from client</dt><dd>${tk(invAit(i))}</dd>` : ''}<dt>SLATE keeps</dt><dd>${tk(invNet(i))}</dd>
       ${st !== 'draft' ? `<dt>Settled so far</dt><dd>${tk(invSettled(i))}</dd><dt class="tot">Balance</dt><dd class="tot" style="color:var(${bal > 0 && st !== 'void' ? '--bad' : '--good'})">${tk(st === 'void' ? 0 : bal)}</dd>` : ''}</dl>
     ${st === 'void' ? `<p class="hint" style="margin-top:10px">Voided ${fmtDate(i.voidedOn)}${i.voidReason ? ` · ${esc(i.voidReason)}` : ''}</p>` : ''}
     ${st !== 'draft' ? `<div class="sec-t" style="margin-top:18px">Payments received</div>
-    <div class="mini-list rows" style="margin-top:10px">${recs.length ? recs.map(r => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;cursor:default"><div style="min-width:0"><div class="t">${fmtDate(r.date)} · ${esc(r.method)}</div><div class="sub">${r.ref ? `Ref ${esc(r.ref)} · ` : ''}${+r.ait ? `AIT ${tk(r.ait)} · ` : ''}${+r.vds ? `VDS ${tk(r.vds)} · ` : ''}by ${who(r.createdBy)}</div></div><div class="amt">${tk(r.received)}</div>${!locked(r.date) ? `<button class="btn ghost sm danger" data-act="del-receipt" data-id="${r.id}">Remove</button>` : '<span></span>'}</div>`).join('') : `<div class="empty" style="padding:14px">No payments recorded yet.</div>`}</div>` : ''}
+    <div class="mini-list rows" style="margin-top:10px">${recs.length ? recs.map(r => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;cursor:default"><div style="min-width:0"><div class="t">${fmtDate(r.date)} · ${esc((acct(r.accountId) || {}).name || r.method || '')}</div><div class="sub">${r.mrNo ? `<span class="mono">${esc(r.mrNo)}</span> · ` : ''}${r.ref ? `Ref ${esc(r.ref)} · ` : ''}${+r.ait ? `AIT ${tk(r.ait)} · ` : ''}${+r.vds ? `VDS ${tk(r.vds)} · ` : ''}by ${who(r.createdBy)}</div></div><div class="amt">${tk(r.received)}</div>
+      <div style="display:flex;gap:4px">${r.mrNo ? `<button class="btn ghost sm" data-act="doc-receipt" data-id="${r.id}">Receipt</button>` : ''}${!locked(r.date) ? `<button class="btn ghost sm danger" data-act="del-receipt" data-id="${r.id}">Remove</button>` : ''}</div></div>`).join('') : `<div class="empty" style="padding:14px">No payments recorded yet.</div>`}</div>` : ''}
     <p class="hint">Raised by ${who(i.createdBy)}${i.updatedBy && i.updatedAt !== i.createdAt ? ` · last change by ${who(i.updatedBy)}, ${fmtWhen(i.updatedAt)}` : ''}</p>
     <div class="foot">
       ${st !== 'void' ? `<button class="btn" data-act="doc-invoice" data-id="${i.id}">${st === 'draft' ? 'Preview' : 'Print / PDF'}</button>` : ''}
@@ -496,15 +573,23 @@ function dueForm(i) {
   });
 }
 function receiptForm(i) {
+  const accts = activeAccts();
+  if (!accts.length) { closeSheet(); S.tab = 'cash'; render(); toast('Add your cash and bank accounts first, so each payment goes into one.'); return; }
   const bal = Math.max(0, invTotal(i) - invSettled(i));
+  const aitLeft = Math.max(0, invAit(i) - recsOf(i).reduce((s, r) => s + (+r.ait || 0), 0));
+  const want = i.mode === 'cash' ? ['cash'] : ['bank', 'mfs'];
+  const defA = (accts.find(a => want.includes(a.kind)) || accts[0]).id;
+  const methodFor = a => a?.kind === 'cash' ? 'Cash' : a?.kind === 'mfs' ? 'bKash / MFS' : 'Bank transfer';
   openSheet(`${sheetHead('Record payment', `${esc(i.no)} · balance ${tk(bal)}`)}
   <form id="rf">
     <div class="fg">
       <label class="f" for="r_date">Date received<input id="r_date" name="date" type="date" required value="${today()}"></label>
-      <label class="f" for="r_method">Method<select id="r_method" name="method">${METHODS.map(m => opt(m, m)).join('')}</select></label>
-      <label class="f" for="r_amt">Amount received (BDT)<input id="r_amt" name="received" type="number" min="0" step="1" required value="${Math.round(bal)}"></label>
+      <label class="f" for="r_acct">Received into<select id="r_acct" name="accountId">${accts.map(a => opt(a.id, `${a.name} · ${ACCT_KIND[a.kind]}`, a.id === defA)).join('')}</select></label>
+      <label class="f" for="r_method">Method<select id="r_method" name="method">${METHODS.map(m => opt(m, m, m === methodFor(acct(defA)))).join('')}</select></label>
       <label class="f" for="r_ref">Cheque / transaction ref<input id="r_ref" name="ref"></label>
-      <label class="f" for="r_ait">AIT deducted by client<input id="r_ait" name="ait" type="number" min="0" step="1" value="0"></label>
+      <label class="f" for="r_amt">Amount received (BDT)<input id="r_amt" name="received" type="number" min="0" step="1" required value="${Math.round(Math.max(0, bal - aitLeft))}"></label>
+      <label class="f" for="r_mr">Money receipt no.<input id="r_mr" name="mrNo" required class="mono" value="${esc(nextMrNo(today()))}"></label>
+      <label class="f" for="r_ait">AIT deducted by client<input id="r_ait" name="ait" type="number" min="0" step="1" value="${Math.round(aitLeft)}"></label>
       <label class="f" for="r_vds">VAT deducted by client (VDS)<input id="r_vds" name="vds" type="number" min="0" step="1" value="0"></label>
     </div>
     <p class="hint">Fill AIT and VDS only if the client deducted tax at source and gave you a challan or certificate for it.</p>
@@ -512,31 +597,27 @@ function receiptForm(i) {
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Record payment</button></div>
   </form>`, root => {
     const f = $('#rf', root);
-    const upd = () => { const s = (+f.received.value || 0) + (+f.ait.value || 0) + (+f.vds.value || 0), left = bal - s;
-      const h = $('#rHint', root); h.textContent = locked(f.date.value) ? `FY ${fyLabel(fyOf(f.date.value))} is closed.` : left > 1 ? `Leaves ${tk(left)} outstanding.` : left < -1 ? `That's ${tk(-left)} more than the balance.` : 'Settles this invoice in full.';
-      h.className = 'hint' + (left < -1 || locked(f.date.value) ? ' err' : ''); };
-    f.addEventListener('input', e => { if (e.target === f.ait || e.target === f.vds) f.received.value = Math.max(0, Math.round(bal - (+f.ait.value || 0) - (+f.vds.value || 0))); upd(); }); upd();
+    const upd = () => { const s = (+f.received.value || 0) + (+f.ait.value || 0) + (+f.vds.value || 0), left = bal - s, a = acct(f.accountId.value);
+      const h = $('#rHint', root);
+      h.textContent = locked(f.date.value) ? `FY ${fyLabel(fyOf(f.date.value))} is closed.` : a && f.date.value < a.openingDate ? `${a.name} starts on ${fmtDate(a.openingDate)}. Pick a later date or another account.` : left > 1 ? `Leaves ${tk(left)} outstanding.` : left < -1 ? `That's ${tk(-left)} more than the balance.` : 'Settles this invoice in full.';
+      h.className = 'hint' + (left < -1 || locked(f.date.value) || (a && f.date.value < a.openingDate) ? ' err' : ''); };
+    f.addEventListener('input', e => { if (e.target === f.ait || e.target === f.vds) f.received.value = Math.max(0, Math.round(bal - (+f.ait.value || 0) - (+f.vds.value || 0))); upd(); });
+    f.accountId.addEventListener('change', () => { f.method.value = methodFor(acct(f.accountId.value)); upd(); });
+    f.date.addEventListener('change', () => { f.mrNo.value = nextMrNo(f.date.value); upd(); });
+    upd();
     f.addEventListener('submit', async ev => { ev.preventDefault();
-      const data = { invoiceId: i.id, projectId: i.projectId, date: f.date.value, method: f.method.value, received: +f.received.value || 0, ait: +f.ait.value || 0, vds: +f.vds.value || 0, ref: f.ref.value.trim() };
-      if (await run(() => addDoc('receipts', data), 'Payment recorded')) invoiceSheet(S.invoices.find(x => x.id === i.id) || i); });
+      const a = acct(f.accountId.value), mrNo = f.mrNo.value.trim();
+      if (a && f.date.value < a.openingDate) { toast(`${a.name} starts on ${fmtDate(a.openingDate)}.`); return; }
+      if (S.receipts.some(r => r.mrNo === mrNo)) { toast('That money receipt number is already used.'); return; }
+      const data = { invoiceId: i.id, projectId: i.projectId, date: f.date.value, accountId: f.accountId.value, method: f.method.value, mrNo,
+        received: +f.received.value || 0, ait: +f.ait.value || 0, vds: +f.vds.value || 0, ref: f.ref.value.trim() };
+      if (await run(() => addDoc('receipts', data), `Payment recorded · receipt ${mrNo}`)) invoiceSheet(S.invoices.find(x => x.id === i.id) || i); });
   });
 }
 
-/* ----- invoice document (opens in a new tab: print or save as PDF) ----- */
-function invoiceDoc(i) {
-  const p = prj(i.projectId) || {}, vat = (+i.amount || 0) * (+i.vatPct || 0) / 100, st = S.settings, draft = invStatus(i) === 'draft';
-  const body = `<h1>Invoice${draft ? ' <span class="dr">Draft</span>' : ''}</h1>
-  <div class="ref"><span>No <b>${esc(i.no)}</b></span><span>Date <b>${fmtDate(i.date)}</b></span><span>Due <b>${fmtDate(i.due)}</b></span>${st.bin && +i.vatPct ? `<span>BIN <b>${esc(st.bin)}</b></span>` : ''}</div>
-  <div class="to">Bill to<b>${esc(p.client || '')}</b>${p.clientAddress ? `<span class="pre">${esc(p.clientAddress)}</span><br>` : ''}Project: ${esc(p.name || '')} (${esc(p.code || '')})${p.location ? `<br>Site: ${esc(p.location)}` : ''}</div>
-  <table><thead><tr><th>Description</th><th class="n">Amount (BDT)</th></tr></thead><tbody>
-  <tr><td>${esc(i.desc)}</td><td class="n">${nf.format(Math.round(+i.amount || 0))}</td></tr>
-  ${+i.vatPct ? `<tr><td>VAT ${i.vatPct}%</td><td class="n">${nf.format(Math.round(vat))}</td></tr>` : ''}
-  <tr class="tot"><td>Total payable</td><td class="n">${nf.format(Math.round(invTotal(i)))}</td></tr></tbody></table>
-  <p class="words">In words: ${esc(takaWords(invTotal(i)))}</p>
-  ${st.bank ? `<h2>Payment details</h2><pre>${esc(st.bank)}</pre>` : ''}
-  ${st.invNote ? `<p class="note">${esc(st.invNote)}</p>` : ''}
-  <div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(STUDIO.name)}</div></div>`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Invoice ${esc(i.no)}</title>
+/* ----- printable documents (open in a new tab: print or save as PDF) ----- */
+function docShell(title, ref, body) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap">
 <style>
 @page{size:A4;margin:0}*{box-sizing:border-box}
@@ -557,18 +638,55 @@ h2{font:500 9pt "Futura","Jost",sans-serif;letter-spacing:.14em;text-transform:u
 table{width:100%;border-collapse:collapse;font-size:9.5pt}
 th{font:500 7.5pt "Jost",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#5F6670;text-align:left;padding:2mm 0;border-bottom:.75pt solid #1A1D21}
 td{padding:2.2mm 0;border-bottom:.5pt solid #D8DCE0;vertical-align:top}td.n,th.n{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
-tr.tot td{border-bottom:0;border-top:1pt solid #1A1D21;font-weight:600}
+tr.tot td{border-bottom:0;border-top:1pt solid #1A1D21;font-weight:600}tr.sub td{color:#5F6670;border-bottom:0}
 .words{font-size:9pt;color:#5F6670;margin:3mm 0 0}
 .sig{display:flex;gap:20mm;margin-top:16mm}.sig div{min-width:60mm;border-top:.75pt solid #1A1D21;padding-top:2mm;font-size:9pt}.sig b{display:block;font-weight:600}
 .foot{position:absolute;left:18mm;right:18mm;bottom:9mm;display:flex;justify-content:space-between;font:400 7.5pt "Jost",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#8A9098}
 @media (max-width:820px){.foot{position:static;margin-top:24px}}
 .note{font-size:8.5pt;color:#5F6670;margin-top:5mm}pre{font:inherit;white-space:pre-wrap;margin:0}
+.amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #1A1D21;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font:500 16pt "IBM Plex Mono",monospace}
 </style></head><body><div class="bar"><button class="p" onclick="print()">Print or save as PDF</button><button onclick="close()">Close</button></div><div class="page">
 <div class="lh"><div class="brand"><i></i><div><b>SLATE</b><small>Architecture &amp; Design</small></div></div>
 <div class="addr">${esc(STUDIO.addr)}<br>${esc(STUDIO.phone)} · ${esc(STUDIO.email)}<br>${esc(STUDIO.web)}</div></div>
 ${body}
-<div class="foot"><span>${esc(STUDIO.tag)}</span><span>Invoice ${esc(i.no)}</span></div>
+<div class="foot"><span>${esc(STUDIO.tag)}</span><span>${esc(ref)}</span></div>
 </div></body></html>`;
+}
+const sigBlock = st => `<div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(STUDIO.name)}</div></div>`;
+function invoiceDoc(i) {
+  const p = prj(i.projectId) || {}, vat = (+i.amount || 0) * (+i.vatPct || 0) / 100, st = S.settings, draft = invStatus(i) === 'draft';
+  const bankMode = i.mode ? i.mode === 'bank' : true;
+  const body = `<h1>Invoice${draft ? ' <span class="dr">Draft</span>' : ''}</h1>
+  <div class="ref"><span>No <b>${esc(i.no)}</b></span><span>Date <b>${fmtDate(i.date)}</b></span><span>Due <b>${fmtDate(i.due)}</b></span>${st.bin && +i.vatPct ? `<span>BIN <b>${esc(st.bin)}</b></span>` : ''}</div>
+  <div class="to">Bill to<b>${esc(p.client || '')}</b>${p.clientAddress ? `<span class="pre">${esc(p.clientAddress)}</span><br>` : ''}Project: ${esc(p.name || '')} (${esc(p.code || '')})${p.location ? `<br>Site: ${esc(p.location)}` : ''}</div>
+  <table><thead><tr><th>Description</th><th class="n">Amount (BDT)</th></tr></thead><tbody>
+  <tr><td>${esc(i.desc)}</td><td class="n">${nf.format(Math.round(+i.amount || 0))}</td></tr>
+  ${+i.vatPct ? `<tr><td>VAT ${i.vatPct}%</td><td class="n">${nf.format(Math.round(vat))}</td></tr>` : ''}
+  <tr class="tot"><td>Total payable</td><td class="n">${nf.format(Math.round(invTotal(i)))}</td></tr>
+  ${invAit(i) ? `<tr class="sub"><td>AIT ${i.aitRate}% deductible at source by the client</td><td class="n">${nf.format(invAit(i))}</td></tr>` : ''}</tbody></table>
+  <p class="words">In words: ${esc(takaWords(invTotal(i)))}</p>
+  ${invAit(i) || +i.vatPct ? `<p class="note">Where VAT or AIT is deducted at source, please share the treasury challan or certificate with SLATE.</p>` : ''}
+  <h2>Payment</h2><p style="margin:0">${bankMode ? 'By bank transfer or account-payee cheque in favour of SLATE Architecture &amp; Design.' : 'In cash. An official SLATE money receipt is issued for every payment.'}</p>
+  ${bankMode && st.bank ? `<pre style="margin-top:2mm">${esc(st.bank)}</pre>` : ''}
+  ${st.invNote ? `<p class="note">${esc(st.invNote)}</p>` : ''}
+  ${sigBlock(st)}`;
+  return docShell(`Invoice ${i.no}`, `Invoice ${i.no}`, body);
+}
+function receiptDoc(r) {
+  const i = S.invoices.find(x => x.id === r.invoiceId) || {}, p = prj(i.projectId) || {}, st = S.settings, a = acct(r.accountId) || {};
+  const body = `<h1>Money receipt</h1>
+  <div class="ref"><span>Receipt no <b>${esc(r.mrNo)}</b></span><span>Date <b>${fmtDate(r.date)}</b></span><span>Against invoice <b>${esc(i.no || '')}</b></span></div>
+  <div class="to">Received with thanks from<b>${esc(p.client || '')}</b>Project: ${esc(p.name || '')} (${esc(p.code || '')})</div>
+  <div class="amtbox"><span>Amount received</span><b>BDT ${nf.format(Math.round(+r.received || 0))}</b></div>
+  <p class="words">In words: ${esc(takaWords(r.received))}</p>
+  <table style="margin-top:6mm"><tbody>
+    <tr><td>Paid by</td><td class="n" style="font-family:inherit">${esc(r.method || '')}${a.kind && a.kind !== 'cash' ? ` · ${esc(a.name)}` : ''}${r.ref ? ` · Ref ${esc(r.ref)}` : ''}</td></tr>
+    ${+r.ait ? `<tr><td>AIT deducted at source by client</td><td class="n">${nf.format(Math.round(+r.ait))}</td></tr>` : ''}
+    ${+r.vds ? `<tr><td>VAT deducted at source by client (VDS)</td><td class="n">${nf.format(Math.round(+r.vds))}</td></tr>` : ''}
+    <tr class="tot"><td>Settled against the invoice</td><td class="n">${nf.format(Math.round((+r.received || 0) + (+r.ait || 0) + (+r.vds || 0)))}</td></tr>
+  </tbody></table>
+  ${sigBlock(st)}`;
+  return docShell(`Money receipt ${r.mrNo}`, `Receipt ${r.mrNo}`, body);
 }
 function takaWords(n) {
   n = Math.round(+n || 0);
@@ -583,8 +701,170 @@ function takaWords(n) {
 function openDoc(html, name) {
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
   const w = window.open(url, '_blank');
-  if (!w) { saveFile(name, html, 'text/html'); toast('Pop-ups are blocked, so the invoice was downloaded instead.'); }
+  if (!w) { saveFile(name, html, 'text/html'); toast('Pop-ups are blocked, so the document was downloaded instead.'); }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* ----- Cash & bank ----- */
+const fyStart = fy => `${fy}-07-01`, fyEnd = fy => `${fy + 1}-06-30`;
+const monthEnd = ym => { const [y, m] = ym.split('-').map(Number); return iso(new Date(y, m, 0)); };
+const lastRecon = a => S.recons.filter(r => r.accountId === a.id).sort((x, y) => (y.month || '').localeCompare(x.month || ''))[0];
+function cashbook() {
+  const accts = activeAccts(), inactive = S.accounts.filter(a => a.active === false), t = today();
+  const sumKind = k => accts.filter(a => a.kind === k).reduce((s, a) => s + acctBal(a, t), 0);
+  const total = accts.reduce((s, a) => s + acctBal(a, t), 0);
+  const recent = [];
+  for (const a of S.accounts) for (const e of acctEntries(a)) if (inFY(e.date, S.fy)) recent.push({ ...e, a });
+  recent.sort((x, y) => (y.date || '').localeCompare(x.date || '') || (y.at || '').localeCompare(x.at || ''));
+  const acRow = a => { const b = acctBal(a, t), rc = lastRecon(a);
+    return `<button class="row r-prj" data-act="open-acct" data-id="${a.id}"><div style="min-width:0"><div class="t">${esc(a.name)}</div><div class="sub">${ACCT_KIND[a.kind]}${a.bank ? ' · ' + esc(a.bank) : ''}${a.number ? ' · <span class="mono">' + esc(a.number) + '</span>' : ''}${a.active === false ? ' · inactive' : ''}</div></div>
+      <div class="c2 sub">${rc ? `Checked to ${fmtShort(monthEnd(rc.month))} · ${Math.abs(+rc.diff || 0) < 1 ? '<span style="color:var(--good)">matched</span>' : `<span class="warnt">off by ${tk(Math.abs(rc.diff))}</span>`}` : 'Not checked yet'}</div>
+      <div class="amt" style="${b < 0 ? 'color:var(--bad)' : ''}">${tk(b)}</div></button>`; };
+  if (!S.accounts.length) return `
+  <div class="head"><div><h2>Cash & bank</h2><p>Every taka in and out, account by account.</p></div></div>
+  <div class="panel"><div class="empty"><strong>Set up the vault and the bank</strong>Add the office vault and the studio's bank account, each with what it held on the day you start counting. Client payments, transfers and drawings then post to them and keep both balances right.
+    <div class="actions" style="justify-content:center"><button class="btn" data-act="new-acct" data-v="cash">Add office vault</button><button class="btn pri" data-act="new-acct" data-v="bank">Add bank account</button></div></div></div>`;
+  return `
+  <div class="head"><div><h2>Cash & bank</h2><p>Balances as of today. Client payments, transfers and drawings post here; expenses and salaries will too.</p></div>
+    <div class="actions"><button class="btn" data-act="new-acct">Add account</button><button class="btn" data-act="new-move" data-v="transfer">Transfer</button><button class="btn" data-act="new-move" data-v="drawing">Owner’s drawing</button><button class="btn" data-act="new-move" data-v="capital">Capital in</button><button class="btn" data-act="new-move" data-v="income">Other income</button></div></div>
+  <div class="kpis">
+    <div class="kpi"><div class="lb">Total cash & bank</div><div class="v" style="${total < 0 ? 'color:var(--bad)' : ''}">${compact(total)}</div><div class="s">${accts.length} active account${accts.length === 1 ? '' : 's'}</div></div>
+    <div class="kpi"><div class="lb">Office vault</div><div class="v">${compact(sumKind('cash'))}</div><div class="s">count it at month end</div></div>
+    <div class="kpi"><div class="lb">Bank</div><div class="v">${compact(sumKind('bank'))}</div><div class="s">check against the statement</div></div>
+    ${accts.some(a => a.kind === 'mfs') ? `<div class="kpi"><div class="lb">Mobile wallets</div><div class="v">${compact(sumKind('mfs'))}</div><div class="s">bKash, Nagad</div></div>`
+      : (() => { const lm = (() => { const d = new Date(); d.setDate(0); return iso(d).slice(0, 7); })(), due = accts.filter(a => a.openingDate <= monthEnd(lm) && !S.recons.some(r => r.accountId === a.id && r.month === lm));
+        return `<div class="kpi"><div class="lb">Month-end check</div><div class="v">${due.length ? `${due.length} due` : 'Done'}</div><div class="s">${fmtShort(monthEnd(lm))}${due.length ? ' · ' + esc(due.map(a => a.name).join(', ')) : ' · all matched up'}</div></div>`; })()}
+  </div>
+  <div class="panel"><div class="ph"><h3>Accounts</h3><span class="meta">tap one for its book</span></div><div class="rows">${accts.map(acRow).join('')}${inactive.map(acRow).join('')}</div></div>
+  <div class="panel"><div class="ph"><h3>Money in and out · FY ${fyLabel(S.fy)}</h3><span class="meta">latest first</span></div>
+    ${recent.length ? `<div class="rows">${recent.slice(0, 25).map(e => entryRow(e, e.a)).join('')}</div>` : `<div class="empty">Nothing in or out in FY ${fyLabel(S.fy)} yet.</div>`}</div>`;
+}
+function entryRow(e, a) {
+  const act = e.kind === 'receipt' ? `data-act="open-receipt-inv" data-id="${e.id}"` : `data-act="edit-move" data-id="${e.id}"`;
+  return `<button class="row r-inv" ${act}><div style="min-width:0"><div class="t">${esc(e.what)}</div><div class="sub">${a ? esc(a.name) + ' · ' : ''}${esc(e.sub || '')}</div></div>
+    <div class="c2 sub">${fmtDate(e.date)}</div><span></span><div class="amt" style="color:var(${e.amt < 0 ? '--bad' : '--good'})">${e.amt < 0 ? '− ' : '+ '}${tk(Math.abs(e.amt))}</div></button>`;
+}
+function accountForm(a, kind) {
+  const src = a || { kind: kind || 'bank', openingDate: fyStart(fyOf(today())), opening: 0 };
+  const used = a && acctEntries(a).length;
+  openSheet(`${sheetHead(a ? 'Edit account' : 'Add account', a ? esc(a.name) : 'Enter what the account held on the date you start counting from.')}
+  <form id="af">
+    <div class="fg">
+      <label class="f" for="a_kind">Type<select id="a_kind" name="kind">${Object.entries(ACCT_KIND).map(([k, l]) => opt(k, l, src.kind === k)).join('')}</select></label>
+      <label class="f" for="a_name">Name<input id="a_name" name="name" required value="${esc(src.name || (src.kind === 'cash' ? 'Office vault' : ''))}" placeholder="e.g. City Bank current"></label>
+    </div>
+    <div class="fg" id="aBank">
+      <label class="f" for="a_bank">Bank / provider<input id="a_bank" name="bank" value="${esc(src.bank)}" placeholder="e.g. City Bank, Gulshan branch"></label>
+      <label class="f" for="a_no">Account number (last 4 is enough)<input id="a_no" name="number" value="${esc(src.number)}" class="mono" maxlength="20"></label>
+    </div>
+    <div class="fg">
+      <label class="f" for="a_open">Opening balance (BDT)<input id="a_open" name="opening" type="number" step="1" required value="${esc(src.opening)}"></label>
+      <label class="f" for="a_od">As of<input id="a_od" name="openingDate" type="date" required value="${esc(src.openingDate)}"></label>
+    </div>
+    <p class="hint">Start from a date you can verify: a bank statement balance, or cash counted in the drawer. Entries can't be dated before it.</p>
+    ${a ? `<label class="check" for="a_act"><input id="a_act" name="active" type="checkbox" ${a.active !== false ? 'checked' : ''}> Active <span class="hint">(inactive accounts keep their history but can't take new entries)</span></label>` : ''}
+    <label class="f" for="a_note">Notes<textarea id="a_note" name="note" rows="2">${esc(src.note)}</textarea></label>
+    <div class="foot">${a && !used ? `<button class="btn danger" type="button" data-act="del-acct" data-id="${a.id}">Delete</button>` : ''}<button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${a ? 'Save' : 'Add account'}</button></div>
+  </form>`, root => {
+    const f = $('#af', root);
+    const sync = () => { $('#aBank', root).hidden = f.kind.value === 'cash'; }; sync();
+    f.kind.addEventListener('change', () => { if (!a && (!f.name.value || f.name.value === 'Office vault')) f.name.value = f.kind.value === 'cash' ? 'Office vault' : ''; sync(); });
+    f.addEventListener('submit', async ev => { ev.preventDefault();
+      const first = a && acctEntries(a)[0];
+      if (first && f.openingDate.value > first.date) { toast(`This account already has an entry on ${fmtDate(first.date)}. The opening date must be on or before it.`); return; }
+      const data = { kind: f.kind.value, name: f.name.value.trim(), bank: f.kind.value === 'cash' ? '' : f.bank.value.trim(), number: f.kind.value === 'cash' ? '' : f.number.value.trim(),
+        opening: +f.opening.value || 0, openingDate: f.openingDate.value, active: a ? f.active.checked : true, note: f.note.value.trim() };
+      const ok = a ? await run(() => putDoc('accounts', a.id, { ...strip(a), ...data }), 'Account saved') : await run(() => addDoc('accounts', data), 'Account added');
+      if (ok) closeSheet(); });
+  });
+}
+function accountSheet(a) {
+  const fy = S.fy, all = acctEntries(a), t = today();
+  const bf = all.filter(e => e.date < fyStart(fy)).reduce((s, e) => s + e.amt, +a.opening || 0);
+  const rows = all.filter(e => inFY(e.date, fy));
+  const startsInFY = inFY(a.openingDate, fy), startsAfter = a.openingDate > fyEnd(fy);
+  let run = bf;
+  const lines = rows.map(e => { run += e.amt; return { ...e, bal: run }; }).reverse();
+  const checks = S.recons.filter(r => r.accountId === a.id).sort((x, y) => (y.month || '').localeCompare(x.month || '')).slice(0, 6);
+  openSheet(`${sheetHead(a.name, `${ACCT_KIND[a.kind]}${a.bank ? ' · ' + esc(a.bank) : ''}${a.number ? ' · <span class="mono">' + esc(a.number) + '</span>' : ''}`)}
+    <dl class="kv"><dt>${startsInFY ? `Opening balance, ${fmtDate(a.openingDate)}` : `Brought forward, 1 Jul ${fy}`}</dt><dd>${startsAfter ? '—' : tk(bf)}</dd>
+      <dt>In · FY ${fyLabel(fy)}</dt><dd style="color:var(--good)">${tk(rows.filter(e => e.amt > 0).reduce((s, e) => s + e.amt, 0))}</dd>
+      <dt>Out · FY ${fyLabel(fy)}</dt><dd style="color:var(--bad)">${tk(-rows.filter(e => e.amt < 0).reduce((s, e) => s + e.amt, 0))}</dd>
+      <dt class="tot">Balance today</dt><dd class="tot">${tk(acctBal(a, t))}</dd></dl>
+    <div class="sec-t" style="margin-top:18px">Book · FY ${fyLabel(fy)}</div>
+    <div class="mini-list rows" style="margin-top:10px">${lines.length ? lines.map(e => `<button class="row" style="grid-template-columns:minmax(0,1fr) auto" ${e.kind === 'receipt' ? `data-act="open-receipt-inv"` : `data-act="edit-move"`} data-id="${e.id}"><div style="min-width:0"><div class="t">${esc(e.what)}</div><div class="sub">${fmtDate(e.date)}${e.sub ? ' · ' + esc(e.sub) : ''}</div></div>
+      <div class="amt" style="color:var(${e.amt < 0 ? '--bad' : '--good'})">${e.amt < 0 ? '− ' : '+ '}${tk(Math.abs(e.amt))}<small>bal ${tk(e.bal)}</small></div></button>`).join('') : `<div class="empty" style="padding:14px">No entries in FY ${fyLabel(fy)}.</div>`}</div>
+    <div class="sec-t" style="margin-top:18px">Month-end checks</div>
+    <div class="mini-list rows" style="margin-top:10px">${checks.length ? checks.map(r => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${fmtDate(monthEnd(r.month))}</div><div class="sub">Book ${tk(r.book)} · ${a.kind === 'cash' ? 'counted' : 'statement'} ${tk(r.actual)}${r.note ? ' · ' + esc(r.note) : ''} · by ${who(r.createdBy)}</div></div>${Math.abs(+r.diff || 0) < 1 ? chip('paid', 'Matched') : chip('overdue', (r.diff > 0 ? 'Short ' : 'Over ') + tk(Math.abs(r.diff)))}<span></span></div>`).join('') : `<div class="empty" style="padding:14px">No checks yet. At each month end, compare the book with the ${a.kind === 'cash' ? 'cash in the drawer' : 'bank statement'}.</div>`}</div>
+    <div class="foot"><button class="btn" data-act="export-acct" data-id="${a.id}">Export CSV</button><button class="btn" data-act="edit-acct" data-id="${a.id}">Edit</button><button class="btn pri" data-act="recon-acct" data-id="${a.id}">Month-end check</button></div>`);
+}
+function moveForm(type, m) {
+  const accts = activeAccts(), src = m || { type, date: today() };
+  type = src.type;
+  const needFrom = ['transfer', 'drawing'].includes(type), needTo = ['transfer', 'capital', 'income'].includes(type);
+  if (accts.length < (type === 'transfer' ? 2 : 1)) { toast(type === 'transfer' ? 'Add at least two accounts to transfer between them.' : 'Add an account first.'); return; }
+  const lk = m && locked(m.date);
+  const pickList = (name, sel) => `<select id="m_${name}" name="${name}">${(m ? S.accounts.filter(a => a.active !== false || a.id === sel) : accts).map(a => opt(a.id, `${a.name} · ${tk(acctBal(a, today()))}`, a.id === sel)).join('')}</select>`;
+  const titles = { transfer: 'Transfer between accounts', drawing: 'Owner’s drawing', capital: 'Capital put in', income: 'Other income' };
+  const subs = { transfer: 'Vault cash deposited in the bank, or cash withdrawn from the bank into the vault.', drawing: 'Money you take out of the studio for yourself. It isn’t a studio expense.', capital: 'Money you put into the studio from your own pocket.', income: 'Money in that isn’t a client fee: bank interest, a refund, sale of old equipment.' };
+  const defTo = type === 'transfer' ? (accts.find(a => a.kind !== 'cash') || accts[1] || accts[0]).id : accts[0].id;
+  openSheet(`${sheetHead(m ? `Edit · ${titles[type]}` : titles[type], subs[type])}
+  <form id="mf">
+    <div class="fg">
+      ${needFrom ? `<label class="f" for="m_from">From${pickList('from', src.from || accts[0].id)}</label>` : ''}
+      ${needTo ? `<label class="f" for="m_to">Into${pickList('to', src.to || defTo)}</label>` : ''}
+      <label class="f" for="m_date">Date<input id="m_date" name="date" type="date" required value="${esc(src.date)}"></label>
+      <label class="f" for="m_amt">Amount (BDT)<input id="m_amt" name="amount" type="number" min="1" step="1" required value="${esc(src.amount)}"></label>
+      <label class="f" for="m_ref">Reference<input id="m_ref" name="ref" value="${esc(src.ref)}" placeholder="Cheque / deposit slip / txn no."></label>
+    </div>
+    <label class="f" for="m_note">${type === 'income' ? 'What it was for' : 'Note'}<input id="m_note" name="note" ${type === 'income' ? 'required' : ''} value="${esc(src.note)}"></label>
+    <p class="hint" id="mHint"></p>
+    ${m ? `<p class="hint">Added by ${who(m.createdBy)} · ${fmtWhen(m.createdAt)}</p>` : ''}
+    <div class="foot">${m && !lk ? `<button class="btn danger" type="button" data-act="del-move" data-id="${m.id}">Delete</button>` : ''}<button class="btn ghost" type="button" data-act="close">${lk ? 'Close' : 'Cancel'}</button>${lk ? '' : `<button class="btn pri" type="submit">${m ? 'Save' : 'Save entry'}</button>`}</div>
+  </form>`, root => {
+    const f = $('#mf', root);
+    const upd = () => { const h = $('#mHint', root), ids = [f.from?.value, f.to?.value].filter(Boolean), late = ids.map(acct).find(a => a && f.date.value < a.openingDate);
+      h.textContent = lk ? `FY ${fyLabel(fyOf(m.date))} is closed, so this can't change.` : locked(f.date.value) ? `FY ${fyLabel(fyOf(f.date.value))} is closed.` : late ? `${late.name} starts on ${fmtDate(late.openingDate)}.` : f.from && f.to && f.from.value === f.to.value ? 'Pick two different accounts.' : '';
+      h.className = 'hint err'; };
+    f.addEventListener('input', upd); f.addEventListener('change', upd); upd();
+    f.addEventListener('submit', async ev => { ev.preventDefault();
+      if ($('#mHint', root).textContent) { toast($('#mHint', root).textContent); return; }
+      const data = { type, date: f.date.value, amount: +f.amount.value || 0, from: f.from ? f.from.value : '', to: f.to ? f.to.value : '', ref: f.ref.value.trim(), note: f.note.value.trim() };
+      const ok = m ? await run(() => putDoc('moves', m.id, { ...strip(m), ...data }), 'Entry saved') : await run(() => addDoc('moves', data), `${titles[type]} saved`);
+      if (ok) closeSheet(); });
+  });
+}
+function reconForm(a) {
+  const d = new Date(); d.setDate(0);                       // last month by default
+  const ym0 = iso(d).slice(0, 7);
+  openSheet(`${sheetHead('Month-end check', `${esc(a.name)} · compare the book with ${a.kind === 'cash' ? 'the cash you count' : 'the bank statement'}`)}
+  <form id="cf">
+    <div class="fg">
+      <label class="f" for="c_m">Month<input id="c_m" name="month" type="month" required value="${ym0}" max="${today().slice(0, 7)}"></label>
+      <label class="f" for="c_a">${a.kind === 'cash' ? 'Cash counted' : 'Statement balance'} on the last day (BDT)<input id="c_a" name="actual" type="number" step="1" required></label>
+    </div>
+    <dl class="kv" id="cTot"></dl>
+    <label class="f" for="c_n">Note<input id="c_n" name="note" placeholder="Explain any difference"></label>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Save check</button></div>
+  </form>`, root => {
+    const f = $('#cf', root);
+    const upd = () => { if (!f.month.value) return; const end = monthEnd(f.month.value), book = acctBal(a, end), act = f.actual.value === '' ? null : +f.actual.value, diff = act == null ? 0 : book - act;
+      const prev = S.recons.find(r => r.accountId === a.id && r.month === f.month.value);
+      $('#cTot', root).innerHTML = `<dt>Book balance on ${fmtDate(end)}</dt><dd>${tk(book)}</dd>${act != null ? `<dt class="tot">${Math.abs(diff) < 1 ? 'Matched' : diff > 0 ? 'Short by' : 'Over by'}</dt><dd class="tot" style="color:var(${Math.abs(diff) < 1 ? '--good' : '--bad'})">${tk(Math.abs(diff))}</dd>` : ''}${prev ? `<dt>Already checked</dt><dd class="txt">saving replaces it</dd>` : ''}`; };
+    f.addEventListener('input', upd); upd();
+    f.addEventListener('submit', async ev => { ev.preventDefault();
+      const month = f.month.value, end = monthEnd(month), book = Math.round(acctBal(a, end)), actual = +f.actual.value || 0;
+      if (end < a.openingDate) { toast(`${a.name} starts on ${fmtDate(a.openingDate)}.`); return; }
+      const id = `${a.id}_${month.replace('-', '')}`, prev = S.recons.find(r => r.id === id);
+      const data = { accountId: a.id, month, date: end, book, actual, diff: book - actual, note: f.note.value.trim() };
+      if (await run(() => setDoc('recons', id, prev ? { ...strip(prev), ...data } : data, !!prev), Math.abs(book - actual) < 1 ? 'Matched and saved' : 'Check saved with a difference')) accountSheet(acct(a.id) || a); });
+  });
+}
+function exportAcct(a) {
+  const r = [['Date', 'Entry', 'Detail', 'In', 'Out', 'Balance']];
+  r.push([a.openingDate, 'Opening balance', '', '', '', +a.opening || 0]);
+  acctEntries(a).forEach(e => r.push([e.date, e.what, e.sub || '', e.amt > 0 ? e.amt : '', e.amt < 0 ? -e.amt : '', Math.round(e.bal)]));
+  saveCsv(`SLATE-${fileSafe(a.name)}-book.csv`, r);
 }
 
 /* ----- Reports ----- */
@@ -612,10 +892,10 @@ function reports() {
 const csv = rows => rows.map(r => r.map(v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(',')).join('\n');
 const saveCsv = (name, rows) => saveFile(name, '﻿' + csv(rows), 'text/csv');
 function exportInv() {
-  const r = [['Invoice no', 'Date', 'Due', 'Project code', 'Client', 'Description', 'Fee', 'VAT %', 'Total', 'Received', 'AIT', 'VDS', 'Balance', 'Status']];
+  const r = [['Invoice no', 'Date', 'Due', 'Project code', 'Client', 'Description', 'Payment', 'Taxes', 'Fee (taxable)', 'VAT %', 'Total', 'AIT expected', 'SLATE keeps', 'Received', 'AIT', 'VDS', 'Balance', 'Status']];
   S.invoices.filter(i => inFY(i.date, S.fy)).sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(i => { const p = prj(i.projectId), rc = recsOf(i);
     const sm = k => rc.reduce((s, x) => s + (+x[k] || 0), 0);
-    r.push([i.no, i.date, i.due, p?.code, p?.client, i.desc, i.amount, i.vatPct, Math.round(invTotal(i)), sm('received'), sm('ait'), sm('vds'), Math.round(invDue(i)), ST_LABEL[invStatus(i)]]); });
+    r.push([i.no, i.date, i.due, p?.code, p?.client, i.desc, MODE_LABEL[i.mode] || '', i.vatOn || i.aitOn ? (i.taxMode === 'inclusive' ? 'Inclusive' : 'Added on top') : 'None', i.amount, i.vatPct, Math.round(invTotal(i)), invAit(i), Math.round(invNet(i)), sm('received'), sm('ait'), sm('vds'), Math.round(invDue(i)), ST_LABEL[invStatus(i)]]); });
   saveCsv(`SLATE-invoices-FY${fyLabel(S.fy).replace('–', '-')}.csv`, r);
 }
 function exportPL() {
@@ -628,11 +908,15 @@ function exportPL() {
 }
 
 /* ----- Change log (audit trail, visible only to the Principal and the COO) ----- */
-const FIELD = { amount: 'Amount', vatPct: 'VAT %', no: 'Number', date: 'Date', due: 'Due date', desc: 'Description', status: 'Status', fee: 'Fee', milestones: 'Milestones', name: 'Name', code: 'Code', client: 'Client', received: 'Received', ait: 'AIT', vds: 'VDS', method: 'Method', ref: 'Reference', note: 'Note', voidReason: 'Void reason', bin: 'BIN', bank: 'Bank details', prefix: 'Number prefix', termsDays: 'Payment terms', lockedFYs: 'Closed years', clientAddress: 'Billing address', location: 'Site', rate: 'Rate', areaSft: 'Area', osId: 'SLATE OS link', type: 'Type', invNote: 'Invoice note', signName: 'Signatory', signTitle: 'Signatory title', projectId: 'Project', milestoneId: 'Milestone', invoiceId: 'Invoice' };
+const FIELD = { opening: 'Opening balance', openingDate: 'Opening date', accountId: 'Account', mrNo: 'Receipt no', mode: 'Payment', net: 'SLATE keeps', entered: 'Entered', actual: 'Counted / statement', from: 'From', to: 'Into', active: 'Active', kind: 'Type', amount: 'Amount', vatPct: 'VAT %', no: 'Number', date: 'Date', due: 'Due date', desc: 'Description', status: 'Status', fee: 'Fee', milestones: 'Milestones', name: 'Name', code: 'Code', client: 'Client', received: 'Received', ait: 'AIT', vds: 'VDS', method: 'Method', ref: 'Reference', note: 'Note', voidReason: 'Void reason', bin: 'BIN', bank: 'Bank details', prefix: 'Number prefix', termsDays: 'Payment terms', lockedFYs: 'Closed years', clientAddress: 'Billing address', location: 'Site', rate: 'Rate', areaSft: 'Area', osId: 'SLATE OS link', type: 'Type', invNote: 'Invoice note', signName: 'Signatory', signTitle: 'Signatory title', projectId: 'Project', milestoneId: 'Milestone', invoiceId: 'Invoice' };
 const SKIP = ['createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
 function auditLine(a) {
   const [coll] = a.path.split('/'), d = a.after || a.before || {};
-  const nm = coll === 'invoices' ? `invoice ${d.no || ''}` : coll === 'receipts' ? `payment of ${tk(d.received)} on ${(S.invoices.find(x => x.id === d.invoiceId) || {}).no || 'an invoice'}` : coll === 'projects' ? `project fee ${d.code || ''}` : 'finance settings';
+  const an = id => (acct(id) || {}).name || 'an account';
+  const nm = coll === 'invoices' ? `invoice ${d.no || ''}` : coll === 'receipts' ? `payment of ${tk(d.received)} on ${(S.invoices.find(x => x.id === d.invoiceId) || {}).no || 'an invoice'}${d.mrNo ? ` (${d.mrNo})` : ''}`
+    : coll === 'projects' ? `project fee ${d.code || ''}` : coll === 'accounts' ? `account ${d.name || ''}`
+    : coll === 'moves' ? (d.type === 'transfer' ? `transfer of ${tk(d.amount)} from ${an(d.from)} to ${an(d.to)}` : `${(MOVE_LABEL[d.type] || 'entry').toLowerCase()} of ${tk(d.amount)}`)
+    : coll === 'recons' ? `month-end check of ${an(d.accountId)} for ${d.month || ''}` : 'finance settings';
   let verb = a.op === 'insert' ? 'added' : a.op === 'delete' ? 'removed' : 'changed';
   if (coll === 'invoices') {
     if (a.op === 'insert') verb = d.status === 'issued' ? 'issued' : 'drafted';
@@ -640,7 +924,7 @@ function auditLine(a) {
   }
   if (coll === 'receipts' && a.op === 'insert') verb = 'recorded';
   const changes = a.op === 'update' && a.before && a.after ? Object.keys({ ...a.before, ...a.after }).filter(k => !SKIP.includes(k) && JSON.stringify(a.before[k]) !== JSON.stringify(a.after[k])) : [];
-  const val = (k, v) => v == null || v === '' ? '—' : ['amount', 'fee', 'received', 'ait', 'vds'].includes(k) ? tk(v) : k === 'milestones' ? (v || []).map(m => `${m.label} ${m.pct}%`).join(', ') : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  const val = (k, v) => v == null || v === '' ? '—' : ['amount', 'fee', 'received', 'ait', 'vds', 'opening', 'net', 'entered', 'actual', 'book', 'diff'].includes(k) ? tk(v) : k === 'milestones' ? (v || []).map(m => `${m.label} ${m.pct}%`).join(', ') : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : String(v);
   return `<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><div style="min-width:0"><div class="t" style="white-space:normal"><b style="font-weight:600">${who(a.actor)}</b> ${verb} ${esc(nm)}</div>
     ${changes.length ? `<div class="sub" style="white-space:normal">${changes.slice(0, 6).map(k => `${esc(FIELD[k] || k)}: ${esc(val(k, a.before[k]))} → ${esc(val(k, a.after[k]))}`).join(' · ')}</div>` : ''}</div><div class="sub">${fmtWhen(a.at)}</div></div>`;
 }
@@ -655,26 +939,28 @@ function settings() {
   const s = S.settings, cur = fyOf(today());
   const fys = [...new Set([cur - 1, cur, ...S.invoices.map(i => fyOf(i.date || today())), ...(s.lockedFYs || []).map(Number)])].filter(y => y <= cur).sort((a, b) => b - a);
   return `
-  <div class="head"><div><h2>Settings</h2><p>Defaults used on invoices. The Principal and the COO can change these.</p></div></div>
+  <div class="head"><div><h2>Settings</h2><p>Defaults for invoices and money receipts. The Principal and the COO can change these.</p></div></div>
   <div class="panel"><div class="pb"><form id="setForm">
     <div class="fg">
       <label class="f" for="s_prefix">Invoice number prefix<input id="s_prefix" name="prefix" value="${esc(s.prefix)}" maxlength="12"></label>
-      <label class="f" for="s_vat">VAT rate on fees (%)<input id="s_vat" name="vatPct" type="number" min="0" max="100" step="0.5" value="${esc(s.vatPct)}"></label>
+      <label class="f" for="s_vat">VAT rate (%)<input id="s_vat" name="vatPct" type="number" min="0" max="100" step="0.5" value="${esc(s.vatPct)}"></label>
+      <label class="f" for="s_ait">AIT rate (%)<input id="s_ait" name="aitPct" type="number" min="0" max="50" step="0.5" value="${esc(s.aitPct)}"></label>
+      <label class="f" for="s_tm">Bank invoices: taxes<select id="s_tm" name="bankTaxMode">${opt('added', 'Added on top (fee stays whole)', s.bankTaxMode !== 'inclusive')}${opt('inclusive', 'Inclusive (taxes inside the figure)', s.bankTaxMode === 'inclusive')}</select></label>
       <label class="f" for="s_terms">Payment terms (days)<input id="s_terms" name="termsDays" type="number" min="0" max="180" value="${esc(s.termsDays)}"></label>
       <label class="f" for="s_bin">VAT registration (BIN)<input id="s_bin" name="bin" value="${esc(s.bin)}" placeholder="Printed on VAT invoices"></label>
     </div>
-    <p class="hint">Numbers run per financial year, for example ${esc(s.prefix || 'SLATE')}/INV/${fyLabel(cur).replace('–', '-')}/001. A voided number is never reused.</p>
+    <p class="hint">Bank invoices start with VAT and AIT at these rates; cash invoices start without them. Rates are fixed on each invoice when it's raised. Numbers run per financial year: ${esc(s.prefix || 'SLATE')}/INV/${fyLabel(cur).replace('–', '-')}/001 for invoices and ${esc(s.prefix || 'SLATE')}/MR/${fyLabel(cur).replace('–', '-')}/001 for money receipts. A voided number is never reused.</p>
     <div class="fg"><label class="f" for="s_sname">Signatory on invoices<input id="s_sname" name="signName" value="${esc(s.signName)}"></label>
       <label class="f" for="s_stitle">Signatory title<input id="s_stitle" name="signTitle" value="${esc(s.signTitle)}"></label></div>
-    <label class="f" for="s_bank">Bank details printed on invoices<textarea id="s_bank" name="bank" rows="4" placeholder="Account name, account number, bank, branch, routing number">${esc(s.bank)}</textarea></label>
+    <label class="f" for="s_bank">Bank details printed on bank invoices<textarea id="s_bank" name="bank" rows="4" placeholder="Account name, account number, bank, branch, routing number">${esc(s.bank)}</textarea></label>
     <label class="f" for="s_note">Note under the total<textarea id="s_note" name="invNote" rows="2">${esc(s.invNote)}</textarea></label>
     <div class="foot"><button class="btn pri" type="submit">Save settings</button></div>
   </form></div></div>
   <div class="panel"><div class="ph"><h3>Close a financial year</h3><span class="meta">${isPrincipal() ? 'Principal only' : 'The Principal closes and reopens years'}</span></div>
-    <div class="pb hint" style="padding-bottom:4px">Once a year is closed, its invoices and payments can't be added, changed or removed. Reopen it for a late correction, then close it again.</div>
+    <div class="pb hint" style="padding-bottom:4px">Once a year is closed, its invoices, payments, transfers and month-end checks can't be added, changed or removed. Reopen it for a late correction, then close it again.</div>
     <div class="rows">${fys.map(y => { const isL = (s.lockedFYs || []).map(Number).includes(y);
       return `<div class="row r-mini" style="cursor:default"><div class="t">FY ${fyLabel(y)}</div>${chip(isL ? 'paid' : '', isL ? 'Closed' : 'Open')}${isPrincipal() ? `<button class="btn sm" data-act="${isL ? 'fy-open' : 'fy-close'}" data-v="${y}" ${!isL && y === cur ? 'disabled title="The current year closes after 30 June"' : ''}>${isL ? 'Reopen' : 'Close year'}</button>` : '<span></span>'}</div>`; }).join('')}</div></div>
-  <div class="panel"><div class="ph"><h3>Who can see finance</h3></div><div class="pb hint">Only the Principal and the COO (Mridula). The database itself enforces this: the team's accounts get nothing back from these records, the project list in SLATE OS never carries fees, and finance changes never appear in the team's log, notifications or messages. The accountant and office staff roles will be added only when the Principal approves them.</div></div>`;
+  <div class="panel"><div class="ph"><h3>Who can see finance</h3></div><div class="pb hint">Only the Principal and the COO. The database itself enforces this: the team's accounts get nothing back from these records, the project list in SLATE OS never carries fees, and finance changes never appear in the team's log, notifications or messages. The accountant and office staff roles will be added only when the Principal approves them.</div></div>`;
 }
 
 /* ---------- events ---------- */
@@ -703,6 +989,17 @@ document.addEventListener('click', async ev => {
     case 'del-receipt': { const r = S.receipts.find(x => x.id === id); if (r && armed(b) && await run(() => delDoc('receipts', id), 'Payment removed')) { const i = S.invoices.find(x => x.id === r.invoiceId); if (i) invoiceSheet(i); else closeSheet(); } break; }
     case 'doc-invoice': { const i = inv(); if (i) openDoc(invoiceDoc(i), `${fileSafe(i.no)}.html`); break; }
     case 'export-inv': exportInv(); break;
+    case 'new-acct': accountForm(null, b.dataset.v); break;
+    case 'open-acct': { const a = acct(id); if (a) accountSheet(a); break; }
+    case 'edit-acct': accountForm(acct(id)); break;
+    case 'del-acct': if (armed(b) && await run(() => delDoc('accounts', id), 'Account deleted')) closeSheet(); break;
+    case 'recon-acct': { const a = acct(id); if (a) reconForm(a); break; }
+    case 'export-acct': { const a = acct(id); if (a) exportAcct(a); break; }
+    case 'new-move': moveForm(b.dataset.v); break;
+    case 'edit-move': { const m = S.moves.find(x => x.id === id); if (m) moveForm(m.type, m); break; }
+    case 'del-move': if (armed(b) && await run(() => delDoc('moves', id), 'Entry deleted')) closeSheet(); break;
+    case 'open-receipt-inv': { const r = S.receipts.find(x => x.id === id), i = r && S.invoices.find(x => x.id === r.invoiceId); if (i) invoiceSheet(i); break; }
+    case 'doc-receipt': { const r = S.receipts.find(x => x.id === id); if (r) openDoc(receiptDoc(r), `${fileSafe(r.mrNo)}.html`); break; }
     case 'export-pl': exportPL(); break;
     case 'reload-audit': loadAudit(); break;
     case 'fy-close': case 'fy-open': {
@@ -718,7 +1015,7 @@ document.addEventListener('change', ev => { if (ev.target.id === 'fySel') { S.fy
 document.addEventListener('submit', async ev => {
   if (ev.target.id !== 'setForm') return; ev.preventDefault();
   const f = ev.target;
-  const data = { ...S.settings, prefix: f.prefix.value.trim().toUpperCase() || 'SLATE', vatPct: +f.vatPct.value || 0, termsDays: +f.termsDays.value || 0, bank: f.bank.value.trim(), invNote: f.invNote.value.trim(), signName: f.signName.value.trim(), signTitle: f.signTitle.value.trim(), bin: f.bin.value.trim() };
+  const data = { ...S.settings, prefix: f.prefix.value.trim().toUpperCase() || 'SLATE', vatPct: +f.vatPct.value || 0, aitPct: +f.aitPct.value || 0, bankTaxMode: f.bankTaxMode.value, termsDays: +f.termsDays.value || 0, bank: f.bank.value.trim(), invNote: f.invNote.value.trim(), signName: f.signName.value.trim(), signTitle: f.signTitle.value.trim(), bin: f.bin.value.trim() };
   await run(() => saveSettings(data), 'Settings saved');
 });
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
