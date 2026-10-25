@@ -605,6 +605,12 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .skel-list{display:grid;gap:2px;margin-top:8px}.skel-row{display:grid;grid-template-columns:30px 1fr;gap:12px;align-items:center;padding:14px 12px;border-bottom:1px solid var(--line)}
 .skel-c{width:22px;height:22px;border-radius:50%}.skel-t{display:grid;gap:7px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+#view.dash-in .track{animation:barSweep .75s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--cd,0ms)}
+@keyframes barSweep{from{clip-path:inset(-6px 100% -6px 0)}to{clip-path:inset(-6px 0 -6px 0)}}
+#view.dash-in .plot .col{transform-origin:50% 100%;animation:colRise .75s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--cd,0ms)}
+@keyframes colRise{from{transform:scaleY(0)}}
+#view.dash-in svg.donut{transform-origin:50% 50%;animation:ringIn .75s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--cd,0ms)}
+@keyframes ringIn{from{transform:rotate(-40deg) scale(.9);opacity:0}}
 .lv-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,240px);gap:8px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--border)}
 .lv-row:first-of-type{border-top:0}
 .lv-pick{display:grid;gap:6px}
@@ -1598,6 +1604,27 @@ function render(force){
   view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView()));
   restoreFocus(k);
+  dashCount(view);
+}
+/* Dashboard: on opening it (or changing period, scope, pod or person) every figure counts up from 0,
+   bars sweep in and the status ring turns in, together, once. A refresh mid-way carries on. */
+const DASH_MS=750;
+function dashCount(view){
+  if(S.view!=='dash'||S.state!=='ready'||motionOff()){ S.dashAnim=null; view.classList.remove('dash-in'); return; }
+  const D=S.dash||{}, key=JSON.stringify([D.kind,D.offset,D.scope,D.pod,D.person]);
+  if(!S.dashAnim||S.dashAnim.key!==key) S.dashAnim={key,at:performance.now()};
+  const el=performance.now()-S.dashAnim.at; if(el>=DASH_MS){ view.classList.remove('dash-in'); return; }
+  view.classList.add('dash-in'); view.style.setProperty('--cd',`-${Math.round(el)}ms`);
+  const paint=()=>{ const a=S.dashAnim; if(!a) return 1;
+    const t=Math.min(1,(performance.now()-a.at)/DASH_MS), e=1-Math.pow(1-t,3);
+    view.querySelectorAll('.kpi .num, .tile .num, .hb .v, .leg b, svg.donut text, .tbl-wrap td.n').forEach(n=>{
+      if(n.dataset.full===undefined) n.dataset.full=n.textContent;
+      n.textContent=t<1?n.dataset.full.replace(/\d[\d,]*(\.\d+)?/g,m=>{ const v=parseFloat(m.replace(/,/g,'')), d=(m.split('.')[1]||'').length; return (v*e).toFixed(d); }):n.dataset.full; });
+    return t; };
+  const step=()=>{ if(!S.dashAnim||S.view!=='dash'){ S.dashRaf=0; return; }
+    if(paint()<1) S.dashRaf=requestAnimationFrame(step); else { S.dashRaf=0; view.classList.remove('dash-in'); } };
+  paint(); /* this frame already shows the counted value, never the final one first */
+  if(!S.dashRaf) S.dashRaf=requestAnimationFrame(step);
 }
 function renderHeader(){
   const tabs=$('#tabs'), slot=$('#bell-slot');
