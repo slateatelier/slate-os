@@ -497,41 +497,26 @@
   const isLeadP = p => !!p && ['principal', 'coo', 'pod_leader', 'design_associate_lead'].includes(p.designation);
   const REPLY_L = { on_it: 'On it', done: 'Done', already: 'Already done', later: 'Will do it later', will: 'Will do it', help: 'Need help', remind: 'Reminder set', task: 'Made it a task' };
   const when = t => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  /* People: two tabs. Send = message box on top, team shortcuts, people as compact chips. Sent = what was sent and the replies. */
   function peopleView() {
     const nm = p => { try { return nameOf(p.id); } catch (_) { return displayName(p); } };
     const rerender = () => { try { render(true); } catch (_) {} };
-    const all = [...people.values()].filter(canMessageClient)
-      .filter(p => !PS.q || (nm(p) + ' ' + (p.role_label || '') + ' ' + (p.team || '')).toLowerCase().includes(PS.q.toLowerCase()));
+    const all = [...people.values()].filter(canMessageClient);
     const order = t => t === "Principal's Office" ? '0' : /^Pod/.test(t || '') ? '1' + t : t ? '2' + t : '9';
-    const groups = new Map();
-    all.sort((a, b) => order(a.team).localeCompare(order(b.team)) || (isLeadP(b) - isLeadP(a)) || nm(a).localeCompare(nm(b)))
-       .forEach(p => { const t = p.team || 'No team'; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(p); });
+    all.sort((a, b) => order(a.team).localeCompare(order(b.team)) || (isLeadP(b) - isLeadP(a)) || nm(a).localeCompare(nm(b)));
+    const groups = new Map(); all.forEach(p => { const t = p.team || 'No team'; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(p); });
     for (const id of [...PS.sel]) if (!people.has(id) || !canMessageClient(people.get(id))) PS.sel.delete(id);
-    const bubble = p => {
-      const on = PS.sel.has(p.id);
-      let a = null; try { a = avaEl(p.id, isLeadP(p), 'md'); } catch (_) {}
-      const b = el('button', { class: 'slate-bub' + (on ? ' on' : ''), type: 'button', 'aria-pressed': String(on), 'aria-label': nm(p) + (on ? ', selected' : '') },
-        el('span', { class: 'slate-bub-a' }, ...(a ? [a] : []),
-          ...(seenOf(p.id).st !== 'off' ? [el('i', { class: 'slate-bub-on', title: seenOf(p.id).label, style: seenOf(p.id).st === 'away' ? 'background:#FF9F0A' : '' })] : []),
-          ...(on ? [el('b', { class: 'slate-bub-ck', 'aria-hidden': 'true' }, '✓')] : [])),
-        el('span', { class: 'slate-bub-n' }, nm(p)),
-        el('span', { class: 'slate-bub-r' }, p.role_label || 'No designation'),
-        el('span', { class: 'slate-bub-r', style: 'font-size:10.5px;' + (seenOf(p.id).st === 'on' ? 'color:#248A3D' : '') }, seenOf(p.id).label));
-      b.addEventListener('click', () => { on ? PS.sel.delete(p.id) : PS.sel.add(p.id); rerender(); });
-      return b;
-    };
-    const secs = [...groups.entries()].map(([t, ps]) => {
-      const allOn = ps.every(p => PS.sel.has(p.id));
-      const tog = el('button', { class: 'linkish', type: 'button', style: 'font-size:13px' }, allOn ? 'Clear' : 'Select all');
-      tog.addEventListener('click', () => { ps.forEach(p => allOn ? PS.sel.delete(p.id) : PS.sel.add(p.id)); rerender(); });
-      let label = t; try { label = podLabel(t); } catch (_) {}
-      return el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, label), tog), el('div', { class: 'slate-bubs' }, ...ps.map(bubble)));
-    });
-    const search = el('input', { type: 'search', placeholder: 'Search by name, designation or team', value: PS.q, 'aria-label': 'Search people' });
-    search.addEventListener('input', () => { PS.q = search.value; rerender(); setTimeout(() => { const s2 = document.querySelector('#slate-people-search'); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }, 0); });
-    search.id = 'slate-people-search';
-    const ta = el('textarea', { id: 'slate-people-msg', maxlength: '300', placeholder: 'Message, e.g. Site visit moved to 3 pm today', 'aria-label': 'Message' }); ta.value = PS.msg;
+    const tab = PS.tab || 'send';
+    const acctBtn = canAdmin() ? el('button', { class: 'btn', type: 'button', id: 'slate-accounts-btn' }, 'Accounts and passwords') : null;
+    if (acctBtn) acctBtn.addEventListener('click', accountsSheet);
+    if (!sentLoaded) loadSent();
+    const nSent = new Set(sent.map(r => r.body + '|' + r.created_at)).size;
+    const tabs = el('div', { class: 'seg', role: 'group', 'aria-label': 'People' }, ...[['send', 'Send a message'], ['sent', 'Sent and replies' + (nSent ? ' · ' + nSent : '')]].map(([k, l]) => {
+      const b = el('button', { type: 'button', 'aria-pressed': String(tab === k) }, l); b.addEventListener('click', () => { PS.tab = k; rerender(); }); return b; }));
+    const headEl = el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Studio'), el('h1', { class: 'h1' }, 'People')), ...(acctBtn ? [acctBtn] : []));
+    if (tab === 'sent') return [headEl, tabs, sent.length ? sentView() : el('p', { class: 'muted' }, 'Nothing sent yet.')];
     const n = PS.sel.size;
+    const ta = el('textarea', { id: 'slate-people-msg', maxlength: '300', rows: '2', placeholder: 'Message, e.g. Site visit moved to 3 pm today', 'aria-label': 'Message' }); ta.value = PS.msg;
     const send = el('button', { class: 'btn btn-primary', type: 'button' }, n ? `Notify ${n} ${n === 1 ? 'person' : 'people'}` : 'Notify');
     if (!n || PS.busy) send.disabled = true;
     const count = el('span', { class: 'f-hint' }, `${ta.value.length}/300`);
@@ -543,18 +528,25 @@
       const { data, error } = await sb.rpc('send_message', { p_to: [...PS.sel], p_message: PS.msg });
       PS.busy = false;
       if (error) PS.note = '!' + friendly(error).message;
-      else { PS.note = `Sent to ${data} ${data === 1 ? 'person' : 'people'}. It’s in the audit trail, and their replies show below.`; PS.msg = ''; PS.sel.clear(); loadSent(); }
+      else { PS.note = `Sent to ${data} ${data === 1 ? 'person' : 'people'}. Replies show under Sent and replies.`; PS.msg = ''; PS.sel.clear(); loadSent(); }
       rerender();
     });
-    const compose = el('div', { class: 'form', style: 'position:sticky;bottom:0;z-index:2;box-shadow:0 -6px 18px rgba(0,0,0,.06)' },
-      el('div', { class: 'form-title' }, n ? `To: ${[...PS.sel].map(id => nm(people.get(id))).join(', ')}` : 'Tap people above to select them'),
-      ta, el('div', { class: 'bar', style: 'justify-content:space-between' }, count, send), note);
-    if (!sentLoaded) loadSent();
-    const acctBtn = canAdmin() ? el('button', { class: 'btn', type: 'button', id: 'slate-accounts-btn' }, 'Accounts and passwords') : null;
-    if (acctBtn) acctBtn.addEventListener('click', accountsSheet);
-    return [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Studio'), el('h1', { class: 'h1' }, 'People'),
-              el('p', { class: 'lead' }, 'Tap people to select them, write a short message and tap Notify. It arrives with sound even if their app is closed; they reply with one tap.')), ...(acctBtn ? [acctBtn] : [])),
-            search, ...secs, sentView(), compose];
+    const compose = el('div', { class: 'form', style: 'gap:10px' }, ta,
+      el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, n ? `To ${n}: ${[...PS.sel].map(id => nm(people.get(id))).join(', ')}` : 'Choose people below', ' · ', count), send), note);
+    // team shortcuts: tap to select or clear a whole team
+    const short = el('div', { class: 'chips' }, ...[['All', all], ...groups.entries()].map(([t, ps]) => {
+      const on = ps.length && ps.every(p => PS.sel.has(p.id)); let label = t; try { label = t === 'All' ? 'Everyone' : podLabel(t); } catch (_) {}
+      const b = el('button', { class: 'chip' + (on ? ' on' : ''), type: 'button', style: 'border:0;cursor:pointer;padding:6px 12px' }, label);
+      b.addEventListener('click', () => { ps.forEach(p => on ? PS.sel.delete(p.id) : PS.sel.add(p.id)); rerender(); }); return b; }));
+    const DOT = { on: '#34C759', away: '#FF9F0A' };
+    const chip = p => { const on = PS.sel.has(p.id), sn = seenOf(p.id); let a = null; try { a = avaEl(p.id, false, 'sm'); } catch (_) {}
+      const b = el('button', { class: 'chip who' + (on ? ' on' : ''), type: 'button', 'aria-pressed': String(on), title: (p.role_label || '') + ' · ' + sn.label, style: 'border:0;cursor:pointer;padding:4px 12px 4px 4px;gap:6px' },
+        el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []), ...(DOT[sn.st] ? [el('i', { style: `position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:50%;background:${DOT[sn.st]};border:1.5px solid #fff` })] : [])), nm(p));
+      b.addEventListener('click', () => { on ? PS.sel.delete(p.id) : PS.sel.add(p.id); rerender(); }); return b; };
+    const list = el('div', { style: 'display:grid;gap:10px;background:var(--group);border-radius:12px;padding:12px' },
+      ...[...groups.entries()].map(([t, ps]) => { let label = t; try { label = podLabel(t); } catch (_) {}
+        return el('div', { style: 'display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:start' }, el('span', { class: 'f-hint', style: 'padding-top:7px' }, label), el('div', { class: 'chips' }, ...ps.map(chip))); }));
+    return [headEl, tabs, compose, short, list];
   }
   /* what I sent, with each person's reply; follow up anyone who hasn't finished */
   let sent = [], sentLoaded = false;
@@ -582,7 +574,8 @@
     const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
     const groups = new Map();
     sent.forEach(r => { const k = r.body + '|' + r.created_at; if (!groups.has(k)) groups.set(k, { k, body: r.body, at: r.created_at, rows: [] }); groups.get(k).rows.push(r); });
-    const items = [...groups.values()].slice(0, 15).map(g => {
+    const shown = PS.more ? 40 : 6;
+    const items = [...groups.values()].slice(0, shown).map(g => {
       const done = g.rows.filter(finished).length, open = g.rows.filter(r => !finished(r));
       const fu = g.rows.reduce((n, r) => Math.max(n, r.followups || 0), 0);
       const box = el('div', { class: 'card', style: 'border-radius:0;border-bottom:1px solid var(--line);gap:8px' },
@@ -613,7 +606,8 @@
       }
       return box;
     });
-    return el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, 'Sent and replies')), el('div', { class: 'list' }, ...items));
+    const moreBtn = groups.size > shown ? (() => { const b = el('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start;background:#fff' }, 'Show older messages'); b.addEventListener('click', () => { PS.more = true; render(true); }); return b; })() : el('span');
+    return el('section', { class: 'sec' }, el('div', { class: 'list' }, ...items), moreBtn);
   }
 
   /* my reminders (from "Remind me…"), shown on my Calendar at the chosen time */
