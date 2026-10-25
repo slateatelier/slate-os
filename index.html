@@ -2409,7 +2409,10 @@ function sheetMeeting(){
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px;z-index:2'},
       h('button',{class:'btn',type:'submit',style:'background:#fff',disabled:S.busy,text:'Save draft'}),
       amApprover()?h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>saveMeeting('publish'),text:m.status==='published'?'Update minutes':'Approve and publish'}):h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>saveMeeting('submit'),text:'Submit to the COO'}),
-      m.status==='published'||m.updatedAt?h('button',{class:'btn',type:'button',onclick:()=>{sh.edit=false;renderSheet()},text:'Close editor'}):null),
+      m.status==='published'||m.updatedAt?h('button',{class:'btn',type:'button',onclick:()=>{sh.edit=false;renderSheet()},text:'Close editor'}):null,
+      h('button',{class:'btn'+(sh.clearArm?' btn-accent':''),type:'button',style:sh.clearArm?'':'background:#fff;color:var(--overdue)',disabled:S.busy,onclick:()=>{
+        if(!sh.clearArm){ sh.clearArm=true; renderSheet(); setTimeout(()=>{ if(S.sheet===sh&&sh.clearArm){ sh.clearArm=false; renderSheet(); } },4000); return; }
+        sh.clearArm=false; sh.d={...sh.d,attendance:{},review:{},updates:{},agenda:MEET_AGENDA,notes:'',decisionList:[],actions:sh.d.actions.filter(a=>actTaskIds(a).some(Boolean)),sharing:{topic:'',by:'',notes:''}}; sh.err=''; clearMeetDraft(date); renderSheet(); toast('Cleared. Tap Save draft to keep it cleared.'); },text:sh.clearArm?'Tap again to clear all':'Clear all'})),
     h('div',{class:'f-hint',text:'Save draft keeps your work (it is also kept on this device as you type). Write the agenda before the meeting and complete the rest after it.'})));
   return out;
 }
