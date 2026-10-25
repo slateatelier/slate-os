@@ -3834,18 +3834,21 @@ const HOWTO=[
    ['home','Start on Home','Your checklist items, tasks and messages wait here. Open it first every day.','Home'],
    ['check','Tick your checklist','Tap the circle when an item is done and checked. Never before.','chk'],
    ['flag','Finish a task','Tap Done today, or Done on another date if you finished earlier.',['✓ Done today','p']],
+   ['list','Add your own task','Tasks › New task. Pick yourself and propose a date; it counts once the COO approves the date.',['New task','p']],
    ['clock','Need more time?','Open the task, pick the reason and the new date. The COO decides; your old date stays until then.','Request new date'],
    ['chat','Answer messages','A message from the Principal or the COO sits on Home until you reply: Done, Already done (with when), Will do it (with a finish date), Need help (with a note), Remind me, or Make it a task. Done and dated replies go on your Calendar.',['✓ Done','p']],
-   ['meet','Log meetings','Went to a client, consultant, authority or site meeting? Log the minutes within 24 hours.','+ Log meeting']],
+   ['meet','Log meetings','Client, consultant, authority or site meeting, planned or not? On Home › Project meetings, pick the project and log it within 24 hours. Choose Site for a site visit.','+ Log meeting'],
+   ['users','Weekly meeting','Sundays. When it is your week to organise, write the minutes in More › Weekly meeting and submit them to the COO.','Submit to the COO']],
   rules:[['score','You are compared only with people in the same role. Interns are not scored.'],'Tick only what is complete and checked.','Raise a risk the day you know it, not the day it is due.','If the client or a consultant caused a delay, say so in the reason. It will not count against you.']},
  {key:'lead',title:'Pod lead',who:'Accountable for the project from brief to as-built',steps:[
+   ['doc','Add a project','Projects › New project. The code is made from the name, size and location. It joins the list once the Principal or the COO approves it.','New project'],
    ['layers','Set up phases','Projects › open the project. Choose the phases; gate deliverables and checklists are created for you.',['Set up phases','p']],
    ['cal','Propose the gate dates','Enter a date for each gate deliverable. They count once the COO approves them.','Send for approval'],
    ['list','Assign the checklist','Pick who does each item, or mark it N/A. Add the client feedback due date.','Show checklist'],
-   ['meet','Log every meeting','Within 24 hours: decisions, client changes and actions. Finalising turns actions into tasks.','+ Log meeting'],
+   ['meet','Log every meeting','Project › Meetings, within 24 hours: decisions, client changes and actions. Unplanned site visits too: choose Site. Finalising turns actions into tasks.','+ Log meeting'],
    ['doc','Send the minutes','Email client, consultant and authority minutes. Silence for 3 working days means accepted.','Mark as sent'],
    ['flag','Close the gate','Mark the final gate deliverable done once every checklist item is ticked or N/A.',['✓ Done today','p']]],
-  rules:['You are accountable for the whole project; the team works through your checklist.','Changes beyond the agreement are an extra revision round: tick the box in the meeting and the COO decides.','Land share resume: use Add phases when the project restarts.','Choose Standard or Relaxed pace at setup; ask the COO for fast track or a proposal sprint.']},
+  rules:['You are accountable for the whole project; the team works through your checklist.','Entering a project that was already running or completed? Choose its stage, tick the phases finished before SLATE OS and add their dates if known. The COO approves this history; it is never scored.','Changes beyond the agreement are an extra revision round: tick the box in the meeting and the COO decides.','Land share resume: use Add phases when the project restarts.','Choose Standard or Relaxed pace at setup; ask the COO for fast track or a proposal sprint.']},
  {key:'head',title:'Drafting lead',who:'Runs the drafting pool for every pod',steps:[
    ['chart','Open your team view','Dashboard › choose Drafting Pool (whole team): every drafter’s load, overdue work and this week’s dates.','Dashboard'],
    ['gauge','Check the load','See who is overloaded and who has room before new work arrives.','Support team load'],
@@ -3858,9 +3861,13 @@ const HOWTO=[
    ['chat','Message the team','People › tap people, write and tap Notify. Replies (Done, Already done, Will do it by…, Need help) come back under Sent and replies; tap Follow up for anyone not done.',['Notify 3 people','p']],
    ['sliders','Set the pace','On the project: Fast track or Proposal sprint for urgent jobs, Relaxed for jobs with time.','Pace'],
    ['chart','Track delivery','On-time delivery against the studio target, by pod. Phase dots on Projects.','Dashboard','score'],
+   ['meet','Approve the minutes','More › Weekly meeting. Check the organiser’s minutes, then approve and publish. Each action becomes a task for each person on it; saving again later never duplicates them.',['Approve and publish','p']],
+   ['shield','Keep your work private','Tasks for the Principal or the COO are stored apart: only the two of you see them.','Private tasks'],
+   ['down','Download the backup','More › Backup every Thursday: all data as Excel or JSON. The COO is reminded on Home.','Backup'],
+   ['chart','Money in Finance','More › Finance: invoices, receipts, costs, payroll and reports. Only the two of you can open it; it has its own guide.','Finance'],
    ['key','Look after accounts','People › Accounts and passwords: reset a forgotten password or add a new person.','Accounts and passwords'],
    ['shield','Check the record','More › Log shows every change, notification and message. Nothing in it can be edited.','Log']],
-  rules:['Only approved dates count on the dashboard.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
+  rules:['Only approved dates count on the dashboard.',`Work finished before ${fmtD(goLive())} is history: you approve it, and it is never scored.`,'Standing guidelines go in Weekly meeting › Studio rules once, not in every set of minutes.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
 /* scoring is explained only to the Principal and the COO */
 const canSeeScoring=()=>S.isOwner||isCOO(S.uid);
 const myGuide=()=>amApprover()||S.isOwner?'boss':(amMgr()||amPodLead())?'lead':myHeadTeam()?'head':'member';
@@ -3889,6 +3896,15 @@ function hxTaskFlow(){
     h('div',{class:'hx-flow'},node('var(--muted)','Assigned','Pod lead gives you the task'),arr(),node('var(--late)','Date proposed','Pod lead suggests a target'),arr(),node('var(--ink)','COO approves','Now it counts'),arr(),node('var(--early)','In progress','Move it on the Board'),arr(),node('var(--ontime)','Done','Locked, with the date')),
     h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('clock')),h('div',{},h('b',{text:'Running late?'}),h('span',{text:' Request a new date with a reason. The COO approves or returns it; the original target stays on record as R0, each change is R1, R2…'}))),
     h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('doc')),h('div',{},h('b',{text:'Client sent changes after it was done?'}),h('span',{text:' Use + Client revision. It becomes a new linked task; the original on-time record is kept.'}))));
+}
+/* infographic: the weekly meeting, from minutes to tasks */
+function hxWeekly(){
+  const node=(c,t,s)=>h('div',{class:'hx-node',style:`--c:${c}`},h('b',{text:t}),h('span',{text:s}));
+  const arr=()=>h('div',{class:'hx-arr','aria-hidden':'true'},hxIco('arrow'));
+  return h('div',{class:'hx-card'},
+    h('div',{class:'hx-flow'},node('var(--muted)','Sunday meeting','Organiser comes from the rotation'),arr(),node('var(--late)','Minutes written','Attendance, review, decisions, actions'),arr(),node('var(--ink)','COO approves','Submitted, then published'),arr(),node('var(--early)','Actions become tasks','One for each person, in Management, Operation or Development'),arr(),node('var(--ontime)','Reviewed next week','Done, carried on or dropped')),
+    h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('clock')),h('div',{},h('b',{text:'No fixed end?'}),h('span',{text:' Tick Ongoing for continuous actions; they need no target date.'}))),
+    h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('shield')),h('div',{},h('b',{text:'A decision that should always apply?'}),h('span',{text:' Mark it as a studio rule. It is kept once in Studio rules, not repeated in every set of minutes.'}))));
 }
 /* infographic: messages and the one-tap replies */
 function hxMessages(){
@@ -3945,6 +3961,7 @@ function viewHelp(){
     ...roleExtra,
     hxSec('The spine','Ten phases, ten gates','Client projects follow these phases. The project type decides which are switched on.',hxSpine()),
     hxSec('Tasks','The life of a task','Only dates the COO approves count. Every step is kept in the task’s history.',hxTaskFlow()),
+    hxSec('Weekly meeting','From Sunday to tasks','Every Sunday. The minutes follow one fixed order, so they are quick to write and easy to follow up.',hxWeekly()),
     hxSec('Messages','One message, one tap','The Principal and the COO can message anyone. You answer from Home.',hxMessages()),
     hxSec('Find your way','Where things are',null,hxTabs()),
     hxSec('Remember','Ground rules',g.title,h('div',{class:'hx-rules'},g.rules.filter(r=>!Array.isArray(r)||sc).map(r=>Array.isArray(r)?r[1]:r).map(r=>h('div',{class:'hx-rule'},h('span',{class:'hx-rule-ic'},hxIco('check')),h('span',{text:r})))))];
