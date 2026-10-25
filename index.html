@@ -28,7 +28,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .product{display:inline-flex;flex-direction:column;line-height:1.15}.product b{color:var(--ink);font-weight:600;font-size:15px;letter-spacing:.04em}
 .tagline{font-size:11px;font-weight:400;color:var(--muted);letter-spacing:.02em}
 @media (max-width:560px){.tagline{display:none}}
-.tabs-in{display:flex;justify-content:center;gap:4px;overflow-x:auto;scrollbar-width:none}
+.tabs-in{display:flex;justify-content:flex-start;gap:4px;overflow-x:auto;scrollbar-width:none;max-width:1120px}
+.tabs-in>:first-child{margin-left:auto}.tabs-in>:last-child{margin-right:auto}
 .tabs-in::-webkit-scrollbar{display:none}
 .tab{appearance:none;border:0;background:none;font-size:14px;font-weight:500;color:var(--muted);padding:10px 10px 9px;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;display:flex;gap:6px;align-items:center}
 .tab[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
@@ -402,6 +403,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .tab-notif{position:relative;margin-left:9px}
 .tab-notif::before{content:"";position:absolute;left:-6px;top:50%;width:1px;height:16px;background:var(--border);transform:translateY(-50%)}
 .tab-notif svg{width:15px;height:15px;flex:none}
+.tab .tab-ic{width:15px;height:15px;flex:none;opacity:.85}
+.tab[aria-current="page"] .tab-ic{opacity:1}
 /* ---- phone layout ---- */
 .kmove{display:none}
 .w{grid-template-columns:minmax(0,1fr)}.w>*{min-width:0}
@@ -1532,7 +1535,7 @@ function renderHeader(){
   if(![...list.map(x=>x[0]),...TASKV,...MOREV].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
-  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},l,n?h('span',{class:'badge',text:String(n)}):null)),
+  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',{class:'badge',text:String(n)}):null)),
     (()=>{ const nn=newCount(); return h('button',{class:'tab tab-notif',type:'button','data-k':'notifs','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
       'Notifications',nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null); })());
@@ -3820,8 +3823,13 @@ const HX_ICO={
  shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
  trash:'M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3',
  arrow:'M5 12h14M13 6l6 6-6 6',
- down:'M12 5v14M6 13l6 6 6-6'};
+ down:'M12 5v14M6 13l6 6 6-6',
+ pen:'M4 20h4L19 9l-4-4L4 16zM13 7l4 4',
+ dots:'M5 12h.01M12 12h.01M19 12h.01'};
 function hxIco(k,cls){ return svgEl('svg',{viewBox:'0 0 24 24',class:'hx-ico'+(cls?' '+cls:''),fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[k]||HX_ICO.circle})); }
+/* small icon beside each top tab label */
+const TAB_ICO={mine:'home',all:'list',projects:'layers',cal:'cal',team:'users',dash:'chart',chalk:'pen',people:'chat',more:'dots',acct:'key'};
+function tabIco(k){ const i=TAB_ICO[k]; if(!i) return null; return svgEl('svg',{viewBox:'0 0 24 24',class:'tab-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[i]})); }
 /* a look-alike of the real control, so people recognise it on screen */
 function hxMock(m){ if(!m) return null;
   if(m==='chk') return h('span',{class:'hx-mock-chk','aria-hidden':'true'});
