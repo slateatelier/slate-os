@@ -788,7 +788,11 @@ function status(t,basis='approved'){
   if(t.doneAt){ if(t.doneAt<g) return 'early'; if(t.doneAt===g) return 'ontime'; return 'late'; }
   const td=today(); if(td>g) return 'overdue'; if(diff(td,g)<=3) return 'soon'; return 'open';
 }
+/* SLATE OS go-live: work finished before it is history ("legacy") and never scored */
+const goLive=()=>(S.settings&&S.settings.goLive)||'2026-11-01';
+const preLive=()=>addDays(goLive(),-1);
 function pill(t,basis='approved'){
+  if(t.legacy) return h('span',{class:'pill s-open',title:'Finished before SLATE OS; not scored',text:'Before SLATE OS'});
   const s=status(t,basis), g=tgt(t,basis); let txt;
   if(s==='early') txt=`Done ${diff(t.doneAt,g)}d early`;
   else if(s==='ontime') txt='Done on time';
@@ -879,11 +883,12 @@ async function createTask(d){
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
   const ask=d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
-  const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
+  const lg=d.legacy?{legacy:true,doneAt:d.doneAt,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
+  const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
-    repeat:d.repeat||'',start:d.start||null,stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist});
+    repeat:d.repeat||'',start:d.start||null,stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
@@ -1754,7 +1759,7 @@ function range(kind,offset){
 }
 function count(items,basis){
   const c={early:0,ontime:0,late:0,overdue:0,open:0,total:0,slip:0,slipN:0};
-  for(const t of items){ let k=status(t,basis); if(k==='soon') k='open'; c[k]++; c.total++;
+  for(const t of items){ if(t.legacy) continue; let k=status(t,basis); if(k==='soon') k='open'; c[k]++; c.total++;
     const g=tgt(t,basis); if(k==='late'){c.slip+=diff(g,t.doneAt);c.slipN++} if(k==='overdue'){c.slip+=diff(g,today());c.slipN++} }
   return c;
 }
@@ -1795,7 +1800,7 @@ function scaleOf(p){ if(!p||p.pod==='Studio') return 1; const k=parseFloat(p.kat
 function weightOf(t){ const p=t._p||S.projects[t.projectId]; return (t.kind==='Deliverable'?3:1)*scaleOf(p)*(paceOf(p)==='fast'?1.25:1); }
 function creditOf(t){ const s=status(t); if(s==='early') return paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
-function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!isChalkP(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
+function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!isChalkP(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
 /* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
 S.dashAnon={}; S.anonInfo={};
 function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
@@ -2883,7 +2888,7 @@ function viewSetup(){
 /* ---------- sheet ---------- */
 function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
 function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&!S.projects[id].closed, okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
-const PFIELDS=['code','name','client','contact','phone','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
+const PFIELDS=['entry','completedOn','code','name','client','contact','phone','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
 const SCOPES=['Architectural design','Structural design','MEP design','Interior design','Common area interior design','Landscape design','3D visualization','Authority (RAJUK) drawings','Working drawings','Site supervision'];
 const AGS=[['','Select…'],['none','Not signed yet'],['loi','Letter of intent'],['signed','Signed agreement'],['internal','Internal (no agreement)']];
 function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.scope=[...(p.scope||[])];
@@ -3210,8 +3215,9 @@ function sheetProject(){
     const dup=Object.entries(S.projects).find(([kk,p])=>kk!==id&&p.status!=='declined'&&(norm(p.code)===norm(v.code)||norm(p.name)===norm(v.name)));
     if(dup) return fail(`“${dup[1].code||''} ${dup[1].name}” already exists${dup[1].status==='pending'?' and is waiting for approval':''}. Choose it from the list instead.`);
     const now=new Date().toISOString(), ref=id?S.db.doc('projects/'+id):S.db.collection('projects').doc();
-    const fn=id?()=>ref.update(v):()=>ref.set({...v,closed:false,createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
-    const plan=!id&&ap&&v.type&&!internal?{pid:ref.id,type:v.type,pod:v.pod}:null;
+    if(!id){ v.entry=internal?'':(d.entry||'upcoming'); if(v.entry!=='completed') v.completedOn=''; } else { delete v.entry; delete v.completedOn; }
+    const fn=id?()=>ref.update(v):()=>ref.set({...v,closed:v.entry==='completed',...(v.entry==='completed'?{legacy:true}:{}),createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
+    const plan=!id&&ap&&v.type&&!internal&&v.entry!=='completed'?{pid:ref.id,type:v.type,pod:v.pod}:null;
     run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
   };
   return [head(id?'Edit project':ap?'New project':'Request a project',id?(d.name||'Project'):ap?'Add to the project list':'New project for the list'),
@@ -3219,6 +3225,9 @@ function sheetProject(){
     h('form',{class:'form',onsubmit:submit},
       sec('Project'),
       h('div',{class:'form-row'},field('Project code',h('input',{id:'sh-code',value:d.code||'',readonly:true,tabindex:'-1',placeholder:'Set automatically when saved',style:'color:var(--muted)'}),'Area · plot · size · year and number, e.g. GUL2-24A-10K-2603'),field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'}))),
+      !id&&!internal?field('Where is this project now?',h('div',{style:'display:grid;gap:6px'},seg('Stage',[['upcoming','Upcoming'],['running','Running'],['completed','Completed']],d.entry||'upcoming',v=>{ d.entry=v; renderSheet(); }),
+        h('div',{class:'f-hint',text:(d.entry||'upcoming')==='upcoming'?'A new project: all phases are set up and scored from the start.':d.entry==='running'?`Already under way: when you set up its phases, tick the ones finished before SLATE OS and add their dates if you know them. Only work after ${fmtD(goLive())} is scored.`:'Finished before SLATE OS: kept as a record with its key dates. No tasks, no scoring.'}),
+        d.entry==='completed'?h('label',{class:'field'},h('span',{class:'lbl',text:'Completed in (optional)'}),h('input',{id:'sh-completedOn',type:'month',max:today().slice(0,7),value:d.completedOn||'',oninput:e=>{d.completedOn=e.target.value}})):null)):null,
       field('Project type'+(isStudio?'':' *'),typeSel(d,'Select project type…')),
       internal?teamPickers(d,id):field('Pod *',(()=>{ const el=sel('pod',[['','Select pod…'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)'],...(!id&&canChalkEdit()?[['__chalk','Chalk Create (separate unit) →']]:[])]); el.addEventListener('change',()=>{ if(el.value==='__chalk'){ D().pod=''; openChalkProject(); return; } renderSheet(); }); return el; })(),'The lead pod: its lead architect is accountable for the project.'),
       !isStudio&&[
@@ -3256,6 +3265,26 @@ function teamPickers(d,id){
     id?h('div',{class:'f-hint',text:'People are added or removed from the project page, under Project team.'})
       :field('People (optional)',h('div',{style:'display:grid;gap:8px'},[...groups.entries()].map(([t,ids])=>h('div',{style:'display:grid;gap:4px'},h('span',{class:'f-hint',text:podLabel(t)}),h('div',{class:'chips'},ids.map(personChip))))),
         'Add individuals who are not in a chosen pod, e.g. one drafter or the visualizer.'+(ap?'':' The COO approves them with the project.'))];
+}
+/* submissions log: past (and later) submissions with their dates, e.g. RAJUK set, revision 2. A record only; never scored. */
+function subsSection(p){
+  const can=S.canWrite&&(amApprover()||isProjLead(p)), xs=(Array.isArray(p.subs)?p.subs:[]).filter(Boolean).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(!xs.length&&!can) return null;
+  const sh=S.sheet, f=sh.subAdd||null, save=list=>run(()=>S.db.doc('projects/'+p.id).update({subs:list}),'Submissions log saved');
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Submissions log'}),h('span',{class:'cnt',text:String(xs.length)})),
+    xs.length?h('div',{class:'list'},xs.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:10px'},
+      h('span',{class:'mono',text:x.date?fmtD(x.date):'—'}),h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:x.what+(x.rev?` · R${x.rev}`:'')}),x.note?h('div',{class:'f-hint',text:x.note}):null,h('div',{class:'f-hint',text:(x.date&&x.date<goLive()?'Before SLATE OS · ':'')+'Logged by '+nameOf(x.by)})),
+      can?h('button',{class:'icon-btn',type:'button','aria-label':'Remove',onclick:()=>save((p.subs||[]).filter(y=>y!==x&&!(y.id&&y.id===x.id))),text:'×'}):h('span')))):h('p',{class:'muted',style:'margin:0 4px',text:'Nothing logged yet.'}),
+    can?(!f?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ sh.subAdd={date:'',what:'',rev:'',note:''}; renderSheet(); },text:'+ Log a submission'})
+      :h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Log a submission'}),
+        h('div',{class:'chips'},['Concept presentation','Design presentation','Marketing set','RAJUK set','Fire set','Working drawings','As-built set'].map(w=>h('button',{type:'button',class:'chip'+(f.what===w?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ f.what=w; renderSheet(); },text:w}))),
+        h('input',{id:'sb-what',maxlength:80,placeholder:'What was submitted',value:f.what,style:'background:#fff',oninput:e=>{f.what=e.target.value}}),
+        h('div',{class:'form-row'},h('input',{id:'sb-date',type:'date',max:today(),value:f.date,style:'background:#fff','aria-label':'Date',oninput:e=>{f.date=e.target.value}}),h('input',{id:'sb-rev',type:'number',min:0,placeholder:'Revision no. (optional)',value:f.rev,style:'background:#fff',oninput:e=>{f.rev=e.target.value}})),
+        h('input',{id:'sb-note',maxlength:120,placeholder:'Note (optional), e.g. to the client by email',value:f.note,style:'background:#fff',oninput:e=>{f.note=e.target.value}}),
+        h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!(f.what||'').trim()) return toast('Write what was submitted.'); if(f.date&&f.date>today()) return toast('The date can’t be in the future.');
+            const x={id:Math.random().toString(36).slice(2,10),what:f.what.trim(),date:f.date||'',rev:f.rev?String(parseInt(f.rev)):'',note:(f.note||'').trim(),by:S.uid,at:new Date().toISOString()};
+            save([...(Array.isArray(p.subs)?p.subs:[]),x]).then(ok=>{ if(ok){ sh.subAdd=null; renderSheet(); } }); },text:'Save'}),
+          h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.subAdd=null; renderSheet(); },text:'Cancel'})))):null);
 }
 function memberPatch(pid,patch){ return {members:{[pid]:patch}}; }
 function teamSection(p){
@@ -3417,7 +3446,7 @@ function stdSection(p){
       det&&amMgr()&&S.canWrite&&!p.closed?h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Set up phases'})):h('div',{class:'f-hint',text:'The pod lead sets the phases up.'}))); }
   const ks=stdPhases(p), act=activePhases(p), cur=act[0]||null, manage=det&&canManageCl(p), open=S.sheet&&S.sheet.openPh!==undefined?S.sheet.openPh:cur, fbEdit=S.canWrite&&(amApprover()||isProjLead(p));
   const closed=ks.filter(k=>stdState(p,k).done).length;
-  const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
+  const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub='before SLATE OS'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
     return h('div',{},h('span',{text:lbl}),extra||h('b',{style:t&&!t.doneAt&&status(t)==='overdue'?'color:var(--overdue)':'',text:v}),!extra&&sub?h('span',{style:'font-weight:500',text:sub}):null); };
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'}),h('span',{class:'cnt',text:`${closed}/${ks.length} gates closed`})),
     paceRow(p),
@@ -3432,14 +3461,30 @@ function stdSection(p){
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>{ S.sheet.openPh=isOpen?null:k; renderSheet(); },text:isOpen?'Hide checklist':'Show checklist'}):null),
         h('div',{class:'pc-bar'},h('span',{style:`width:${c.tot-c.na?Math.round(c.done/(c.tot-c.na)*100):100}%`})),
-        isOpen&&det?h('div',{class:'cl'},main.map(it=>clRow(p,k,it,manage)),cost.length?[h('div',{class:'cl-h',text:'Cost checks'}),cost.map(it=>clRow(p,k,it,manage))]:null):null); })),
+        isOpen&&det?h('div',{class:'cl'},main.map(it=>clRow(p,k,it,manage)),cost.length?[h('div',{class:'cl-h',text:'Cost checks'}),cost.map(it=>clRow(p,k,it,manage))]:null):null,
+        s.created&&!s.done&&manage&&today()<addDays(goLive(),60)?preBox(p,k):null); })),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Gate deliverables carry the dates and count on the dashboard. Checklist items are ticked, not dated. Client feedback dates are for planning and never count against the pod.'}),
     det&&amMgr()&&S.canWrite&&!p.closed&&tp&&tp.std&&tp.phases.some(k=>!stdState(p,k).created)?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Add phases'}):null);
+}
+/* a phase that was already set up but had finished before SLATE OS went live: close it as history */
+function preBox(p,k){
+  const sh=S.sheet, f=sh.preEdit&&sh.preEdit.k===k?sh.preEdit:null;
+  if(!f) return h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px',onclick:()=>{ sh.preEdit={k,sub:'',final:''}; renderSheet(); },text:'Finished before SLATE OS?'});
+  return h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Close this phase as finished before SLATE OS'}),
+    h('div',{class:'form-row'},stepsOf(p.std.type,k).map(([st])=>h('label',{class:'field'},h('span',{class:'lbl',text:(st==='sub'?'Submitted on':st==='final'?'Final on':'Done on')+' (optional)'}),h('input',{id:`pb-${k}-${st}`,type:'date',max:preLive(),value:f[st]||'',style:'background:#fff',oninput:e=>{f[st]=e.target.value}})))),
+    h('div',{class:'f-hint',text:'Its gate shows as closed with these dates and its checklist is closed. It never counts in scores.'}),
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{
+        for(const t of gateTasks(p.id).filter(t=>t.gate.k===k&&!t.doneAt)){ const dt=f[t.gate.step]||(t.gate.step==='sub'?f.final:f.sub)||'';
+          await taskUpdate(t.id,{doneAt:dt||preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:!dt,request:null},[{type:'done',to:dt||preLive(),note:'Finished before SLATE OS'+(dt?'':' (date not recorded)')}]); }
+        const m={}; clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(!x.done&&!x.na) m[it.id]={...x,done:f.final||f.sub||preLive(),legacy:true}; });
+        if(Object.keys(m).length) await S.db.doc('projects/'+p.id).update({cl:{[k]:m}});
+      },'Phase recorded as finished before SLATE OS').then(ok=>{ if(ok){ sh.preEdit=null; renderSheet(); } }),text:'Close phase'}),
+      h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.preEdit=null; renderSheet(); },text:'Cancel'})));
 }
 function openStdPlan(pid,type,pod){
   const p=S.projects[pid]||{}, tp=T()[type]; if(!tp||!tp.std) return;
   const has=[...new Set(gateTasks(pid).map(t=>t.gate.k))];
-  S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pace:paceOf(p),lead:(p.std&&p.std.lead)||personFor('lead',pod||p.pod)||'',has,on:Object.fromEntries(tp.phases.map(k=>[k,has.includes(k)||!(tp.off||[]).includes(k)]))};
+  S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pre:{},running:p.entry==='running',pace:paceOf(p),lead:(p.std&&p.std.lead)||personFor('lead',pod||p.pod)||'',has,on:Object.fromEntries(tp.phases.map(k=>[k,has.includes(k)||!(tp.off||[]).includes(k)]))};
   renderSheet();
 }
 function sheetStdPlan(){
@@ -3457,7 +3502,12 @@ function sheetStdPlan(){
         h('label',{style:'display:flex;gap:10px;align-items:flex-start'},h('input',{type:'checkbox',id:'sp-'+k,checked:on,disabled:done,onchange:e=>{sh.on[k]=e.target.checked;renderSheet()}}),
           h('div',{style:'min-width:0'},h('div',{style:'font-weight:600',text:'Phase '+phLabel(k)}),
             h('div',{class:'f-hint',text:'Gate: '+stepsOf(sh.tpl,k).map(s=>s[1]).join(' → ')}),
-            h('div',{class:'f-hint',text:`${clItems(k).length} checklist items`+(done?' · already set up':(tp.off||[]).includes(k)&&!on?' · '+(tp.offNote||'Off by default'):'')})))); }),
+            h('div',{class:'f-hint',text:`${clItems(k).length} checklist items`+(done?' · already set up':(tp.off||[]).includes(k)&&!on?' · '+(tp.offNote||'Off by default'):'')}))),
+        !done&&on&&(sh.running||sh.pre[k])?(()=>{ const pr=sh.pre[k];
+          return h('div',{style:'display:grid;gap:6px;padding-left:30px'},h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pre-'+k,checked:!!pr,onchange:e=>{ if(e.target.checked) sh.pre[k]={}; else delete sh.pre[k]; renderSheet(); }}),'Finished before SLATE OS'),
+            pr?h('div',{class:'form-row'},stepsOf(sh.tpl,k).map(([st,txt])=>h('label',{class:'field'},h('span',{class:'lbl',text:(st==='sub'?'Submitted on':st==='final'?'Final on':'Done on')+' (optional)'}),h('input',{id:`pre-${k}-${st}`,type:'date',max:preLive(),value:pr[st]||'',oninput:e=>{pr[st]=e.target.value}})))):null,
+            pr?h('div',{class:'f-hint',text:'Recorded as history: the gate shows as closed with these dates and the checklist is closed. It never counts in scores.'}):null); })():null); }),
+    sh.running?h('p',{class:'f-hint',style:'margin:0',text:`This project was already running. Tick each phase finished before SLATE OS went live (${fmtD(goLive())}); set up the rest normally.`}):null,
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
       h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!n,onclick:createStdPlan,text:n?`Set up ${n} phase${n===1?'':'s'}`:'Nothing new to set up'}),
@@ -3471,8 +3521,10 @@ function createStdPlan(){
   const keep=new Set([...stdPhases(p),...ks]), ordered=tp.phases.filter(k=>keep.has(k)), jr=personFor('junior',sh.pod);
   let n=0;
   run(async()=>{
-    for(const k of ks) for(const [step,txt] of stepsOf(sh.tpl,k)){ await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:sh.lead,phase:phLabel(k),gate:{k,step}}); n++; }
-    const cl={}; ks.forEach(k=>{ const m={}; clItems(k).forEach(it=>{ if(it.only&&it.only!==sh.tpl){ m[it.id]={na:true}; return; } if(sh.pace==='fast'&&sh.tpl==='proposal'&&SPRINT_NA.includes(it.id)){ m[it.id]={na:true,sp:true}; return; } const who=it.r==='L'?sh.lead:it.r==='J'?jr:''; if(who&&!isPriv(who)&&!isCOO(who)) m[it.id]={who}; }); cl[k]=m; });
+    for(const k of ks) for(const [step,txt] of stepsOf(sh.tpl,k)){ const pr=sh.pre[k];
+      if(pr){ const dt=pr[step]||(step==='sub'?pr.final:pr.sub)||''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:sh.lead,phase:phLabel(k),gate:{k,step},legacy:true,doneAt:dt||preLive(),legacyNoDate:!dt,target:dt||preLive()}); }
+      else await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:sh.lead,phase:phLabel(k),gate:{k,step}}); n++; }
+    const cl={}; ks.forEach(k=>{ const m={}, pr=sh.pre[k]; clItems(k).forEach(it=>{ if(it.only&&it.only!==sh.tpl){ m[it.id]={na:true}; return; } if(pr){ m[it.id]={done:pr.final||pr.sub||preLive(),legacy:true}; return; } if(sh.pace==='fast'&&sh.tpl==='proposal'&&SPRINT_NA.includes(it.id)){ m[it.id]={na:true,sp:true}; return; } const who=it.r==='L'?sh.lead:it.r==='J'?jr:''; if(who&&!isPriv(who)&&!isCOO(who)) m[it.id]={who}; }); cl[k]=m; });
     await S.db.doc('projects/'+pid).update({type:sh.tpl,std:{v:1,type:sh.tpl,phases:ordered,lead:sh.lead,pace:sh.pace||'std'},cl});
   },`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(ok) openTimeline(pid); });
 }
@@ -4079,7 +4131,7 @@ function sheetProjView(){
   const st=projStats(p), [hl,hk]=HEALTH[st.health], ap=amApprover(), det=canSeeProjectDetail(p), tp=p.type&&(T()[p.type]||LEGACY[p.type]);
   const fact=(l,v,sub)=>v?h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v',text:v}),sub&&h('div',{class:'s',text:sub})):null;
   const out=[head(`${p.code} · ${podText(p)}`,p.name),
-    h('div',{class:'sh-status'},h('span',{class:'pill s-'+hk,text:p.closed?'Closed':hl}),tp&&h('span',{class:'tag',text:tp.name}),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
+    h('div',{class:'sh-status'},h('span',{class:'pill s-'+hk,text:p.closed?'Closed':hl}),tp&&h('span',{class:'tag',text:tp.name}),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.entry==='completed'&&h('span',{class:'tag',text:'Completed before SLATE OS'+(p.completedOn?' · '+MON[+p.completedOn.slice(5,7)-1]+' '+p.completedOn.slice(0,4):'')}),p.entry==='running'&&h('span',{class:'tag',text:'Running before SLATE OS'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:st.tot?`${st.pct}% complete`:'No tasks yet'}),h('span',{class:'muted',text:st.tot?`${st.ts.filter(t=>t.doneAt).length} of ${st.ts.length} done`:''})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${st.pct}%`})),
       h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%'],['Overdue',String(st.over)],['Open',String(st.open)],['No date',String(st.noDate)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
     h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),
@@ -4088,6 +4140,7 @@ function sheetProjView(){
     if(fs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Building and FAR'})),h('div',{class:'facts'},fs))); }
   if(p.type==='jv'&&unitsOf(p)&&(det||amApprover())) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Landowner and developer units'})),h('div',{class:'card'},loChart({...p,loUnits:p.loUnits||[]},false))));
   { const tm=teamSection(p); if(tm) out.push(tm); }
+  { const sb=subsSection(p); if(sb) out.push(sb); }
   { const ss=stdSection(p); if(ss) out.push(ss); }
   { const ms=pmSection(p); if(ms) out.push(ms); }
   { const ps=phaseSection(p); if(ps) out.push(ps); }

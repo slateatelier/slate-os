@@ -1,0 +1,7 @@
+-- SLATE OS · existing projects (25 Oct 2026), applied as existing_projects_backfill, legacy_update_rule, legacy_update_rule_2
+-- * config/settings.goLive (default 2026-11-01); private.go_live() reads it.
+-- * Work finished before go-live is recorded as history: tasks carry legacy=true (+ legacyNoDate when no date is known).
+--   Legacy tasks never count: the app skips them in scoring and dash_rows excludes them.
+-- * docs_guard: a project's pod leader may create a legacy-done task (doneAt before go-live, target empty or equal),
+--   may mark an open task legacy-done only with a doneAt before go-live, and may edit the project's submissions log (subs).
+--   A task flagged legacy can never carry a doneAt on or after go-live.
