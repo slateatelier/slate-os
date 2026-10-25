@@ -2156,6 +2156,16 @@ function viewMeetings(){
         h('span',{class:'mi-a',text:'›'})); })):h('p',{class:'muted',style:'margin:0 4px',text:'No minutes yet.'})));
   return out;
 }
+/* weekly-meeting action items go under a studio area, not a client project. Each area has one studio-work project,
+   created the first time the COO approves minutes with an action in that area. */
+const STUDIO_AREAS=[['studiomgmt','Management'],['studioops','Operation'],['studiodev','Development']];
+const areaName=k=>(STUDIO_AREAS.find(x=>x[0]===k)||['',''])[1];
+const areaProject=k=>Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>p.type===k&&isLive(p)&&!p.closed).sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''))[0]||null;
+const _areaMade={};
+async function ensureAreaProject(k){ const ex=areaProject(k); if(ex) return ex.id; if(_areaMade[k]) return _areaMade[k];
+  const now=new Date().toISOString(), ref=S.db.collection('projects').doc(), nm={studiomgmt:'STUDIO MANAGEMENT',studioops:'STUDIO OPERATION',studiodev:'STUDIO DEVELOPMENT'}[k];
+  await ref.set({name:nm,type:k,pod:'Studio',pod2:'',pods:[],katha:'',client:'',location:'',agStatus:'internal',scope:[],note:'Studio work from the weekly meeting',closed:false,status:'active',createdAt:now,createdBy:S.uid,approvedBy:S.uid,approvedAt:now});
+  _areaMade[k]=ref.id; return ref.id; }
 const actOwners=a=>Array.isArray(a.owners)&&a.owners.length?[...a.owners]:a.owner?[a.owner]:[];
 const actTaskIds=a=>Array.isArray(a.taskIds)&&a.taskIds.length?[...a.taskIds]:a.taskId?[a.taskId]:[];
 /* minutes drafts are also kept on this device as you type, so nothing is lost before Save draft */
@@ -2171,10 +2181,10 @@ function saveMeeting(mode){
   if(submit||publish){ if(!(d.notes||'').trim()&&!(d.decisions||'').trim()) return fail('Complete the minutes first: add the discussion notes or decisions.'); if(!d.attendees.length) return fail('Tick who attended.'); }
   const acts=d.actions.filter(a=>(a.text||'').trim());
   acts.forEach(a=>{ a.owners=actOwners(a); a.owner=a.owners[0]||''; });
-  if(publish||submit){ const bad=acts.find(a=>!a.owners.length||!a.project); if(bad) return fail(`Choose who does “${bad.text}” and its project.`); }
+  if(publish||submit){ const bad=acts.find(a=>!a.owners.length||(!a.area&&!a.project)); if(bad) return fail(`Choose who does “${bad.text}” and its area: Management, Operation or Development.`); }
   run(async()=>{
-    if(publish) for(const a of acts){ const ap=amApprover(); a.taskIds=actTaskIds(a); for(let j=0;j<a.owners.length;j++){ if(a.taskIds[j]) continue; a.taskIds[j]=await createTask({projectId:a.project,title:a.text.trim(),kind:'Task',assignee:a.owners[j],phase:'Meeting actions',target:ap?(a.due||''):'',proposed:ap?'':(a.due||''),note:`From the weekly meeting on ${fmtD(date)}`+(a.owners.length>1?` · shared with ${a.owners.filter((x,k)=>k!==j).map(nameOf).join(', ')}`:'')}); } a.taskId=a.taskIds[0]||''; }
-    await S.db.doc('meetings/'+date).set({date,organiser:d.organiser||(amApprover()?'':S.uid),guest:d.guest||'',attendees:d.attendees,agenda:d.agenda,notes:d.notes,decisions:d.decisions,actions:acts.map(a=>({text:a.text.trim(),owner:a.owners[0]||'',owners:a.owners,due:a.due||'',project:a.project||'',taskId:(actTaskIds(a)[0])||'',taskIds:actTaskIds(a)})),
+    if(publish) for(const a of acts){ const ap=amApprover(); a.taskIds=actTaskIds(a); if(!a.project&&a.area) a.project=await ensureAreaProject(a.area); for(let j=0;j<a.owners.length;j++){ if(a.taskIds[j]) continue; a.taskIds[j]=await createTask({projectId:a.project,title:a.text.trim(),kind:'Task',assignee:a.owners[j],phase:'Meeting actions',target:ap?(a.due||''):'',proposed:ap?'':(a.due||''),note:`From the weekly meeting on ${fmtD(date)}`+(a.owners.length>1?` · shared with ${a.owners.filter((x,k)=>k!==j).map(nameOf).join(', ')}`:'')}); } a.taskId=a.taskIds[0]||''; }
+    await S.db.doc('meetings/'+date).set({date,organiser:d.organiser||(amApprover()?'':S.uid),guest:d.guest||'',attendees:d.attendees,agenda:d.agenda,notes:d.notes,decisions:d.decisions,actions:acts.map(a=>({text:a.text.trim(),owner:a.owners[0]||'',owners:a.owners,due:a.due||'',area:a.area||'',project:a.project||'',taskId:(actTaskIds(a)[0])||'',taskIds:actTaskIds(a)})),
       status:publish?'published':submit?'submitted':(m.status==='returned'?'returned':m.status==='published'?'published':'draft'),createdAt:m.createdAt||now,createdBy:m.createdBy||S.uid,updatedAt:now,updatedBy:S.uid,
       submittedAt:submit?now:(m.submittedAt||''),submittedBy:submit?S.uid:(m.submittedBy||''),returnNote:submit?'':(m.returnNote||''),returnedAt:m.returnedAt||'',returnedBy:m.returnedBy||'',
       ...(publish?{publishedAt:m.publishedAt||now,publishedBy:S.uid,approvedBy:S.uid,approvedAt:now}:{publishedAt:m.publishedAt||'',publishedBy:m.publishedBy||''})});
@@ -2227,7 +2237,7 @@ function sheetMeeting(){
     const acts=(m.actions||[]).filter(a=>a.text);
     out.push(sec('Action items',acts.length?h('div',{class:'list'},acts.flatMap(a=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]?{...S.tasks[id],id}:null).filter(t=>t&&canSee(t));
       if(ts.length) return ts.map(t=>row(t,{}));
-      const os=actOwners(a); return [h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},h('div',{style:'font-weight:500',text:a.text}),h('div',{class:'f-hint who'},...os.slice(0,4).map(o=>avaEl(o,false,'sm')),[os.map(nameOf).join(', '),a.due?'due '+fmtD(a.due):''].filter(Boolean).join(' · ')))]; })):null));
+      const os=actOwners(a); return [h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},h('div',{style:'font-weight:500',text:a.text}),h('div',{class:'f-hint who'},...os.slice(0,4).map(o=>avaEl(o,false,'sm')),[os.map(nameOf).join(', '),areaName(a.area),a.due?'due '+fmtD(a.due):''].filter(Boolean).join(' · ')))]; })):null));
     if(!m.updatedAt) out.push(h('p',{class:'muted',style:'margin:0',text:can?'Nothing written yet.':'The organiser hasn’t written the agenda yet.'}));
     if(amApprover()&&S.canWrite&&m.status==='submitted') out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--ink)'},h('div',{class:'lbl',text:`Submitted by ${nameOf(m.submittedBy)} · ${fmtTs(m.submittedAt)}`}),
       h('div',{class:'bar'},h('input',{id:'mt-rn',placeholder:'Note for the organiser (needed to return)',value:S.declineNote['mt:'+date]||'',style:'background:#fff',oninput:e=>{S.declineNote['mt:'+date]=e.target.value}}),
@@ -2254,12 +2264,15 @@ function sheetMeeting(){
       const own=h('div',{style:'display:grid;gap:6px;flex:1 1 220px'},
         a.owners.length?h('div',{class:'chips'},a.owners.map((o,j)=>h('span',{class:'chip who',style:'padding-right:6px;background:var(--group)'},avaEl(o,false,'sm'),nameOf(o),a.taskIds[j]?null:h('button',{class:'icon-btn',type:'button','aria-label':'Remove '+nameOf(o),style:'width:22px;height:22px;font-size:14px',onclick:()=>{ a.owners.splice(j,1); a.taskIds.splice(j,1); a.owner=a.owners[0]||''; saveMeetDraft(); renderSheet(); },text:'×'})))):null,
         h('select',{id:'ma-o-'+i,'aria-label':'Add a person',style:'background:#fff',onchange:e=>{ const v=e.target.value; if(v&&!a.owners.includes(v)){ a.owners.push(v); a.owner=a.owners[0]; } saveMeetDraft(); renderSheet(); }},meetOwnerOpts().filter(([v])=>!a.owners.includes(v)).map(([v,l])=>h('option',{value:v,text:v?l:(a.owners.length?'+ Add another person…':'Who… (add one or more)')}))));
-      const pj=h('select',{id:'ma-p-'+i,'aria-label':'Project',style:'background:#fff',onchange:e=>{a.project=e.target.value}},projectOpts().map(([v,l])=>h('option',{value:v,text:l}))); if(!a.project) a.project=defP; pj.value=a.project||'';
+      const pj=h('select',{id:'ma-p-'+i,'aria-label':'Area',style:'background:var(--group)',onchange:e=>{ const v=e.target.value; if(v.startsWith('p:')){ a.project=v.slice(2); a.area=''; } else { a.area=v; a.project=''; } saveMeetDraft(); }},
+        h('option',{value:'',text:'Area: choose…'}),STUDIO_AREAS.map(([k,l])=>h('option',{value:k,text:'Area: '+l})),
+        a.project&&!a.area&&S.projects[a.project]?h('option',{value:'p:'+a.project,text:projLabel(S.projects[a.project])}):null);
+      pj.value=a.area||(a.project?'p:'+a.project:'');
       return h('div',{class:'card',style:'background:#fff;gap:8px'},
         h('div',{style:'display:flex;gap:6px'},h('input',{id:'ma-t-'+i,placeholder:'What needs doing',value:a.text||'',disabled:made,style:'background:var(--group)',oninput:e=>{a.text=e.target.value}}),made?null:h('button',{class:'icon-btn',type:'button','aria-label':'Remove',onclick:()=>{d.actions.splice(i,1);renderSheet()},text:'×'})),
         made?h('div',{class:'f-hint',text:'Tasks created · '+a.owners.map(nameOf).join(', ')}):null,
         made&&a.owners.length===a.taskIds.filter(Boolean).length?null:h('div',{class:'form-row'},own,h('input',{id:'ma-d-'+i,type:'date',value:a.due||'',style:'background:var(--group)',oninput:e=>{a.due=e.target.value}}),pj)); }),
-    h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ d.actions.push({text:'',owner:'',owners:[],taskIds:[],due:'',project:defP}); renderSheet(); setTimeout(()=>{const e=document.getElementById('ma-t-'+(d.actions.length-1));e&&e.focus()},30); },text:'+ Add action item'}),
+    h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ d.actions.push({text:'',owner:'',owners:[],taskIds:[],due:'',area:'',project:''}); renderSheet(); setTimeout(()=>{const e=document.getElementById('ma-t-'+(d.actions.length-1));e&&e.focus()},30); },text:'+ Add action item'}),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},
       h('button',{class:'btn',type:'submit',style:'background:#fff',disabled:S.busy,text:'Save draft'}),
