@@ -574,6 +574,27 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .hx-tab-ic .hx-ico{width:17px;height:17px}
 .hx-tab b{font-size:14px}.hx-tab span{font-size:12px;color:var(--muted);line-height:1.35}
 /* rules */
+.hd{display:grid;gap:12px}
+.hd-bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.hd-search{flex:1 1 260px;min-width:0;font:inherit;font-size:15px;padding:11px 14px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:var(--ink)}
+.hd-allr{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer}
+.hd-cnt{font-size:12px;color:var(--muted);margin-left:auto}
+.hd-topics .chip{border:0;cursor:pointer;padding:6px 12px}
+.hd-topics .chip[hidden]{display:none}
+.hd-list{display:grid;gap:8px}
+.hd-item{background:var(--group);border-radius:var(--r-lg);padding:0 16px}
+.hd-item[hidden]{display:none}
+.hd-item summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px;padding:14px 0}
+.hd-item summary::-webkit-details-marker{display:none}
+.hd-item summary::before{content:"+";font-weight:600;color:var(--muted);width:14px;flex:none}
+.hd-item[open] summary::before{content:"–"}
+.hd-q{font-weight:600;font-size:15px;flex:1 1 220px}
+.hd-who{font-size:12px;color:var(--muted)}
+.hd-steps{margin:0 0 12px;padding-left:22px;display:grid;gap:6px;font-size:14px;line-height:1.45}
+.hd-after,.hd-note{font-size:13px;line-height:1.45;padding:10px 12px;border-radius:var(--r);background:#fff;margin-bottom:8px}
+.hd-note{margin-bottom:14px}
+.hd-after b,.hd-note b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:2px}
+.hd-empty{margin:0}
 .hx-rules{background:var(--group);border-radius:var(--r-lg);overflow:hidden}
 .hx-rule{display:grid;grid-template-columns:24px 1fr;gap:10px;padding:12px 14px;font-size:14px;line-height:1.45;border-top:1px solid var(--line)}
 .hx-rule:first-child{border-top:0}
@@ -3952,6 +3973,142 @@ function hxTabs(){
   if(amApprover()) t.splice(5,0,['users','People','Message the team · accounts']);
   return h('div',{class:'hx-tabs'},t.map(([i,n,d])=>h('div',{class:'hx-tab'},h('span',{class:'hx-tab-ic'},hxIco(i)),h('b',{text:n}),h('span',{text:d}))));
 }
+/* ---------- How do I…: every scenario, step by step (shown inside How to use) ----------
+   Each entry: [topic, roles, question, steps, what happens next, good to know]
+   roles: 'all' or a list of member / lead / head / boss (guide roles from myGuide()) */
+const HD_TOPICS=[['start','Getting started'],['tasks','Tasks'],['dates','Dates'],['projects','Projects'],['phases','Phases and checklist'],['pmeet','Project meetings'],['weekly','Weekly meeting'],['msg','Messages'],['notif','Notifications and calendar'],['team','Team and dashboard'],['admin','People and settings'],['tools','Tools']];
+const HD_ROLES={member:'Team member',lead:'Pod lead',head:'Drafting lead',boss:'Principal and COO'};
+const HOWDO=[
+ // ---- getting started
+ ['start','all','Sign in for the first time',['Open SLATE OS and enter your Studio email and the temporary password you were given.','Tap Sign in.','On the next screen, type a new password (8+ characters) twice and tap Set password and continue.'],'Only you know the new password. The log records that you chose it.','Keep “Keep me signed in” ticked on your own phone; untick it on a shared computer.'],
+ ['start','all','Forgot my password',['On the sign-in screen, type your email.','Tap Forgot password? and open the link in the email.','Or ask the COO or Principal to reset it: they give you a new temporary password.'],'After a reset you choose your own password the next time you sign in.',null],
+ ['start','all','Change my password or sign out',['Tap More › Account (or your profile picture › Account).','Type the new password twice and tap Change password.','To leave, tap Sign out.'],null,null],
+ ['start','all','Install SLATE OS on my phone',['iPhone (Safari): tap Share › Add to Home Screen › Add, then open SLATE OS from the red icon.','Android (Chrome): tap ⋮ › Install app.','Or use the Install SLATE OS / Add to Home Screen banner, or More › Account › App.'],'It opens like an app, without the browser bar.','On iPhone, notifications only work once it is on the Home Screen.'],
+ ['start','all','Turn on notifications',['Tap Turn on in the notification banner, or More › Account › Turn on notifications.','Allow notifications when the phone asks.'],'You get alerts for tasks, approvals and messages even when the app is closed.','If you blocked them by mistake, allow them for SLATE OS in your phone’s settings. Turn them on separately on each device you use.'],
+ ['start','all','Set my profile icon',['Tap your picture at the top left.','Pick an icon. Each icon belongs to one person only.','To go back to initials, tap Use my initials instead.'],null,null],
+ ['start','all','Report a problem with the app',['Tap the ! button at the bottom left (Report an issue on larger screens).','Describe the problem and tap Send report.'],'The Principal and COO are told. Follow it in More › Report log: Open, Being fixed, Fixed or Closed.','The screen you were on is attached for you.'],
+
+ // ---- tasks
+ ['tasks','all','See what I have to do today',['Open Home.','Read Needs attention first: overdue work and anything due in the next 3 days.','Then My checklist, Waiting for an approved date and In progress.'],null,'Messages from the Principal or COO sit at the top of Home until you answer them.'],
+ ['tasks','all','Add a task for myself',['Tap New task (or the round + button).','Type the task, or pick a suggestion.','Choose the Project and yourself under Assign to.','Pick a proposed date with the chips or the date box.','Tap Add task.'],'The task is yours at once. The date is a proposal until the COO approves it; only approved dates count.','Use More options for a category, note, start date or a weekly/monthly repeat.'],
+ ['tasks',['lead','boss'],'Give a task to someone in my pod',['Tap New task.','Choose the Project, then the person under Assign to.','Pick a date: pod leads propose it, the COO and Principal set it directly.','Tick This is a deliverable if it is a submission.','Tap Add task. The sheet stays open for the next one.'],'The person is notified. A pod lead’s date waits for the COO.','Added just now lists what you created in this sheet.'],
+ ['tasks',['lead','head','boss'],'Get help from the drafting pool or another pod',['Create the task (or open it › Edit or reassign).','Choose a drafter, visualiser or someone from another pod.','Save.'],'It becomes an assignment request: the task shows “awaiting approval” until the COO approves, picks someone else, or declines.','Drafting leads: leave the date as a proposal. Adding a person to the project team (Project › + Add people) avoids asking for every task.'],
+ ['tasks','all','Know a task from a deliverable',['A deliverable is a submission (a set, a presentation, a gate). Tick This is a deliverable when you create it.','Everything else is a task.'],'Deliverables carry a tag, a diamond on the Timeline and the Calendar, and weigh 3 points against 1 for a task.',null],
+ ['tasks','all','Mark a task done',['Tap the circle on the task row, or open it and tap ✓ Done today.','Finished on an earlier day? Open it › Done on another date, pick the date, add a note if useful, tap Mark as done.'],'It is scored against the approved target: done in advance, on time or late. Undo is offered for a few seconds.','A phase’s final gate deliverable can’t be marked done while its checklist has open items.'],
+ ['tasks','all','Move my work across the Board',['Tasks › Board.','On a computer, drag the card to To do, In progress, In review or Done.','On a phone, use the ← Prev / Next → buttons on the card.'],'Dropping on Done asks for the completion date.','You can move only your own cards (managers can move their pod’s).'],
+ ['tasks','all','Find a task',['Open Tasks.','Type in Search tasks: title, project, code or person.','Filter by Project, Person and Status (Open, Overdue, Due soon, Date requests, Completed, Archived…).'],null,'Switch between List, Board and Timeline at the top; the app remembers your choice.'],
+ ['tasks','all','Plan on the Timeline',['Tasks › Timeline.','Choose 6 weeks, 3 months or 6 months; move with ‹ Today ›.','Filter by project or person.'],'Bars run from the start date to the target; late time shows in red.','Tasks without an approved date are not drawn. Set a Start date in Edit to give a bar its true length.'],
+ ['tasks','all','The client sent changes after I finished',['Open the completed task.','Tap + Client revision.','Write what the client asked for, when the feedback came, and the (proposed) submission date.','Tap Add revision.'],'A new linked task “… · Revision 1” is created. The original stays done and on time.','Completed tasks are locked; this is the way to add more work to them.'],
+ ['tasks',['lead','boss'],'Rename, reassign or change a task',['Open the task.','Tap Rename for the name, or Edit or reassign for type, project, person, start date and repeat.','Save.'],'Every change is kept in the task’s history; the old name too.','Once a task is done, only the Principal or COO can edit it.'],
+ ['tasks',['lead','boss'],'Remove a task that is no longer needed',['Open the task › Archive.','Add a reason, e.g. Dropped from scope, and confirm.'],'It leaves the lists and the dashboard but keeps its history.','Nothing is deleted. To bring it back: Tasks › Status: Archived › open it › Restore.'],
+ ['tasks','boss','Reopen a completed task or fix its completion date',['Open the task.','Tap Reopen, or Correct completion date.','Give the reason (required) and save.'],'The change and the reason stay in the history.','Use it for real mistakes only; client changes go in as + Client revision.'],
+ ['tasks','all','Make a task repeat every week or month',['When creating it, open More options › Repeat (or Edit or reassign › Repeat).','Choose Repeats weekly or Repeats monthly.'],'When you mark it done, the next one is created for the same person with its date already set.','Choose Does not repeat to stop the series.'],
+ ['tasks','all','Read a task’s history',['Open the task.','The top shows Target Rn and Original target R0.','Scroll to History for every change, who made it and when.'],'R0 is the first approved date; each approved change is R1, R2…',null],
+ ['tasks','boss','Keep the Principal’s and COO’s tasks private',['Tasks for a private person are stored apart automatically.','The Principal can mark someone private in More › Settings › People › Private tasks.'],'Only the Principal and the COO see them. They never appear on the dashboard or in anyone else’s lists.','A private task can’t be reassigned; archive it and create a new one.'],
+
+ // ---- dates
+ ['dates',['member','lead','head'],'Ask for more time',['Open the task › Request new date.','Pick the new date (chips: +2 days, +1 week, +2 weeks, or any date).','Tap a reason chip, e.g. Waiting for client input, and add detail.','Tap Send for approval.'],'The COO approves or declines. Your current date stays until then; the row shows Date request.','Ask the day you know you will be late, not on the due date. If the client or a consultant caused the delay, say so in the reason.'],
+ ['dates',['lead','boss'],'Propose dates for a whole project',['Tasks › beside the project heading, tap Propose timeline (or Set timeline).','Enter a date for each task. You can leave some for later.','Tap Send for approval (or Set dates).'],'Pod leads’ dates go to the COO; the Principal’s and COO’s count at once.',null],
+ ['dates','lead','Propose a date for a task that has none',['Open the task › Propose date.','Pick the date, add a note if useful.','Tap Send for approval.'],'It shows “Waiting for the COO’s approval” until decided.',null],
+ ['dates','boss','Approve dates and requests',['Home › Dates to approve.','A project’s first timeline comes as one card: Approve all or Return with a note.','Revised dates: Approve or Decline each.','With several waiting, Approve all N clears them (tap twice).'],'Approved dates become the target; changes become R1, R2… and the original R0 stays on record.','Fast-track projects are listed first and marked “decide today”.'],
+ ['dates','boss','Change a target date directly',['Open the task › Change target date (or Set target date).','Enter the new date and the reason.','Tap Save date.'],'It becomes the next revision; the original target stays on record.',null],
+
+ // ---- projects
+ ['projects','boss','Add a new project',['Projects › New project.','Fill in the name, Stage (Upcoming, Running or Completed), type, pod, land size, FAR, client, site and agreement.','Tap Add project.'],'The code is made automatically from area, plot and size (e.g. GUL2-24A-10K-2603). The phase setup opens next.','Over 30 katha needs a second pod. Agreement details are seen only by the Principal and COO.'],
+ ['projects','lead','Ask for a new project for my pod',['Projects › Request a project.','Fill in the same form as a new project.','Tap Send for approval.'],'The COO approves it, edits it first or declines it with a note. You see it under Your project requests.','You can withdraw it while it is waiting.'],
+ ['projects',['lead','boss'],'Enter a project that started before SLATE OS',['Add or request the project and choose the Stage: Running, or Completed.','Running: when setting up phases, tick Finished before SLATE OS on the phases already done and add their dates if known.','Completed: add the month it finished. It is kept as a record only.'],'Work before go-live is history: the COO approves it and it is never scored.','On a phase already set up, use Finished before SLATE OS? inside the phase.'],
+ ['projects',['lead','boss'],'Log the submissions made before SLATE OS',['Open the project › Submissions log › + Log a submission.','Pick the set (Concept presentation, RAJUK set, Working drawings…) and the date.','Tap Save.'],'Pod leads’ entries wait for the COO. It is a record only, never scored.',null],
+ ['projects',['lead','boss'],'Add people to a project team',['Open the project › Project team › + Add people.','Choose the person; for someone from another pod add Until (the end date).','Say what they will help with and tap Send for approval (or Add).'],'Once approved they see the project, and the pod lead can give them tasks directly.','Temporary members lose access after their Until date.'],
+ ['projects','lead','Ask for someone to join my pod',['Tasks › your pod’s team card › Add a team member….','Choose the person and tap Request.'],'The COO approves or declines.',null],
+ ['projects','boss','Set the pace of a project',['Open the project › Pace.','Choose Fast track (or Proposal sprint), Standard or Relaxed.'],'Fast track shortens dates and counts ×1.25. Relaxed gives longer dates and no bonus for finishing early.','Pod leads choose Standard or Relaxed at setup; only the Principal or COO sets fast track.'],
+ ['projects','boss','Close or reopen a project',['Open the project › Close project, or Reopen.'],'Closed projects leave the Active list and the task menus.','There is no “on hold” state: close it and reopen it when work resumes.'],
+ ['projects','boss','Delete a project',['Principal: open the project › Delete project › Delete permanently (tap twice).','COO: Ask to delete project, give the reason, Send to the Principal.'],'The Principal approves or declines the COO’s request. The audit trail keeps a full copy.','Closing is usually better than deleting.'],
+ ['projects','all','Read a project card',['Health: On track, At risk, Off track, Complete or Not started.','The dots show phases: filled = gate closed, outlined = in progress.','Below: the next deliverable and its date, and any overdue count.'],null,'Filter by pod and status, or search by code, name or client.'],
+ ['projects','boss','Add a Chalk Create project or task',['Projects › New Chalk project (or the Chalk Create tab › New project).','Give the name and type; tick Add the suggested tasks if useful.','For a single task: Chalk Create › New task.'],'Chalk work gets a CHK code, needs no COO approval and is never part of SLATE scoring.','Only the Principal and the Chalk lead give Chalk work; later date changes go to the Principal.'],
+
+ // ---- phases and checklist
+ ['phases',['lead','boss'],'Set up a project’s phases',['Open the project › Set up phases.','Choose the pod lead who owns the gate deliverables and the pace.','Tick the phases this project needs.','Tap Set up N phases.'],'Gate deliverables and checklists are created, and Propose the timeline opens for the dates.','Land share or private client resuming later? Use Add phases when it restarts.'],
+ ['phases',['lead','boss'],'Assign the checklist',['Open the project › a phase › Show checklist.','Pick who does each item, or tap N/A for items that don’t apply.'],'Each person sees their items on Home under My checklist.','Items are ticked, never dated, and never scored.'],
+ ['phases','all','Tick my checklist items',['Home › My checklist (or the project’s checklist).','Tap the circle when the item is done and checked.'],'It shows ticked with the date and your name.','Tick only what is complete. You can tick only items assigned to you.'],
+ ['phases',['lead','boss'],'Close a phase gate',['Make sure every checklist item is ticked or N/A.','Mark the phase’s final gate deliverable done.'],'The phase shows Gate closed and the next phase becomes active.','Phase 4 runs alongside 5 and 6 once the design is frozen. Only the Principal or COO can close a gate with open items.'],
+ ['phases',['lead','boss'],'Record when the client’s feedback is due',['Open the project › the phase card › Client feedback due.','Pick the date; it saves straight away.'],'It shows on the Calendar. It is for planning only and never counts against the pod.','Feedback received is recorded from a client meeting.'],
+
+ // ---- project meetings
+ ['pmeet','all','Log a client, consultant, authority or site meeting',['Pod: open the project › Meetings › + Log meeting.','Support staff: Home › Project meetings › pick the project › + Log meeting.','Choose the Type and the date, then write the discussion, decisions, client changes and actions (with who and when).','Tap Finalise minutes, or Save draft to finish later.'],'Every action becomes a task. Log it within 24 hours.','An unplanned site visit is logged the same way: choose Site.'],
+ ['pmeet',['lead','boss'],'Send meeting minutes to the client',['Email the minutes to everyone who attended.','In the meeting, tap Mark as sent to attendees.'],'Silence for 3 working days counts as acceptance; the meeting then shows Accepted.','For client, consultant and authority meetings. The pod lead or COO marks them sent.'],
+ ['pmeet','all','Record that the client gave feedback',['Log the client meeting with its phase.','Tick The client gave feedback on the phase N submission.'],'The phase records the feedback-received date.',null],
+ ['pmeet','all','Ask for an extra revision round',['In the client meeting, write the changes requested.','Tick These changes are an extra revision round beyond the agreement.'],'The COO decides: Approve as extra, or Within scope.',null],
+
+ // ---- weekly meeting
+ ['weekly',['lead','head','boss'],'Know when it is my turn to organise',['Home › Weekly meeting shows “Your turn to organise”.','You also get a reminder on Thursday at noon and on Sunday.'],null,'The full list is in More › Weekly meeting.'],
+ ['weekly',['lead','head','boss'],'Write the weekly minutes',['More › Weekly meeting › open this Sunday › Start the minutes.','Fill in the sections in order: attendance, last week’s actions, project status, discussion and decisions, new actions, sharing session. The next meeting fills itself in.','Each new action needs who, the area and a target date, or tick Ongoing.','Tap Save draft as you go, then Submit to the COO.'],'The COO approves and publishes them; every action becomes a task for each person on it.','Typing is also saved on this device. Need to change something after submitting? Tap Take back.'],
+ ['weekly',['lead','head','boss'],'I can’t organise this week',['Open the week’s meeting › I can’t organise this week.','Choose who organises instead, add a reason, tap Hand over.'],'Only that week changes; the rotation stays.','Do it before the minutes are submitted.'],
+ ['weekly',['lead','head','boss'],'Record who attended',['Open the meeting › Record attendance.','Mark each person Present, Late, Absent or Excused.','Tap Save attendance.'],'Late marks feed the monthly lateness list.',null],
+ ['weekly','member','I’m invited to the weekly meeting',['Home › Weekly meeting shows “You’re invited”.','You get a reminder on Thursday at noon and on Sunday morning.','Come ready to share: the sharing session may be yours to lead.'],'Once the COO publishes the minutes, any action for you appears as a task on Home.',null],
+ ['weekly','boss','Approve or return the minutes',['Home › Meeting minutes to approve (or More › Weekly meeting).','Read them, then Approve and publish, Edit first, or Return with a note.'],'Publishing creates the tasks, closes actions reviewed as done, archives dropped ones and adds marked decisions to Studio rules.','Saving the minutes again never duplicates tasks.'],
+ ['weekly','boss','Set up the meeting rotation',['More › Weekly meeting › Set up rotation (or Rotation and time).','Add the organisers in turn order, and the invited junior architects.','Set the time, venue, meeting number and the first Sunday.','Tap Save.'],null,null],
+ ['weekly','all','See the open actions and studio rules',['More › Weekly meeting › Open actions, or Studio rules.'],'Open actions are tasks: update them as usual. The Principal and COO add, edit and retire studio rules.',null],
+
+ // ---- messages
+ ['msg','all','Answer a message from the Principal or COO',['On Home, the message card shows the reply buttons.','✓ Done, Already done… (with when), Will do it… (with a finish date), Need help… (with a note), Remind me…, or Make it a task….'],'Your reply goes straight back to the sender. Done and dated replies go on your Calendar.','The card stays on Home until you answer. Remind me hides it until the time you pick.'],
+ ['msg','all','Finish something I said I would do',['Home › Messages you said you’d do (or the item on your Calendar).','Tap ✓ Done when it is finished.'],'The sender sees it done, on time or late.',null],
+ ['msg','all','Turn a message into a task',['On the message, tap Make it a task….','Check the task text, project, person and date.','Tap Create task.'],'The task is created and the sender is told who has it.',null],
+ ['msg','boss','Message the team',['Open People.','Type the message (up to 300 characters).','Tap people, a team’s heading, or Select everyone.','Tap Notify N people.'],'Replies come back under Sent and replies.',null],
+ ['msg','boss','Follow up people who haven’t answered',['People › Sent and replies.','On the message, tap Follow up the N not done (or Follow up for one person).','Add a note if useful and tap Send follow-up.'],'They get a new card; their reply counts on the original message.',null],
+
+ // ---- notifications and calendar
+ ['notif','all','Read my notifications',['Tap the bell.','Use Needs action, Deadlines, Updates and Weekly to filter.','Tap an item to open it; Archive to clear it.'],'Old items archive themselves after 14 days.','Sound settings are at the bottom of the bell.'],
+ ['notif','all','Know what the weekly notices are',['Sunday morning: Weekly update, your on-time record for last week.','Thursday noon: Next week’s submissions.'],null,null],
+ ['notif','all','Use the Calendar',['Open Calendar.','Filter by project and person; turn types on or off (Gate deliverables, Tasks, Meetings, Client feedback, My reminders, Messages).','Tap a day, then an item to open it.'],null,'Fridays and Saturdays are shaded. Reminders come from a message’s Remind me….'],
+
+ // ---- team and dashboard
+ ['team','all','See who is in today',['Home › Online now, or Team › Who’s online.'],'Online, Away · app open, or when they were last seen.',null],
+ ['team','all','See who works where',['Open Team.','Full team, By pod or By project.'],null,null],
+ ['team','all','Read the dashboard',['Open Dashboard.','Choose Week, Month or Quarter and move with ‹ Today ›.','Read the on-time rate against the target, then the lists: Overdue, Due in the next 7 days, Waiting for approval.'],'Only approved dates count. Overall shows the whole studio.',null],
+ ['team','head','Balance the drafting pool',['Dashboard › choose your team (whole team).','Read Support team load: overdue, due in 7 days, later, no date.','Tell the COO who should take the next job, and why.'],null,'The COO approves who works on which pod.'],
+
+ // ---- admin
+ ['admin','boss','Add a new person',['People › Accounts and passwords › Add a person.','Enter name, studio email, designation and team, then Create account.','Copy or share the temporary password. It is shown only once.'],'They choose their own password at first sign-in.','Only the Principal can create a COO account.'],
+ ['admin','boss','Reset someone’s password',['People › Accounts and passwords › Reset a password.','Find the person, tap Reset password, then tap again.','Give them the new temporary password.'],'They are told by notification and must choose a new password.','The COO can’t reset the Principal’s or COO’s password.'],
+ ['admin','boss','Change someone’s team, designation or rights',['More › Settings › People.','Change the team, designation, Manager, Approver, Private tasks or Chalk lead.'],'The Principal’s changes apply at once. The COO’s go to the Principal: Role changes to approve.',null],
+ ['admin','boss','Download the weekly backup',['More › Backup.','Download as Excel, or Download full backup (JSON).'],'Each download is logged. The COO is reminded every Thursday.','Keep the file somewhere safe outside the office computer.'],
+ ['admin','boss','Check what changed and who did it',['More › Log.','Full audit trail, or Task history; filter by type, project or person.'],'Nothing in the log can be edited or removed.',null],
+ ['admin','boss','Edit the SLATE standard process',['More › SLATE standard process › Edit on a phase.','Change the phase, gate, gate deliverables or checklist items.','Tap Save phase.'],'It applies to every project. Ticks already made stay with their items.','Restore original brings back the first standard.'],
+ ['admin','boss','Reply to issues the team reported',['More › Report log.','Set Being fixed, Fixed or Close, with a note for the reporter.'],'The reporter is told.',null],
+
+ // ---- tools
+ ['tools','all','Check FAR and areas for a site',['More › FAR calculator.','Enter land size (katha), density block, front road and basements.','Tap Calculate.'],'You see FAR, ground coverage, unit count and areas. Every calculation is saved in the FAR log.','Tap a row in the log to load it again.'],
+ ['tools','all','Read the SLATE standard process',['More › SLATE standard process.'],'Every project type, phase, gate deliverable and checklist item, with who owns it.',null],
+ ['tools','boss','Open Finance',['More › Finance.'],'Invoices, payments, costs, payroll and reports. Only the Principal and COO can open it; it has its own Guide tab.',null]
+];
+const hdFor=(e,r)=>e[1]==='all'||(Array.isArray(e[1])?e[1].includes(r):e[1]===r);
+const hdRoleNames=e=>e[1]==='all'?'Everyone':(Array.isArray(e[1])?e[1]:[e[1]]).map(r=>HD_ROLES[r]).join(' · ');
+function hxHowDo(role){
+  const st=S.hd||(S.hd={q:'',topic:'',all:false});
+  const list=h('div',{class:'hd-list'});
+  const empty=h('p',{class:'f-hint hd-empty',hidden:true,text:'Nothing matches. Try other words, or show all roles.'});
+  const items=HOWDO.map(e=>{ const [tp,,q,steps,after,note]=e;
+    const el=h('details',{class:'hd-item','data-tp':tp,'data-txt':(q+' '+steps.join(' ')+' '+(after||'')+' '+(note||'')).toLowerCase()},
+      h('summary',{},h('span',{class:'hd-q',text:q}),h('span',{class:'hd-who',text:hdRoleNames(e)})),
+      h('ol',{class:'hd-steps'},steps.map(s=>h('li',{text:s}))),
+      after?h('div',{class:'hd-after'},h('b',{text:'What happens next '}),h('span',{text:after})):null,
+      note?h('div',{class:'hd-note'},h('b',{text:'Good to know '}),h('span',{text:note})):null);
+    el._e=e; return el; });
+  list.append(...items);
+  const apply=()=>{ if(st.topic&&!st.all&&!HOWDO.some(e=>e[0]===st.topic&&hdFor(e,role))) st.topic=''; const q=st.q.trim().toLowerCase(); let n=0;
+    for(const el of items){ const ok=(st.all||hdFor(el._e,role))&&(!st.topic||el.dataset.tp===st.topic)&&(!q||q.split(/\s+/).every(w=>el.dataset.txt.includes(w)));
+      el.hidden=!ok; if(ok) n++; if(!ok) el.open=false; }
+    empty.hidden=n>0; cnt.textContent=n+' of '+HOWDO.length;
+    chips.querySelectorAll('.chip').forEach(c=>{ const k=c.dataset.k; c.hidden=!!k&&!st.all&&!HOWDO.some(e=>e[0]===k&&hdFor(e,role)); }); };
+  const chips=h('div',{class:'chips hd-topics'},[['','All topics'],...HD_TOPICS].map(([k,l])=>{ const b=h('button',{type:'button','data-k':k,class:'chip'+(st.topic===k?' on':''),onclick:()=>{ st.topic=k; chips.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b)); apply(); },text:l}); return b; }));
+  const cnt=h('span',{class:'hd-cnt'});
+  const bar=h('div',{class:'hd-bar'},
+    h('input',{type:'search',class:'hd-search',placeholder:'Search, e.g. more time, site visit, password',value:st.q,'aria-label':'Search the how-to',oninput:e=>{ st.q=e.target.value; apply(); }}),
+    h('label',{class:'hd-allr'},h('input',{type:'checkbox',checked:st.all,onchange:e=>{ st.all=e.target.checked; apply(); }}),'Show every role'),cnt);
+  apply();
+  return h('div',{class:'hd'},bar,chips,list,empty);
+}
+
 function viewHelp(){
   const me=myGuide(); if(!S.helpRole) S.helpRole=me; const k=S.helpRole, g=HOWTO.find(x=>x.key===k);
   if(!pref.helpSeen) savePref('helpSeen',1);
@@ -3966,6 +4123,7 @@ function viewHelp(){
       h('p',{class:'lead',text:'One spine of phases for every project. Each phase ends at a dated gate; the work inside it is a checklist. Pick your role to see your routine.'}),
       h('div',{class:'hx-roles',role:'tablist'},HOWTO.map(x=>h('button',{type:'button',role:'tab','aria-selected':String(x.key===k),class:'hx-role'+(x.key===k?' on':''),onclick:()=>{S.helpRole=x.key;render(true)}},h('b',{text:x.title}),x.key===me?h('span',{text:'You'}):null)))),
     hxSec('Your routine',g.title,g.who,hxSteps(g)),
+    hxSec('Step by step','How do I…','Every job in SLATE OS, with the exact buttons to tap. Search, or pick a topic. It shows what applies to '+(k===me?'you':HD_ROLES[k]||g.title)+'; tick Show every role to see the rest.',hxHowDo(k)),
     ...roleExtra,
     hxSec('The spine','Ten phases, ten gates','Client projects follow these phases. The project type decides which are switched on.',hxSpine()),
     hxSec('Tasks','The life of a task','Only dates the COO approves count. Every step is kept in the task’s history.',hxTaskFlow()),
