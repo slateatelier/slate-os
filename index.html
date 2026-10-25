@@ -2240,6 +2240,13 @@ async function ensureAreaProject(k){ const ex=areaProject(k); if(ex) return ex.i
   _areaMade[k]=ref.id; return ref.id; }
 const actOwners=a=>Array.isArray(a.owners)&&a.owners.length?[...a.owners]:a.owner?[a.owner]:[];
 const actTaskIds=a=>Array.isArray(a.taskIds)&&a.taskIds.length?[...a.taskIds]:a.taskId?[a.taskId]:[];
+/* a meeting action's task for one person: the linked one if it still exists, else any live task already made from this meeting for that person and text.
+   Saving the minutes again therefore never creates a second copy, even if a link was lost. */
+const meetActTitle=a=>(a.kind&&a.kind!=='action'?AKIND[a.kind]+': ':'')+(a.text||'').trim();
+function findMeetTask(date,owner,title,linked){
+  if(linked&&S.tasks[linked]&&!S.tasks[linked].archived) return linked;
+  for(const [id,t] of Object.entries(S.tasks)) if(t&&!t.archived&&t.meet===date&&(t.title||'').trim()===title&&(t.assignee===owner||(t.assignReq&&t.assignReq.to===owner))) return id;
+  return ''; }
 const decisionsOf=m=>Array.isArray(m&&m.decisionList)&&m.decisionList.length?m.decisionList.filter(x=>x&&x.text):((m&&m.decisions)||'').split('\n').filter(Boolean).map(text=>({text}));
 /* minutes drafts are also kept on this device as you type, so nothing is lost before Save draft */
 const MD_KEY=date=>'slate-mt-draft-'+date;
@@ -2269,11 +2276,14 @@ function saveMeeting(mode){
   }
   run(async()=>{
     if(publish){ const ap=amApprover();
-      for(const a of acts){ a.taskIds=actTaskIds(a); if(!a.project&&a.area) a.project=await ensureAreaProject(a.area);
-        for(let j=0;j<a.owners.length;j++){ if(a.taskIds[j]) continue;
-          a.taskIds[j]=await createTask({projectId:a.project,title:(a.kind&&a.kind!=='action'?AKIND[a.kind]+': ':'')+a.text.trim(),kind:'Task',assignee:a.owners[j],phase:'Meeting actions',meet:date,ongoing:!!a.ongoing,target:a.ongoing?'':ap?(a.due||''):'',proposed:a.ongoing||ap?'':(a.due||''),
+      for(const a of acts){ const ids=actTaskIds(a); if(!a.project&&a.area) a.project=await ensureAreaProject(a.area);
+        const title=meetActTitle(a);
+        for(let j=0;j<a.owners.length;j++){
+          const have=findMeetTask(date,a.owners[j],title,ids[j]); if(have){ ids[j]=have; continue; }
+          // keep the new id in a local list: a screen refresh during the save must not drop it
+          ids[j]=await createTask({projectId:a.project,title,kind:'Task',assignee:a.owners[j],phase:'Meeting actions',meet:date,ongoing:!!a.ongoing,target:a.ongoing?'':ap?(a.due||''):'',proposed:a.ongoing||ap?'':(a.due||''),
             note:`From ${meetTitle(date)} (${fmtD(date)})`+(a.owners.length>1?` · shared with ${a.owners.filter((x,k)=>k!==j).map(nameOf).join(', ')}`:'')}); }
-        a.taskId=a.taskIds[0]||''; }
+        ids.length=a.owners.length; a.taskIds=Array.from(ids,x=>x||''); a.taskId=a.taskIds[0]||''; }
       // the review is applied: confirmed done, dropped actions archived
       for(const [tid,r] of Object.entries(d.review||{})){ const t=S.tasks[tid]; if(!t||t.archived) continue;
         if(r.st==='done'&&!t.doneAt) await taskUpdate(tid,{doneAt:date<=today()?date:today(),doneBy:S.uid},[{type:'done',to:date<=today()?date:today(),note:`Confirmed done at ${meetTitle(date)}`+(r.note?': '+r.note:'')}]);
@@ -2391,7 +2401,7 @@ function sheetMeeting(){
     h('div',{class:'bar'},(()=>{ const s=h('select',{id:'dca-'+i,'aria-label':'Area',style:'background:var(--group);flex:0 1 200px',onchange:e=>{x.area=e.target.value}},h('option',{value:'',text:'Area (optional)'}),STUDIO_AREAS.map(([k,l])=>h('option',{value:k,text:'Area: '+l}))); s.value=x.area||''; return s; })(),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'dcr-'+i,checked:!!x.rule,disabled:!!x.ruleAdded,onchange:e=>{x.rule=e.target.checked}}),x.ruleAdded?'In the studio rules':'Make it a studio rule'))));
   // 5 actions
-  const actRows=d.actions.map((a,i)=>{ a.owners=actOwners(a); a.taskIds=actTaskIds(a); const made=a.taskIds.filter(Boolean).length>0;
+  const actRows=d.actions.map((a,i)=>{ if(!Array.isArray(a.owners)) a.owners=actOwners(a); if(!Array.isArray(a.taskIds)) a.taskIds=actTaskIds(a); const made=a.taskIds.filter(Boolean).length>0;
     const own=h('div',{style:'display:grid;gap:6px'},
       a.owners.length?h('div',{class:'chips'},a.owners.map((o,j)=>h('span',{class:'chip who',style:'padding-right:6px;background:var(--group)'},avaEl(o,false,'sm'),nameOf(o),a.taskIds[j]?null:h('button',{class:'icon-btn',type:'button','aria-label':'Remove '+nameOf(o),style:'width:22px;height:22px;font-size:14px',onclick:()=>{ a.owners.splice(j,1); a.taskIds.splice(j,1); saveMeetDraft(); renderSheet(); },text:'×'})))):null,
       h('select',{id:'ma-o-'+i,'aria-label':'Add a person',style:'background:var(--group)',onchange:e=>{ const v=e.target.value; if(v&&!a.owners.includes(v)) a.owners.push(v); saveMeetDraft(); renderSheet(); }},meetOwnerOpts().filter(([v])=>!a.owners.includes(v)).map(([v,l])=>h('option',{value:v,text:v?l:(a.owners.length?'+ Add another person…':'Responsible: choose one or more…')}))));
