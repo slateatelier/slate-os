@@ -27,7 +27,7 @@
       ]
     },
     {
-      "source": "/(index.html|slate-db.js|config.js)?",
+      "source": "/(index.html|slate-db.js|config.js|finance|finance.html|finance.js)?",
       "headers": [
         {
           "key": "Cache-Control",

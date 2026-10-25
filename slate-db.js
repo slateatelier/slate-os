@@ -1067,6 +1067,17 @@
           Reports: (data.issue_reports || []).map(r => ({ Reported: r.created_at, By: nm(r.reporter), Screen: r.screen, Issue: r.message, Status: r.status, Note: r.note || '' })),
           'Activity log': (data.activity_log || []).map(a => ({ At: a.at, By: nm(a.actor), Area: a.table_name, Action: a.action, Item: a.row_id || '' }))
         };
+        // Finance comes back only for the Principal and the COO.
+        if (Array.isArray(data.finance)) {
+          const fin = c => data.finance.filter(d => d.path.split('/')[0] === c).map(d => ({ ...d.data, _id: d.path.split('/')[1] }));
+          const fp = {}; fin('projects').forEach(p => { fp[p._id] = p; });
+          const fi = {}; fin('invoices').forEach(i => { fi[i._id] = i; });
+          const fpl = id => fp[id] ? `${fp[id].code} · ${fp[id].name}` : '';
+          sheets['Finance projects'] = fin('projects').map(p => ({ Code: p.code, Name: p.name, Client: p.client, Status: p.status || 'active', 'Fee (BDT)': p.fee, Milestones: (p.milestones || []).map(m => `${m.label} ${m.pct}%`).join(' | '), Note: p.note || '' }));
+          sheets['Finance invoices'] = fin('invoices').map(i => ({ No: i.no, Date: i.date, Due: i.due, Project: fpl(i.projectId), Description: i.desc, 'Fee (BDT)': i.amount, 'VAT %': i.vatPct, Status: i.status, 'Void reason': i.voidReason || '' }));
+          sheets['Finance payments'] = fin('receipts').map(r => ({ Date: r.date, Invoice: (fi[r.invoiceId] || {}).no || '', Project: fpl(r.projectId), Received: r.received, AIT: r.ait, VDS: r.vds, Method: r.method, Ref: r.ref || '', 'Recorded by': nm(r.createdBy) }));
+          sheets['Finance change log'] = (data.finance_log || []).map(a => ({ At: a.at, By: nm(a.actor), Record: a.path, Change: a.op }));
+        }
         const wb = X.utils.book_new();
         wb.Props = { Title: 'SLATE OS backup ' + day, Author: data.exportedBy };
         X.utils.book_append_sheet(wb, X.utils.json_to_sheet([{ 'SLATE OS backup': day, 'Exported by': data.exportedBy, Note: data.note + '. The JSON backup holds every field; this workbook is the readable version.' }]), 'About');
@@ -1335,6 +1346,9 @@
     setupMessages();
     setupReports();
     setupBackup();
+    // Finance is a separate page; only ask whether to show its link. Anyone else gets null and sees nothing.
+    sb.rpc('fin_role').then(({ data }) => { window.slateFinanceRole = ['principal', 'coo'].includes(data) ? data : null;
+      try { if (window.slateFinanceRole && S.view === 'more') render(true); } catch (_) {} }, () => {});
     // Dashboard averages: anonymous score inputs for tasks this person can't see.
     window.slateDashRows = async (from, to) => {
       const { data, error } = await sb.rpc('dash_rows', { p_from: from, p_to: to });

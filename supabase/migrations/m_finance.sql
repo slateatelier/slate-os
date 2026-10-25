@@ -230,3 +230,38 @@ drop trigger if exists a_fin_guard on public.fin_docs;
 create trigger a_fin_guard before insert or update or delete on public.fin_docs for each row execute function private.fin_guard();
 drop trigger if exists z_fin_log on public.fin_docs;
 create trigger z_fin_log after insert or update or delete on public.fin_docs for each row execute function private.fin_log();
+
+
+-- SLATE OS · weekly backup now includes Finance, but only when the person downloading is the Principal or the COO.
+create or replace function public.backup_export(p_format text default 'json'::text)
+ returns jsonb
+ language plpgsql
+ security definer
+ set search_path to ''
+as $function$
+declare own boolean := private.is_owner(); fin boolean := private.is_finance(); out jsonb; n int;
+begin
+  if not private.is_active() or not private.is_approver() then raise exception 'Only the Principal and the COO download backups'; end if;
+  out := jsonb_build_object(
+    'app', 'SLATE OS', 'exportedAt', now(), 'exportedBy', private.person_name(auth.uid()),
+    'note', case when own then 'Full backup' else 'Full backup without the Principal''s private tasks' end,
+    'profiles', coalesce((select jsonb_agg(to_jsonb(p) order by p.full_name) from public.profiles p), '[]'),
+    'docs', coalesce((select jsonb_agg(jsonb_build_object('path', d.path, 'data', d.data, 'created_at', d.created_at, 'updated_at', d.updated_at) order by d.path)
+                      from public.docs d where d.coll <> 'data' and (own or d.coll <> 'lead')), '[]'),
+    'issue_reports', coalesce((select jsonb_agg(to_jsonb(r) order by r.id) from public.issue_reports r), '[]'),
+    'notifications_sent', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'to', x.user_id, 'from', x.sender, 'kind', x.kind, 'title', x.title, 'body', x.body, 'created_at', x.created_at,
+                                     'read_at', x.read_at, 'reply', x.reply, 'replied_at', x.replied_at, 'done_at', x.done_at, 'due_at', x.due_at, 'reply_note', x.reply_note) order by x.id)
+                      from public.notifications x where x.kind = 'message'), '[]'),
+    'activity_log', coalesce((select jsonb_agg(to_jsonb(a) order by a.id) from public.activity_log a where own or not a.is_private), '[]'));
+  if fin then
+    out := out || jsonb_build_object(
+      'finance', coalesce((select jsonb_agg(jsonb_build_object('path', f.path, 'data', f.data, 'created_at', f.created_at, 'updated_at', f.updated_at) order by f.path) from public.fin_docs f), '[]'),
+      'finance_log', coalesce((select jsonb_agg(to_jsonb(a) order by a.id) from public.fin_audit a), '[]'));
+  end if;
+  n := jsonb_array_length(out->'docs') + jsonb_array_length(out->'profiles') + jsonb_array_length(out->'activity_log')
+       + coalesce(jsonb_array_length(out->'finance'), 0);
+  insert into public.backup_log (by_user, rows_total, format) values (auth.uid(), n, left(coalesce(p_format, 'json'), 10));
+  insert into public.activity_log (actor, table_name, row_id, action, is_private, after)
+  values (auth.uid(), 'backup', null, 'download', false, jsonb_build_object('rows', n, 'format', p_format));
+  return out;
+end $function$;

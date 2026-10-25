@@ -1,7 +1,7 @@
 /* SLATE OS service worker: lets the app open from the home screen.
    The page and its scripts are fetched fresh whenever online (so updates arrive at once);
    the saved copy is used only when the network is unavailable. Data calls are never cached. */
-const CACHE = 'slate-os-v18';
+const CACHE = 'slate-os-v19';
 const SHELL = ['/', '/slate-db.js', '/config.js', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
@@ -26,6 +26,9 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== self.location.origin) return;
+  // Other pages (Finance) are never stored, so they can't replace the saved copy of the app.
+  if (req.mode === 'navigate' && url.pathname !== '/' && url.pathname !== '/index.html') return;
+  if (/^\/finance(\.js|\.html)?$/.test(url.pathname)) return;
   e.respondWith(fetch(req).then(res => {                             // the app itself: network first
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req.mode === 'navigate' ? '/' : req, copy)); }
     return res;
