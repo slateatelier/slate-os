@@ -853,17 +853,47 @@
           catch (err) { st.className = 'msg err'; st.textContent = err.message; b.disabled = false; b.textContent = 'Reset password'; }
           b.classList.remove('danger');
         });
-        return el('div', { class: 'slate-acc-row' }, el('div', { style: 'min-width:0' }, el('div', { class: 'n' }, nm(p)), el('div', { class: 'e' }, [p.role_label, p.email].filter(Boolean).join(' · ')), st), b);
+        const off = p.designation === 'principal' || (!boss && p.designation === 'coo') ? null : el('button', { class: 'link', type: 'button' }, 'Deactivate');
+        if (off) {
+          let armedOff = false;
+          off.addEventListener('click', async () => {
+            if (!armedOff) { armedOff = true; off.textContent = 'Tap again: they can’t sign in'; off.classList.add('danger'); setTimeout(() => { if (armedOff && off.isConnected && !off.disabled) { armedOff = false; off.textContent = 'Deactivate'; off.classList.remove('danger'); } }, 4000); return; }
+            armedOff = false; off.disabled = true; off.textContent = 'Deactivating…';
+            try { await adminCall({ action: 'deactivate', user_id: p.id }); p.active = false; try { people.set(p.id, { ...p, active: false }); } catch (_) {} draw(); drawOff(); }
+            catch (err) { st.className = 'msg err'; st.textContent = err.message; off.disabled = false; off.textContent = 'Deactivate'; off.classList.remove('danger'); }
+          });
+        }
+        return el('div', { class: 'slate-acc-row' }, el('div', { style: 'min-width:0' }, el('div', { class: 'n' }, nm(p)), el('div', { class: 'e' }, [p.role_label, p.email].filter(Boolean).join(' · ')), st), el('div', { class: 'slate-acc-btns' }, b, off));
       }));
     };
-    q.addEventListener('input', draw); draw();
+    // people who have left: deactivated accounts, which can be brought back
+    const offList = el('div', { class: 'slate-acc-list' });
+    const offCard = el('div', { class: 'slate-acc-card' }, el('b', {}, 'Deactivated accounts'),
+      el('span', { class: 'f' }, 'They can’t sign in and get no notifications. Their tasks, history and minutes stay. Reassign their open tasks first.'), offList);
+    const drawOff = () => {
+      const ps = [...people.values()].filter(p => p.id !== me.id && p.active === false && p.designation !== 'principal').sort((a, b) => nm(a).localeCompare(nm(b)));
+      offCard.hidden = !ps.length;
+      offList.replaceChildren(...ps.map(p => {
+        const st = el('div', { class: 'msg', role: 'status' });
+        const locked = !boss && p.designation === 'coo';
+        const on = el('button', { class: 'link', type: 'button' }, locked ? 'Principal only' : 'Reactivate');
+        if (locked) on.disabled = true;
+        on.addEventListener('click', async () => {
+          on.disabled = true; on.textContent = 'Reactivating…';
+          try { await adminCall({ action: 'reactivate', user_id: p.id }); p.active = true; try { people.set(p.id, { ...p, active: true }); } catch (_) {} draw(); drawOff(); }
+          catch (err) { st.className = 'msg err'; st.textContent = err.message; on.disabled = false; on.textContent = 'Reactivate'; }
+        });
+        return el('div', { class: 'slate-acc-row' }, el('div', { style: 'min-width:0' }, el('div', { class: 'n' }, nm(p)), el('div', { class: 'e' }, [p.role_label, p.email].filter(Boolean).join(' · ')), st), on);
+      }));
+    };
+    q.addEventListener('input', draw); draw(); drawOff();
     const close = el('button', { class: 'link', type: 'button' }, 'Close');
     close.addEventListener('click', () => root.remove());
     const close2 = el('button', { class: 'link', type: 'button', style: 'justify-self:end' }, 'Close');
     close2.addEventListener('click', () => root.remove());
     box.append(close2, el('div', { class: 'brand' }, el('b', {}, 'Accounts'), el('i', {}), el('span', {}, boss ? 'Principal' : 'COO')),
       el('p', { class: 'f', style: 'margin:0' }, 'Someone forgot their password? Reset it here and give them the temporary one. ' + (boss ? 'You can reset anyone’s.' : 'Only the Principal can reset the Principal’s password.')),
-      result, addForm, el('div', { class: 'slate-acc-card' }, el('b', {}, 'Reset a password'), q, list), el('div', { class: 'row' }, close));
+      result, addForm, el('div', { class: 'slate-acc-card' }, el('b', {}, 'Reset a password or deactivate'), el('span', { class: 'f' }, 'Deactivate someone who has left SLATE: they can’t sign in, and their records stay.'), q, list), offCard, el('div', { class: 'row' }, close));
     root.append(box); document.body.append(root);
   }
   window.slateAccounts = accountsSheet;
@@ -902,6 +932,8 @@
       const who = nm(r.subject_user);
       if (r.action === 'password_reset') return [`${nm(r.actor)} reset ${who}’s password`, a.email];
       if (r.action === 'account_create') return [`${nm(r.actor)} created an account for ${who}`, a.email];
+      if (r.action === 'account_deactivate') return [`${nm(r.actor)} deactivated ${who}’s account`, a.email];
+      if (r.action === 'account_reactivate') return [`${nm(r.actor)} reactivated ${who}’s account`, a.email];
       if (r.action === 'password_chosen') return [`${who} chose a new password`, ''];
     }
     if (r.table_name === 'notification') return [`Notification to ${nm(r.subject_user)}${r.actor ? ' · from ' + nm(r.actor) : ''}: ${a.title || ''}`, a.body];
@@ -1192,6 +1224,8 @@
   .slate-acc-list{display:grid;background:#fff;border-radius:10px;overflow:hidden}
   .slate-acc-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid #e5e5ea}
   .slate-acc-row:first-child{border-top:0}
+  .slate-acc-btns{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+  .slate-acc-btns .link:last-child:not(:first-child){color:#8e8e93;font-size:13px}
   .slate-acc-row .n{font-weight:600;font-size:15px}
   .slate-acc-row .e{font-size:12.5px;color:#8e8e93;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slate-acc-row .link{white-space:nowrap}

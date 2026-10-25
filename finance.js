@@ -1365,7 +1365,7 @@ function pettyView() {
   const rc = S.recons.find(r => r.accountId === box.id && r.month === mo);
   return `
   <div class="head"><div><h2>Petty cash</h2><p>${esc(box.name)}${box.note ? ' · ' + esc(box.note) : ''}. Bills go to the Principal for approval; top-ups come from the office vault.</p></div>
-    <div class="actions"><button class="btn" data-act="petty-statement">Statement</button><button class="btn" data-act="recon-acct" data-id="${box.id}">Count the box</button>${isPrincipal() && pend.length ? `<button class="btn" data-act="approve-all">Approve all ${pend.length}</button>` : ''}<button class="btn" data-act="petty-topup">Top up</button><button class="btn pri" data-act="petty-bills">Record bills</button></div></div>
+    <div class="actions"><button class="btn" data-act="petty-statement">Statement</button><button class="btn" data-act="recon-acct" data-id="${box.id}">Count the box</button>${isPrincipal() && pend.length ? `<button class="btn" data-act="approve-all" data-id="${box.id}">Approve all ${pend.length}</button>` : ''}<button class="btn" data-act="petty-topup">Top up</button><button class="btn pri" data-act="petty-bills">Record bills</button></div></div>
   <div class="kpis">
     <div class="kpi"><div class="lb">In the box</div><div class="v" style="${bal < 0 ? 'color:var(--bad)' : ''}">${tk(bal)}</div><div class="s">${low ? '<b class="bad">running low · top it up</b>' : fl ? `of a ${tk(fl)} float` : 'no float set'}</div></div>
     <div class="kpi"><div class="lb">Top-up needed</div><div class="v">${tk(Math.max(0, fl - bal))}</div><div class="s">to bring it back to the float</div></div>
@@ -2288,7 +2288,7 @@ document.addEventListener('click', async ev => {
     case 'pay-exp': { const x = S.expenses.find(e => e.id === id); if (x) payExpForm(x); break; }
     case 'approve-exp': { const x = S.expenses.find(e => e.id === id); if (x && await run(() => putDoc('expenses', id, { ...strip(x), status: 'approved', decidedBy: S.uid, decidedOn: today() }), 'Expense approved')) expenseSheet(S.expenses.find(e => e.id === id)); break; }
     case 'reject-exp': { const x = S.expenses.find(e => e.id === id); if (x) rejectExpForm(x); break; }
-    case 'approve-all': { const pe = pendingExp().filter(x => !locked(x.date)); if (!pe.length || !armed(b)) break;
+    case 'approve-all': { const pe = pendingExp().filter(x => !locked(x.date) && (!id || x.accountId === id)); if (!pe.length || !armed(b)) break;
       await run(async () => { for (const x of pe) await putDoc('expenses', x.id, { ...strip(x), status: 'approved', decidedBy: S.uid, decidedOn: today() }); }, `${pe.length} expense${pe.length === 1 ? '' : 's'} approved`); break; }
     case 'export-exp': exportExp(); break;
     case 'new-wo': woForm(); break;

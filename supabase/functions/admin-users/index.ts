@@ -1,4 +1,4 @@
-// SLATE OS account admin: the Principal and the COO reset a password or create an account.
+// SLATE OS account admin: the Principal and the COO reset a password, create an account, or deactivate one.
 // Holds the admin key so it never reaches a phone. Every action is logged by admin_mark_temp_pw.
 const URL_ = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -68,6 +68,25 @@ Deno.serve(async (req) => {
       if (!r.ok) return fail(/already/i.test(u.msg || '') ? 'That email already has an account. Use Reset password instead.' : 'Could not create the account: ' + (u.msg || r.status), r.status === 422 ? 409 : 500);
       await mark(u.id, me.id, 'account_create');
       return json({ ok: true, email, password: pw, id: u.id });
+    }
+    if (body.action === 'deactivate' || body.action === 'reactivate') {
+      // someone leaves SLATE: block their sign-in and make the account read-only; their records stay
+      const on = body.action === 'reactivate';
+      const id = String(body.user_id || '');
+      if (!UUID.test(id)) return fail('Choose a person.');
+      if (id === me.id) return fail('You can’t deactivate your own account.');
+      const t = await profile(`id=eq.${id}`);
+      if (!t) return fail('That person was not found.', 404);
+      if (t.designation === 'principal') return fail('The Principal’s account can’t be deactivated.', 403);
+      if (t.designation === 'coo' && !boss) return fail('Only the Principal can deactivate or reactivate the COO.', 403);
+      const r = await admin(`users/${id}`, { method: 'PUT', body: JSON.stringify({ ban_duration: on ? 'none' : '876000h' }) });
+      if (!r.ok) return fail('Could not change their sign-in: ' + ((await r.json().catch(() => ({}))).msg || r.status), 500);
+      const s = await rest('rpc/admin_set_active', { method: 'POST', body: JSON.stringify({ p_user: id, p_by: me.id, p_active: on }) });
+      if (!s.ok) {
+        await admin(`users/${id}`, { method: 'PUT', body: JSON.stringify({ ban_duration: on ? '876000h' : 'none' }) });
+        return fail('Could not record the change: ' + (await s.text()), 500);
+      }
+      return json({ ok: true, active: on, email: t.email });
     }
     return fail('Unknown action.');
   } catch (e) {
