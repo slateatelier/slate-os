@@ -222,13 +222,20 @@ async function run(fn, ok) {
 
 /* ---------- ui primitives ---------- */
 let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200); }
+const motionOff = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) { return false; } };
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; t.classList.remove('in', 'out'); void t.offsetWidth; if (!motionOff()) t.classList.add('in'); clearTimeout(toastT);
+  toastT = setTimeout(() => { if (motionOff()) { t.hidden = true; return; } t.classList.add('out'); toastT = setTimeout(() => { t.hidden = true; t.classList.remove('out'); }, 160); }, 3200); }
+let sheetT;
 function openSheet(html, bind) {
-  $('#sheetPanel').innerHTML = html; $('#sheet').hidden = false; document.body.style.overflow = 'hidden';
+  const sh = $('#sheet'), opening = sh.hidden || sh.classList.contains('out'); clearTimeout(sheetT); sh.classList.remove('out');
+  $('#sheetPanel').innerHTML = html; sh.hidden = false; document.body.style.overflow = 'hidden';
+  if (opening && !motionOff()) { sh.classList.remove('in'); void sh.offsetWidth; sh.classList.add('in'); sheetT = setTimeout(() => sh.classList.remove('in'), 320); }
   bind && bind($('#sheetPanel'));
   const f = $('#sheetPanel input:not([type=hidden]), #sheetPanel select'); if (f && matchMedia('(min-width:700px)').matches) f.focus();
 }
-function closeSheet() { $('#sheet').hidden = true; $('#sheetPanel').innerHTML = ''; document.body.style.overflow = ''; }
+function closeSheet() { const sh = $('#sheet'); clearTimeout(sheetT); sh.classList.remove('in');
+  const done = () => { sh.classList.remove('out'); sh.hidden = true; $('#sheetPanel').innerHTML = ''; document.body.style.overflow = ''; };
+  if (sh.hidden || motionOff()) return done(); sh.classList.add('out'); sheetT = setTimeout(done, 170); }
 const sheetHead = (t, sub) => `<div class="sheet-h"><div><h2>${esc(t)}</h2>${sub ? `<p>${sub}</p>` : ''}</div><button class="btn ghost sm" type="button" data-act="close">Close</button></div>`;
 const chip = (cls, text) => `<span class="chip ${cls}">${esc(text)}</span>`;
 const opt = (v, l, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(l)}</option>`;

@@ -211,6 +211,14 @@ label.f .hint{font-size:11px}
 .sec-t{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:4px 0 -4px}
 .mini-list{border:1px solid var(--line);border-radius:var(--r)}
 
+/* motion: quick, once; off for reduced motion */
+@keyframes fsIn{from{opacity:0}} @keyframes fpUp{from{transform:translateY(28px);opacity:0}} @keyframes fpIn{from{transform:translateY(10px) scale(.98);opacity:0}}
+.sheet.in{animation:fsIn .2s ease-out both}.sheet.in .sheet-panel{animation:fpUp .26s cubic-bezier(.2,.8,.2,1) both}
+@media (min-width:700px){.sheet.in .sheet-panel{animation-name:fpIn}}
+.sheet.out{transition:opacity .17s ease-in;opacity:0;pointer-events:none}.sheet.out .sheet-panel{transition:transform .17s ease-in;transform:translateY(16px)}
+@keyframes ftIn{from{opacity:0;transform:translate(-50%,10px)}} @keyframes ftOut{to{opacity:0;transform:translate(-50%,6px)}}
+.toast.in{animation:ftIn .22s ease-out both}.toast.out{animation:ftOut .16s ease-in both}
+.btn{transition:background-color .15s ease-out,transform .1s ease-out}.btn:active:not(:disabled){transform:scale(.97)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:var(--r);font-size:13px;z-index:60;max-width:calc(100% - 32px)}
 .notice{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:var(--r);padding:14px 16px;font-size:13px}
 .notice strong{font-family:var(--f-display);font-weight:500;font-size:15px;display:block;margin-bottom:2px}

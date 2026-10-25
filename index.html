@@ -574,6 +574,37 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .hx-tab-ic .hx-ico{width:17px;height:17px}
 .hx-tab b{font-size:14px}.hx-tab span{font-size:12px;color:var(--muted);line-height:1.35}
 /* rules */
+/* motion: 150–300 ms, ease-out, once; off for reduced motion */
+.btn{transition:background-color .15s ease-out,transform .1s ease-out}.btn:active:not(:disabled){transform:scale(.97)}
+.row,.kcard,.hd-item,.more-i,.tab{transition:background-color .15s ease-out,color .15s ease-out}
+@keyframes fxPop{0%{transform:scale(.55)}55%{transform:scale(1.18)}100%{transform:scale(1)}}
+.chk.fx-done{animation:fxPop .34s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fxIn{from{opacity:0;transform:translateY(6px)}}
+.fx-in{animation:fxIn .26s ease-out both}
+@keyframes fxMove{0%{opacity:.35;transform:scale(.97);box-shadow:0 0 0 2px var(--ink)}100%{opacity:1;transform:none}}
+.kcard.fx-move,.kcard.fx-done{animation:fxMove .28s ease-out both}
+.row.fx-move{animation:fxIn .26s ease-out both}
+.row.fx-leave{opacity:.45;transition:opacity .24s ease-out}
+@keyframes fxPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
+.badge.fx-pulse{animation:fxPulse .5s ease-out}
+@keyframes shIn{from{transform:translateX(28px);opacity:0}}
+@keyframes shUp{from{transform:translateY(24px);opacity:0}}
+@keyframes bdIn{from{opacity:0}}
+.panel.sh-in{animation:shIn .24s cubic-bezier(.2,.8,.2,1) both}
+.backdrop.sh-in{animation:bdIn .2s ease-out both}
+#sheet.sh-out{pointer-events:none}
+#sheet.sh-out .panel{animation:none;transition:transform .17s ease-in,opacity .17s ease-in;transform:translateX(28px);opacity:0}
+#sheet.sh-out .backdrop{animation:none;transition:opacity .17s ease-in;opacity:0}
+@media (max-width:560px){.panel.sh-in{animation-name:shUp}#sheet.sh-out .panel{transform:translateY(24px)}}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}}
+@keyframes toastOut{to{opacity:0;transform:translate(-50%,6px)}}
+#toast.toast-in{animation:toastIn .22s ease-out both}
+#toast.toast-out{animation:toastOut .16s ease-in both}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
+.skel{display:block;height:13px;border-radius:7px;background:linear-gradient(90deg,var(--group) 30%,#f7f7f9 50%,var(--group) 70%);background-size:300% 100%;animation:shimmer 1.3s ease-in-out infinite}
+.skel-list{display:grid;gap:2px;margin-top:8px}.skel-row{display:grid;grid-template-columns:30px 1fr;gap:12px;align-items:center;padding:14px 12px;border-bottom:1px solid var(--line)}
+.skel-c{width:22px;height:22px;border-radius:50%}.skel-t{display:grid;gap:7px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 .lv-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,240px);gap:8px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--border)}
 .lv-row:first-of-type{border-top:0}
 .lv-pick{display:grid;gap:6px}
@@ -894,8 +925,22 @@ document.addEventListener('click',e=>{
   else if(el.matches('input,textarea')) return;
   sfx(k);
 },true);
+/* ---------- motion: small, quick, once ----------
+   Screens are rebuilt on every refresh, so an effect is keyed to what changed and carries its
+   start time: a rebuild in the middle continues it (negative delay) instead of replaying it. */
+const motionOff=()=>{ try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } };
+const FX_MS={done:380,in:300,move:300,pulse:520};
+S.fx={};
+function fxMark(key,kind){ if(motionOff()) return; S.fx[key]={kind,at:performance.now()}; }
+function fxA(key,kinds,a){ const f=S.fx[key]; if(!f) return a; const el=performance.now()-f.at;
+  if(el>FX_MS[f.kind]){ delete S.fx[key]; return a; } if(kinds&&!kinds.includes(f.kind)) return a;
+  return {...a,class:(a.class||'')+' fx-'+f.kind,style:(a.style?a.style+';':'')+`animation-delay:-${Math.round(el)}ms`}; }
+/* a tick on a row that is about to leave the list: show the tick first, then do it */
+function fxTick(e,fn){ e.stopPropagation(); const b=e.currentTarget; if(motionOff()||!b) return fn();
+  b.disabled=true; b.classList.add('on','fx-done'); b.textContent='✓'; const r=b.closest('.row'); if(r) r.classList.add('fx-leave'); setTimeout(fn,260); }
 let toastT;
-function toast(msg,act){ if(/^(Marked as done|Done\.|Ticked)/.test(msg)) sfx('done'); const el=$('#toast'); el.replaceChildren(document.createTextNode(msg)); if(act) el.append(h('button',{class:'toast-act',type:'button',onclick:()=>{ el.hidden=true; act.fn(); },text:act.label})); el.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>{el.hidden=true},act?6000:2800); }
+function toast(msg,act){ if(/^(Marked as done|Done\.|Ticked)/.test(msg)) sfx('done'); const el=$('#toast'); el.replaceChildren(document.createTextNode(msg)); if(act) el.append(h('button',{class:'toast-act',type:'button',onclick:()=>{ el.hidden=true; act.fn(); },text:act.label})); el.hidden=false; el.classList.remove('toast-in','toast-out'); void el.offsetWidth; if(!motionOff()) el.classList.add('toast-in'); clearTimeout(toastT);
+  toastT=setTimeout(()=>{ if(motionOff()){ el.hidden=true; return; } el.classList.add('toast-out'); toastT=setTimeout(()=>{ el.hidden=true; el.classList.remove('toast-out'); },160); },act?6000:2800); }
 function errMsg(e){
   const c=e&&e.code;
   if(c==='invalid_argument') return "You don't have permission to change this. Ask the owner for Editor access.";
@@ -914,6 +959,7 @@ async function run(fn,ok){
 /* ---------- data writes ---------- */
 async function taskUpdate(id,patch,entries){
   const t=S.tasks[id]; const now=new Date().toISOString();
+  if(patch&&patch.doneAt&&!(t&&t.doneAt)) fxMark('task:'+id,'done'); else if(patch&&patch.stage&&t&&patch.stage!==t.stage) fxMark('task:'+id,'move');
   const hist=[...((t&&t.history)||[]),...entries.map(e=>({at:now,by:S.uid,...e}))];
   await S.db.doc(S.paths[id]||('tasks/'+id)).update({...patch,history:hist});
 }
@@ -924,6 +970,7 @@ async function createTask(d){
   const ask=d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
   const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
   const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
+  fxMark('task:'+ref.id,'in');
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
@@ -1557,9 +1604,10 @@ function renderHeader(){
   if(S.state!=='ready'){ tabs.replaceChildren(); slot.replaceChildren(); $('#me-slot').replaceChildren(); return; }
   nSoundCheck(newCount());
   { const ms=$('#me-slot'); const b=h('button',{class:'mebtn',type:'button','aria-label':'My profile icon',title:'My profile icon',onclick:openProfile},avaEl(S.uid,true)); if(!iconOf(S.uid)) b.append(h('span',{class:'me-plus',text:'+'})); ms.replaceChildren(b); }
-  { const nn=newCount(); slot.replaceChildren(h('button',{class:'bell',type:'button','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
+  { const nn=newCount(); S.badgeSeen=S.badgeSeen||{}; if(S.badgeSeen.bell!==undefined&&nn>S.badgeSeen.bell) fxMark('badge:bell','pulse'); S.badgeSeen.bell=nn;
+    slot.replaceChildren(h('button',{class:'bell',type:'button','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
-      nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null)); }
+      nn?h('span',fxA('badge:bell',['pulse'],{class:'badge',text:nn>99?'99+':String(nn)})):null)); }
   const reqs=amApprover()?(S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid).length:0)+activeTasks().filter(t=>t.request||t.assignReq).length+podRequests().length+nickProposals().length+projectReqs().filter(p=>p.status==='pending').length+libReqs().length+phaseReqs().length+memberReqs().length+historyReqs().length+minutesToApprove().length+extraReqs().length+(S.isOwner?chalkReqs().length:0):0;
   const full=fullView(), mp=myPod();
   const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
@@ -1568,8 +1616,9 @@ function renderHeader(){
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
+  S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
-  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',{class:'badge',text:String(n)}):null)),
+  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)),
     (()=>{ const nn=newCount(); return h('button',{class:'tab tab-notif',type:'button','data-k':'notifs','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
       'Notifications',nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null); })());
@@ -1578,7 +1627,8 @@ function renderHeader(){
 }
 
 function buildView(){
-  if(S.state==='loading') return h('div',{class:'state'},h('strong',{text:'Opening SLATE OS…'}),h('span',{text:'Connecting to SLATE’s shared task data.'}));
+  if(S.state==='loading') return [h('div',{class:'state'},h('strong',{text:'Opening SLATE OS…'}),h('span',{text:'Connecting to SLATE’s shared task data.'})),
+    h('div',{class:'skel-list','aria-hidden':'true'},[78,62,70,54].map(w=>h('div',{class:'skel-row'},h('i',{class:'skel skel-c'}),h('div',{class:'skel-t'},h('i',{class:'skel',style:`width:${w}%`}),h('i',{class:'skel',style:`width:${w-24}%;height:10px`})))))];
   if(S.state==='nohost') return h('div',{class:'state'},h('strong',{text:'SLATE OS can’t reach its database'}),h('span',{text:'Check your internet connection, then reload the page. If it keeps happening, tell the Principal.'}));
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
@@ -1623,8 +1673,8 @@ function row(t,o={}){
   if(o.person!==false){ const pid=t.assignReq?t.assignReq.to:t.assignee; meta.push(h('span',{class:'who'},pid?avaEl(pid,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (awaiting approval)`:nameOf(t.assignee))); }
   const metaEls=meta.flatMap((x,i)=>i?[h('span',{'aria-hidden':'true',text:'·'}),x]:[x]);
   const can=canQuickDone(t);
-  return h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); openTask(t.id); } }},
-    t.doneAt?h('span',{class:'chk on','aria-label':'Completed',text:'✓'}):can?h('button',{class:'chk',type:'button','aria-label':'Mark “'+t.title+'” done',title:'Mark done',disabled:S.busy,onclick:e=>{ e.stopPropagation(); quickDone(t); }}):h('span',{class:'chk off','aria-hidden':'true'}),
+  return h('div',fxA('task:'+t.id,['in','move'],{class:'row',role:'button',tabindex:'0',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); openTask(t.id); } }}),
+    t.doneAt?h('span',fxA('task:'+t.id,['done'],{class:'chk on','aria-label':'Completed',text:'✓'})):can?h('button',{class:'chk',type:'button','aria-label':'Mark “'+t.title+'” done',title:'Mark done',disabled:S.busy,onclick:e=>fxTick(e,()=>quickDone(t))}):h('span',{class:'chk off','aria-hidden':'true'}),
     h('div',{class:'row-main'},
       h('div',{class:'row-title'},h('span',{text:t.title}),
         t.gate?h('span',{class:'tag',text:'Gate'}):t.kind==='Deliverable'&&h('span',{class:'tag',text:'Deliverable'}),
@@ -2027,10 +2077,10 @@ function viewBoard(){
   const ts=activeTasks().filter(t=>(!b.project||t.projectId===b.project)&&(!b.person||t.assignee===b.person||(t.assignReq&&t.assignReq.to===b.person)));
   let drag=null;
   const card=t=>{ const p=S.projects[t.projectId], mv=canMove(t);
-    const el=h('div',{class:'kcard',role:'button',tabindex:'0',draggable:mv?'true':null,'aria-label':t.title,
+    const el=h('div',fxA('task:'+t.id,['in','move','done'],{class:'kcard',role:'button',tabindex:'0',draggable:mv?'true':null,'aria-label':t.title,
       onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openTask(t.id); } },
       ondragstart:e=>{ drag=t.id; e.dataTransfer.setData('text/plain',t.id); e.dataTransfer.effectAllowed='move'; el.classList.add('dragging'); },
-      ondragend:()=>el.classList.remove('dragging')},
+      ondragend:()=>el.classList.remove('dragging')}),
       h('div',{class:'kt',text:t.title}),
       h('div',{class:'km'},p&&h('span',{class:'mono',text:p.code||p.name}),t.phase&&h('span',{text:'· '+t.phase})),
       h('div',{class:'kf'},h('span',{class:'f-hint who'},(t.assignReq?t.assignReq.to:t.assignee)?avaEl(t.assignReq?t.assignReq.to:t.assignee,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (pending)`:nameOf(t.assignee)),pill(t)),
@@ -2958,12 +3008,18 @@ function closeSheet(){ S.sheet=null; renderSheet(); }
 function renderSheet(fromData){
   applyStd();
   const el=$('#sheet');
-  if(!S.sheet){ el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked'); return; }
+  if(!S.sheet){
+    if(!el.hidden&&el.firstChild&&!motionOff()){ if(el.dataset.closing) return; el.dataset.closing='1'; el.classList.add('sh-out');
+      setTimeout(()=>{ delete el.dataset.closing; el.classList.remove('sh-out'); if(!S.sheet){ el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked'); } },170); return; }
+    el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked'); return; }
+  if(el.dataset.closing){ delete el.dataset.closing; el.classList.remove('sh-out'); }
+  if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
   const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
-  const panel=h('div',{class:'panel',role:'dialog','aria-modal':'true','aria-label':'Details'},body);
-  el.replaceChildren(h('div',{class:'backdrop',onclick:closeSheet}),panel);
+  const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
+  const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
+  el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
   el.hidden=false; document.body.classList.add('locked'); panel.scrollTop=top; restoreFocus(k);
 }
 const D=()=>S.sheet.d;
@@ -3499,11 +3555,11 @@ function gateBlock(t){ if(!t||!t.gate||t.gate.step!=='final') return ''; const p
 const isProjLead=p=>!!p&&podsOfProject(p).some(pd=>isPodLead(S.uid,pd));
 const canManageCl=p=>S.canWrite&&(amApprover()||S.isOwner||isProjLead(p)||(amMgr()&&fullView()));
 const canTickCl=(p,x)=>S.canWrite&&(canManageCl(p)||x.who===S.uid);
-function clSet(p,k,id,patch,msg){ const cur=clOf(p,k,id); return run(()=>S.db.doc('projects/'+p.id).update({cl:{[k]:{[id]:{...cur,...patch,at:new Date().toISOString(),by:S.uid}}}}),msg); }
+function clSet(p,k,id,patch,msg){ const cur=clOf(p,k,id); if(patch&&patch.done) fxMark(`cl:${p.id}:${k}:${id}`,'done'); return run(()=>S.db.doc('projects/'+p.id).update({cl:{[k]:{[id]:{...cur,...patch,at:new Date().toISOString(),by:S.uid}}}}),msg); }
 function clWhoOpts(p){ const ps=podsOfProject(p); return [['','Owner: role'],...people().filter(id=>!isCOO(id)&&!isPriv(id)&&id!==ownerId()&&(ps.includes(teamOf(id))||(amApprover()&&isSupport(id)))).map(id=>[id,nameOf(id)])]; }
 function clRow(p,k,it,manage){
   const x=clOf(p,k,it.id), can=canTickCl(p,x), whoTxt=x.who?nameOf(x.who):CL_ROLES[it.r]||'';
-  const box=x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?(can?h('button',{class:'chk on',type:'button','aria-label':'Untick “'+it.t+'”',title:'Untick',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{done:null},'Unticked'),text:'✓'}):h('span',{class:'chk on',text:'✓'}))
+  const box=x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?(can?h('button',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',type:'button','aria-label':'Untick “'+it.t+'”',title:'Untick',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{done:null},'Unticked'),text:'✓'})):h('span',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',text:'✓'})))
     :can?h('button',{class:'chk',type:'button','aria-label':'Tick “'+it.t+'”',title:'Tick when done and checked',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked')}):h('span',{class:'chk off','aria-hidden':'true'});
   let who=null; if(manage&&!x.done&&!x.na){ const opts=clWhoOpts(p); if(x.who&&!opts.some(o=>o[0]===x.who)) opts.push([x.who,nameOf(x.who)]); who=h('select',{id:`clw-${k}-${it.id}`,'aria-label':'Who does it',onchange:e=>clSet(p,k,it.id,{who:e.target.value},'Assigned')},opts.map(([v,l])=>h('option',{value:v,text:v?l:`Owner: ${CL_ROLES[it.r]}`}))); who.value=x.who||''; }
   return h('div',{class:'cl-row'+(x.na?' na':'')},box,
@@ -3623,7 +3679,7 @@ function myChecklist(){ const out=[];
 function myChecklistSec(list){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
     h('div',{class:'list'},list.slice(0,40).map(({p,k,it})=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
-      h('button',{class:'chk',type:'button','aria-label':'Tick “'+it.t+'”',title:'Tick when done and checked',disabled:S.busy||!S.canWrite,onclick:e=>{ e.stopPropagation(); clSet(p,k,it.id,{done:today(),na:false},'Ticked'); }}),
+      h('button',{class:'chk',type:'button','aria-label':'Tick “'+it.t+'”',title:'Tick when done and checked',disabled:S.busy||!S.canWrite,onclick:e=>fxTick(e,()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'))}),
       h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k)}))),
       h('span'),h('span')))),
     list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
