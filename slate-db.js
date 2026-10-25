@@ -1025,6 +1025,90 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadReports(); });
   }
 
+  /* ---------------- weekly backup: the Principal and the COO download all data (More → Backup) ---------------- */
+  const BK = { last: null, loaded: false, busy: false, msg: '' };
+  async function loadBackups() {
+    const { data } = await sb.from('backup_log').select('at,by_user,rows_total,format').order('at', { ascending: false }).limit(10);
+    BK.list = data || []; BK.last = (data && data[0]) || null; BK.loaded = true;
+    placeBackupBanner(true); try { if (S.view === 'backup') render(true); } catch (_) {}
+  }
+  const bkDue = () => BK.loaded && (!BK.last || Date.now() - new Date(BK.last.at).getTime() > 7 * 864e5);
+  function saveFile(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
+  function loadXlsxLib() { return window.XLSX ? Promise.resolve(window.XLSX) : new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = () => ok(window.XLSX); s.onerror = () => bad(new Error('Couldn’t load the Excel tool. Check the connection and try again.')); document.head.append(s); }); }
+  async function downloadBackup(fmt) {
+    if (BK.busy) return; BK.busy = true; BK.msg = 'Preparing the backup…'; try { render(true); } catch (_) {}
+    try {
+      const { data, error } = await sb.rpc('backup_export', { p_format: fmt });
+      if (error) throw friendly(error);
+      const day = new Date().toISOString().slice(0, 10);
+      if (fmt === 'json') saveFile(`SLATE_OS_backup_${day}.json`, new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+      else {
+        const X = await loadXlsxLib();
+        const pn = {}; (data.profiles || []).forEach(p => { pn[p.id] = p.label || p.full_name || p.email; });
+        const nm = id => pn[id] || id || '';
+        const docs = data.docs || [], by = c => docs.filter(d => d.path.split('/')[0] === c);
+        const projs = {}; by('projects').forEach(d => { projs[d.path.split('/')[1]] = d.data; });
+        const ag = {}; by('agreements').forEach(d => { ag[d.path.split('/')[1]] = d.data; });
+        const pl = id => projs[id] ? [projs[id].code, projs[id].name].filter(Boolean).join(' · ') : '';
+        const st = t => t.legacy ? 'Before SLATE OS' : t.archived ? 'Archived' : t.doneAt ? (t.target ? (t.doneAt < t.target ? 'Done early' : t.doneAt === t.target ? 'Done on time' : 'Done late') : 'Done') : t.target ? (t.target < day ? 'Overdue' : 'Open') : 'No date';
+        const sheets = {
+          Projects: Object.entries(projs).map(([id, p]) => ({ Code: p.code, Name: p.name, Status: p.status, Closed: p.closed ? 'Yes' : '', Stage: p.entry || '', Type: p.type, Pod: p.pod, 'Other pods': [p.pod2, ...(p.pods || [])].filter(x => x && x !== p.pod).join(', '), Katha: p.katha, Client: p.client, Contact: p.contact, Phone: p.phone, Location: p.location,
+            'Agreement status': (ag[id] || {}).agStatus || '', 'Agreement date': (ag[id] || {}).agDate || '', 'Agreement ref': (ag[id] || {}).agRef || '', 'Contract completion': p.dueDate || '', Scope: (p.scope || []).join(', '), Members: Object.entries(p.members || {}).filter(([k, m]) => m).map(([k, m]) => nm(k) + (m.status !== 'approved' ? ' (pending)' : '')).join(', '), Created: p.createdAt || '', Note: p.note || '' })),
+          Tasks: [...by('tasks'), ...by('lead')].map(d => { const t = d.data; return { Project: pl(t.projectId), Task: t.title, Type: t.kind, Phase: t.phase, 'Assigned to': nm(t.assignee), Target: t.target || '', 'Original target': t.originalTarget || '', Revisions: t.revisions || 0, Completed: t.doneAt || '', Status: st(t), Private: d.path.startsWith('lead/') ? 'Yes' : '', Created: t.createdAt || '', 'Created by': nm(t.createdBy) }; }),
+          Submissions: Object.values(projs).flatMap(p => (p.subs || []).map(x => ({ Project: [p.code, p.name].join(' · '), Submitted: x.what, Date: x.date, Revision: x.rev, Approved: x.ok === false ? 'Waiting' : 'Yes', Note: x.note || '' }))),
+          Meetings: by('meetings').map(d => { const m = d.data; return { Date: m.date, No: m.no || '', Organiser: nm(m.organiser), Status: m.status, Present: Object.entries(m.attendance || {}).filter(([k, v]) => v === 'present' || v === 'late').map(([k, v]) => nm(k) + (v === 'late' ? ' (late)' : '')).join(', '), Decisions: (m.decisionList || []).map(x => x.text).join(' | ') || m.decisions || '', Actions: (m.actions || []).map(a => `${a.text} [${(a.owners || [a.owner]).map(nm).join(', ')}${a.due ? ', ' + a.due : ''}]`).join(' | '), Notes: m.notes || '' }; }),
+          'Studio rules': ((by('meetcfg').find(d => d.path === 'meetcfg/rules') || {}).data || { items: [] }).items.map(x => ({ Rule: x.text, Category: x.cat, Since: x.since })),
+          People: (data.profiles || []).map(p => ({ Name: pn[p.id], Email: p.email, Designation: p.role_label, Team: p.team, Active: p.active ? 'Yes' : 'No', Joined: p.created_at })),
+          Messages: (data.notifications_sent || []).map(x => ({ Sent: x.created_at, From: nm(x.from), To: nm(x.to), Message: x.body, Reply: x.reply || '', 'Replied at': x.replied_at || '', 'Done at': x.done_at || '', 'Due': x.due_at || '', Note: x.reply_note || '' })),
+          Reports: (data.issue_reports || []).map(r => ({ Reported: r.created_at, By: nm(r.reporter), Screen: r.screen, Issue: r.message, Status: r.status, Note: r.note || '' })),
+          'Activity log': (data.activity_log || []).map(a => ({ At: a.at, By: nm(a.actor), Area: a.table_name, Action: a.action, Item: a.row_id || '' }))
+        };
+        const wb = X.utils.book_new();
+        wb.Props = { Title: 'SLATE OS backup ' + day, Author: data.exportedBy };
+        X.utils.book_append_sheet(wb, X.utils.json_to_sheet([{ 'SLATE OS backup': day, 'Exported by': data.exportedBy, Note: data.note + '. The JSON backup holds every field; this workbook is the readable version.' }]), 'About');
+        for (const [n, rows] of Object.entries(sheets)) X.utils.book_append_sheet(wb, X.utils.json_to_sheet(rows.length ? rows : [{ '': 'Nothing yet' }]), n);
+        X.writeFile(wb, `SLATE_OS_backup_${day}.xlsx`);
+      }
+      BK.msg = 'Backup downloaded. Keep it somewhere safe, e.g. the studio Google Drive.';
+      try { toast('Backup downloaded'); } catch (_) {}
+      loadBackups();
+    } catch (e) { BK.msg = '!' + e.message; }
+    BK.busy = false; try { render(true); } catch (_) {}
+  }
+  function backupView() {
+    if (!BK.loaded) loadBackups();
+    const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const b = (fmt, label, primary) => { const x = el('button', { class: 'btn' + (primary ? ' btn-primary' : ''), type: 'button' }, BK.busy ? 'Preparing…' : label); if (BK.busy) x.disabled = true; x.addEventListener('click', () => downloadBackup(fmt)); return x; };
+    const out = [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Principal and COO'), el('h1', { class: 'h1' }, 'Backup'),
+      el('p', { class: 'lead' }, 'Download all SLATE OS data once a week and keep it somewhere safe. The COO gets a reminder every Thursday if no backup was taken that week.')))];
+    out.push(el('div', { class: 'card', style: 'gap:6px' }, el('b', {}, BK.last ? 'Last backup: ' + when(BK.last.at) + ' by ' + nm(BK.last.by_user) : BK.loaded ? 'No backup taken yet' : 'Checking…'),
+      bkDue() ? el('div', { style: 'color:var(--overdue);font-weight:500' }, 'A backup is due.') : el('span')));
+    out.push(el('div', { class: 'actions' }, b('xlsx', 'Download as Excel', true), b('json', 'Download full backup (JSON)')));
+    if (BK.msg) out.push(el('div', { class: BK.msg.startsWith('!') ? 'err' : 'f-hint' }, BK.msg.replace(/^!/, '')));
+    out.push(el('p', { class: 'f-hint', style: 'margin:0' }, 'Excel is the readable copy: projects, tasks, submissions, meetings, studio rules, people, messages, reports and the activity log, one sheet each. The JSON file holds every field and can be used to restore the data. Each download is recorded in the log. ' + (S.isOwner ? '' : 'The Principal’s private tasks are not included in your backup.')));
+    if ((BK.list || []).length) out.push(el('section', { class: 'sec' }, el('div', { class: 'sec-h' }, el('h2', {}, 'Recent backups')),
+      el('div', { class: 'list' }, ...BK.list.map(r => el('div', { class: 'card', style: 'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto' }, el('span', {}, `${when(r.at)} · ${nm(r.by_user)}`), el('span', { class: 'f-hint' }, (r.format || '').toUpperCase()))))));
+    return out;
+  }
+  window.slateBackupView = backupView;
+  window.slateBackupDue = () => bkDue();
+  /* a reminder on the COO's Home when the weekly backup is due */
+  function placeBackupBanner(force) {
+    const show = (() => { try { return S.view === 'mine' && me && me.designation === 'coo' && bkDue(); } catch (_) { return false; } })();
+    const old = document.getElementById('slate-backup-banner');
+    if (!show) { if (old) old.remove(); return; }
+    const main = document.querySelector('main'); if (!main || (old && !force && main.contains(old))) return;
+    const go = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Download now');
+    go.addEventListener('click', () => { try { S.view = 'backup'; render(true); window.scrollTo(0, 0); } catch (_) {} });
+    const box = el('div', { id: 'slate-backup-banner', class: 'banner' }, el('span', {}, 'Weekly backup due' + (BK.last ? ' · last one ' + when(BK.last.at) : ' · none taken yet')), go);
+    if (old) old.replaceWith(box); else main.prepend(box);
+  }
+  function setupBackup() {
+    if (!canAdmin()) return;
+    loadBackups();
+    new MutationObserver(() => placeBackupBanner(false)).observe(document.body, { childList: true, subtree: true });
+  }
+
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
   .slate-sheet{position:fixed;inset:0;z-index:1000;background:#fff;display:grid;place-items:center;
@@ -1229,6 +1313,7 @@
     setupPresence(session);
     setupMessages();
     setupReports();
+    setupBackup();
     // Dashboard averages: anonymous score inputs for tasks this person can't see.
     window.slateDashRows = async (from, to) => {
       const { data, error } = await sb.rpc('dash_rows', { p_from: from, p_to: to });

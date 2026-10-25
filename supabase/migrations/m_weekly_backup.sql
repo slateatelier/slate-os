@@ -1,0 +1,4 @@
+-- SLATE OS · weekly backup (25 Oct 2026), applied as weekly_backup
+-- public.backup_log, public.backup_export(p_format) for the Principal and the COO (the COO's copy leaves out the
+-- Principal's private tasks and private log entries), private.backup_reminder() and the cron job
+-- 'slate-backup-reminder' (Thursdays 10:00 UTC = 4 PM Dhaka): reminds the COO unless a backup was taken in the last 6 days.
