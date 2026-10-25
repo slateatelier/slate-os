@@ -15,7 +15,21 @@ const authStore = {
   setItem: (k, v) => { if (remember()) { L_.setItem(k, v); S_.removeItem(k); } else { S_.setItem(k, v); L_.removeItem(k); } },
   removeItem: k => { L_.removeItem(k); S_.removeItem(k); }
 };
-const sb = window.supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: authStore } });
+/* Session lock with a time limit. iPhone Safari can freeze the previous page (back/forward cache)
+   while it holds the sign-in lock, which left the next page waiting forever. Wait up to 3 s, then go on. */
+const sessionLock = async (name, _t, fn) => {
+  if (!(typeof navigator !== 'undefined' && navigator.locks && window.AbortController)) return fn();
+  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 3000);
+  let got = false;
+  try { return await navigator.locks.request(name, { mode: 'exclusive', signal: ac.signal }, async () => { got = true; clearTimeout(timer); return await fn(); }); }
+  catch (e) { if (!got && e && e.name === 'AbortError') return fn(); throw e; }
+  finally { clearTimeout(timer); }
+};
+if (!window.supabase || !CFG) { document.getElementById('app').innerHTML = '<div class="notice"><strong>Couldn’t load finance</strong>The page didn’t finish loading. Check your connection and reload.<div style="margin-top:12px"><a class="btn" href="/finance">Reload</a></div></div>'; return; }
+const sb = window.supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: authStore, lock: sessionLock } });
+/* Let go of the session while this page is hidden or frozen, so SLATE OS never waits on it. */
+addEventListener('pagehide', () => { try { sb.auth.stopAutoRefresh(); } catch (_) {} });
+addEventListener('pageshow', () => { try { sb.auth.startAutoRefresh(); } catch (_) {} });
 
 /* ---------- helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -719,6 +733,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet
 /* ---------- boot ---------- */
 try { const t = localStorage.getItem('slate-fin-tab'); if (t && TABS.some(x => x[0] === t)) S.tab = t; } catch (_) {}
 renderChrome();
+const watchdog = setTimeout(() => { if (!S.loaded && /Opening finance/.test($('#app').textContent)) notice('Finance is taking too long', 'Couldn’t reach the studio database. Check your connection and try again.<div style="margin-top:12px;display:flex;gap:8px"><a class="btn pri" href="/finance">Try again</a></div>', true); }, 15000);
 (async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { notice('Sign in to SLATE OS first', 'Finance uses your SLATE OS account. Sign in there, then come back to this page.', true); return; }
@@ -729,10 +744,11 @@ renderChrome();
   S.role = role;
   try { await Promise.all([load(), loadAux()]); }
   catch (e) { notice('Couldn’t open finance', esc(friendly(e)), true); return; }
+  clearTimeout(watchdog);
   render();
   const refresh = () => { if (document.visibilityState === 'visible' && $('#sheet').hidden) load().then(render).catch(() => {}); };
   setInterval(refresh, 30000);
   document.addEventListener('visibilitychange', refresh);
-})();
+})().catch(e => { clearTimeout(watchdog); notice('Couldn’t open finance', esc(friendly(e)), true); });
 window.slateFinanceTest = { S, render, invStatus, takaWords, nextInvNo };
 })();

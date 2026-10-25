@@ -27,9 +27,21 @@
     setItem: (k, v) => { if (remember()) { L_.setItem(k, v); S_.removeItem(k); } else { S_.setItem(k, v); L_.removeItem(k); } },
     removeItem: k => { L_.removeItem(k); S_.removeItem(k); }
   };
+  /* Session lock with a time limit. iPhone Safari can freeze the previous page (back/forward cache)
+     while it holds the sign-in lock, which left the next page waiting forever. Wait up to 3 s, then go on. */
+  const sessionLock = async (name, _t, fn) => {
+    if (!(typeof navigator !== 'undefined' && navigator.locks && window.AbortController)) return fn();
+    const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 3000);
+    let got = false;
+    try { return await navigator.locks.request(name, { mode: 'exclusive', signal: ac.signal }, async () => { got = true; clearTimeout(timer); return await fn(); }); }
+    catch (e) { if (!got && e && e.name === 'AbortError') return fn(); throw e; }
+    finally { clearTimeout(timer); }
+  };
   const sb = window.supabase.createClient(CFG.url, CFG.key, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: authStore }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: authStore, lock: sessionLock }
   });
+  addEventListener('pagehide', () => { try { sb.auth.stopAutoRefresh(); } catch (_) {} });
+  addEventListener('pageshow', () => { try { sb.auth.startAutoRefresh(); } catch (_) {} });
   window.slateSupabase = sb;
 
   /* ---------------- small utilities ---------------- */
