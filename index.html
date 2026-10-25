@@ -2452,7 +2452,7 @@ function printMinutes(date){
   const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to print the minutes.'); w.document.open(); w.document.write(html); w.document.close();
 }
 /* weekly-meeting action items can go to anyone, the Principal and the COO included; they become tasks when the COO approves the minutes */
-const meetOwnerOpts=keep=>[['','Select person…'],...people().filter(id=>(S.members[id]||id===ownerId())&&(!isPriv(id)||S.isOwner||id===keep)&&!isChalkP(id)).sort((a,b)=>((b===ownerId())-(a===ownerId()))||(isCOO(b)-isCOO(a))||nameOf(a).localeCompare(nameOf(b))).map(id=>[id,nameOf(id)+(id===ownerId()?' — Principal':isCOO(id)?' — COO':roleOf(id)?' — '+roleOf(id):'')])];
+const meetOwnerOpts=keep=>[['','Select person…'],...people().filter(id=>(S.members[id]||id===ownerId())&&(!isPriv(id)||S.isOwner||id===keep)&&!isChalkP(id)).sort((a,b)=>((b===ownerId())-(a===ownerId()))||(isCOO(b)-isCOO(a))||nameOf(a).localeCompare(nameOf(b))).map(id=>[id,nameOf(id)])];
 function openRota(){ const r=rota(); S.sheet={type:'rota',d:{ids:[...r.ids],start:r.start||upcomingSunday(),pick:'',juniors:[...r.juniors],jstart:r.jstart||r.start||upcomingSunday(),jpick:'',time:r.time,venue:r.venue,firstNo:String(r.firstNo)},err:''}; renderSheet(); }
 function sheetRota(){
   const sh=S.sheet, d=sh.d, ppl=people().filter(id=>(S.members[id]||id===ownerId())&&!d.ids.includes(id));
@@ -2911,13 +2911,13 @@ function form(title,fields,submit,onSubmit,danger){
     h('div',{class:'actions'},h('button',{class:'btn '+(danger?'btn-accent':'btn-primary'),type:'submit',disabled:S.busy,text:submit}),h('button',{class:'btn',type:'button',onclick:()=>setMode(null),text:'Cancel'})));
 }
 function head(eyebrow,title){ return h('div',{class:'sh-head'},h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:eyebrow,style:keepCase(eyebrow)}),h('h2',{class:'sh-title',text:title})),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})); }
-const memberOpts=keep=>[['','Select person…'],...people().filter(id=>(((!isCOO(id)||amApprover())&&canAssignTo(id))||id===keep)&&(!isPriv(id)||S.isOwner||id===S.uid)).map(id=>[id,nameOf(id)+(roleOf(id)?' — '+roleOf(id):'')+(isPriv(id)?' (private)':'')])];
+const memberOpts=keep=>[['','Select person…'],...people().filter(id=>(((!isCOO(id)||amApprover())&&canAssignTo(id))||id===keep)&&(!isPriv(id)||S.isOwner||id===S.uid)).map(id=>[id,nameOf(id)])];
 const projectOpts=(incl)=>{ const ps=projects().filter(p=>!p.closed||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2})[p.type];
   const st=ps.filter(p=>isInternalP(p)).sort((a,b)=>rank(a)-rank(b)||(a.name||'').localeCompare(b.name||'')), rest=ps.filter(p=>!isInternalP(p));
   return [['','Select project…'],...st.map(p=>[p.id,'Studio work · '+(/^STUDIO (MANAGEMENT|OPERATION|DEVELOPMENT)$/.test(p.name||'')?areaName(p.type):p.name)]),...rest.map(p=>[p.id,projLabel(p)])]; };
 /* everyone can add a task for themselves; managers assign to others */
 const canNewTask=()=>!!S.canWrite&&!amChalkMember();
-const newTaskPeople=()=>amMgr()?memberOpts():[['','Select person…'],...msgTaskPeople().map(id=>[id,id===S.uid?nameOf(id)+' (me)':nameOf(id)])];
+const newTaskPeople=()=>amMgr()?memberOpts():[['','Select person…'],...msgTaskPeople().map(id=>[id,nameOf(id)])];
 
 function sheetTask(){
   const raw=S.tasks[S.sheet.id];
