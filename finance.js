@@ -864,6 +864,11 @@ function exportExp() {
 
 /* ----- Work orders (consultants and vendors) ----- */
 const woNet = x => (+x.gross || 0) - (+x.ait || 0) - (+x.vds || 0);
+const nextMonth = (ym, n = 1) => { const d = new Date((ym || today().slice(0, 7)) + '-01T00:00:00'); d.setMonth(d.getMonth() + n); return iso(d).slice(0, 7); };
+const woSchedule = w => Array.isArray(w.schedule) && w.schedule.length ? w.schedule : [{ id: 'all', label: 'Full value', pct: 100, month: (w.deliverBy || '').slice(0, 7) || nextMonth(today().slice(0, 7)) }];
+/* what is still to pay on each instalment: payments made so far use up the earliest instalments first */
+function woDue(w) { let paid = woSettled(w); return woSchedule(w).map(i => { const amt = Math.round((+w.amount || 0) * (+i.pct || 0) / 100), take = Math.min(amt, paid); paid -= take; return { ...i, amt, left: amt - take }; }); }
+const schRow = i => `<div class="ml" style="grid-template-columns:minmax(0,1fr) 64px 132px 32px"><input type="hidden" name="sc_id" value="${esc(i.id)}"><input name="sc_label" aria-label="Instalment" placeholder="e.g. On approved drawings" value="${esc(i.label)}"><input name="sc_pct" aria-label="Percent" type="number" min="0" max="100" step="0.5" value="${esc(i.pct)}"><input name="sc_month" aria-label="Expected month" type="month" value="${esc(i.month || '')}"><button class="btn ghost sm" type="button" data-sc="del" aria-label="Remove">×</button></div>`;
 const woPays = w => S.wopays.filter(x => x.woId === w.id).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 const woSettled = w => woPays(w).reduce((s, x) => s + (+x.gross || 0), 0);
 const woLeft = w => Math.max(0, (+w.amount || 0) - woSettled(w));
@@ -921,21 +926,30 @@ function woForm(w) {
       <label class="f" for="w_ait">AIT deducted at source (%)<input id="w_ait" name="aitPct" type="number" min="0" max="50" step="0.5" value="${esc(src.aitPct)}"></label>
       <label class="f" for="w_vds">VDS deducted at source (%)<input id="w_vds" name="vdsPct" type="number" min="0" max="50" step="0.5" value="${esc(src.vdsPct)}"></label>
     </div>
-    <label class="f" for="w_pay">Payment terms<input id="w_pay" name="payTerms" value="${esc(src.payTerms || '')}" placeholder="e.g. 50% on start, 50% on approved drawings"></label>
+    <div class="sec-t">Payment schedule</div>
+    <div id="scBox" style="display:flex;flex-direction:column;gap:6px">${(src.schedule && src.schedule.length ? src.schedule : [{ id: mid(), label: 'On start', pct: 50, month: today().slice(0, 7) }, { id: mid(), label: 'On approved deliverables', pct: 50, month: nextMonth(today().slice(0, 7)) }]).map(schRow).join('')}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" type="button" data-sc="add">Add instalment</button><span class="hint" id="scSum"></span></div>
+    <label class="f" for="w_pay">Payment note (optional, printed)<input id="w_pay" name="payTerms" value="${esc(src.payTerms || '')}" placeholder="e.g. Released within 7 days of approval"></label>
     <label class="f" for="w_terms">Terms printed on the work order<textarea id="w_terms" name="terms" rows="3">${esc(src.terms)}</textarea></label>
     <dl class="kv" id="wTot"></dl>
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${w ? 'Save' : isPrincipal() ? 'Create work order' : 'Send for approval'}</button></div>
   </form>`, root => {
     const f = $('#wf', root);
+    const readSc = () => { const ids = [...f.querySelectorAll('[name=sc_id]')].map(x => x.value), L = [...f.querySelectorAll('[name=sc_label]')].map(x => x.value.trim()), P = [...f.querySelectorAll('[name=sc_pct]')].map(x => +x.value || 0), M = [...f.querySelectorAll('[name=sc_month]')].map(x => x.value);
+      return ids.map((id, i) => ({ id, label: L[i], pct: P[i], month: M[i] })).filter(x => x.label || x.pct); };
+    f.addEventListener('click', e => { const b = e.target.closest('[data-sc]'); if (!b) return; if (b.dataset.sc === 'add') $('#scBox', root).insertAdjacentHTML('beforeend', schRow({ id: mid(), label: '', pct: 0, month: '' })); else b.closest('.ml').remove(); upd(); });
     const upd = () => { const a = +f.amount.value || 0, ait = Math.round(a * (+f.aitPct.value || 0) / 100), vds = Math.round(a * (+f.vdsPct.value || 0) / 100);
+      const sc = readSc(), sum = sc.reduce((u, x) => u + x.pct, 0); const h = $('#scSum', root); h.textContent = `${sum}% of value${sum !== 100 ? ' · should total 100%' : ''}`; h.className = 'hint' + (sum !== 100 ? ' err' : '');
       $('#wTot', root).innerHTML = `<dt>Value</dt><dd>${tk(a)}</dd><dt>AIT withheld</dt><dd>− ${tk(ait)}</dd><dt>VDS withheld</dt><dd>− ${tk(vds)}</dd><dt class="tot">Vendor receives</dt><dd class="tot">${tk(a - ait - vds)}</dd>`; };
     f.addEventListener('input', upd); upd();
     f.date.addEventListener('change', () => { if (!w) f.no.value = nextWoNo(f.date.value); });
     f.addEventListener('submit', async ev => { ev.preventDefault(); const no = f.no.value.trim();
       if (S.workorders.some(o => o.no === no && o.id !== w?.id)) { toast('That work order number is already used.'); return; }
       if (w && (+f.amount.value || 0) + 1 < woSettled(w)) { toast(`${tk(woSettled(w))} has already been paid against it.`); return; }
+      const schedule = readSc(); if (Math.round(schedule.reduce((u, x) => u + x.pct, 0)) !== 100) { toast('The payment schedule needs to add up to 100%.'); return; }
+      if (schedule.some(x => !x.label || !x.month)) { toast('Give each instalment a name and the month you expect to pay it.'); return; }
       const data = { no, date: f.date.value, vendor: f.vendor.value.trim(), vendorAddr: f.vendorAddr.value.trim(), type: f.type.value, projectId: f.projectId.value, scope: f.scope.value.trim(),
-        amount: +f.amount.value || 0, deliverBy: f.deliverBy.value, aitPct: +f.aitPct.value || 0, vdsPct: +f.vdsPct.value || 0, payTerms: f.payTerms.value.trim(), terms: f.terms.value.trim(),
+        amount: +f.amount.value || 0, deliverBy: f.deliverBy.value, aitPct: +f.aitPct.value || 0, vdsPct: +f.vdsPct.value || 0, schedule, payTerms: f.payTerms.value.trim(), terms: f.terms.value.trim(),
         status: w ? (w.status || 'pending') : isPrincipal() ? 'approved' : 'pending', ...(w ? {} : isPrincipal() ? { decidedBy: S.uid, decidedOn: today() } : {}) };
       const ok = w ? await run(() => putDoc('workorders', w.id, { ...strip(w), ...data }), 'Work order saved') : await run(() => addDoc('workorders', data), isPrincipal() ? 'Work order created' : 'Sent to the Principal for approval');
       if (ok) closeSheet(); });
@@ -949,7 +963,9 @@ function woSheet(w) {
     ${w.scope ? `<p style="margin:0 0 12px;white-space:pre-line">${esc(w.scope)}</p>` : ''}
     <dl class="kv"><dt>Value</dt><dd>${tk(w.amount)}</dd><dt>Settled so far</dt><dd>${tk(woSettled(w))}</dd><dt>of which tax withheld</dt><dd>${tk(wh)}</dd><dt class="tot">Left to pay</dt><dd class="tot">${tk(left)}</dd>
       ${st !== 'pending' ? `<dt>${WO_ST[st]}</dt><dd class="txt">${who(w.decidedBy)}${w.decidedOn ? ', ' + fmtDate(w.decidedOn) : ''}${w.rejectReason ? ' · ' + esc(w.rejectReason) : ''}</dd>` : ''}</dl>
-    ${w.payTerms ? `<p class="hint" style="margin-top:10px">Payment terms: ${esc(w.payTerms)}</p>` : ''}
+    <div class="sec-t" style="margin-top:18px">Payment schedule</div>
+    <div class="mini-list rows" style="margin-top:10px">${woDue(w).map(i => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${esc(i.label)} · ${i.pct}%</div><div class="sub">${i.month ? 'expected ' + monthName(i.month) : 'no month set'}</div></div>${i.left < 1 ? chip('paid', 'Paid') : i.left < i.amt ? chip('part', 'Part paid') : chip('', 'Due')}<div class="amt">${tk(i.amt)}${i.left >= 1 && i.left < i.amt ? `<small>${tk(i.left)} left</small>` : ''}</div></div>`).join('')}</div>
+    ${w.payTerms ? `<p class="hint" style="margin-top:10px">${esc(w.payTerms)}</p>` : ''}
     <div class="sec-t" style="margin-top:18px">Payments</div>
     <div class="mini-list rows" style="margin-top:10px">${pays.length ? pays.map(x => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;cursor:default"><div style="min-width:0"><div class="t">${fmtDate(x.date)} · ${esc((acct(x.accountId) || {}).name || '')}</div><div class="sub">Settled ${tk(x.gross)}${+x.ait ? ` · AIT ${tk(x.ait)}` : ''}${+x.vds ? ` · VDS ${tk(x.vds)}` : ''}${x.ref ? ' · ' + esc(x.ref) : ''}</div></div><div class="amt">${tk(woNet(x))}</div>${!locked(x.date) ? `<button class="btn ghost sm danger" data-act="del-wopay" data-id="${x.id}">Remove</button>` : '<span></span>'}</div>`).join('') : `<div class="empty" style="padding:14px">No payments yet.</div>`}</div>
     <p class="hint">Raised by ${who(w.createdBy)} · ${fmtWhen(w.createdAt)}</p>
@@ -1009,7 +1025,9 @@ function woDoc(w) {
     ${vds ? `<tr class="sub"><td>VDS ${w.vdsPct}% deducted at source</td><td class="n">${nf.format(vds)}</td></tr>` : ''}
     <tr class="tot"><td>Net payable to you</td><td class="n">${nf.format(Math.round((+w.amount || 0) - ait - vds))}</td></tr></tbody></table>
   <p class="words">Work order value in words: ${esc(takaWords(w.amount))}</p>
-  ${w.payTerms ? `<h2>Payment</h2><p style="margin:0">${esc(w.payTerms)}</p>` : ''}
+  <h2>Payment schedule</h2><table><thead><tr><th>Instalment</th><th>Expected</th><th class="n">%</th><th class="n">Value</th><th class="n">Net payable</th></tr></thead><tbody>
+  ${woSchedule(w).map(i => { const v = (+w.amount || 0) * (+i.pct || 0) / 100; return `<tr><td>${esc(i.label)}</td><td>${i.month ? monthName(i.month) : ''}</td><td class="n">${esc(i.pct)}</td><td class="n">${nf.format(Math.round(v))}</td><td class="n">${nf.format(Math.round(v * (1 - ((+w.aitPct || 0) + (+w.vdsPct || 0)) / 100)))}</td></tr>`; }).join('')}</tbody></table>
+  ${w.payTerms ? `<p class="note">${esc(w.payTerms)}</p>` : ''}
   ${w.terms ? `<h2>Terms</h2><ol style="margin:0;padding-left:5mm;font-size:9pt">${w.terms.split('\n').filter(Boolean).map(l => `<li>${esc(l)}</li>`).join('')}</ol>` : ''}
   <div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(STUDIO.name)}</div><div><b>Accepted by</b>${esc(w.vendor)}<br>Signature and date</div></div>`;
   return docShell(`Work order ${w.no}`, `Work order ${w.no}`, body);
@@ -1627,11 +1645,21 @@ function plView() {
   <p class="hint">Salaries count the cost to SLATE (gross plus allowances, less unpaid leave); advances aren’t a cost, their recovery isn’t income. Consultants count what was settled, including tax withheld. ${basis === 'billed' ? 'Expenses awaiting approval are included; rejected ones are not.' : ''}</p>`;
 }
 const budgetOf = fy => S.budgets.find(b => b.id === 'FY' + fy);
+// Eid bonus estimate: every active person's basic x the budget's percent
+const bonusEst = b => Math.round(activeStaff().reduce((u, t) => u + (+(curRate(t) || {}).basic || 0), 0) * (+(b && b.bonusPct != null ? b.bonusPct : 100)) / 100);
+/* budget for one category in one month: the monthly amount, plus the Eid bonus in an Eid month, plus any one-off cost dated that month */
+function budgetFor(b, cat, ym) {
+  if (!b) return 0;
+  let v = +(b.lines || {})[cat] || 0;
+  if (cat === 'Salaries & bonuses' && (b.bonusMonths || []).includes(ym)) v += bonusEst(b);
+  (b.oneoffs || []).forEach(o => { if (o.month === ym && (o.cat || 'Other') === cat) v += +o.amount || 0; });
+  return v;
+}
 function budgetView() {
   const fy = S.fy, b = budgetOf(fy), lines = (b && b.lines) || {}, { R } = plData(fy, 'billed'), cur = today().slice(0, 7);
   const months = R.map(r => r.k), bm = S.f.bm && months.includes(S.f.bm) ? S.f.bm : (months.includes(cur) ? cur : months[0]);
   const upto = months.indexOf(bm) + 1, done = R.slice(0, upto);
-  const rows = COST_CATS.map(c => { const mb = +lines[c] || 0, ma = (R.find(r => r.k === bm).cats[c] || 0), yb = mb * upto, ya = done.reduce((u, r) => u + (r.cats[c] || 0), 0); return { c, mb, ma, yb, ya }; }).filter(r => r.mb || r.ma || r.ya);
+  const rows = COST_CATS.map(c => { const mb = budgetFor(b, c, bm), ma = (R.find(r => r.k === bm).cats[c] || 0), yb = done.reduce((u, r) => u + budgetFor(b, c, r.k), 0), ya = done.reduce((u, r) => u + (r.cats[c] || 0), 0); return { c, mb, ma, yb, ya }; }).filter(r => r.mb || r.ma || r.ya);
   const T = rows.reduce((a, r) => ({ mb: a.mb + r.mb, ma: a.ma + r.ma, yb: a.yb + r.yb, ya: a.ya + r.ya }), { mb: 0, ma: 0, yb: 0, ya: 0 });
   const vr = (bud, act) => { if (!bud) return act ? `<span class="warnt">no budget</span>` : '–'; const d = act - bud, pct = Math.round(act / bud * 100); return `<span style="color:var(${d > 0 ? '--bad' : '--good'})">${pct}%</span>`; };
   return `
@@ -1645,11 +1673,21 @@ function budgetView() {
     <div class="kpi"><div class="lb">Spent to date</div><div class="v" style="color:var(${T.yb && T.ya > T.yb ? '--bad' : '--ink'})">${compact(T.ya)}</div><div class="s">${T.yb ? `${T.ya > T.yb ? 'over' : 'under'} by ${compact(Math.abs(T.yb - T.ya))}` : ''}</div></div>
   </div>
   <div class="panel"><div class="ph"><h3>By category</h3><span class="meta">BDT</span></div>${rows.length ? `<div class="tbl"><table>
-    <thead><tr><th>Category</th><th>Budget / month</th><th>${MONTHS[upto - 1]}</th><th></th><th>Budget to date</th><th>Spent to date</th><th></th></tr></thead>
+    <thead><tr><th>Category</th><th>Budget · ${MONTHS[upto - 1]}</th><th>${MONTHS[upto - 1]}</th><th></th><th>Budget to date</th><th>Spent to date</th><th></th></tr></thead>
     <tbody>${rows.map(r => `<tr><td>${esc(r.c)}</td><td>${nf.format(r.mb)}</td><td>${nf.format(Math.round(r.ma))}</td><td>${vr(r.mb, r.ma)}</td><td>${nf.format(r.yb)}</td><td>${nf.format(Math.round(r.ya))}</td><td>${vr(r.yb, r.ya)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Total</td><td>${nf.format(T.mb)}</td><td>${nf.format(Math.round(T.ma))}</td><td>${vr(T.mb, T.ma)}</td><td>${nf.format(T.yb)}</td><td>${nf.format(Math.round(T.ya))}</td><td>${vr(T.yb, T.ya)}</td></tr></tfoot></table></div>`
-    : `<div class="empty">No budget or spending yet this year.</div>`}</div>`;
+    : `<div class="empty">No budget or spending yet this year.</div>`}</div>
+  ${b && ((b.bonusMonths || []).length || (b.oneoffs || []).length) ? `<div class="panel"><div class="ph"><h3>Dated items in this budget</h3></div><div class="rows">
+    ${(b.bonusMonths || []).filter(Boolean).map((m, i) => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${['Eid-ul-Fitr', 'Eid-ul-Adha'][i] || 'Eid'} bonus</div><div class="sub">${monthName(m)} · ${b.bonusPct ?? 100}% of basic</div></div><span></span><div class="amt">${tk(bonusEst(b))}</div></div>`).join('')}
+    ${(b.oneoffs || []).slice().sort((x, y) => (x.month || '').localeCompare(y.month || '')).map(o => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${esc(o.label)}</div><div class="sub">${monthName(o.month)} · ${esc(o.cat || 'Other')}</div></div><span></span><div class="amt">${tk(o.amount)}</div></div>`).join('')}
+  </div></div>` : ''}`;
 }
+const ooRow = o => `<div class="oo" data-id="${esc(o.id)}" style="display:grid;grid-template-columns:minmax(0,1.4fr) 128px minmax(0,1fr) 96px 28px;gap:6px;align-items:center">
+  <input name="oo_label" placeholder="e.g. Trade licence renewal" value="${esc(o.label)}" aria-label="One-off cost" style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:7px 9px;min-width:0">
+  <input name="oo_month" type="month" value="${esc(o.month)}" aria-label="Month" style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:6px;min-width:0">
+  <select name="oo_cat" aria-label="Category" style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:6px;min-width:0">${COST_CATS.map(c => opt(c, c, (o.cat || 'Other') === c)).join('')}</select>
+  <input name="oo_amt" type="number" min="1" step="1" value="${esc(o.amount)}" placeholder="Taka" aria-label="Amount" style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:7px 9px;min-width:0">
+  <button class="btn ghost sm" type="button" data-oo="del" aria-label="Remove">×</button></div>`;
 function budgetForm() {
   const fy = S.fy, b = budgetOf(fy), lines = (b && b.lines) || {};
   // suggest from the last three months of actual spending where there is no budget yet
@@ -1657,16 +1695,30 @@ function budgetForm() {
   const avg = c => past.length ? Math.round(past.reduce((u, r) => u + (r.cats[c] || 0), 0) / past.length / 100) * 100 : 0;
   const payroll = activeStaff().reduce((u, t) => u + grossOf(curRate(t)), 0);
   openSheet(`${sheetHead(`Budget · FY ${fyLabel(fy)}`, 'Monthly amounts. Leave a category empty if you don’t budget for it.')}
-  <form id="bf"><div class="fg">${COST_CATS.map(c => { const v = lines[c] ?? (c === 'Salaries & bonuses' && payroll ? Math.round(payroll * 13 / 12 / 100) * 100 : avg(c) || ''); return `<label class="f">${esc(c)}<input name="${esc(c)}" type="number" min="0" step="100" value="${esc(v)}"></label>`; }).join('')}</div>
+  <form id="bf"><div class="fg">${COST_CATS.map(c => { const v = lines[c] ?? (c === 'Salaries & bonuses' && payroll ? Math.round(payroll / 100) * 100 : avg(c) || ''); return `<label class="f">${esc(c)}<input name="${esc(c)}" type="number" min="0" step="100" value="${esc(v)}"></label>`; }).join('')}</div>
+    <div class="sec-t">Eid bonuses</div>
+    <div class="fg"><label class="f">Eid-ul-Fitr bonus paid in<input type="month" name="eid1" value="${esc((b && b.bonusMonths || [])[0] ?? (fy === 2026 ? '2027-03' : ''))}"></label>
+      <label class="f">Eid-ul-Adha bonus paid in<input type="month" name="eid2" value="${esc((b && b.bonusMonths || [])[1] ?? (fy === 2026 ? '2027-05' : ''))}"></label>
+      <label class="f">Each bonus (% of basic)<input type="number" name="bonusPct" min="0" max="300" step="5" value="${esc(b && b.bonusPct != null ? b.bonusPct : 100)}"></label><div class="hint" id="bBonus" style="align-self:end"></div></div>
+    <p class="hint" style="margin-top:-6px">Eid falls on lunar dates; check the months each year. The bonus is added to salaries in those months only.</p>
+    <div class="sec-t">One-off costs this year</div>
+    <div id="ooBox" style="display:flex;flex-direction:column;gap:6px">${((b && b.oneoffs) || []).map(ooRow).join('')}</div>
+    <div><button class="btn sm" type="button" data-oo="add">Add one-off cost</button> <span class="hint">trade licence, advance tax instalment, audit, renewals</span></div>
     <dl class="kv" id="bTot"></dl>
-    <p class="hint">${b ? '' : 'Pre-filled from the last three months of spending, and salaries from current payroll with two Eid bonuses spread over the year. Adjust freely.'}</p>
+    <p class="hint">${b ? '' : 'Pre-filled from the last three months of spending and current payroll. Adjust freely.'}</p>
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Save budget</button></div></form>`, root => {
     const f = $('#bf', root);
-    const upd = () => { const t = COST_CATS.reduce((u, c) => u + (+f.elements[c].value || 0), 0); $('#bTot', root).innerHTML = `<dt class="tot">Total a month</dt><dd class="tot">${tk(t)}</dd><dt>For the year</dt><dd>${tk(t * 12)}</dd>`; };
+    const readOO = () => [...f.querySelectorAll('.oo')].map(r => ({ id: r.dataset.id, label: r.querySelector('[name=oo_label]').value.trim(), month: r.querySelector('[name=oo_month]').value, cat: r.querySelector('[name=oo_cat]').value, amount: +r.querySelector('[name=oo_amt]').value || 0 })).filter(o => o.label || o.amount);
+    const upd = () => { const t = COST_CATS.reduce((u, c) => u + (+f.elements[c].value || 0), 0), be = bonusEst({ bonusPct: +f.bonusPct.value || 0 }), nb = [f.eid1.value, f.eid2.value].filter(Boolean).length, oo = readOO().reduce((u, o) => u + o.amount, 0);
+      $('#bBonus', root).textContent = `≈ ${tk(be)} each, from current basic salaries`;
+      $('#bTot', root).innerHTML = `<dt>Monthly budget</dt><dd>${tk(t)}</dd><dt>Eid bonuses</dt><dd>${tk(be * nb)}</dd><dt>One-off costs</dt><dd>${tk(oo)}</dd><dt class="tot">For the year</dt><dd class="tot">${tk(t * 12 + be * nb + oo)}</dd>`; };
+    f.addEventListener('click', e => { const x = e.target.closest('[data-oo]'); if (!x) return; if (x.dataset.oo === 'add') $('#ooBox', root).insertAdjacentHTML('beforeend', ooRow({ id: mid(), label: '', month: '', cat: 'Other', amount: '' })); else x.closest('.oo').remove(); upd(); });
     f.addEventListener('input', upd); upd();
     f.addEventListener('submit', async ev => { ev.preventDefault();
       const out = {}; COST_CATS.forEach(c => { const v = +f.elements[c].value || 0; if (v) out[c] = v; });
-      if (await run(() => setDoc('budgets', 'FY' + fy, b ? { ...strip(b), fy, lines: out } : { fy, lines: out }, !!b), 'Budget saved')) closeSheet(); });
+      const oneoffs = readOO(); if (oneoffs.some(o => !o.label || !o.month || !(o.amount > 0))) { toast('Each one-off cost needs a name, a month and an amount.'); return; }
+      const extra = { bonusMonths: [f.eid1.value, f.eid2.value], bonusPct: +f.bonusPct.value || 0, oneoffs };
+      if (await run(() => setDoc('budgets', 'FY' + fy, b ? { ...strip(b), fy, lines: out, ...extra } : { fy, lines: out, ...extra }, !!b), 'Budget saved')) closeSheet(); });
   });
 }
 function forecastData() {
@@ -1685,11 +1737,15 @@ function forecastData() {
     S.payruns.filter(x => x.kind === 'bonus' && x.month === r.k && x.status !== 'paid').forEach(x => r.pay += runTotals(x).net); });
   // other costs: the budget if set, else the last three months' average; approved unpaid expenses this month
   const b = budgetOf(fyOf(t)), { R: P } = plData(fyOf(t), 'billed'), past = P.filter(r => r.k < cm).slice(-3);
-  const base = EXP_CATS.filter(c => !NOT_COST.includes(c)).reduce((u, c) => u + (b ? +(b.lines || {})[c] || 0 : past.length ? past.reduce((v, r) => v + (r.cats[c] || 0), 0) / past.length : 0), 0);
-  R.forEach(r => r.exp = base);
+  const avgOf = c => past.length ? past.reduce((v, r) => v + (r.cats[c] || 0), 0) / past.length : 0;
+  R.forEach(r => { const bb = budgetOf(fyOf(r.k + '-01'));
+    r.exp = EXP_CATS.filter(c => !NOT_COST.includes(c)).reduce((u, c) => u + (bb ? budgetFor(bb, c, r.k) : avgOf(c)), 0);
+    if (bb && (bb.bonusMonths || []).includes(r.k) && !S.payruns.some(x => x.kind === 'bonus' && x.month === r.k)) r.pay += bonusEst(bb);
+    if (bb) (bb.oneoffs || []).forEach(o => { if (o.month !== r.k) return; if (o.cat === 'Salaries & bonuses') r.pay += +o.amount || 0; if (o.cat === 'Consultants & vendors') r.wo += +o.amount || 0; }); });
   R[0].exp += S.expenses.filter(x => x.status === 'approved' && !x.accountId).reduce((u, x) => u + (+x.amount || 0), 0);
   // vendors: what's left on open work orders, in the delivery month (or next month), net of tax withheld
-  S.workorders.filter(w => w.status === 'approved' && woLeft(w) >= 1).forEach(w => { const r = at((w.deliverBy || keys[1]).slice(0, 7)) || R[R.length - 1]; r.wo += woLeft(w) * (1 - ((+w.aitPct || 0) + (+w.vdsPct || 0)) / 100); });
+  S.workorders.filter(w => ['approved', 'pending'].includes(w.status || 'pending') && woLeft(w) >= 1).forEach(w => { const netF = 1 - ((+w.aitPct || 0) + (+w.vdsPct || 0)) / 100;
+    woDue(w).forEach(i => { if (i.left < 1) return; const r = at(i.month || keys[1]); if (r) r.wo += i.left * netF; }); });
   let bal = activeAccts().reduce((u, a) => u + acctBal(a, t), 0); const open = bal;
   R.forEach(r => { r.open = bal; r.in = r.inv + r.ms; r.out = r.pay + r.exp + r.wo; bal += r.in - r.out; r.close = bal; });
   return { R, open, budgeted: !!b };
@@ -1699,7 +1755,7 @@ function forecastView() {
   const unplanned = [];
   S.projects.filter(p => (p.status || 'active') === 'active').forEach(p => (p.milestones || []).forEach(m => { if (!msInvoiced(p, m)) unplanned.push({ p, m }); }));
   return `
-  <div class="head"><div><h2>Cash forecast · next 6 months</h2><p>Starts from today’s cash and bank. Money in: what clients owe (by due date) and the milestones you expect to bill. Money out: salaries, ${budgeted ? 'the budget' : 'average monthly spending (set a budget to use it instead)'}, and what’s left on open work orders.</p></div></div>
+  <div class="head"><div><h2>Cash forecast · next 6 months</h2><p>Starts from today\u2019s cash and bank. Money in: what clients owe (by due date) and the milestones you expect to bill. Money out: salaries with Eid bonuses in their months, ${budgeted ? 'the budget and its one-off costs' : 'average monthly spending (set a budget to use it instead)'}, and work orders by their payment schedules.</p></div></div>
   <div class="kpis">
     <div class="kpi"><div class="lb">Cash & bank now</div><div class="v">${compact(open)}</div><div class="s">all active accounts</div></div>
     <div class="kpi"><div class="lb">In · 6 months</div><div class="v" style="color:var(--good)">${compact(R.reduce((u, r) => u + r.in, 0))}</div><div class="s">invoices and milestones</div></div>
