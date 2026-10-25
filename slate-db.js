@@ -393,29 +393,26 @@
     setInterval(() => { if (vis()) loadSeen(); }, 120000);
     new MutationObserver(() => placeOnline(false)).observe(document.body, { childList: true, subtree: true });
   }
+  /* Home: "Online now" lists only the people who have SLATE OS open on screen; the Team tab shows everyone's status */
   function placeOnline(force) {
-    const old = document.getElementById('slate-online'); if (old) old.remove();
-    if (force) { try { if (S.view === 'team' && !(S.sheet)) render(true); } catch (_) {} }
-    return;
+    if (force) { try { if (S.view === 'team' && !S.sheet) render(true); } catch (_) {} }
+    const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
+    const old = document.getElementById('slate-online');
+    const name = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    const on = onlineIds.filter(id => id !== authUser.id && people.has(id) && people.get(id).active).sort((a, b) => name(a).localeCompare(name(b)));
+    if (!home || !on.length) { if (old) old.remove(); return; }
     const head = document.querySelector('main .page-h'); if (!head) return;
     if (old && !force && old.previousElementSibling === head) return;
-    const others = [...people.values()].filter(p => p.id !== authUser.id && p.active).map(p => p.id);
-    const name = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
-    const rank = id => { const s = seenOf(id); return s.st === 'on' ? 0 : s.st === 'away' ? 1 : 2; };
-    others.sort((a, b) => rank(a) - rank(b) || ((seenMap.get(b) || {}).seen_at || '').localeCompare((seenMap.get(a) || {}).seen_at || '') || name(a).localeCompare(name(b)));
-    const nOn = others.filter(id => rank(id) === 0).length, nAway = others.filter(id => rank(id) === 1).length;
-    const DOT = { on: '#34C759', away: '#FF9F0A', off: '#C7C7CC' };
     const chip = id => { let a = null; try { a = avaEl(id, isLeadP(people.get(id))); } catch (_) {}
-      const s = seenOf(id);
-      return el('span', { class: 'chip', style: 'padding:4px 12px 4px 4px;background:#fff;gap:8px', title: s.at ? new Date(s.at).toLocaleString() : s.label },
+      return el('span', { class: 'chip', style: 'padding:4px 12px 4px 4px;background:#fff;gap:8px' },
         el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []),
-          el('i', { style: `position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:${DOT[s.st]};border:2px solid #fff` })),
-        el('span', { style: 'display:grid;line-height:1.15' }, el('span', {}, name(id)), el('span', { style: 'font-size:11.5px;color:var(--muted)' }, s.label)));
-    };
+          el('i', { style: 'position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#34C759;border:2px solid #fff' })),
+        name(id)); };
+    const all = el('button', { class: 'linkish', type: 'button', style: 'font-size:12.5px' }, 'Everyone’s status');
+    all.addEventListener('click', () => { try { S.view = 'team'; S.tv = 'status'; render(true); window.scrollTo(0, 0); } catch (_) {} });
     const box = el('section', { id: 'slate-online', class: 'sec' },
-      el('div', { class: 'sec-h' }, el('h2', {}, 'Team status'), el('span', { class: 'cnt' }, `${nOn} online` + (nAway ? ` · ${nAway} away` : ''))),
-      others.length ? el('div', { class: 'chips', style: 'background:var(--group);border-radius:10px;padding:10px' }, ...others.map(chip))
-                    : el('div', { class: 'list' }, el('p', { class: 'muted', style: 'margin:0' }, 'No one else on SLATE OS yet.')));
+      el('div', { class: 'sec-h' }, el('h2', {}, 'Online now · ' + on.length), all),
+      el('div', { class: 'chips', style: 'background:var(--group);border-radius:10px;padding:10px' }, ...on.map(chip)));
     if (old) old.replaceWith(box); else head.after(box);
   }
 
