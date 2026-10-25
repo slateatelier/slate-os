@@ -65,9 +65,9 @@ const INTERNAL_TYPES = ['studioops', 'studiodev', 'studiomgmt'];
 /* ---------- state ---------- */
 const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, woTerms: DEFAULT_WO_TERMS, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [] };
 const S = {
-  role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], profiles: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
+  role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
   os: [], people: {}, audit: null, loaded: false, fy: fyOf(today()), tab: 'overview',
-  f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open' }
+  f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open', rep: 'pl', basis: 'billed', bm: '' }
 };
 const isPrincipal = () => S.role === 'principal';
 
@@ -168,7 +168,7 @@ async function load() {
   S.projects = by('projects'); S.invoices = by('invoices'); S.receipts = by('receipts');
   S.accounts = by('accounts'); S.moves = by('moves'); S.recons = by('recons');
   S.expenses = by('expenses'); S.workorders = by('workorders'); S.wopays = by('wopays');
-  S.staff = by('staff'); S.advances = by('advances'); S.payruns = by('payruns');
+  S.staff = by('staff'); S.advances = by('advances'); S.payruns = by('payruns'); S.budgets = by('budgets');
   const st = rows.find(r => r.path === 'config/settings');
   S.settingsRow = !!st; S.settings = { ...DEFAULT_SETTINGS, ...(st ? st.data : {}) };
   S.loaded = true;
@@ -1080,7 +1080,7 @@ function payrollView() {
   ${advs.length ? `<div class="panel"><div class="ph"><h3>Advances and loans</h3></div><div class="rows">${advs.map(a => `<button class="row r-inv" data-act="open-adv" data-id="${a.id}"><div style="min-width:0"><div class="t">${esc((staffOf(a.staffId) || {}).name || 'Staff')}</div><div class="sub">${tk(a.installment)} a month${a.note ? ' · ' + esc(a.note) : ''}</div></div><div class="c2 sub">${fmtDate(a.date)}</div>${advChip(a)}<div class="amt">${tk(a.amount)}</div></button>`).join('')}</div></div>` : ''}`;
 }
 function staffForm(t) {
-  const src = t || { payMethod: 'cash', joinDate: today() }, r = t ? curRate(t) || {} : {};
+  const src = t || { payMethod: 'cash', joinDate: '' }, r = t ? curRate(t) || {} : {};
   const used = new Set(S.staff.map(x => x.userId).filter(Boolean));
   const ppl = S.profiles.filter(p => !used.has(p.id) || p.id === src.userId);
   openSheet(`${sheetHead(t ? 'Edit staff member' : 'Add staff member', t ? esc(t.name) : 'Salary details stay in Finance. The team never sees them.')}
@@ -1089,14 +1089,14 @@ function staffForm(t) {
     <div class="fg">
       <label class="f" for="t_name">Name<input id="t_name" name="name" required value="${esc(src.name)}"></label>
       <label class="f" for="t_des">Designation<input id="t_des" name="designation" value="${esc(src.designation)}"></label>
-      <label class="f" for="t_join">Joined SLATE<input id="t_join" name="joinDate" type="date" value="${esc(src.joinDate)}"></label>
+      <label class="f" for="t_join">Joined SLATE <span class="hint">(only for someone joining this month or later)</span><input id="t_join" name="joinDate" type="date" value="${esc(src.joinDate)}"></label>
       <label class="f" for="t_pay">Salary paid<select id="t_pay" name="payMethod">${opt('cash', 'In cash', src.payMethod !== 'bank')}${opt('bank', 'To bank account', src.payMethod === 'bank')}</select></label>
     </div>
     <label class="f" for="t_bank" id="tBankWrap">Their bank account (bank, last 4 digits)<input id="t_bank" name="bankInfo" value="${esc(src.bankInfo)}" placeholder="e.g. BRAC Bank · 4417"></label>
     <div class="sec-t">Monthly salary (BDT)</div>
     <div class="fg">${SAL_PARTS.map(([k, l]) => `<label class="f" for="t_${k}">${l}<input id="t_${k}" name="${k}" type="number" min="0" step="1" value="${esc(r[k] ?? '')}"></label>`).join('')}
       <label class="f" for="t_tax">Tax deducted each month<input id="t_tax" name="tax" type="number" min="0" step="1" value="${esc(r.tax ?? 0)}"></label></div>
-    <div class="fg"><label class="f" for="t_from">${t ? 'New salary applies from' : 'Salary starts from'}<input id="t_from" name="from" type="month" required value="${t ? today().slice(0, 7) : (src.joinDate || today()).slice(0, 7)}"></label><div></div></div>
+    <div class="fg"><label class="f" for="t_from">${t ? 'New salary applies from' : 'Salary starts from'}<input id="t_from" name="from" type="month" required value="${today().slice(0, 7)}"></label><div></div></div>
     <dl class="kv" id="tTot"></dl>
     ${t ? `<label class="check" for="t_act"><input id="t_act" name="active" type="checkbox" ${t.active !== false ? 'checked' : ''}> Active <span class="hint">(untick when someone leaves; their history stays)</span></label>` : ''}
     <label class="f" for="t_note">Notes<input id="t_note" name="note" value="${esc(src.note)}"></label>
@@ -1564,7 +1564,170 @@ function exportAcct(a) {
 }
 
 /* ----- Reports ----- */
+/* ----- Reports: profit & loss, budget, forecast, billing ----- */
+const NOT_COST = ['Tax deposited (AIT/VDS withheld)'];
+const COST_CATS = [...EXP_CATS.filter(c => !NOT_COST.includes(c)), 'Salaries & bonuses', 'Consultants & vendors'];
+const lineCost = l => (+l.gross || 0) + (+l.extra || 0) - (+l.leaveDed || 0);   // cost to SLATE of one payroll line
+/* income and costs per month of a financial year.
+   billed: income when invoiced (fee before VAT), costs when incurred (expense date, salary month, vendor payment)
+   cash:   income when paid (the fee share of what was settled), costs when the money left an account */
+function plData(fy, basis) {
+  const keys = Array.from({ length: 12 }, (_, i) => monthKey(fy, i));
+  const R = keys.map(k => ({ k, income: 0, cats: {} }));
+  const at = d => { const i = keys.indexOf((d || '').slice(0, 7)); return i < 0 ? null : R[i]; };
+  const add = (d, cat, v) => { const r = at(d); if (r && v) r.cats[cat] = (r.cats[cat] || 0) + v; };
+  if (basis === 'cash') {
+    S.receipts.forEach(x => { const i = S.invoices.find(v => v.id === x.invoiceId); if (!i) return; const t = invTotal(i) || 1, r = at(x.date);
+      if (r) r.income += ((+x.received || 0) + (+x.ait || 0) + (+x.vds || 0)) * (+i.amount || 0) / t; });
+    S.expenses.filter(x => x.status !== 'rejected' && x.accountId && !NOT_COST.includes(x.category)).forEach(x => add(x.paidOn, x.category, +x.amount || 0));
+    S.payruns.filter(r => r.status === 'paid').forEach(r => add(r.payDate, 'Salaries & bonuses', (r.lines || []).reduce((u, l) => u + lineCost(l), 0)));
+  } else {
+    S.invoices.filter(i => !['void', 'draft'].includes(invStatus(i))).forEach(i => { const r = at(i.date); if (r) r.income += +i.amount || 0; });
+    S.expenses.filter(x => x.status !== 'rejected' && !NOT_COST.includes(x.category)).forEach(x => add(x.date, x.category, +x.amount || 0));
+    S.payruns.filter(r => ['approved', 'paid'].includes(r.status)).forEach(r => add(r.month + '-01', 'Salaries & bonuses', (r.lines || []).reduce((u, l) => u + lineCost(l), 0)));
+  }
+  S.wopays.forEach(x => add(x.date, 'Consultants & vendors', +x.gross || 0));
+  R.forEach(r => { r.cost = Object.values(r.cats).reduce((u, v) => u + v, 0); r.profit = r.income - r.cost; });
+  const T = { income: 0, cost: 0, profit: 0, cats: {} };
+  R.forEach(r => { T.income += r.income; T.cost += r.cost; T.profit += r.profit; for (const [c, v] of Object.entries(r.cats)) T.cats[c] = (T.cats[c] || 0) + v; });
+  return { R, T };
+}
 function reports() {
+  const v = S.f.rep;
+  const seg = `<div class="filters"><div class="seg">${[['pl', 'Profit & loss'], ['budget', 'Budget'], ['forecast', 'Forecast'], ['billing', 'Billing']].map(([k, l]) => `<button data-act="f-rep" data-v="${k}" aria-pressed="${v === k}">${l}</button>`).join('')}</div></div>`;
+  return seg + ({ pl: plView, budget: budgetView, forecast: forecastView, billing: billingReport }[v] || plView)();
+}
+function plView() {
+  const fy = S.fy, basis = S.f.basis, { R, T } = plData(fy, basis), n = v => v ? nf.format(Math.round(v)) : '–';
+  const cats = COST_CATS.filter(c => T.cats[c]);
+  const cur = today().slice(0, 7), cm = R.find(r => r.k === cur);
+  const margin = T.income ? Math.round(T.profit / T.income * 100) : 0;
+  const max = Math.max(1, ...R.map(r => Math.max(r.income, r.cost)));
+  const bars = R.map((r, i) => `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0" title="${MONTHS[i]}: income ${tk(r.income)}, costs ${tk(r.cost)}, profit ${tk(r.profit)}">
+    <div style="height:110px;display:flex;align-items:flex-end;gap:2px;width:100%;justify-content:center"><i style="display:block;width:38%;max-width:12px;height:${(r.income / max * 100).toFixed(1)}%;background:var(--inflow);opacity:.75;border-radius:2px 2px 0 0"></i><i style="display:block;width:38%;max-width:12px;height:${(r.cost / max * 100).toFixed(1)}%;background:var(--red);border-radius:2px 2px 0 0"></i></div>
+    <span style="font-size:10px;color:${r.k === cur ? 'var(--ink)' : 'var(--muted)'};font-weight:${r.k === cur ? 600 : 400}">${MONTHS[i]}</span><span class="num" style="font-size:10px;color:${r.profit < 0 ? 'var(--bad)' : 'var(--good)'}">${r.income || r.cost ? axisLbl(Math.abs(r.profit)).replace(/^/, r.profit < 0 ? '−' : '') : ''}</span></div>`).join('');
+  return `
+  <div class="head"><div><h2>Profit & loss · FY ${fyLabel(fy)}</h2><p>${basis === 'cash' ? 'Cash basis: income when clients pay (fee share, before VAT), costs when money leaves the vault or bank.' : 'Billed basis: income when invoiced (before VAT), costs when incurred.'} VAT, tax deposits and owner’s drawings are not income or cost.</p></div>
+    <div class="actions"><div class="seg">${[['billed', 'Billed'], ['cash', 'Cash']].map(([k, l]) => `<button data-act="f-basis" data-v="${k}" aria-pressed="${basis === k}">${l}</button>`).join('')}</div><button class="btn" data-act="export-plfull">Export CSV</button></div></div>
+  <div class="kpis">
+    <div class="kpi"><div class="lb">Income · FY</div><div class="v">${compact(T.income)}</div><div class="s">${cm ? `${compact(cm.income)} this month` : ''}</div></div>
+    <div class="kpi"><div class="lb">Costs · FY</div><div class="v">${compact(T.cost)}</div><div class="s">${cm ? `${compact(cm.cost)} this month` : ''}</div></div>
+    <div class="kpi"><div class="lb">Profit · FY</div><div class="v" style="color:var(${T.profit < 0 ? '--bad' : '--good'})">${compact(T.profit)}</div><div class="s">${T.income ? `${margin}% margin` : 'no income yet'}</div></div>
+    <div class="kpi"><div class="lb">This month</div><div class="v" style="color:var(${cm && cm.profit < 0 ? '--bad' : '--good'})">${compact(cm ? cm.profit : 0)}</div><div class="s">${monthName(cur)}</div></div>
+  </div>
+  <div class="panel"><div class="ph"><h3>Income and costs by month</h3><div class="legend"><span style="--c:var(--inflow)">Income</span><span style="--c:var(--red)">Costs</span></div></div>
+    <div class="pb" style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:2px">${bars}</div></div>
+  <div class="panel"><div class="ph"><h3>Statement</h3><span class="meta">BDT</span></div><div class="tbl"><table>
+    <thead><tr><th></th>${R.map((r, i) => `<th>${MONTHS[i]}</th>`).join('')}<th>FY</th></tr></thead>
+    <tbody><tr><td><b>Fee income</b></td>${R.map(r => `<td>${n(r.income)}</td>`).join('')}<td><b>${n(T.income)}</b></td></tr>
+    ${cats.map(c => `<tr><td style="padding-left:20px">${esc(c)}</td>${R.map(r => `<td>${n(r.cats[c])}</td>`).join('')}<td>${n(T.cats[c])}</td></tr>`).join('')}
+    <tr><td><b>Total costs</b></td>${R.map(r => `<td>${n(r.cost)}</td>`).join('')}<td><b>${n(T.cost)}</b></td></tr></tbody>
+    <tfoot><tr><td>Profit</td>${R.map(r => `<td class="${r.profit < 0 ? 'neg' : ''}">${n(r.profit)}</td>`).join('')}<td class="${T.profit < 0 ? 'neg' : ''}">${n(T.profit)}</td></tr></tfoot>
+  </table></div></div>
+  <p class="hint">Salaries count the cost to SLATE (gross plus allowances, less unpaid leave); advances aren’t a cost, their recovery isn’t income. Consultants count what was settled, including tax withheld. ${basis === 'billed' ? 'Expenses awaiting approval are included; rejected ones are not.' : ''}</p>`;
+}
+const budgetOf = fy => S.budgets.find(b => b.id === 'FY' + fy);
+function budgetView() {
+  const fy = S.fy, b = budgetOf(fy), lines = (b && b.lines) || {}, { R } = plData(fy, 'billed'), cur = today().slice(0, 7);
+  const months = R.map(r => r.k), bm = S.f.bm && months.includes(S.f.bm) ? S.f.bm : (months.includes(cur) ? cur : months[0]);
+  const upto = months.indexOf(bm) + 1, done = R.slice(0, upto);
+  const rows = COST_CATS.map(c => { const mb = +lines[c] || 0, ma = (R.find(r => r.k === bm).cats[c] || 0), yb = mb * upto, ya = done.reduce((u, r) => u + (r.cats[c] || 0), 0); return { c, mb, ma, yb, ya }; }).filter(r => r.mb || r.ma || r.ya);
+  const T = rows.reduce((a, r) => ({ mb: a.mb + r.mb, ma: a.ma + r.ma, yb: a.yb + r.yb, ya: a.ya + r.ya }), { mb: 0, ma: 0, yb: 0, ya: 0 });
+  const vr = (bud, act) => { if (!bud) return act ? `<span class="warnt">no budget</span>` : '–'; const d = act - bud, pct = Math.round(act / bud * 100); return `<span style="color:var(${d > 0 ? '--bad' : '--good'})">${pct}%</span>`; };
+  return `
+  <div class="head"><div><h2>Budget · FY ${fyLabel(fy)}</h2><p>Monthly budget per cost category against what was actually spent (billed basis). ${isPrincipal() ? 'Only you set the budget.' : 'The Principal sets the budget.'}</p></div>
+    <div class="actions"><select id="bmSel" aria-label="Month">${months.map(m => opt(m, monthName(m), m === bm)).join('')}</select>${isPrincipal() ? `<button class="btn pri" data-act="edit-budget">${b ? 'Edit budget' : 'Set budget'}</button>` : ''}</div></div>
+  ${!b ? `<div class="panel"><div class="empty"><strong>No budget for FY ${fyLabel(fy)} yet</strong>${isPrincipal() ? 'Set a monthly amount for each kind of cost (rent, salaries, consultants, printing). Actuals are tracked against it every month.' : 'The Principal hasn’t set one yet. Actual spending still shows below.'}${isPrincipal() ? `<div class="actions" style="justify-content:center"><button class="btn pri" data-act="edit-budget">Set budget</button></div>` : ''}</div></div>` : ''}
+  <div class="kpis">
+    <div class="kpi"><div class="lb">Budget · ${MONTHS[upto - 1]}</div><div class="v">${compact(T.mb)}</div><div class="s">a month</div></div>
+    <div class="kpi"><div class="lb">Spent · ${MONTHS[upto - 1]}</div><div class="v" style="color:var(${T.mb && T.ma > T.mb ? '--bad' : '--ink'})">${compact(T.ma)}</div><div class="s">${T.mb ? `${Math.round(T.ma / T.mb * 100)}% of budget` : ''}</div></div>
+    <div class="kpi"><div class="lb">Budget to date</div><div class="v">${compact(T.yb)}</div><div class="s">Jul to ${MONTHS[upto - 1]}</div></div>
+    <div class="kpi"><div class="lb">Spent to date</div><div class="v" style="color:var(${T.yb && T.ya > T.yb ? '--bad' : '--ink'})">${compact(T.ya)}</div><div class="s">${T.yb ? `${T.ya > T.yb ? 'over' : 'under'} by ${compact(Math.abs(T.yb - T.ya))}` : ''}</div></div>
+  </div>
+  <div class="panel"><div class="ph"><h3>By category</h3><span class="meta">BDT</span></div>${rows.length ? `<div class="tbl"><table>
+    <thead><tr><th>Category</th><th>Budget / month</th><th>${MONTHS[upto - 1]}</th><th></th><th>Budget to date</th><th>Spent to date</th><th></th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${esc(r.c)}</td><td>${nf.format(r.mb)}</td><td>${nf.format(Math.round(r.ma))}</td><td>${vr(r.mb, r.ma)}</td><td>${nf.format(r.yb)}</td><td>${nf.format(Math.round(r.ya))}</td><td>${vr(r.yb, r.ya)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td>${nf.format(T.mb)}</td><td>${nf.format(Math.round(T.ma))}</td><td>${vr(T.mb, T.ma)}</td><td>${nf.format(T.yb)}</td><td>${nf.format(Math.round(T.ya))}</td><td>${vr(T.yb, T.ya)}</td></tr></tfoot></table></div>`
+    : `<div class="empty">No budget or spending yet this year.</div>`}</div>`;
+}
+function budgetForm() {
+  const fy = S.fy, b = budgetOf(fy), lines = (b && b.lines) || {};
+  // suggest from the last three months of actual spending where there is no budget yet
+  const { R } = plData(fy, 'billed'), cur = today().slice(0, 7), past = R.filter(r => r.k < cur).slice(-3);
+  const avg = c => past.length ? Math.round(past.reduce((u, r) => u + (r.cats[c] || 0), 0) / past.length / 100) * 100 : 0;
+  const payroll = activeStaff().reduce((u, t) => u + grossOf(curRate(t)), 0);
+  openSheet(`${sheetHead(`Budget · FY ${fyLabel(fy)}`, 'Monthly amounts. Leave a category empty if you don’t budget for it.')}
+  <form id="bf"><div class="fg">${COST_CATS.map(c => { const v = lines[c] ?? (c === 'Salaries & bonuses' && payroll ? Math.round(payroll * 13 / 12 / 100) * 100 : avg(c) || ''); return `<label class="f">${esc(c)}<input name="${esc(c)}" type="number" min="0" step="100" value="${esc(v)}"></label>`; }).join('')}</div>
+    <dl class="kv" id="bTot"></dl>
+    <p class="hint">${b ? '' : 'Pre-filled from the last three months of spending, and salaries from current payroll with two Eid bonuses spread over the year. Adjust freely.'}</p>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Save budget</button></div></form>`, root => {
+    const f = $('#bf', root);
+    const upd = () => { const t = COST_CATS.reduce((u, c) => u + (+f.elements[c].value || 0), 0); $('#bTot', root).innerHTML = `<dt class="tot">Total a month</dt><dd class="tot">${tk(t)}</dd><dt>For the year</dt><dd>${tk(t * 12)}</dd>`; };
+    f.addEventListener('input', upd); upd();
+    f.addEventListener('submit', async ev => { ev.preventDefault();
+      const out = {}; COST_CATS.forEach(c => { const v = +f.elements[c].value || 0; if (v) out[c] = v; });
+      if (await run(() => setDoc('budgets', 'FY' + fy, b ? { ...strip(b), fy, lines: out } : { fy, lines: out }, !!b), 'Budget saved')) closeSheet(); });
+  });
+}
+function forecastData() {
+  const t = today(), cm = t.slice(0, 7), keys = [];
+  const d = new Date(cm + '-01T00:00:00'); for (let i = 0; i < 6; i++) { keys.push(iso(d).slice(0, 7)); d.setMonth(d.getMonth() + 1); }
+  const R = keys.map(k => ({ k, inv: 0, ms: 0, pay: 0, exp: 0, wo: 0, items: [] }));
+  const at = ym => R.find(r => r.k === (ym < cm ? cm : ym));
+  // money owed by clients, on the due date (overdue lands this month); AIT the client keeps isn't cash
+  S.invoices.filter(invOpen).forEach(i => { const r = at((i.due || i.date || t).slice(0, 7)); if (!r) return; const left = Math.max(0, invDue(i) - Math.max(0, invAit(i) - recsOf(i).reduce((u, x) => u + (+x.ait || 0), 0))); r.inv += left; });
+  // milestones not invoiced yet, in the month you expect to bill them (paid the month after)
+  S.projects.filter(p => (p.status || 'active') === 'active').forEach(p => (p.milestones || []).forEach(m => { if (!m.expect || msInvoiced(p, m)) return; const nx = new Date(m.expect + '-01T00:00:00'); nx.setMonth(nx.getMonth() + 1);
+    const r = at(iso(nx).slice(0, 7)); if (r) r.ms += Math.round((+p.fee || 0) * m.pct / 100); }));
+  // payroll: this month's net if a sheet exists, else every active person's salary less tax and advance recovery
+  const est = activeStaff().reduce((u, s2) => { const rt = curRate(s2); return u + grossOf(rt) - (+(rt || {}).tax || 0); }, 0);
+  R.forEach(r => { const run = S.payruns.find(x => x.kind === 'salary' && x.month === r.k); r.pay = run ? (run.status === 'paid' ? 0 : runTotals(run).net) : est;
+    S.payruns.filter(x => x.kind === 'bonus' && x.month === r.k && x.status !== 'paid').forEach(x => r.pay += runTotals(x).net); });
+  // other costs: the budget if set, else the last three months' average; approved unpaid expenses this month
+  const b = budgetOf(fyOf(t)), { R: P } = plData(fyOf(t), 'billed'), past = P.filter(r => r.k < cm).slice(-3);
+  const base = EXP_CATS.filter(c => !NOT_COST.includes(c)).reduce((u, c) => u + (b ? +(b.lines || {})[c] || 0 : past.length ? past.reduce((v, r) => v + (r.cats[c] || 0), 0) / past.length : 0), 0);
+  R.forEach(r => r.exp = base);
+  R[0].exp += S.expenses.filter(x => x.status === 'approved' && !x.accountId).reduce((u, x) => u + (+x.amount || 0), 0);
+  // vendors: what's left on open work orders, in the delivery month (or next month), net of tax withheld
+  S.workorders.filter(w => w.status === 'approved' && woLeft(w) >= 1).forEach(w => { const r = at((w.deliverBy || keys[1]).slice(0, 7)) || R[R.length - 1]; r.wo += woLeft(w) * (1 - ((+w.aitPct || 0) + (+w.vdsPct || 0)) / 100); });
+  let bal = activeAccts().reduce((u, a) => u + acctBal(a, t), 0); const open = bal;
+  R.forEach(r => { r.open = bal; r.in = r.inv + r.ms; r.out = r.pay + r.exp + r.wo; bal += r.in - r.out; r.close = bal; });
+  return { R, open, budgeted: !!b };
+}
+function forecastView() {
+  const { R, open, budgeted } = forecastData(), low = R.reduce((m, r) => r.close < m.close ? r : m, R[0]), n = v => nf.format(Math.round(v || 0));
+  const unplanned = [];
+  S.projects.filter(p => (p.status || 'active') === 'active').forEach(p => (p.milestones || []).forEach(m => { if (!msInvoiced(p, m)) unplanned.push({ p, m }); }));
+  return `
+  <div class="head"><div><h2>Cash forecast · next 6 months</h2><p>Starts from today’s cash and bank. Money in: what clients owe (by due date) and the milestones you expect to bill. Money out: salaries, ${budgeted ? 'the budget' : 'average monthly spending (set a budget to use it instead)'}, and what’s left on open work orders.</p></div></div>
+  <div class="kpis">
+    <div class="kpi"><div class="lb">Cash & bank now</div><div class="v">${compact(open)}</div><div class="s">all active accounts</div></div>
+    <div class="kpi"><div class="lb">In · 6 months</div><div class="v" style="color:var(--good)">${compact(R.reduce((u, r) => u + r.in, 0))}</div><div class="s">invoices and milestones</div></div>
+    <div class="kpi"><div class="lb">Out · 6 months</div><div class="v" style="color:var(--bad)">${compact(R.reduce((u, r) => u + r.out, 0))}</div><div class="s">salaries, costs, vendors</div></div>
+    <div class="kpi"><div class="lb">Lowest point</div><div class="v" style="color:var(${low.close < 0 ? '--bad' : '--ink'})">${compact(low.close)}</div><div class="s">${low.close < 0 ? `<b class="bad">short in ${monthName(low.k)}</b>` : `end of ${monthName(low.k)}`}</div></div>
+  </div>
+  <div class="panel"><div class="ph"><h3>Month by month</h3><span class="meta">BDT</span></div><div class="tbl"><table>
+    <thead><tr><th></th>${R.map(r => `<th>${MONTHS[(+r.k.slice(5, 7) + 5) % 12]} ${r.k.slice(2, 4)}</th>`).join('')}</tr></thead>
+    <tbody><tr><td>Opening</td>${R.map(r => `<td>${n(r.open)}</td>`).join('')}</tr>
+      <tr><td style="padding-left:20px">Clients owe</td>${R.map(r => `<td>${r.inv ? n(r.inv) : '–'}</td>`).join('')}</tr>
+      <tr><td style="padding-left:20px">Milestones to bill</td>${R.map(r => `<td>${r.ms ? n(r.ms) : '–'}</td>`).join('')}</tr>
+      <tr><td style="padding-left:20px">Salaries</td>${R.map(r => `<td class="neg">${r.pay ? n(r.pay) : '–'}</td>`).join('')}</tr>
+      <tr><td style="padding-left:20px">Running costs</td>${R.map(r => `<td class="neg">${r.exp ? n(r.exp) : '–'}</td>`).join('')}</tr>
+      <tr><td style="padding-left:20px">Vendors</td>${R.map(r => `<td class="neg">${r.wo ? n(r.wo) : '–'}</td>`).join('')}</tr></tbody>
+    <tfoot><tr><td>Closing</td>${R.map(r => `<td class="${r.close < 0 ? 'neg' : ''}">${n(r.close)}</td>`).join('')}</tr></tfoot></table></div></div>
+  <div class="panel"><div class="ph"><h3>When will you bill these milestones?</h3><span class="meta">${unplanned.filter(x => x.m.expect).length} of ${unplanned.length} planned</span></div>
+    ${unplanned.length ? `<div class="rows">${unplanned.map(({ p, m }) => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${esc(m.label)}</div><div class="sub"><span class="mono">${esc(p.code)}</span> · ${esc(p.client || p.name)} · ${tk((+p.fee || 0) * m.pct / 100)}</div></div>
+      <input type="month" class="msExpect" data-pid="${p.id}" data-mid="${m.id}" value="${esc(m.expect || '')}" min="${today().slice(0, 7)}" aria-label="Expected billing month" style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:5px 6px;font-size:13px;max-width:150px"><span></span></div>`).join('')}</div>`
+      : `<div class="empty">Every active milestone has been invoiced.</div>`}</div>
+  <p class="hint">A forecast is only as good as its inputs: set the expected month for each milestone above, keep salary sheets and work orders current, and set a budget for running costs.</p>`;
+}
+function exportPLFull() {
+  const { R, T } = plData(S.fy, S.f.basis), cats = COST_CATS.filter(c => T.cats[c]);
+  const r = [['', ...R.map(x => x.k), `FY ${fyLabel(S.fy)}`], ['Fee income', ...R.map(x => Math.round(x.income)), Math.round(T.income)],
+    ...cats.map(c => [c, ...R.map(x => Math.round(x.cats[c] || 0)), Math.round(T.cats[c])]), ['Total costs', ...R.map(x => Math.round(x.cost)), Math.round(T.cost)], ['Profit', ...R.map(x => Math.round(x.profit)), Math.round(T.profit)]];
+  saveCsv(`SLATE-profit-and-loss-${S.f.basis}-FY${fyLabel(S.fy).replace('–', '-')}.csv`, r);
+}
+function billingReport() {
   const fy = S.fy;
   const rows = Array.from({ length: 12 }, (_, i) => ({ k: monthKey(fy, i), m: MONTHS[i], billed: 0, vat: 0, recv: 0, wh: 0 }));
   const at = d => rows.find(r => d && d.startsWith(r.k));
@@ -1574,7 +1737,7 @@ function reports() {
   const byProj = S.projects.map(p => ({ p, s: projStats(p) })).filter(x => x.s.billed || x.s.fee).sort((a, b) => b.s.outstanding - a.s.outstanding);
   const n = v => v ? nf.format(Math.round(v)) : '–';
   return `
-  <div class="head"><div><h2>Reports · FY ${fyLabel(fy)}</h2><p>Billed on the invoice date, excluding VAT. Received on the day the money came in.</p></div>
+  <div class="head"><div><h2>Billing · FY ${fyLabel(fy)}</h2><p>Billed on the invoice date, excluding VAT. Received on the day the money came in.</p></div>
     <div class="actions"><button class="btn" data-act="export-pl">Export CSV</button></div></div>
   <div class="panel"><div class="ph"><h3>Monthly billing statement</h3><span class="meta">BDT</span></div><div class="tbl"><table>
     <thead><tr><th>Month</th><th>Billed</th><th>VAT billed</th><th>Received</th><th>AIT / VDS withheld</th></tr></thead>
@@ -1614,7 +1777,7 @@ function auditLine(a) {
     : coll === 'moves' ? (d.type === 'transfer' ? `transfer of ${tk(d.amount)} from ${an(d.from)} to ${an(d.to)}` : `${(MOVE_LABEL[d.type] || 'entry').toLowerCase()} of ${tk(d.amount)}`)
     : coll === 'recons' ? `month-end check of ${an(d.accountId)} for ${d.month || ''}`
     : coll === 'expenses' ? `expense “${d.desc || ''}” (${tk(d.amount)})` : coll === 'workorders' ? `work order ${d.no || ''} for ${d.vendor || ''}`
-    : coll === 'staff' ? `staff record for ${d.name || ''}` : coll === 'advances' ? `advance of ${tk(d.amount)} to ${(staffOf(d.staffId) || {}).name || 'staff'}`
+    : coll === 'budgets' ? `budget for FY ${fyLabel(+d.fy || S.fy)}` : coll === 'staff' ? `staff record for ${d.name || ''}` : coll === 'advances' ? `advance of ${tk(d.amount)} to ${(staffOf(d.staffId) || {}).name || 'staff'}`
     : coll === 'payruns' ? `${runLabel(d)} (${tk(runTotals(d).net)})`
     : coll === 'wopays' ? `payment of ${tk((+d.gross || 0) - (+d.ait || 0) - (+d.vds || 0))} on work order ${(S.workorders.find(w => w.id === d.woId) || {}).no || ''}` : 'finance settings';
   let verb = a.op === 'insert' ? 'added' : a.op === 'delete' ? 'removed' : 'changed';
@@ -1697,6 +1860,10 @@ document.addEventListener('click', async ev => {
     case 'export-inv': exportInv(); break;
     case 'new-acct': accountForm(null, b.dataset.v); break;
     case 'new-staff': staffForm(); break;
+    case 'f-rep': S.f.rep = b.dataset.v; schedule(); break;
+    case 'f-basis': S.f.basis = b.dataset.v; schedule(); break;
+    case 'edit-budget': budgetForm(); break;
+    case 'export-plfull': exportPLFull(); break;
     case 'petty-bills': pettyBillsForm(); break;
     case 'petty-topup': pettyTopupForm(); break;
     case 'petty-statement': { if (pettyBox()) openDoc(pettyStatementDoc(S.f.pettyMonth || today().slice(0, 7)), 'Petty-cash-statement.html'); break; }
@@ -1762,7 +1929,9 @@ document.addEventListener('click', async ev => {
 document.addEventListener('input', ev => {
   if (ev.target.id === 'q') { S.f.q = ev.target.value; const pos = ev.target.selectionStart; render(); const q = $('#q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (_) {} } }
 });
-document.addEventListener('change', ev => { if (ev.target.id === 'fySel') { S.fy = +ev.target.value; schedule(); } if (ev.target.id === 'expCat') { S.f.expCat = ev.target.value; schedule(); } if (ev.target.id === 'pettyMonth') { S.f.pettyMonth = ev.target.value; schedule(); } });
+document.addEventListener('change', ev => { if (ev.target.id === 'fySel') { S.fy = +ev.target.value; schedule(); } if (ev.target.id === 'expCat') { S.f.expCat = ev.target.value; schedule(); } if (ev.target.id === 'pettyMonth') { S.f.pettyMonth = ev.target.value; schedule(); } if (ev.target.id === 'bmSel') { S.f.bm = ev.target.value; schedule(); }
+  if (ev.target.classList.contains('msExpect')) { const p = prj(ev.target.dataset.pid); if (!p) return; const ms = (p.milestones || []).map(m => m.id === ev.target.dataset.mid ? { ...m, expect: ev.target.value } : m);
+    run(() => putDoc('projects', p.id, { ...strip(p), milestones: ms }), ev.target.value ? `Expected ${monthName(ev.target.value)}` : 'Cleared'); } });
 document.addEventListener('submit', async ev => {
   if (ev.target.id !== 'setForm') return; ev.preventDefault();
   const f = ev.target;
