@@ -31,8 +31,23 @@
      back/forward cache) hold up the next one. Supabase accepts two pages refreshing at the same moment. */
   const sessionLock = (() => { let tail = Promise.resolve();
     return (_name, _t, fn) => { const run = tail.then(() => fn()); tail = run.catch(() => {}); return run; }; })();
+  /* No call waits for ever on a weak signal: a save gives up after 15 seconds, a load after 30,
+     so the app never stays locked and the person is told to try again. */
+  const TIMEOUT_MSG = 'Not saved: the connection is too slow. Check your signal and try again.';
+  const timedFetch = (input, init = {}) => {
+    const method = String(init.method || (input && input.method) || 'GET').toUpperCase();
+    const ms = method === 'GET' || method === 'HEAD' ? 30000 : 15000;
+    const ctl = new AbortController(), outer = init.signal;
+    if (outer) { if (outer.aborted) ctl.abort(); else outer.addEventListener('abort', () => ctl.abort(), { once: true }); }
+    let timedOut = false;
+    const t = setTimeout(() => { timedOut = true; ctl.abort(); }, ms);
+    return fetch(input, { ...init, signal: ctl.signal })
+      .catch(e => { throw timedOut ? new Error(method === 'GET' ? 'The connection is too slow to load SLATE OS right now. Try again in a moment.' : TIMEOUT_MSG) : e; })
+      .finally(() => clearTimeout(t));
+  };
   const sb = window.supabase.createClient(CFG.url, CFG.key, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: authStore, lock: sessionLock }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: authStore, lock: sessionLock },
+    global: { fetch: timedFetch }
   });
   addEventListener('pagehide', () => { try { sb.auth.stopAutoRefresh(); } catch (_) {} });
   addEventListener('pageshow', () => { try { sb.auth.startAutoRefresh(); } catch (_) {} });
@@ -55,7 +70,11 @@
   const parentOf = path => path.split('/').slice(0, -1).join('/');
   const lastOf = path => path.split('/').pop();
   function friendly(err) {
-    const m = (err && (err.message || err.error_description || err.msg)) || String(err || 'Something went wrong');
+    let m = (err && (err.message || err.error_description || err.msg)) || String(err || 'Something went wrong');
+    m = m.replace(/^(?:\w*Error:\s*)+/, '');
+    if (/^(Failed to fetch|NetworkError|Load failed|network error)/i.test(m)) m = 'No connection, so this wasn’t saved. Check your signal and try again.';
+    // a pod leader acting outside their pod's projects
+    if (/Only the pod leader or COO (edits|reassigns) this task/.test(m)) m = 'You can change this only on your own pod’s projects. Ask the project’s pod leader or the COO.';
     return new Error(m.replace(/^not-found:\s*/, 'Not found: '));
   }
 
@@ -674,7 +693,7 @@
   let myMessages = [];
   async function loadMessages() {
     const { data } = await sb.from('notifications').select('id,kind,title,body,created_at,ref_id,reply,sender').in('kind', ['message', 'reply', 'reminder']).is('read_at', null).order('created_at', { ascending: false }).limit(15);
-    myMessages = data || []; placeMessages(true);
+    myMessages = data || []; placeMessages(true); msgRefresh(); syncBadge();
   }
   function remindChoices() {
     const now = new Date(), at = (d, h, m) => { const x = new Date(now); x.setDate(x.getDate() + d); x.setHours(h, m || 0, 0, 0); return x; };
@@ -693,6 +712,78 @@
     if (error) throw friendly(error);
   }
   window.slateReplyTask = async (msgId, path) => { await sendReply(msgId, 'task', { task: path }); myMessages = myMessages.filter(y => y.id !== msgId); loadAnswered(); loadMessages(); };
+  /* a message answered or dismissed (on Home or in the bell) leaves both, and the counts update */
+  function msgGone(id) {
+    myMessages = myMessages.filter(y => y.id !== id); bellCards.delete(id);
+    placeMessages(true); syncBadge(); msgRefresh();
+  }
+  function msgRefresh() { try { schedule(); } catch (_) {} try { if (S.sheet && S.sheet.type === 'notif') renderSheet(); } catch (_) {} }
+  const msgNm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+  function msgCard(m) {
+    const msgId = m.kind === 'reminder' ? m.ref_id : m.kind === 'message' ? m.id : null;
+    const status = el('div', { class: 'f-hint', role: 'status' });
+    const actions = el('div', { class: 'actions' });
+    const lock = on => actions.querySelectorAll('button,input,textarea').forEach(b => { b.disabled = on; });
+    const reply = async (choice, label, extra) => {
+      lock(true);
+      try { await sendReply(msgId, choice, extra); }
+      catch (e) { status.textContent = e.message; status.className = 'err'; lock(false); return; }
+      if (m.kind === 'reminder') await sb.rpc('message_read', { p_id: m.id });
+      if (choice === 'remind') loadReminders(); else loadAnswered();
+      try { toast(choice === 'remind' ? 'Reminder set for ' + when(extra.remindAt) + ' · added to your Calendar'
+        : choice === 'done' || choice === 'already' ? 'Reply sent: ' + label + ' · on your Calendar'
+        : choice === 'will' ? 'Reply sent · due ' + dayOnly(extra.at) + ' on your Calendar' : 'Reply sent: ' + label); } catch (_) {}
+      msgGone(m.id);
+    };
+    const mini = (label, primary) => el('button', { class: 'btn btn-sm' + (primary ? ' btn-primary' : ''), type: 'button', style: primary ? '' : 'background:#fff' }, label);
+    const panel = (title, input, go, note) => {
+      const back = mini('Back');
+      back.addEventListener('click', () => { actions.replaceChildren(...buttons()); status.textContent = ''; });
+      actions.replaceChildren(el('div', { style: 'display:grid;gap:8px;width:100%' }, el('div', { class: 'lbl' }, title), input, note || el('span'), el('div', { class: 'actions' }, go, back)));
+      try { input.focus(); } catch (_) {}
+    };
+    const buttons = () => {
+      const out = [];
+      const done = mini('✓ Done', true); done.addEventListener('click', () => reply('done', 'Done')); out.push(done);
+      const al = mini('Already done…'); al.addEventListener('click', () => {
+        const i = el('input', { type: 'datetime-local', max: localDT(new Date()), style: 'background:#fff' }); i.value = localDT(new Date());
+        const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value) return (status.textContent = 'Choose when it was done.'); const at = new Date(i.value); if (at > new Date()) return (status.textContent = 'That time is in the future.'); reply('already', 'Already done', { at }); });
+        panel('When was it done?', i, go); }); out.push(al);
+      const wl = mini('Will do it…'); wl.addEventListener('click', () => {
+        const tm = new Date(); tm.setDate(tm.getDate() + 1);
+        const i = el('input', { type: 'date', min: localD(new Date()), style: 'background:#fff' }); i.value = localD(tm);
+        const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value) return (status.textContent = 'Choose the finish date.'); const at = new Date(i.value + 'T18:00'); reply('will', 'Will do it', { at }); });
+        panel('By when will you finish it?', i, go, el('div', { class: 'f-hint' }, 'It goes on your Calendar; tap ✓ Done there when it’s finished.')); }); out.push(wl);
+      const hp = mini('Need help…'); hp.addEventListener('click', () => {
+        const i = el('textarea', { maxlength: '300', rows: '2', placeholder: 'What help do you need?', style: 'background:#fff' });
+        const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value.trim()) return (status.textContent = 'Write what help you need.'); reply('help', 'Need help', { note: i.value.trim() }); });
+        panel('Need help', i, go); }); out.push(hp);
+      const rb = mini('Remind me…'); rb.addEventListener('click', () => {
+        actions.replaceChildren(...remindChoices().map(([l, d]) => { const b = mini(l); b.addEventListener('click', () => reply('remind', l, { remindAt: d })); return b; }), (() => { const b = mini('Back'); b.addEventListener('click', () => actions.replaceChildren(...buttons())); return b; })()); }); out.push(rb);
+      if (typeof window.slateMsgTaskSheet === 'function') { const tk = mini('Make it a task…'); tk.addEventListener('click', () => window.slateMsgTaskSheet({ id: msgId, body: m.kind === 'reminder' ? m.body : m.body, sender: m.sender })); out.push(tk); }
+      return out;
+    };
+    if (msgId) actions.append(...buttons());
+    else {
+      const x = mini('Dismiss');
+      x.addEventListener('click', async () => { msgGone(m.id); await sb.rpc('message_read', { p_id: m.id }); });
+      actions.append(x);
+    }
+    const color = m.kind === 'reply' ? '#007AFF' : m.kind === 'reminder' ? '#FF9500' : '#d7262b';
+    return el('div', { class: 'callout', style: 'box-shadow:inset 3px 0 0 ' + color },
+      el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', {}, m.title), el('span', { class: 'f-hint' }, when(m.created_at))),
+      el('div', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, m.body), actions, status);
+  }
+
+  /* the bell lists the same messages, each with the same reply buttons; cards are kept so an open reply stays open */
+  const bellCards = new Map();
+  window.slateMsgCount = () => myMessages.length;
+  window.slateMsgCards = () => {
+    if (!myMessages.length) return null;
+    for (const id of [...bellCards.keys()]) if (!myMessages.some(m => m.id === id)) bellCards.delete(id);
+    return el('div', { class: 'n-msgs' }, el('div', { class: 'n-day' }, myMessages.length === 1 ? 'Message for you' : `Messages for you · ${myMessages.length}`),
+      ...myMessages.map(m => { if (!bellCards.has(m.id)) bellCards.set(m.id, msgCard(m)); return bellCards.get(m.id); }));
+  };
   function placeMessages(force) {
     const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
     const old = document.getElementById('slate-messages');
@@ -700,63 +791,7 @@
     if (!home || (!myMessages.length && !open.length)) { if (old) old.remove(); return; }
     const main = document.querySelector('main'); if (!main) return;
     if (old && !force && main.contains(old)) return;
-    const gone = id => { myMessages = myMessages.filter(y => y.id !== id); placeMessages(true); syncBadge(); };
-    const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
-    const card = m => {
-      const msgId = m.kind === 'reminder' ? m.ref_id : m.kind === 'message' ? m.id : null;
-      const status = el('div', { class: 'f-hint', role: 'status' });
-      const actions = el('div', { class: 'actions' });
-      const lock = on => actions.querySelectorAll('button,input,textarea').forEach(b => { b.disabled = on; });
-      const reply = async (choice, label, extra) => {
-        lock(true);
-        try { await sendReply(msgId, choice, extra); }
-        catch (e) { status.textContent = e.message; status.className = 'err'; lock(false); return; }
-        if (m.kind === 'reminder') await sb.rpc('message_read', { p_id: m.id });
-        if (choice === 'remind') loadReminders(); else loadAnswered();
-        try { toast(choice === 'remind' ? 'Reminder set for ' + when(extra.remindAt) + ' · added to your Calendar'
-          : choice === 'done' || choice === 'already' ? 'Reply sent: ' + label + ' · on your Calendar'
-          : choice === 'will' ? 'Reply sent · due ' + dayOnly(extra.at) + ' on your Calendar' : 'Reply sent: ' + label); } catch (_) {}
-        gone(m.id);
-      };
-      const mini = (label, primary) => el('button', { class: 'btn btn-sm' + (primary ? ' btn-primary' : ''), type: 'button', style: primary ? '' : 'background:#fff' }, label);
-      const panel = (title, input, go, note) => {
-        const back = mini('Back');
-        back.addEventListener('click', () => { actions.replaceChildren(...buttons()); status.textContent = ''; });
-        actions.replaceChildren(el('div', { style: 'display:grid;gap:8px;width:100%' }, el('div', { class: 'lbl' }, title), input, note || el('span'), el('div', { class: 'actions' }, go, back)));
-        try { input.focus(); } catch (_) {}
-      };
-      const buttons = () => {
-        const out = [];
-        const done = mini('✓ Done', true); done.addEventListener('click', () => reply('done', 'Done')); out.push(done);
-        const al = mini('Already done…'); al.addEventListener('click', () => {
-          const i = el('input', { type: 'datetime-local', max: localDT(new Date()), style: 'background:#fff' }); i.value = localDT(new Date());
-          const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value) return (status.textContent = 'Choose when it was done.'); const at = new Date(i.value); if (at > new Date()) return (status.textContent = 'That time is in the future.'); reply('already', 'Already done', { at }); });
-          panel('When was it done?', i, go); }); out.push(al);
-        const wl = mini('Will do it…'); wl.addEventListener('click', () => {
-          const tm = new Date(); tm.setDate(tm.getDate() + 1);
-          const i = el('input', { type: 'date', min: localD(new Date()), style: 'background:#fff' }); i.value = localD(tm);
-          const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value) return (status.textContent = 'Choose the finish date.'); const at = new Date(i.value + 'T18:00'); reply('will', 'Will do it', { at }); });
-          panel('By when will you finish it?', i, go, el('div', { class: 'f-hint' }, 'It goes on your Calendar; tap ✓ Done there when it’s finished.')); }); out.push(wl);
-        const hp = mini('Need help…'); hp.addEventListener('click', () => {
-          const i = el('textarea', { maxlength: '300', rows: '2', placeholder: 'What help do you need?', style: 'background:#fff' });
-          const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value.trim()) return (status.textContent = 'Write what help you need.'); reply('help', 'Need help', { note: i.value.trim() }); });
-          panel('Need help', i, go); }); out.push(hp);
-        const rb = mini('Remind me…'); rb.addEventListener('click', () => {
-          actions.replaceChildren(...remindChoices().map(([l, d]) => { const b = mini(l); b.addEventListener('click', () => reply('remind', l, { remindAt: d })); return b; }), (() => { const b = mini('Back'); b.addEventListener('click', () => actions.replaceChildren(...buttons())); return b; })()); }); out.push(rb);
-        if (typeof window.slateMsgTaskSheet === 'function') { const tk = mini('Make it a task…'); tk.addEventListener('click', () => window.slateMsgTaskSheet({ id: msgId, body: m.kind === 'reminder' ? m.body : m.body, sender: m.sender })); out.push(tk); }
-        return out;
-      };
-      if (msgId) actions.append(...buttons());
-      else {
-        const x = mini('Dismiss');
-        x.addEventListener('click', async () => { gone(m.id); await sb.rpc('message_read', { p_id: m.id }); });
-        actions.append(x);
-      }
-      const color = m.kind === 'reply' ? '#007AFF' : m.kind === 'reminder' ? '#FF9500' : '#d7262b';
-      return el('div', { class: 'callout', style: 'box-shadow:inset 3px 0 0 ' + color },
-        el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', {}, m.title), el('span', { class: 'f-hint' }, when(m.created_at))),
-        el('div', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, m.body), actions, status);
-    };
+    const nm = msgNm;
     const commit = r => {
       const late = new Date(r.due_at) < new Date();
       const b = el('button', { class: 'btn btn-sm btn-primary', type: 'button' }, '✓ Done');
@@ -765,16 +800,19 @@
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', { style: 'overflow-wrap:anywhere;font-weight:500' }, r.body), el('span', { class: 'pill ' + (late ? 's-overdue' : 's-open') }, (late ? 'Overdue · ' : 'Due ') + dayOnly(r.due_at))),
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, 'From ' + nm(r.sender)), b));
     };
-    const box = el('section', { id: 'slate-messages', class: 'sec' }, ...myMessages.map(card),
+    const box = el('section', { id: 'slate-messages', class: 'sec' }, ...myMessages.map(m => msgCard(m)),
       ...(open.length ? [el('div', { class: 'sec-h' }, el('h2', {}, 'Messages you said you’d do'), el('span', { class: 'cnt' }, String(open.length))), el('div', { class: 'list' }, ...open.map(commit))] : []));
-    if (old) old.replaceWith(box); else main.prepend(box);
+    if (old) old.replaceWith(box);
+    else { // under the page title and the "waiting on you" line, not above them
+      const anchor = main.querySelector('.q-banner') || main.querySelector('.page-h');
+      if (anchor) anchor.after(box); else main.prepend(box); }
   }
   function setupMessages() {
     window.slatePeopleView = peopleView;
     loadMessages(); loadReminders(); loadAnswered();
     if (canAdmin()) loadSent();
     sb.channel('slate-my-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + authUser.id },
-      ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); if (ev.new.kind === 'reply') loadSent(); if (ev.new.kind === 'reminder') loadReminders(); } }).subscribe();
+      ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); msgRefresh(); syncBadge(); if (ev.new.kind === 'reply') loadSent(); if (ev.new.kind === 'reminder') loadReminders(); } }).subscribe();
     new MutationObserver(() => placeMessages(false)).observe(document.body, { childList: true, subtree: true });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); loadAnswered(); } });
   }

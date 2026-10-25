@@ -1,7 +1,7 @@
 /* SLATE OS service worker: lets the app open from the home screen.
    The page and its scripts are fetched fresh whenever online (so updates arrive at once);
    the saved copy is used only when the network is unavailable. Data calls are never cached. */
-const CACHE = 'slate-os-v19';
+const CACHE = 'slate-os-v20';
 const SHELL = ['/', '/slate-db.js', '/config.js', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
@@ -47,11 +47,18 @@ self.addEventListener('push', e => {
   }
   e.waitUntil(Promise.all(jobs).catch(() => {}));
 });
+/* Tapping a notification opens what it is about. Its tag is "<kind>-<id>"; the app looks the
+   notification up and opens the task, approval, meeting or message behind it. */
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '/';
-  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    for (const c of list) if ('focus' in c) return c.focus();
+  const m = /^([a-z_]+)-(\d+)$/.exec(e.notification.tag || '');
+  const go = m ? `n:${m[2]}:${m[1]}` : '';
+  const url = go ? '/?go=' + encodeURIComponent(go) : ((e.notification.data && e.notification.data.url) || '/');
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async list => {
+    const home = list.find(c => { try { const p = new URL(c.url).pathname; return p === '/' || p === '/index.html'; } catch (_) { return false; } });
+    if (home) { if (go) home.postMessage({ type: 'slate-go', go }); return home.focus(); }
+    const other = list.find(c => 'navigate' in c);
+    if (other) { const c = await other.navigate(url).catch(() => null); if (c) return c.focus(); }
     return self.clients.openWindow(url);
   }));
 });
