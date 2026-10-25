@@ -574,6 +574,13 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .hx-tab-ic .hx-ico{width:17px;height:17px}
 .hx-tab b{font-size:14px}.hx-tab span{font-size:12px;color:var(--muted);line-height:1.35}
 /* rules */
+.lv-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,240px);gap:8px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--border)}
+.lv-row:first-of-type{border-top:0}
+.lv-pick{display:grid;gap:6px}
+.lv-pick select,.lv-pick input{width:100%;min-width:0}
+.lv-date{display:grid;gap:2px}.lv-date span{font-size:12px;color:var(--muted)}
+.lv-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}.lv-head select{flex:1 1 200px;max-width:260px}
+@media (max-width:560px){.lv-row{grid-template-columns:minmax(0,1fr)}}
 .hd{display:grid;gap:12px}
 .hd-bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
 .hd-search{flex:1 1 260px;min-width:0;font:inherit;font-size:15px;padding:11px 14px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:var(--ink)}
@@ -716,7 +723,8 @@ function fmtTs(iso){ if(!iso) return ''; const d=new Date(iso); return `${fmtD(y
 function nameOf(id){
   if(!id) return 'Unassigned';
   const r=S.settings&&S.settings.roster&&S.settings.roster[id];
-  return (r&&r.label)||(S.profiles[id]&&S.profiles[id].name)||(id===S.uid?((S.me&&S.me.name)||'You'):'Team member');
+  const n=(r&&r.label)||(S.profiles[id]&&S.profiles[id].name)||(id===S.uid?((S.me&&S.me.name)||'You'):'Team member');
+  return S.members[id]&&S.members[id].active===false?n+' (left)':n;
 }
 const roster=id=>(S.settings&&S.settings.roster&&S.settings.roster[id])||{};
 const teamOf=id=>{ const r=roster(id), d=podDecision(id); if(d&&(!r.teamAt||(d.at||'')>r.teamAt)) return d.team||'No team set'; return r.team||'No team set'; };
@@ -752,7 +760,10 @@ const canChalkAssign=()=>!!S.canWrite&&(S.isOwner||amChalkLead());
 const canChalkEdit=()=>!!S.canWrite&&canChalkView();
 const chalkPeople=()=>people().filter(id=>isChalkP(id)||isChalkLead(id));
 const chalkProjects=()=>Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>isLive(p)&&isChalkProj(p)).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-function people(){ const ids=new Set(Object.keys(S.members)); if(ownerId()) ids.add(ownerId()); if(S.uid) ids.add(S.uid); return [...ids].sort((a,b)=>nameOf(a).localeCompare(nameOf(b))); }
+/* people who left SLATE (account closed): kept for history, out of every list */
+function isLeft(id){ return !!id&&!!S.members[id]&&S.members[id].active===false; }
+function leftOn(id){ return isLeft(id)?(S.members[id].leftOn||''):''; }
+function people(){ const ids=new Set(Object.keys(S.members).filter(id=>!isLeft(id))); if(ownerId()) ids.add(ownerId()); if(S.uid) ids.add(S.uid); return [...ids].sort((a,b)=>nameOf(a).localeCompare(nameOf(b))); }
 const isLive=p=>!!p&&(!p.status||p.status==='active');
 function projectReqs(){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>p.status==='pending'||p.status==='declined').sort((a,b)=>(a.requestedAt||'').localeCompare(b.requestedAt||'')); }
 function projects(){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>isLive(p)&&!isChalkProj(p)).sort((a,b)=>(a.code||a.name||'').localeCompare(b.code||b.name||'')); }
@@ -1844,7 +1855,7 @@ function perfTable(r){
   const raw=periodRaw(r), byP=new Map(), byPod=new Map();
   raw.forEach(t=>{ if(t.assignee){ if(!byP.has(t.assignee)) byP.set(t.assignee,[]); byP.get(t.assignee).push(t);} podsOf(t).filter(p=>/^pod\b/i.test(p)).forEach(p=>{ if(!byPod.has(p)) byPod.set(p,[]); byPod.get(p).push(t); }); });
   const mk=m=>[...m.entries()].map(([k,ts])=>({k,...perf(ts)})).filter(x=>x.pos>0);
-  const people=mk(byP), podsP=mk(byPod);
+  const people=mk(byP).filter(x=>!isLeft(x.k)), podsP=mk(byPod); /* people who left aren't ranked; their work still counts for the pod */
   const avg=(a,f)=>a.length?a.reduce((x,y)=>x+f(y),0)/a.length:0;
   /* people: 50% workload + 50% timeliness, against others in the same role; alone in a role → timeliness against the studio */
   const unsK=k=>['intern','other','boss'].includes(rgK(k)); const scored=people.filter(x=>!unsK(x.k)), sq=avg(scored,x=>x.q);
@@ -2950,7 +2961,7 @@ function renderSheet(fromData){
   if(!S.sheet){ el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked'); return; }
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const panel=h('div',{class:'panel',role:'dialog','aria-modal':'true','aria-label':'Details'},body);
   el.replaceChildren(h('div',{class:'backdrop',onclick:closeSheet}),panel);
   el.hidden=false; document.body.classList.add('locked'); panel.scrollTop=top; restoreFocus(k);
@@ -4076,7 +4087,7 @@ const HOWDO=[
 
  // ---- admin
  ['admin','boss','Add a new person',['People › Accounts and passwords › Add a person.','Enter name, studio email, designation and team, then Create account.','Copy or share the temporary password. It is shown only once.'],'They choose their own password at first sign-in.','Only the Principal can create a COO account.'],
- ['admin','boss','Deactivate someone who has left',['First reassign their open tasks (Tasks › Person: their name › Edit or reassign).','People › Accounts and passwords › find them › Deactivate, then tap again.'],'They can’t sign in and their phones stop getting notifications. Their tasks, history and minutes stay on record. The log records who deactivated them.','Changed your mind? Deactivated accounts › Reactivate. The COO can’t deactivate the Principal or the COO.'],
+ ['admin','boss','Someone is leaving SLATE',['People › Accounts and passwords › find them › Leaving SLATE….','Enter their last working day.','Choose who takes their work: everything to one person, all of one project, or item by item (tasks, checklist items, rotation slot, upcoming meetings).','For overdue work or work due within 3 days, set a new date, or leave it empty for the new person to propose.','Tap Hand over and close the account, then tap again.'],'Their work moves with a note in each task’s history. Fresh dates count from the new person’s date, so they aren’t marked late. The account closes: no sign-in, no notifications, out of the people lists and rankings. Past work shows as “Name (left)”.','The account can’t close while any task is still with them. If they led a pod, make the new lead a Manager in Settings. Changed your mind? Deactivated accounts › Reactivate.'],
  ['admin','boss','Reset someone’s password',['People › Accounts and passwords › Reset a password.','Find the person, tap Reset password, then tap again.','Give them the new temporary password.'],'They are told by notification and must choose a new password.','The COO can’t reset the Principal’s or COO’s password.'],
  ['admin','boss','Change someone’s team, designation or rights',['More › Settings › People.','Change the team, designation, Manager, Approver, Private tasks or Chalk lead.'],'The Principal’s changes apply at once. The COO’s go to the Principal: Role changes to approve.',null],
  ['admin','boss','Download the weekly backup',['More › Backup.','Download as Excel, or Download full backup (JSON).'],'Each download is logged. The COO is reminded every Thursday.','Keep the file somewhere safe outside the office computer.'],
@@ -4115,6 +4126,109 @@ function hxHowDo(role){
     h('label',{class:'hd-allr'},h('input',{type:'checkbox',checked:st.all,onchange:e=>{ st.all=e.target.checked; apply(); }}),'Show every role'),cnt);
   apply();
   return h('div',{class:'hd'},bar,chips,list,empty);
+}
+
+/* ---------- Leaving SLATE: hand over everything a person holds, then close their account ----------
+   Principal and COO only. Opened from People › Accounts and passwords › Leaving SLATE.
+   Work that is overdue or due within 3 days gets a fresh date for the new person (no lateness, no revision). */
+const lvFresh=t=>!!t.target&&diff(today(),t.target)<=3;
+function lvTasks(uid){
+  return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.doneAt&&(t.assignee===uid||(!t.assignee&&t.assignReq&&t.assignReq.to===uid)))
+    .sort((a,b)=>(a.target||'9999').localeCompare(b.target||'9999')); }
+function lvChecklist(uid){ const out=[];
+  for(const [pid,p] of Object.entries(S.projects)){ if(!p||p.closed||!p.cl) continue;
+    for(const [k,items] of Object.entries(p.cl)) for(const [iid,x] of Object.entries(items||{})) if(x&&x.who===uid&&!x.done&&!x.na){
+      const it=(clItems(k)||[]).find(i=>i.id===iid); out.push({pid,k,iid,title:it?it.t:'Checklist item',p:{...p,id:pid}}); } }
+  return out; }
+const lvTeams=uid=>Object.entries(S.projects).filter(([pid,p])=>p&&projMembers(p).some(([id])=>id===uid)).map(([pid,p])=>({...p,id:pid}));
+const lvMeetings=uid=>Object.entries(S.meetings).filter(([d,m])=>m&&m.organiser===uid&&d>=today()&&!['submitted','published'].includes(m.status)).map(([d])=>d).sort();
+const lvMinutes=uid=>Object.values(S.pmeet).filter(m=>m&&m.createdBy===uid&&m.status!=='final').length;
+function openLeave(uid){ if(!amApprover()||!S.canWrite) return;
+  S.sheet={type:'leave',uid,err:'',arm:false,d:{last:today(),all:'',pick:{},date:{},cl:{},meet:{},rota:''}}; renderSheet(); }
+window.slateLeaveSheet=openLeave;
+function sheetLeave(){
+  const sh=S.sheet, d=sh.d, uid=sh.uid, who=nameOf(uid);
+  const opts=[['','Choose who takes it…'],...memberOpts().slice(1).filter(([id])=>id!==uid&&!isLeft(id))];
+  const pick=(key,store,extra)=>{ const s=h('select',{'aria-label':'New person',onchange:e=>{ store[key]=e.target.value; sh.arm=false; renderSheet(); }},[...opts,...(extra||[])].map(([v,l])=>h('option',{value:v,text:l}))); s.value=store[key]!==undefined?store[key]:(d.all||''); return s; };
+  const tasks=lvTasks(uid), cl=lvChecklist(uid), teams=lvTeams(uid), meets=lvMeetings(uid), mins=lvMinutes(uid);
+  const r=S.meetRota||{}, inRota=(r.ids||[]).includes(uid), inJr=(r.juniors||[]).includes(uid);
+  const lead=isPodLead(uid,teamOf(uid));
+  const choice=t=>d.pick[t.id]!==undefined?d.pick[t.id]:d.all;
+  const missing=tasks.filter(t=>!choice(t)).length+meets.filter(m=>!(d.meet[m]!==undefined?d.meet[m]:d.all)).length;
+  const byProj={}; for(const t of tasks) (byProj[t.projectId||'']=byProj[t.projectId||'']||[]).push(t);
+  const out=[head('Leaving SLATE',who),
+    h('p',{class:'muted',style:'margin:0',text:`Give everything ${who} still holds to someone else, then close the account. Their finished work and history stay on record.`}),
+    h('div',{class:'form-row'},
+      h('label',{class:'field'},h('span',{class:'lbl',text:'Last working day'}),h('input',{type:'date',value:d.last,max:addDays(today(),60),onchange:e=>{ d.last=e.target.value; }})),
+      h('label',{class:'field'},h('span',{class:'lbl',text:'Give everything to'}),(()=>{ const s=h('select',{onchange:e=>{ d.all=e.target.value; d.pick={}; d.meet={}; d.cl={}; sh.arm=false; renderSheet(); }},opts.map(([v,l])=>h('option',{value:v,text:v?l:'Choose, or pick per item below…'}))); s.value=d.all; return s; })()))];
+  if(lead) out.push(h('div',{class:'banner'},h('span',{text:`${who} leads ${podLabel(teamOf(uid))}. After the handover, make the new pod lead a Manager in More › Settings › People.`})));
+  // tasks
+  out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Open tasks and deliverables'}),h('span',{class:'cnt',text:String(tasks.length)})),
+    tasks.length?h('div',{style:'display:grid;gap:12px'},Object.entries(byProj).map(([pid,ts])=>{ const p=S.projects[pid];
+      const all=h('select',{'aria-label':'Give all in this project to',onchange:e=>{ for(const t of ts) d.pick[t.id]=e.target.value; sh.arm=false; renderSheet(); }},[['','All in this project to…'],...opts.slice(1)].map(([v,l])=>h('option',{value:v,text:l})));
+      return h('div',{class:'card',style:'gap:8px'},h('div',{class:'lv-head'},h('b',{text:p?projLabel({...p,id:pid}):'No project'}),ts.length>1?all:null),
+        ts.map(t=>{ const fresh=lvFresh(t);
+          return h('div',{class:'lv-row'},
+            h('div',{style:'min-width:0'},h('div',{class:'row-title'},h('span',{text:t.title}),t.kind==='Deliverable'?h('span',{class:'tag',text:'Deliverable'}):null),
+              h('div',{class:'row-meta'},h('span',{text:t.target?(status(t)==='overdue'?`Overdue since ${fmtD(t.target)}`:`Due ${fmtD(t.target)}`):(t.request?`Proposed ${fmtD(t.request.date)}`:'No date yet')}),
+                fresh?h('span',{class:'tag tag-req',text:'Fresh date for the new person'}):null,!t.assignee&&t.assignReq?h('span',{class:'tag',text:'Assignment waiting'}):null)),
+            h('div',{class:'lv-pick'},pick(t.id,d.pick),
+              fresh?h('label',{class:'lv-date'},h('span',{text:'New date (optional)'}),h('input',{type:'date',title:'Leave empty and the new person proposes the date',min:today(),value:d.date[t.id]||'',onchange:e=>{ d.date[t.id]=e.target.value; }})):null)); }));
+    })):h('p',{class:'f-hint',style:'margin:0',text:'No open tasks.'})));
+  if(tasks.some(lvFresh)) out.push(h('p',{class:'f-hint',style:'margin:-8px 0 0',text:'Overdue or due within 3 days: the old date is cleared so the new person isn’t marked late. Set the new date here, or leave it empty and they propose one for the COO to approve.'}));
+  // checklist
+  if(cl.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Checklist items'}),h('span',{class:'cnt',text:String(cl.length)})),
+    h('div',{class:'card',style:'gap:8px'},cl.map(c=>{ const key=`${c.pid}|${c.k}|${c.iid}`;
+      return h('div',{class:'lv-row'},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:c.title}),h('div',{class:'row-meta',text:`${c.p.code||c.p.name} · phase ${phLabel(c.k)}`})),
+        h('div',{class:'lv-pick'},pick(key,d.cl,[['-','Back to the role (owner by role)']]))); }))));
+  // weekly meeting
+  if(inRota||inJr||meets.length){ const ro=[['','Remove from the rotation'],...opts.slice(1).filter(([id])=>!(r.ids||[]).includes(id)&&!(r.juniors||[]).includes(id)).map(([id,l])=>[id,'Replace with '+l])];
+    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'})),h('div',{class:'card',style:'gap:8px'},
+      inRota||inJr?h('div',{class:'lv-row'},h('div',{},h('div',{class:'row-title',text:inRota?'Organiser rotation':'Invited junior rotation'}),h('div',{class:'row-meta',text:'Replacing keeps everyone else’s turns the same; removing moves the later turns up.'})),
+        h('div',{class:'lv-pick'},(()=>{ const s=h('select',{onchange:e=>{ d.rota=e.target.value; }},ro.map(([v,l])=>h('option',{value:v,text:l}))); s.value=d.rota; return s; })())):null,
+      meets.map(m=>h('div',{class:'lv-row'},h('div',{},h('div',{class:'row-title',text:`Organiser of ${meetTitle(m)}`}),h('div',{class:'row-meta',text:fmtD(m)})),h('div',{class:'lv-pick'},pick(m,d.meet)))))));
+  }
+  // other things that change automatically
+  const auto=[teams.length?`Removed from ${teams.length} project team${teams.length>1?'s':''}: ${teams.map(p=>p.code||p.name).join(', ')}.`:'',
+    mins?`${mins} project meeting minute${mins>1?'s are':' is'} unfinished; the pod lead can finish ${mins>1?'them':'it'}.`:'',
+    'Their account closes: they can’t sign in, and they leave the people lists, the Team page and rankings. Past work shows as “'+who+' (left)”.'].filter(Boolean);
+  out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Also happens'})),h('ul',{class:'hx-list',style:'margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px'},auto.map(x=>h('li',{text:x})))));
+  if(sh.err) out.push(h('div',{class:'err',role:'alert',text:sh.err}));
+  out.push(h('div',{class:'actions'},
+    h('button',{class:'btn '+(sh.arm?'btn-accent':'btn-primary'),type:'button',disabled:S.busy||missing>0,onclick:()=>{ if(!sh.arm){ sh.arm=true; renderSheet(); return; } sh.arm=false; doLeave(); },
+      text:missing?`Choose who takes ${missing} more item${missing>1?'s':''}`:sh.arm?'Tap again: hand over and close the account':'Hand over and close the account'}),
+    h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})));
+  return out;
+}
+async function lvMove(t,succ,patch,entries){
+  // private tasks live per person; moving between people means a new task and archiving the old one
+  const path=S.paths[t.id]||'tasks/'+t.id, fromPriv=path.startsWith('lead/'), toPriv=isPriv(succ);
+  if(!fromPriv&&!toPriv) return taskUpdate(t.id,{assignee:succ,assignReq:null,request:null,...patch},entries);
+  const now=new Date().toISOString(), {id,...data}=t;
+  const ref=toPriv?S.db.collection(`lead/${succ}/tasks`).doc():S.db.collection('tasks').doc();
+  await ref.set({...data,assignee:succ,assignReq:null,request:null,...patch,history:[...(t.history||[]),...entries.map(e=>({at:now,by:S.uid,...e}))]});
+  await taskUpdate(t.id,{archived:true},[{type:'archived',note:`Moved to ${nameOf(succ)} as a new task`}]);
+}
+function doLeave(){
+  const sh=S.sheet, d=sh.d, uid=sh.uid, who=nameOf(uid), last=d.last||today();
+  const tasks=lvTasks(uid), cl=lvChecklist(uid), teams=lvTeams(uid), meets=lvMeetings(uid), r=S.meetRota||{};
+  run(async()=>{
+    for(const t of tasks){ const succ=d.pick[t.id]!==undefined?d.pick[t.id]:d.all; if(!succ) throw new Error('Choose who takes every task.');
+      const fresh=lvFresh(t), nd=fresh?(d.date[t.id]||''):'';
+      const note=`Handed over when ${who} left SLATE`+(fresh?` · earlier target ${fmtD(t.target)} cleared for a fresh date`:'');
+      const entries=[{type:'reassigned',from:t.assignee||(t.assignReq&&t.assignReq.to)||uid,to:succ,note}];
+      if(nd) entries.push({type:'scheduled',to:nd});
+      await lvMove(t,succ,fresh?{target:nd||null,originalTarget:nd||null,revisions:0}:{},entries); }
+    const clPatch={}; for(const c of cl){ const key=`${c.pid}|${c.k}|${c.iid}`, v=d.cl[key]!==undefined?d.cl[key]:d.all; if(!v) continue;
+      const cur=clOf(S.projects[c.pid],c.k,c.iid); ((clPatch[c.pid]=clPatch[c.pid]||{})[c.k]=clPatch[c.pid][c.k]||{})[c.iid]={...cur,who:v==='-'?null:v,at:new Date().toISOString(),by:S.uid}; }
+    for(const [pid,cls] of Object.entries(clPatch)) await S.db.doc('projects/'+pid).update({cl:cls});
+    for(const p of teams) await S.db.doc('projects/'+p.id).update(memberPatch(uid,null));
+    for(const m of meets){ const v=d.meet[m]!==undefined?d.meet[m]:d.all; if(v) await S.db.doc('meetings/'+m).set({date:m,organiser:v,handover:{from:uid,by:S.uid,at:new Date().toISOString(),reason:`${who} left SLATE`}},{merge:true}); }
+    if((r.ids||[]).includes(uid)||(r.juniors||[]).includes(uid)){ const rep=x=>d.rota?x.map(id=>id===uid?d.rota:id):x.filter(id=>id!==uid);
+      await S.db.doc('meetcfg/rota').set({...r,ids:rep(r.ids||[]),juniors:rep(r.juniors||[]),by:S.uid,at:new Date().toISOString()}); }
+    if(!window.slateAdminCall) throw new Error('Reload SLATE OS and try again.');
+    await window.slateAdminCall({action:'deactivate',user_id:uid,last_day:last});
+  },`${who}’s work is handed over and the account is closed`).then(ok=>{ if(ok) closeSheet(); });
 }
 
 function viewHelp(){

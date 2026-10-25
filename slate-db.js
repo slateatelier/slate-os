@@ -93,7 +93,7 @@
   function membersDocs() {
     const out = [];
     for (const p of people.values()) {
-      out.push([p.id, { icon: p.icon || null, iconAt: p.icon_at || null, joinedAt: p.created_at, active: p.active }]);
+      out.push([p.id, { icon: p.icon || null, iconAt: p.icon_at || null, joinedAt: p.created_at, active: p.active, leftOn: p.left_on || null }]);
     }
     return out;
   }
@@ -781,6 +781,7 @@
 
   /* ---------------- accounts: the Principal and the COO reset passwords and add people ---------------- */
   const canAdmin = () => !!me && me.active !== false && (me.designation === 'principal' || me.designation === 'coo');
+  window.slateAdminCall = b => adminCall(b);
   async function adminCall(body) {
     const { data, error } = await sb.functions.invoke('admin-users', { body });
     if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.error) m = j.error; } catch (_) {} throw new Error(m); }
@@ -853,8 +854,9 @@
           catch (err) { st.className = 'msg err'; st.textContent = err.message; b.disabled = false; b.textContent = 'Reset password'; }
           b.classList.remove('danger');
         });
-        const off = p.designation === 'principal' || (!boss && p.designation === 'coo') ? null : el('button', { class: 'link', type: 'button' }, 'Deactivate');
-        if (off) {
+        const off = p.designation === 'principal' || (!boss && p.designation === 'coo') ? null : el('button', { class: 'link', type: 'button' }, window.slateLeaveSheet ? 'Leaving SLATE…' : 'Deactivate');
+        if (off && window.slateLeaveSheet) off.addEventListener('click', () => { root.remove(); window.slateLeaveSheet(p.id); });
+        else if (off) {
           let armedOff = false;
           off.addEventListener('click', async () => {
             if (!armedOff) { armedOff = true; off.textContent = 'Tap again: they can’t sign in'; off.classList.add('danger'); setTimeout(() => { if (armedOff && off.isConnected && !off.disabled) { armedOff = false; off.textContent = 'Deactivate'; off.classList.remove('danger'); } }, 4000); return; }
@@ -883,7 +885,7 @@
           try { await adminCall({ action: 'reactivate', user_id: p.id }); p.active = true; try { people.set(p.id, { ...p, active: true }); } catch (_) {} draw(); drawOff(); }
           catch (err) { st.className = 'msg err'; st.textContent = err.message; on.disabled = false; on.textContent = 'Reactivate'; }
         });
-        return el('div', { class: 'slate-acc-row' }, el('div', { style: 'min-width:0' }, el('div', { class: 'n' }, nm(p)), el('div', { class: 'e' }, [p.role_label, p.email].filter(Boolean).join(' · ')), st), on);
+        return el('div', { class: 'slate-acc-row' }, el('div', { style: 'min-width:0' }, el('div', { class: 'n' }, nm(p)), el('div', { class: 'e' }, [p.role_label, p.left_on ? 'left ' + p.left_on : '', p.email].filter(Boolean).join(' · ')), st), on);
       }));
     };
     q.addEventListener('input', draw); draw(); drawOff();
@@ -893,7 +895,7 @@
     close2.addEventListener('click', () => root.remove());
     box.append(close2, el('div', { class: 'brand' }, el('b', {}, 'Accounts'), el('i', {}), el('span', {}, boss ? 'Principal' : 'COO')),
       el('p', { class: 'f', style: 'margin:0' }, 'Someone forgot their password? Reset it here and give them the temporary one. ' + (boss ? 'You can reset anyone’s.' : 'Only the Principal can reset the Principal’s password.')),
-      result, addForm, el('div', { class: 'slate-acc-card' }, el('b', {}, 'Reset a password or deactivate'), el('span', { class: 'f' }, 'Deactivate someone who has left SLATE: they can’t sign in, and their records stay.'), q, list), offCard, el('div', { class: 'row' }, close));
+      result, addForm, el('div', { class: 'slate-acc-card' }, el('b', {}, 'Reset a password, or someone leaving'), el('span', { class: 'f' }, 'Someone leaving? Tap Leaving SLATE: hand over their work, then their account closes. Their records stay.'), q, list), offCard, el('div', { class: 'row' }, close));
     root.append(box); document.body.append(root);
   }
   window.slateAccounts = accountsSheet;

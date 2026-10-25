@@ -79,9 +79,17 @@ Deno.serve(async (req) => {
       if (!t) return fail('That person was not found.', 404);
       if (t.designation === 'principal') return fail('The Principal’s account can’t be deactivated.', 403);
       if (t.designation === 'coo' && !boss) return fail('Only the Principal can deactivate or reactivate the COO.', 403);
+      const lastDay = /^\d{4}-\d{2}-\d{2}$/.test(String(body.last_day || '')) ? String(body.last_day) : null;
+      if (!on) {
+        // nothing may be left with them: every open task must be handed over first
+        const q = await rest(`docs?select=path,data&coll=in.(tasks,lead)&or=(assignee.eq.${id},parent.eq.${id})`);
+        const rows = await q.json().catch(() => []);
+        const left = (Array.isArray(rows) ? rows : []).filter((r: { data: Record<string, unknown> }) => !r.data?.doneAt && !r.data?.archived).length;
+        if (left) return fail(`They still have ${left} open task${left === 1 ? '' : 's'}. Hand them over first.`, 409);
+      }
       const r = await admin(`users/${id}`, { method: 'PUT', body: JSON.stringify({ ban_duration: on ? 'none' : '876000h' }) });
       if (!r.ok) return fail('Could not change their sign-in: ' + ((await r.json().catch(() => ({}))).msg || r.status), 500);
-      const s = await rest('rpc/admin_set_active', { method: 'POST', body: JSON.stringify({ p_user: id, p_by: me.id, p_active: on }) });
+      const s = await rest('rpc/admin_set_active', { method: 'POST', body: JSON.stringify({ p_user: id, p_by: me.id, p_active: on, p_last_day: on ? null : lastDay }) });
       if (!s.ok) {
         await admin(`users/${id}`, { method: 'PUT', body: JSON.stringify({ ban_duration: on ? '876000h' : 'none' }) });
         return fail('Could not record the change: ' + (await s.text()), 500);
