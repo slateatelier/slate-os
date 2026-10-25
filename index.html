@@ -793,6 +793,7 @@ const goLive=()=>(S.settings&&S.settings.goLive)||'2026-11-01';
 const preLive=()=>addDays(goLive(),-1);
 function pill(t,basis='approved'){
   if(t.legacy) return h('span',{class:'pill '+(t.legacyOk?'s-open':'s-late'),title:'Finished before SLATE OS; not scored',text:t.legacyOk?'Before SLATE OS':'Before SLATE OS · COO to approve'});
+  if(t.ongoing&&!t.target&&!t.doneAt) return h('span',{class:'pill s-open',title:'Continuous task; no target date, not scored',text:'Ongoing'});
   const s=status(t,basis), g=tgt(t,basis); let txt;
   if(s==='early') txt=`Done ${diff(t.doneAt,g)}d early`;
   else if(s==='ontime') txt='Done on time';
@@ -888,7 +889,7 @@ async function createTask(d){
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
-    repeat:d.repeat||'',start:d.start||null,stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
+    repeat:d.repeat||'',start:d.start||null,stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
@@ -912,7 +913,7 @@ function loadOf(id,excl){
   const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id))&&(!isChalkTask(t)||isChalkP(id)));
   const c={open:0,overdue:0,week:0,later:0,nodate:0,pending:0,list:[]};
   for(const t of ts){ if(t.assignReq&&t.assignReq.to===id&&t.assignee!==id){c.pending++;continue;} c.open++;
-    if(!t.target) c.nodate++; else if(t.target<td) c.overdue++; else if(t.target<=wk) c.week++; else c.later++; c.list.push(t); }
+    if(!t.target){ if(!t.ongoing) c.nodate++; } else if(t.target<td) c.overdue++; else if(t.target<=wk) c.week++; else c.later++; c.list.push(t); }
   c.list.sort(byTarget); return c;
 }
 function loadPanel(id,excl){
@@ -1762,7 +1763,7 @@ function range(kind,offset){
 }
 function count(items,basis){
   const c={early:0,ontime:0,late:0,overdue:0,open:0,total:0,slip:0,slipN:0};
-  for(const t of items){ if(t.legacy) continue; let k=status(t,basis); if(k==='soon') k='open'; c[k]++; c.total++;
+  for(const t of items){ if(t.legacy||(t.ongoing&&!t.target)) continue; let k=status(t,basis); if(k==='soon') k='open'; c[k]++; c.total++;
     const g=tgt(t,basis); if(k==='late'){c.slip+=diff(g,t.doneAt);c.slipN++} if(k==='overdue'){c.slip+=diff(g,today());c.slipN++} }
   return c;
 }
@@ -2255,13 +2256,13 @@ function saveMeeting(mode){
     if(!present.length) return fail('Section 1: mark who was present.');
     const open=carriedActions(date).filter(t=>!t.doneAt&&!(d.review[t.id]&&d.review[t.id].st)); if(open.length) return fail(`Section 2: give an update for every open action (${open.length} left).`);
     if(!decs.length&&!acts.length&&!(d.notes||'').trim()) return fail('Add the discussion, a decision or an action before submitting.');
-    const bad=acts.find(a=>!a.owners.length||(!a.area&&!a.project)||!a.due); if(bad) return fail(`Section 5: “${bad.text}” needs who, the area and a target date.`);
+    const bad=acts.find(a=>!a.owners.length||(!a.area&&!a.project)||(!a.due&&!a.ongoing)); if(bad) return fail(`Section 5: “${bad.text}” needs who, the area and a target date (or tick Ongoing).`);
   }
   run(async()=>{
     if(publish){ const ap=amApprover();
       for(const a of acts){ a.taskIds=actTaskIds(a); if(!a.project&&a.area) a.project=await ensureAreaProject(a.area);
         for(let j=0;j<a.owners.length;j++){ if(a.taskIds[j]) continue;
-          a.taskIds[j]=await createTask({projectId:a.project,title:(a.kind&&a.kind!=='action'?AKIND[a.kind]+': ':'')+a.text.trim(),kind:'Task',assignee:a.owners[j],phase:'Meeting actions',meet:date,target:ap?(a.due||''):'',proposed:ap?'':(a.due||''),
+          a.taskIds[j]=await createTask({projectId:a.project,title:(a.kind&&a.kind!=='action'?AKIND[a.kind]+': ':'')+a.text.trim(),kind:'Task',assignee:a.owners[j],phase:'Meeting actions',meet:date,ongoing:!!a.ongoing,target:a.ongoing?'':ap?(a.due||''):'',proposed:a.ongoing||ap?'':(a.due||''),
             note:`From ${meetTitle(date)} (${fmtD(date)})`+(a.owners.length>1?` · shared with ${a.owners.filter((x,k)=>k!==j).map(nameOf).join(', ')}`:'')}); }
         a.taskId=a.taskIds[0]||''; }
       // the review is applied: confirmed done, dropped actions archived
@@ -2273,7 +2274,7 @@ function saveMeeting(mode){
     await S.db.doc('meetings/'+date).set({date,no:meetNo(date)||null,time:meetTime(),venue:rota().venue,organiser:d.organiser||(amApprover()?'':S.uid),guest:d.guest||'',
       attendance:att,attendees:present,agenda:d.agenda||'',notes:d.notes||'',review:d.review||{},updates:d.updates||{},
       decisionList:decs.map(x=>({text:x.text.trim(),area:x.area||'',rule:!!x.rule,...(x.ruleAdded?{ruleAdded:true}:{})})),decisions:decs.map(x=>x.text.trim()).join('\n'),
-      actions:acts.map(a=>({text:a.text.trim(),kind:a.kind||'action',owner:a.owners[0]||'',owners:a.owners,due:a.due||'',area:a.area||'',project:a.project||'',taskId:(actTaskIds(a)[0])||'',taskIds:actTaskIds(a)})),
+      actions:acts.map(a=>({text:a.text.trim(),kind:a.kind||'action',owner:a.owners[0]||'',owners:a.owners,due:a.ongoing?'':(a.due||''),...(a.ongoing?{ongoing:true}:{}),area:a.area||'',project:a.project||'',taskId:(actTaskIds(a)[0])||'',taskIds:actTaskIds(a)})),
       sharing:{topic:(d.sharing.topic||'').trim(),by:d.sharing.by||'',notes:(d.sharing.notes||'').trim()},
       status:publish?'published':submit?'submitted':(m.status==='returned'?'returned':m.status==='published'?'published':'draft'),createdAt:m.createdAt||now,createdBy:m.createdBy||S.uid,updatedAt:now,updatedBy:S.uid,
       submittedAt:submit?now:(m.submittedAt||''),submittedBy:submit?S.uid:(m.submittedBy||''),returnNote:submit?'':(m.returnNote||''),returnedAt:m.returnedAt||'',returnedBy:m.returnedBy||'',
@@ -2393,7 +2394,8 @@ function sheetMeeting(){
       made?h('div',{class:'f-hint',text:'Tasks created · '+a.owners.map(nameOf).join(', ')}):null,
       made&&a.owners.length===a.taskIds.filter(Boolean).length?null:[
         h('div',{class:'chips'},Object.entries(AKIND).map(([k,l])=>h('button',{type:'button',class:'chip'+((a.kind||'action')===k?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ a.kind=k; if(k!=='action'&&!a.owners.length&&ownerId()) a.owners.push(ownerId()); saveMeetDraft(); renderSheet(); },text:l}))),
-        own,h('div',{class:'form-row'},pj,h('input',{id:'ma-d-'+i,type:'date','aria-label':'Target date',min:date,value:a.due||'',style:'background:var(--group)',oninput:e=>{a.due=e.target.value}}))]); });
+        own,h('div',{class:'form-row'},pj,a.ongoing?h('div',{class:'f-hint',style:'align-self:center',text:'Ongoing · no target date'}):h('input',{id:'ma-d-'+i,type:'date','aria-label':'Target date',min:date,value:a.due||'',style:'background:var(--group)',oninput:e=>{a.due=e.target.value}})),
+        h('label',{style:'display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer'},h('input',{type:'checkbox',checked:!!a.ongoing,onchange:e=>{ a.ongoing=e.target.checked; if(a.ongoing) a.due=''; saveMeetDraft(); renderSheet(); }}),'Ongoing — continuous, no target date')]); });
   // 6 sharing
   const shr=d.sharing;
   const shareBox=h('div',{class:'card',style:'background:#fff;gap:8px'},
@@ -2455,7 +2457,7 @@ function printMinutes(date){
   ${m.notes?`<table><thead><tr class="h"><th>4. DISCUSSION</th></tr></thead><tbody><tr><td>${esc(m.notes).replace(/\n/g,'<br>')}</td></tr></tbody></table>`:''}
   ${tbl('4. DECISIONS',['Sl.','Decision','Area'],ds.map((x,i)=>row([i+1,esc(x.text)+(x.rule?' <i>(studio rule)</i>':''),esc(areaName(x.area))])),'No decisions')}
   ${tbl('5. ACTION ITEMS',['Sl.','Action','Responsible','Area','Target date','Status'],acts.map((a,i)=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]).filter(Boolean), st=ts.length?(ts.every(t=>t.doneAt)?'Done':ts.some(t=>t.target&&t.target<today()&&!t.doneAt)?'Overdue':'Open'):'Proposed';
-      return row([i+1,(a.kind&&a.kind!=='action'?'<b>'+esc(AKIND[a.kind])+':</b> ':'')+esc(a.text),esc(actOwners(a).map(nameOf).join(', ')),esc(areaName(a.area)||(S.projects[a.project]?projLabel(S.projects[a.project]):'')),esc(a.due?fmtD(a.due):'—'),st]); }),'No actions')}
+      return row([i+1,(a.kind&&a.kind!=='action'?'<b>'+esc(AKIND[a.kind])+':</b> ':'')+esc(a.text),esc(actOwners(a).map(nameOf).join(', ')),esc(areaName(a.area)||(S.projects[a.project]?projLabel(S.projects[a.project]):'')),esc(a.ongoing?'Ongoing':a.due?fmtD(a.due):'—'),st]); }),'No actions')}
   ${m.sharing&&m.sharing.topic?`<table><thead><tr class="h"><th colspan="2">6. SHARING SESSION</th></tr></thead><tbody><tr><td class="k">Topic</td><td>${esc(m.sharing.topic)}${m.sharing.by?' · led by '+esc(nameOf(m.sharing.by)):''}${m.sharing.notes?'<br>'+esc(m.sharing.notes):''}</td></tr></tbody></table>`:''}
   <table><tr><td class="next">Next meeting: ${esc(wd(nx)+' '+fmtD(nx))} @ ${esc(fmtHM(meetTime()))}</td><td class="k">Minutes</td><td class="next">${esc(organiserFor(nx)?nameOf(organiserFor(nx)):'')}</td></tr></table>
   <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`;
@@ -2964,7 +2966,7 @@ function sheetTask(){
     const btns=[];
     if(canAct&&!t.doneAt) btns.push(h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done today'}),h('button',{class:'btn',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Done on another date'}));
     if(false) btns.push(h('button',{class:'btn btn-primary',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Mark as done'}));
-    if(S.canWrite&&!t.archived&&!t.doneAt&&(mine||mgr)&&!t.request&&!ap&&(t.target||mgr)) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:'',reason:''}),text:t.target?'Request new date':'Propose date'}));
+    if(S.canWrite&&!t.archived&&!t.doneAt&&(mine||mgr)&&!t.request&&!ap&&!t.ongoing&&(t.target||mgr)) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:'',reason:''}),text:t.target?'Request new date':'Propose date'}));
     if(mgr&&!t.archived){
       if(!t.doneAt&&ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('target',{date:t.target||(t.request&&t.request.date)||'',reason:''}),text:t.target?'Change target date':'Set target date'}));
       if(!t.doneAt||amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('rename',{title:t.title}),text:'Rename'}));
@@ -4249,7 +4251,7 @@ const chalkTypeName=k=>(CHALK_TYPES[k]||{}).name||'Chalk project';
 function chalkTasks(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&isChalkTask(t)); }
 function chalkReqs(){ return chalkTasks().filter(t=>t.request&&!t.doneAt); }
 function chalkLoad(id){ const td=today(), wk=addDays(td,7), c={open:0,overdue:0,week:0,later:0,nodate:0};
-  chalkTasks().filter(t=>t.assignee===id&&!t.doneAt).forEach(t=>{ c.open++; if(!t.target) c.nodate++; else if(t.target<td) c.overdue++; else if(t.target<=wk) c.week++; else c.later++; }); return c; }
+  chalkTasks().filter(t=>t.assignee===id&&!t.doneAt).forEach(t=>{ c.open++; if(!t.target){ if(!t.ongoing) c.nodate++; } else if(t.target<td) c.overdue++; else if(t.target<=wk) c.week++; else c.later++; }); return c; }
 const chalkAssignOpts=keep=>[['','Select person…'],...chalkPeople().filter(id=>isChalkP(id)||isChalkLead(id)||id===keep).map(id=>[id,nameOf(id)+(roleOf(id)?' — '+roleOf(id):'')])];
 const chalkProjOpts=incl=>[['','Select project…'],...chalkProjects().filter(p=>!p.closed||p.id===incl).map(p=>[p.id,projLabel(p)])];
 
