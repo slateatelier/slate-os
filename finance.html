@@ -214,6 +214,25 @@ label.f .hint{font-size:11px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:var(--r);font-size:13px;z-index:60;max-width:calc(100% - 32px)}
 .notice{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:var(--r);padding:14px 16px;font-size:13px}
 .notice strong{font-family:var(--f-display);font-weight:500;font-size:15px;display:block;margin-bottom:2px}
+.g-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.g-step{border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:6px;background:var(--surface)}
+.g-step b{font-family:var(--f-display);font-weight:500;font-size:15px}
+.g-step p{margin:0;font-size:13px;color:var(--muted);flex:1}
+.g-step .btn{align-self:flex-start;margin-top:4px}
+.g-no{font-family:var(--f-mono);font-size:11px;color:var(--red);letter-spacing:.06em}
+.g-flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px}
+.g-node{flex:1 1 130px;border:1px solid var(--line);border-top:3px solid var(--ink);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:2px;background:var(--sunk)}
+.g-node b{font-family:var(--f-display);font-weight:500;font-size:14px}
+.g-node span{font-size:12px;color:var(--muted)}
+.g-node.g-hi{border-top-color:var(--red)}
+.g-arr{align-self:center;color:var(--muted);font-size:18px}
+.g-where{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.g-tab{text-align:left;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;gap:2px;cursor:pointer;font:inherit;color:inherit}
+.g-tab:hover{border-color:var(--ink)}
+.g-tab b{font-size:14px;font-weight:600}
+.g-tab span{font-size:12px;color:var(--muted)}
+.g-rules{margin:0;padding-left:18px;display:grid;gap:8px;font-size:13px}
+@media (max-width:560px){.g-arr{display:none}.g-node{flex-basis:100%}}
 .muted{color:var(--muted)}
 .right{text-align:right}
 

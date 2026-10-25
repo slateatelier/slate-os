@@ -67,7 +67,7 @@ const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDa
 const S = {
   role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
   os: [], people: {}, audit: null, loaded: false, fy: fyOf(today()), tab: 'overview',
-  f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open', rep: 'pl', basis: 'billed', bm: '' }
+  f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open', rep: 'pl', basis: 'billed', bm: '', guide: '' }
 };
 const isPrincipal = () => S.role === 'principal';
 
@@ -248,7 +248,7 @@ const fileSafe = s => String(s || '').replace(/[^\w.-]+/g, '-');
 /* ---------- render ---------- */
 let rq = 0;
 const schedule = () => { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); };
-const TABS = [['overview', 'Overview'], ['dash', 'Dashboard'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['workorders', 'Work orders'], ['payroll', 'Payroll'], ['petty', 'Petty cash'], ['cash', 'Cash & bank'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['dash', 'Dashboard'], ['billing', 'Projects'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['workorders', 'Work orders'], ['payroll', 'Payroll'], ['petty', 'Petty cash'], ['cash', 'Cash & bank'], ['reports', 'Reports'], ['activity', 'Change log'], ['settings', 'Settings'], ['guide', 'Guide']];
 function renderChrome() {
   const fys = new Set([fyOf(today()), S.fy]);
   [...S.invoices.map(i => i.date), ...S.receipts.map(r => r.date), ...S.moves.map(m => m.date), ...S.expenses.map(x => x.date), ...S.wopays.map(x => x.date), ...S.payruns.map(r => (r.month || '') + '-01')].forEach(d => d && fys.add(fyOf(d)));
@@ -262,7 +262,7 @@ function renderChrome() {
 function render() {
   renderChrome();
   if (!S.loaded) return;
-  const v = { overview, dash: dashboard, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, petty: pettyView, cash: cashbook, reports, activity, settings }[S.tab] || overview;
+  const v = { overview, dash: dashboard, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, petty: pettyView, cash: cashbook, reports, activity, settings, guide: guideView }[S.tab] || overview;
   $('#app').innerHTML = v();
 }
 function notice(title, body, link) {
@@ -768,7 +768,7 @@ function expensesView() {
     return true; }).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
   const total = list.reduce((s, x) => s + (+x.amount || 0), 0);
   return `
-  <div class="head"><div><h2>Expenses</h2><p>Studio costs. ${isPrincipal() ? 'You approve every expense.' : 'Every expense goes to the Principal for approval.'} Consultants and vendors go under Work orders; salaries will have their own tab.</p></div>
+  <div class="head"><div><h2>Expenses</h2><p>Studio costs. ${isPrincipal() ? 'You approve every expense.' : 'Every expense goes to the Principal for approval.'} Consultants and vendors go under Work orders; salaries under Payroll.</p></div>
     <div class="actions"><button class="btn" data-act="export-exp">Export CSV</button>${isPrincipal() && pend.length ? `<button class="btn" data-act="approve-all">Approve all ${pend.length}</button>` : ''}<button class="btn pri" data-act="new-exp">New expense</button></div></div>
   <div class="kpis">
     <div class="kpi"><div class="lb">Spent this month</div><div class="v">${compact(spentMo)}</div><div class="s">${fmtDate(mo + '-01').replace(/^1 /, '')}</div></div>
@@ -1094,7 +1094,7 @@ function payrollView() {
   return `
   <div class="head"><div><h2>Payroll</h2><p>Salaries, Eid bonuses and staff advances. ${isPrincipal() ? 'You approve each salary sheet and advance.' : 'Sheets and advances go to the Principal for approval.'} Only the Principal and the COO can see this.</p></div>
     <div class="actions"><button class="btn" data-act="new-staff">Add staff</button><button class="btn" data-act="new-adv" ${S.staff.length ? '' : 'disabled'}>Give advance</button><button class="btn" data-act="new-run" data-v="bonus" ${S.staff.length ? '' : 'disabled'}>Eid bonus</button><button class="btn pri" data-act="new-run" data-v="salary" ${S.staff.length ? '' : 'disabled'}>Salary sheet</button></div></div>
-  ${!S.staff.length ? `<div class="panel"><div class="empty"><strong>Add your staff first</strong>Pick each person from SLATE OS (or add someone who isn't in it), with their salary breakdown and whether they're paid in cash or to a bank account. The Principal isn't on payroll: what you take out is an owner's drawing.
+  ${!S.staff.length ? `<div class="panel"><div class="empty"><strong>Add your staff first</strong>Pick each person from SLATE OS (or add someone who isn't in it), with their salary breakdown and whether they're paid in cash or to a bank account. Add the Principal too if they draw a salary; money taken out otherwise is an owner's drawing.
     <div class="actions" style="justify-content:center"><button class="btn pri" data-act="new-staff">Add first staff member</button></div></div></div>` : `
   <div class="kpis">
     <div class="kpi"><div class="lb">Monthly payroll</div><div class="v">${compact(monthly)}</div><div class="s">gross, ${st.length} active staff</div></div>
@@ -1451,7 +1451,7 @@ function cashbook() {
   <div class="panel"><div class="empty"><strong>Set up the vault and the bank</strong>Add the office vault and the studio's bank account, each with what it held on the day you start counting. Client payments, transfers and drawings then post to them and keep both balances right.
     <div class="actions" style="justify-content:center"><button class="btn" data-act="new-acct" data-v="cash">Add office vault</button><button class="btn pri" data-act="new-acct" data-v="bank">Add bank account</button></div></div></div>`;
   return `
-  <div class="head"><div><h2>Cash & bank</h2><p>Balances as of today. Client payments, paid expenses, work order payments, transfers and drawings all post here; salaries will too.</p></div>
+  <div class="head"><div><h2>Cash & bank</h2><p>Balances as of today. Client payments, paid expenses, work order payments, salaries, transfers and drawings all post here.</p></div>
     <div class="actions"><button class="btn" data-act="new-acct">Add account</button><button class="btn" data-act="new-move" data-v="transfer">Transfer</button><button class="btn" data-act="new-move" data-v="drawing">Owner’s drawing</button><button class="btn" data-act="new-move" data-v="capital">Capital in</button><button class="btn" data-act="new-move" data-v="income">Other income</button></div></div>
   <div class="kpis">
     <div class="kpi"><div class="lb">Total cash & bank</div><div class="v" style="${total < 0 ? 'color:var(--bad)' : ''}">${compact(total)}</div><div class="s">${accts.length} active account${accts.length === 1 ? '' : 's'}</div></div>
@@ -2137,6 +2137,55 @@ function activity() {
   <div class="panel">${S.audit.length ? `<div class="rows">${S.audit.map(auditLine).join('')}</div>` : `<div class="empty">No changes yet.</div>`}</div>`;
 }
 
+/* ----- Guide: how to use Finance, for the Principal and the COO ----- */
+const G_ROUTINE = {
+  principal: [
+    ['Overview', 'Start here', 'Cash and bank now, what clients owe, what is not yet billed, and everything waiting for your approval.'],
+    ['Overview', 'Decide what is waiting', 'Expenses, work orders, advances and salary sheets the COO sent. Approve, or Reject with a reason so the COO knows what to do next. Approve all clears every pending expense at once.'],
+    ['Invoices', 'Check what is overdue', 'The red count on Invoices is overdue bills. Open one to see its payments and chase the client.'],
+    ['Payroll', 'Approve the salary sheet', 'Each month the COO prepares the sheet and submits it. Check it, then Approve. It is paid only after you approve.'],
+    ['Reports', 'Read the month', 'Profit & loss, Budget against spending, and the 6-month cash Forecast. Set the budget once a year.'],
+    ['Settings', 'Close the year', 'After 30 June, Close year. Nothing in a closed year can change until you reopen it.']],
+  coo: [
+    ['Projects', 'Add the project fee', 'When an agreement is signed: Add project fee. Pick the SLATE OS project, enter the fee and the payment milestones (they must add up to 100%).'],
+    ['Invoices', 'Bill each milestone', 'From the project or Overview › Next milestones to bill: Invoice. Save as draft, check the Preview, then Issue invoice.'],
+    ['Invoices', 'Record the payment', 'When money arrives: Record payment. Fill one or more accounts if it came part cash, part bank; one money receipt covers it. Print the Receipt for the client.'],
+    ['Expenses', 'Log every cost', 'New expense, or Petty cash › Record bills for small cash spends. Each goes to the Principal; record the payment once approved.'],
+    ['Work orders', 'Hire a consultant or vendor', 'New work order with scope, value and payment schedule. After the Principal approves, print it for signature and pay each instalment; AIT and VDS are withheld for you.'],
+    ['Payroll', 'Run the salaries', 'Salary sheet for the month: adjust leave, advances and tax, then Submit for approval. Once approved, Record payment and print the Payslips.'],
+    ['Cash & bank', 'Check the books monthly', 'Month-end check on every account: count the cash, enter the bank statement balance. Short or over shows straight away.']]
+};
+const G_FLOW = [['Project fee', 'Fee and milestones'], ['Invoice', 'Draft, then issued'], ['Payment', 'Cash, bank or both'], ['Money receipt', 'Printed for the client'], ['Cash & bank', 'In the account book']];
+const G_RULES = [
+  'Issued invoices are fixed. Only the due date can change. To correct one, Void it (only possible before any payment) and issue a new one; a voided number is never reused.',
+  'Bank invoices carry VAT and AIT by default. Cash invoices leave them off unless the client needs them.',
+  'Every expense, work order, advance and salary sheet the COO raises waits for the Principal. What the Principal raises is approved at once.',
+  'Money the Principal takes out goes through Cash & bank › Owner’s drawing; it is not a studio expense. If the Principal draws a fixed salary, add them as staff under Payroll instead.',
+  'Things with history are never deleted: mark a project closed, an account or a staff member inactive.',
+  'Delete and void buttons need a second tap to confirm.',
+  'The Change log keeps every change with who made it and when. Nobody can edit it.',
+  'Finance figures never reach the team, their notifications or the SLATE OS log.'];
+const G_WHERE = [['Overview', 'Today’s position and your approvals'], ['Dashboard', 'Income, costs, profit and runway against last year'], ['Projects', 'Fees and milestones per project'], ['Invoices', 'Bills and client payments'], ['Expenses', 'Studio and project costs'], ['Work orders', 'Consultants and vendors, paid in instalments'], ['Payroll', 'Staff, salary sheets, Eid bonuses, advances'], ['Petty cash', 'The cash box, bills and top-ups'], ['Cash & bank', 'Every account’s book, transfers, drawings'], ['Reports', 'Profit & loss, budget, forecast, billing'], ['Change log', 'Who changed what'], ['Settings', 'Tax rates, numbering, letterhead, year close']];
+function guideView() {
+  const who = S.f.guide || (isPrincipal() ? 'principal' : 'coo');
+  const steps = G_ROUTINE[who];
+  const tab = k => (TABS.find(([, l]) => l === k) || [])[0] || '';
+  const card = (n, [t, h, d]) => `<li class="g-step"><span class="g-no">${String(n + 1).padStart(2, '0')}</span><b>${esc(h)}</b><p>${esc(d)}</p>${tab(t) ? `<button class="btn sm ghost" data-tab="${tab(t)}">Open ${esc(t)} ›</button>` : ''}</li>`;
+  return `<div class="head"><div><h2>How to use Finance</h2><p>Fees, invoices, payments, costs and payroll for SLATE. Only the Principal and the COO can open it. Figures in BDT; the financial year runs July to June.</p></div></div>
+  <div class="filters"><div class="seg">${[['principal', 'Principal'], ['coo', 'COO']].map(([k, l]) => `<button data-act="f-guide" data-v="${k}" aria-pressed="${who === k}">${l}${(isPrincipal() ? 'principal' : 'coo') === k ? ' · you' : ''}</button>`).join('')}</div></div>
+  <section class="panel"><div class="ph"><h3>${who === 'principal' ? 'Your routine as Principal' : 'Your routine as COO'}</h3><span class="meta">${who === 'principal' ? 'Approve, review, close' : 'Record, bill, pay, check'}</span></div>
+    <div class="pb"><ol class="g-steps">${steps.map((x, i) => card(i, x)).join('')}</ol></div></section>
+  <section class="panel"><div class="ph"><h3>How a fee becomes money in the bank</h3></div>
+    <div class="pb"><div class="g-flow">${G_FLOW.map(([t, d], i) => `${i ? '<span class="g-arr" aria-hidden="true">→</span>' : ''}<div class="g-node"><b>${esc(t)}</b><span>${esc(d)}</span></div>`).join('')}</div>
+    <p class="hint" style="margin:12px 0 0">Invoice numbers run per financial year, e.g. SLATE/INV/2026-27/001; receipts use MR and work orders WO. Every printed document is on the SLATE letterhead: Print, or save as PDF.</p></div></section>
+  <section class="panel"><div class="ph"><h3>Approvals</h3><span class="meta">The Principal decides</span></div>
+    <div class="pb"><div class="g-flow"><div class="g-node"><b>COO raises it</b><span>Expense, work order, advance, salary sheet</span></div><span class="g-arr" aria-hidden="true">→</span><div class="g-node g-hi"><b>Principal decides</b><span>Approve, or reject with a reason</span></div><span class="g-arr" aria-hidden="true">→</span><div class="g-node"><b>COO pays</b><span>Record payment; it goes in the book</span></div></div></div></section>
+  <section class="panel"><div class="ph"><h3>Where things are</h3></div>
+    <div class="pb"><div class="g-where">${G_WHERE.map(([t, d]) => `<button class="g-tab" data-tab="${tab(t)}"><b>${esc(t)}</b><span>${esc(d)}</span></button>`).join('')}</div></div></section>
+  <section class="panel"><div class="ph"><h3>Ground rules</h3></div>
+    <div class="pb"><ul class="g-rules">${G_RULES.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div></section>`;
+}
+
 /* ----- Settings ----- */
 function settings() {
   const s = S.settings, cur = fyOf(today());
@@ -2206,6 +2255,7 @@ document.addEventListener('click', async ev => {
     case 'new-acct': accountForm(null, b.dataset.v); break;
     case 'new-staff': staffForm(); break;
     case 'f-rep': S.f.rep = b.dataset.v; schedule(); break;
+    case 'f-guide': S.f.guide = b.dataset.v; schedule(); break;
     case 'f-basis': S.f.basis = b.dataset.v; schedule(); break;
     case 'edit-budget': budgetForm(); break;
     case 'export-plfull': exportPLFull(); break;
