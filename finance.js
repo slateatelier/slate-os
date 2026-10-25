@@ -95,8 +95,8 @@ const activeAccts = () => S.accounts.filter(a => a.active !== false).sort((a, b)
 const MOVE_LABEL = { transfer: 'Transfer', drawing: 'Owner\u2019s drawing', capital: 'Capital put in', income: 'Other income' };
 function acctEntries(a) {
   const e = [];
-  S.receipts.filter(r => r.accountId === a.id).forEach(r => { const i = S.invoices.find(x => x.id === r.invoiceId), p = i && prj(i.projectId);
-    e.push({ date: r.date, amt: +r.received || 0, what: `Received · ${p ? p.client || p.name : 'client'}`, sub: `${r.mrNo || ''}${i ? ' · ' + i.no : ''}`, kind: 'receipt', id: r.id, at: r.createdAt }); });
+  S.receipts.forEach(r => { const pt = recParts(r).filter(x => x.accountId === a.id); if (!pt.length) return; const i = S.invoices.find(x => x.id === r.invoiceId), p = i && prj(i.projectId);
+    pt.forEach(x => e.push({ date: r.date, amt: +x.amount || 0, what: `Received · ${p ? p.client || p.name : 'client'}`, sub: `${r.mrNo || ''}${i ? ' · ' + i.no : ''}${recParts(r).length > 1 ? ' · part of ' + tk(r.received) : ''}`, kind: 'receipt', id: r.id, at: r.createdAt })); });
   S.moves.forEach(m => {
     const other = id => (acct(id) || {}).name || 'another account';
     if (m.to === a.id) e.push({ date: m.date, amt: +m.amount || 0, what: m.type === 'transfer' ? `Transfer from ${other(m.from)}` : MOVE_LABEL[m.type], sub: m.note || m.ref || '', kind: 'move', id: m.id, at: m.createdAt });
@@ -572,7 +572,7 @@ function invoiceSheet(i) {
       ${st !== 'draft' ? `<dt>Settled so far</dt><dd>${tk(invSettled(i))}</dd><dt class="tot">Balance</dt><dd class="tot" style="color:var(${bal > 0 && st !== 'void' ? '--bad' : '--good'})">${tk(st === 'void' ? 0 : bal)}</dd>` : ''}</dl>
     ${st === 'void' ? `<p class="hint" style="margin-top:10px">Voided ${fmtDate(i.voidedOn)}${i.voidReason ? ` · ${esc(i.voidReason)}` : ''}</p>` : ''}
     ${st !== 'draft' ? `<div class="sec-t" style="margin-top:18px">Payments received</div>
-    <div class="mini-list rows" style="margin-top:10px">${recs.length ? recs.map(r => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;cursor:default"><div style="min-width:0"><div class="t">${fmtDate(r.date)} · ${esc((acct(r.accountId) || {}).name || r.method || '')}</div><div class="sub">${r.mrNo ? `<span class="mono">${esc(r.mrNo)}</span> · ` : ''}${r.ref ? `Ref ${esc(r.ref)} · ` : ''}${+r.ait ? `AIT ${tk(r.ait)} · ` : ''}${+r.vds ? `VDS ${tk(r.vds)} · ` : ''}by ${who(r.createdBy)}</div></div><div class="amt">${tk(r.received)}</div>
+    <div class="mini-list rows" style="margin-top:10px">${recs.length ? recs.map(r => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;cursor:default"><div style="min-width:0"><div class="t">${fmtDate(r.date)} · ${esc(partsLabel(r) || r.method || '')}</div><div class="sub">${r.mrNo ? `<span class="mono">${esc(r.mrNo)}</span> · ` : ''}${r.ref ? `Ref ${esc(r.ref)} · ` : ''}${+r.ait ? `AIT ${tk(r.ait)} · ` : ''}${+r.vds ? `VDS ${tk(r.vds)} · ` : ''}by ${who(r.createdBy)}</div></div><div class="amt">${tk(r.received)}</div>
       <div style="display:flex;gap:4px">${r.mrNo ? `<button class="btn ghost sm" data-act="doc-receipt" data-id="${r.id}">Receipt</button>` : ''}${!locked(r.date) ? `<button class="btn ghost sm danger" data-act="del-receipt" data-id="${r.id}">Remove</button>` : ''}</div></div>`).join('') : `<div class="empty" style="padding:14px">No payments recorded yet.</div>`}</div>` : ''}
     <p class="hint">Raised by ${who(i.createdBy)}${i.updatedBy && i.updatedAt !== i.createdAt ? ` · last change by ${who(i.updatedBy)}, ${fmtWhen(i.updatedAt)}` : ''}</p>
     <div class="foot">
@@ -599,45 +599,53 @@ function dueForm(i) {
       if (await run(() => putDoc('invoices', i.id, { ...strip(i), due: ev.target.d.value }), 'Due date changed')) invoiceSheet(S.invoices.find(x => x.id === i.id) || i); });
   });
 }
+const recParts = r => Array.isArray(r.parts) && r.parts.length ? r.parts : (r.accountId ? [{ accountId: r.accountId, amount: +r.received || 0 }] : []);
+const partsLabel = r => recParts(r).map(x => `${(acct(x.accountId) || {}).name || 'account'} ${tk(x.amount)}`).join(' + ');
 function receiptForm(i) {
-  const accts = activeAccts();
-  if (!accts.length) { closeSheet(); S.tab = 'cash'; render(); toast('Add your cash and bank accounts first, so each payment goes into one.'); return; }
+  const accts = activeAccts().filter(a => a.kind !== 'petty');
+  if (!accts.length) { closeSheet(); S.tab = 'cash'; render(); toast('Add your vault and bank accounts first, so each payment goes into one.'); return; }
   const bal = Math.max(0, invTotal(i) - invSettled(i));
   const aitLeft = Math.max(0, invAit(i) - recsOf(i).reduce((s, r) => s + (+r.ait || 0), 0));
   const want = i.mode === 'cash' ? ['cash'] : ['bank', 'mfs'];
-  const defA = (accts.find(a => want.includes(a.kind)) || accts[0]).id;
-  const methodFor = a => a?.kind === 'cash' ? 'Cash' : a?.kind === 'mfs' ? 'bKash / MFS' : 'Bank transfer';
+  const defA = (accts.find(a => want.includes(a.kind)) || accts[0]).id, first = Math.round(Math.max(0, bal - aitLeft));
   openSheet(`${sheetHead('Record payment', `${esc(i.no)} · balance ${tk(bal)}`)}
   <form id="rf">
     <div class="fg">
       <label class="f" for="r_date">Date received<input id="r_date" name="date" type="date" required value="${today()}"></label>
-      <label class="f" for="r_acct">Received into<select id="r_acct" name="accountId">${accts.map(a => opt(a.id, `${a.name} · ${ACCT_KIND[a.kind]}`, a.id === defA)).join('')}</select></label>
-      <label class="f" for="r_method">Method<select id="r_method" name="method">${METHODS.map(m => opt(m, m, m === methodFor(acct(defA)))).join('')}</select></label>
-      <label class="f" for="r_ref">Cheque / transaction ref<input id="r_ref" name="ref"></label>
-      <label class="f" for="r_amt">Amount received (BDT)<input id="r_amt" name="received" type="number" min="0" step="1" required value="${Math.round(Math.max(0, bal - aitLeft))}"></label>
       <label class="f" for="r_mr">Money receipt no.<input id="r_mr" name="mrNo" required class="mono" value="${esc(nextMrNo(today()))}"></label>
+    </div>
+    <div class="sec-t">How it came in</div>
+    <div style="display:flex;flex-direction:column;gap:6px">${accts.map(a => `<label class="f" style="display:grid;grid-template-columns:minmax(0,1fr) 140px;align-items:center;gap:10px"><span>${esc(a.name)} <span class="hint">${a.kind === 'cash' ? 'cash' : a.kind === 'mfs' ? 'mobile' : 'bank / cheque'}</span></span><input type="number" min="0" step="1" name="part" data-acct="${a.id}" value="${a.id === defA ? first : ''}" placeholder="0" aria-label="Amount into ${esc(a.name)}"></label>`).join('')}</div>
+    <div class="fg">
+      <label class="f" for="r_ref">Cheque / transaction ref<input id="r_ref" name="ref"></label>
       <label class="f" for="r_ait">AIT deducted by client<input id="r_ait" name="ait" type="number" min="0" step="1" value="${Math.round(aitLeft)}"></label>
       <label class="f" for="r_vds">VAT deducted by client (VDS)<input id="r_vds" name="vds" type="number" min="0" step="1" value="0"></label>
     </div>
-    <p class="hint">Fill AIT and VDS only if the client deducted tax at source and gave you a challan or certificate for it.</p>
+    <p class="hint">Split a payment by filling more than one account: one money receipt covers it all. Fill AIT and VDS only if the client deducted tax at source and gave you a challan or certificate.</p>
+    <dl class="kv" id="rTot"></dl>
     <p class="hint" id="rHint"></p>
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Record payment</button></div>
   </form>`, root => {
-    const f = $('#rf', root);
-    const upd = () => { const s = (+f.received.value || 0) + (+f.ait.value || 0) + (+f.vds.value || 0), left = bal - s, a = acct(f.accountId.value);
+    const f = $('#rf', root), partEls = [...f.querySelectorAll('[name=part]')];
+    const parts = () => partEls.map(e => ({ accountId: e.dataset.acct, amount: Math.round(+e.value || 0) })).filter(x => x.amount > 0);
+    const upd = () => { const P = parts(), rec = P.reduce((u, x) => u + x.amount, 0), s = rec + (+f.ait.value || 0) + (+f.vds.value || 0), left = bal - s;
+      const late = P.map(x => acct(x.accountId)).find(a => a && f.date.value < a.openingDate);
+      $('#rTot', root).innerHTML = `<dt>Received</dt><dd>${tk(rec)}${P.length > 1 ? `<br><small class="muted">${P.map(x => `${esc(acct(x.accountId).name)} ${tk(x.amount)}`).join(' + ')}</small>` : ''}</dd><dt>Tax deducted by client</dt><dd>${tk((+f.ait.value || 0) + (+f.vds.value || 0))}</dd><dt class="tot">Settles</dt><dd class="tot">${tk(s)}</dd>`;
       const h = $('#rHint', root);
-      h.textContent = locked(f.date.value) ? `FY ${fyLabel(fyOf(f.date.value))} is closed.` : a && f.date.value < a.openingDate ? `${a.name} starts on ${fmtDate(a.openingDate)}. Pick a later date or another account.` : left > 1 ? `Leaves ${tk(left)} outstanding.` : left < -1 ? `That's ${tk(-left)} more than the balance.` : 'Settles this invoice in full.';
-      h.className = 'hint' + (left < -1 || locked(f.date.value) || (a && f.date.value < a.openingDate) ? ' err' : ''); };
-    f.addEventListener('input', e => { if (e.target === f.ait || e.target === f.vds) f.received.value = Math.max(0, Math.round(bal - (+f.ait.value || 0) - (+f.vds.value || 0))); upd(); });
-    f.accountId.addEventListener('change', () => { f.method.value = methodFor(acct(f.accountId.value)); upd(); });
+      h.textContent = locked(f.date.value) ? `FY ${fyLabel(fyOf(f.date.value))} is closed.` : late ? `${late.name} starts on ${fmtDate(late.openingDate)}. Pick a later date.` : !rec && !(+f.ait.value) && !(+f.vds.value) ? 'Enter what came in.' : left > 1 ? `Leaves ${tk(left)} outstanding.` : left < -1 ? `That's ${tk(-left)} more than the balance.` : 'Settles this invoice in full.';
+      h.className = 'hint' + (left < -1 || locked(f.date.value) || late ? ' err' : ''); };
+    f.addEventListener('input', e => { if ((e.target === f.ait || e.target === f.vds) && parts().length <= 1) { const el = partEls.find(x => +x.value > 0) || partEls.find(x => x.dataset.acct === defA); el.value = Math.max(0, Math.round(bal - (+f.ait.value || 0) - (+f.vds.value || 0))); } upd(); });
     f.date.addEventListener('change', () => { f.mrNo.value = nextMrNo(f.date.value); upd(); });
     upd();
     f.addEventListener('submit', async ev => { ev.preventDefault();
-      const a = acct(f.accountId.value), mrNo = f.mrNo.value.trim();
-      if (a && f.date.value < a.openingDate) { toast(`${a.name} starts on ${fmtDate(a.openingDate)}.`); return; }
+      const P = parts(), rec = P.reduce((u, x) => u + x.amount, 0), mrNo = f.mrNo.value.trim(), h = $('#rHint', root);
+      if (h.classList.contains('err')) { toast(h.textContent); return; }
+      if (!rec && !(+f.ait.value) && !(+f.vds.value)) { toast('Enter what came in.'); return; }
       if (S.receipts.some(r => r.mrNo === mrNo)) { toast('That money receipt number is already used.'); return; }
-      const data = { invoiceId: i.id, projectId: i.projectId, date: f.date.value, accountId: f.accountId.value, method: f.method.value, mrNo,
-        received: +f.received.value || 0, ait: +f.ait.value || 0, vds: +f.vds.value || 0, ref: f.ref.value.trim() };
+      const main = P.slice().sort((x, y) => y.amount - x.amount)[0] || { accountId: defA };
+      const methodOf = a => a?.kind === 'cash' ? 'Cash' : a?.kind === 'mfs' ? 'bKash / MFS' : 'Bank transfer';
+      const data = { invoiceId: i.id, projectId: i.projectId, date: f.date.value, accountId: main.accountId, parts: P, method: P.map(x => methodOf(acct(x.accountId))).filter((v, k, a) => a.indexOf(v) === k).join(' + ') || methodOf(acct(main.accountId)),
+        mrNo, received: rec, ait: +f.ait.value || 0, vds: +f.vds.value || 0, ref: f.ref.value.trim() };
       if (await run(() => addDoc('receipts', data), `Payment recorded · receipt ${mrNo}`)) invoiceSheet(S.invoices.find(x => x.id === i.id) || i); });
   });
 }
@@ -714,7 +722,8 @@ function receiptDoc(r) {
   <div class="amtbox"><span>Amount received</span><b>BDT ${nf.format(Math.round(+r.received || 0))}</b></div>
   <p class="words">In words: ${esc(takaWords(r.received))}</p>
   <table style="margin-top:6mm"><tbody>
-    <tr><td>Paid by</td><td class="n" style="font-family:inherit">${esc(r.method || '')}${a.kind && a.kind !== 'cash' ? ` · ${esc(a.name)}` : ''}${r.ref ? ` · Ref ${esc(r.ref)}` : ''}</td></tr>
+    ${recParts(r).length > 1 ? recParts(r).map(x => { const ac = acct(x.accountId) || {}; return `<tr><td>${ac.kind === 'cash' ? 'In cash' : 'By bank' + (ac.name ? ' · ' + esc(ac.name) : '')}</td><td class="n">${nf.format(Math.round(+x.amount || 0))}</td></tr>`; }).join('') + (r.ref ? `<tr class="sub"><td>Reference</td><td class="n" style="font-family:inherit">${esc(r.ref)}</td></tr>` : '')
+      : `<tr><td>Paid by</td><td class="n" style="font-family:inherit">${esc(r.method || '')}${a.kind && a.kind !== 'cash' ? ` · ${esc(a.name)}` : ''}${r.ref ? ` · Ref ${esc(r.ref)}` : ''}</td></tr>`}
     ${+r.ait ? `<tr><td>AIT deducted at source by client</td><td class="n">${nf.format(Math.round(+r.ait))}</td></tr>` : ''}
     ${+r.vds ? `<tr><td>VAT deducted at source by client (VDS)</td><td class="n">${nf.format(Math.round(+r.vds))}</td></tr>` : ''}
     <tr class="tot"><td>Settled against the invoice</td><td class="n">${nf.format(Math.round((+r.received || 0) + (+r.ait || 0) + (+r.vds || 0)))}</td></tr>
@@ -1044,10 +1053,12 @@ const activeStaff = () => S.staff.filter(t => t.active !== false).sort((a, b) =>
 const runLabel = r => r.kind === 'bonus' ? `${r.label || 'Bonus'} ${(r.month || '').slice(0, 4)}` : `${monthName(r.month)} salary`;
 const RUN_ST = { draft: 'Draft', submitted: 'Awaiting approval', approved: 'Approved · unpaid', paid: 'Paid' };
 const runChip = r => chip({ draft: '', submitted: 'pending', approved: 'unpaid', paid: 'paid' }[r.status || 'draft'], RUN_ST[r.status || 'draft']);
+const PAY_LABEL = { cash: 'Cash', bank: 'Bank', split: 'Bank + cash' };
+const lineBank = l => { const n = +l.net || 0; return l.method === 'bank' ? n : l.method === 'split' ? Math.min(n, Math.max(0, +l.bankAmt || 0)) : 0; };
 function runTotals(r) {
   const t = { gross: 0, net: 0, cash: 0, bank: 0, cashN: 0, bankN: 0, tax: 0, adv: 0 };
-  for (const l of r.lines || []) { const n = +l.net || 0; t.gross += +l.gross || 0; t.net += n; t.tax += +l.tax || 0; t.adv += +l.adv || 0;
-    if ((l.method || 'cash') === 'bank') { t.bank += n; if (n) t.bankN++; } else { t.cash += n; if (n) t.cashN++; } }
+  for (const l of r.lines || []) { const n = +l.net || 0, bk = lineBank(l); t.gross += +l.gross || 0; t.net += n; t.tax += +l.tax || 0; t.adv += +l.adv || 0;
+    t.bank += bk; t.cash += n - bk; if (bk) t.bankN++; if (n - bk) t.cashN++; }
   return t;
 }
 const advGiven = id => S.advances.filter(a => a.staffId === id && a.status === 'approved' && a.accountId).reduce((t, a) => t + (+a.amount || 0), 0);
@@ -1066,7 +1077,7 @@ function buildLines(kind, ym, opts = {}) {
   const end = monthEnd(ym), start = ym + '-01';
   return activeStaff().filter(t => !t.joinDate || t.joinDate <= end).map(t => {
     const r = rateAt(t, ym) || curRate(t); if (!r) return null;
-    const base = { staffId: t.id, name: t.name, designation: t.designation || '', method: t.payMethod || 'cash', basic: +r.basic || 0 };
+    const base = { staffId: t.id, name: t.name, designation: t.designation || '', method: t.payMethod || 'cash', bankAmt: t.payMethod === 'split' ? +t.bankPart || 0 : 0, basic: +r.basic || 0 };
     if (kind === 'bonus') return calcLine({ ...base, gross: Math.round((opts.basis === 'gross' ? grossOf(r) : +r.basic || 0) * (+opts.pct || 0) / 100), tax: 0, otherDed: 0 }, 'bonus');
     const lateJoin = t.joinDate && t.joinDate > start ? daysBetween(start, t.joinDate) : 0;
     return calcLine({ ...base, gross: grossOf(r), leaveDays: lateJoin, extra: 0, adv: Math.min(advInstall(t.id), advOut(t.id)), tax: +r.tax || 0, otherDed: 0, note: lateJoin ? `Joined ${fmtShort(t.joinDate)}` : '' }, 'salary');
@@ -1094,7 +1105,7 @@ function payrollView() {
   ${runs.length ? `<div class="panel"><div class="ph"><h3>Salary sheets and bonuses</h3><span class="meta">latest first</span></div><div class="rows">${runs.map(r => { const t = runTotals(r);
     return `<button class="row r-inv" data-act="open-run" data-id="${r.id}"><div style="min-width:0"><div class="t">${esc(runLabel(r))}</div><div class="sub">${(r.lines || []).length} staff · ${tk(t.cash)} cash · ${tk(t.bank)} bank</div></div><div class="c2 sub">${r.payDate ? 'Paid ' + fmtShort(r.payDate) : ''}</div>${runChip(r)}<div class="amt">${tk(t.net)}</div></button>`; }).join('')}</div></div>` : ''}
   ${S.staff.length ? `<div class="panel"><div class="ph"><h3>Staff</h3><span class="meta">${st.length} active</span></div><div class="rows">${S.staff.slice().sort((a, b) => (a.active === false) - (b.active === false) || (a.name || '').localeCompare(b.name || '')).map(t => { const ao = advOut(t.id);
-    return `<button class="row r-inv" data-act="open-staff" data-id="${t.id}"><div style="min-width:0"><div class="t">${esc(t.name)}</div><div class="sub">${esc(t.designation || '—')} · ${t.payMethod === 'bank' ? 'Bank' : 'Cash'}${t.active === false ? ' · inactive' : ''}${ao ? ` · <span class="warnt">advance ${tk(ao)}</span>` : ''}</div></div><div class="c2 sub">${t.joinDate ? 'since ' + fmtShort(t.joinDate) : ''}</div><span></span><div class="amt">${tk(grossOf(curRate(t)))}<small>gross / month</small></div></button>`; }).join('')}</div></div>` : ''}
+    return `<button class="row r-inv" data-act="open-staff" data-id="${t.id}"><div style="min-width:0"><div class="t">${esc(t.name)}</div><div class="sub">${esc(t.designation || '—')} · ${PAY_LABEL[t.payMethod] || 'Cash'}${t.active === false ? ' · inactive' : ''}${ao ? ` · <span class="warnt">advance ${tk(ao)}</span>` : ''}</div></div><div class="c2 sub">${t.joinDate ? 'since ' + fmtShort(t.joinDate) : ''}</div><span></span><div class="amt">${tk(grossOf(curRate(t)))}<small>gross / month</small></div></button>`; }).join('')}</div></div>` : ''}
   ${advs.length ? `<div class="panel"><div class="ph"><h3>Advances and loans</h3></div><div class="rows">${advs.map(a => `<button class="row r-inv" data-act="open-adv" data-id="${a.id}"><div style="min-width:0"><div class="t">${esc((staffOf(a.staffId) || {}).name || 'Staff')}</div><div class="sub">${tk(a.installment)} a month${a.note ? ' · ' + esc(a.note) : ''}</div></div><div class="c2 sub">${fmtDate(a.date)}</div>${advChip(a)}<div class="amt">${tk(a.amount)}</div></button>`).join('')}</div></div>` : ''}`;
 }
 function staffForm(t) {
@@ -1108,9 +1119,10 @@ function staffForm(t) {
       <label class="f" for="t_name">Name<input id="t_name" name="name" required value="${esc(src.name)}"></label>
       <label class="f" for="t_des">Designation<input id="t_des" name="designation" value="${esc(src.designation)}"></label>
       <label class="f" for="t_join">Joined SLATE <span class="hint">(only for someone joining this month or later)</span><input id="t_join" name="joinDate" type="date" value="${esc(src.joinDate)}"></label>
-      <label class="f" for="t_pay">Salary paid<select id="t_pay" name="payMethod">${opt('cash', 'In cash', src.payMethod !== 'bank')}${opt('bank', 'To bank account', src.payMethod === 'bank')}</select></label>
+      <label class="f" for="t_pay">Salary paid<select id="t_pay" name="payMethod">${opt('cash', 'In cash', !['bank', 'split'].includes(src.payMethod))}${opt('bank', 'To bank account', src.payMethod === 'bank')}${opt('split', 'Part to bank, rest in cash', src.payMethod === 'split')}</select></label>
     </div>
-    <label class="f" for="t_bank" id="tBankWrap">Their bank account (bank, last 4 digits)<input id="t_bank" name="bankInfo" value="${esc(src.bankInfo)}" placeholder="e.g. BRAC Bank · 4417"></label>
+    <div class="fg" id="tBankWrap"><label class="f" for="t_bank">Their bank account (bank, last 4 digits)<input id="t_bank" name="bankInfo" value="${esc(src.bankInfo)}" placeholder="e.g. BRAC Bank · 4417"></label>
+      <label class="f" for="t_bpart" id="tPartWrap">Paid to bank each month (rest in cash)<input id="t_bpart" name="bankPart" type="number" min="0" step="1" value="${esc(src.bankPart ?? '')}"></label></div>
     <div class="sec-t">Monthly salary (BDT)</div>
     <div class="fg">${SAL_PARTS.map(([k, l]) => `<label class="f" for="t_${k}">${l}<input id="t_${k}" name="${k}" type="number" min="0" step="1" value="${esc(r[k] ?? '')}"></label>`).join('')}
       <label class="f" for="t_tax">Tax deducted each month<input id="t_tax" name="tax" type="number" min="0" step="1" value="${esc(r.tax ?? 0)}"></label></div>
@@ -1121,18 +1133,19 @@ function staffForm(t) {
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${t ? 'Save' : 'Add staff member'}</button></div>
   </form>`, root => {
     const f = $('#sf', root);
-    const upd = () => { $('#tBankWrap', root).hidden = f.payMethod.value !== 'bank'; const g = SAL_PARTS.reduce((a, [k]) => a + (+f[k].value || 0), 0);
+    const upd = () => { $('#tBankWrap', root).hidden = f.payMethod.value === 'cash'; $('#tPartWrap', root).hidden = f.payMethod.value !== 'split'; const g = SAL_PARTS.reduce((a, [k]) => a + (+f[k].value || 0), 0);
       $('#tTot', root).innerHTML = `<dt class="tot">Gross a month</dt><dd class="tot">${tk(g)}</dd><dt>Take-home before deductions</dt><dd>${tk(g - (+f.tax.value || 0))}</dd>`; };
     f.addEventListener('input', upd); f.addEventListener('change', upd); upd();
     f.userId.addEventListener('change', () => { const p = S.profiles.find(x => x.id === f.userId.value); if (p) { f.name.value = p.full_name || p.label || ''; if (!f.designation.value) f.designation.value = p.role_label || ''; } });
     f.addEventListener('submit', async ev => { ev.preventDefault();
       const nr = { from: f.from.value, tax: +f.tax.value || 0 }; SAL_PARTS.forEach(([k]) => nr[k] = +f[k].value || 0);
       if (!grossOf(nr)) { toast('Enter the salary.'); return; }
+      if (f.payMethod.value === 'split' && !(+f.bankPart.value > 0)) { toast('Enter how much goes to the bank each month.'); return; }
       let rates = t ? (t.rates || []).slice() : [];
       const same = r && SAL_PARTS.every(([k]) => (+r[k] || 0) === nr[k]) && (+r.tax || 0) === nr.tax;
       if (!t || !same) { rates = rates.filter(x => x.from !== nr.from); rates.push(nr); rates.sort((a, b) => a.from.localeCompare(b.from)); }
       const data = { userId: f.userId.value, name: f.name.value.trim(), designation: f.designation.value.trim(), joinDate: f.joinDate.value, payMethod: f.payMethod.value,
-        bankInfo: f.payMethod.value === 'bank' ? f.bankInfo.value.trim() : '', rates, active: t ? f.active.checked : true, note: f.note.value.trim() };
+        bankInfo: f.payMethod.value !== 'cash' ? f.bankInfo.value.trim() : '', bankPart: f.payMethod.value === 'split' ? +f.bankPart.value || 0 : 0, rates, active: t ? f.active.checked : true, note: f.note.value.trim() };
       const ok = t ? await run(() => putDoc('staff', t.id, { ...strip(t), ...data }), 'Saved') : await run(() => addDoc('staff', data), 'Staff member added');
       if (ok) closeSheet(); });
   });
@@ -1141,7 +1154,7 @@ function staffSheet(t) {
   const lines = S.payruns.filter(r => r.status === 'paid').flatMap(r => (r.lines || []).filter(l => l.staffId === t.id).map(l => ({ r, l }))).sort((a, b) => (b.r.month || '').localeCompare(a.r.month || ''));
   const advs = S.advances.filter(a => a.staffId === t.id);
   openSheet(`${sheetHead(t.name, `${esc(t.designation || '')}${t.userId ? ' · in SLATE OS' : ''}${t.active === false ? ' · inactive' : ''}`)}
-    <dl class="kv"><dt>Joined</dt><dd class="txt">${fmtDate(t.joinDate)}</dd><dt>Paid</dt><dd class="txt">${t.payMethod === 'bank' ? 'To bank' + (t.bankInfo ? ' · ' + esc(t.bankInfo) : '') : 'In cash'}</dd>
+    <dl class="kv"><dt>Joined</dt><dd class="txt">${fmtDate(t.joinDate)}</dd><dt>Paid</dt><dd class="txt">${t.payMethod === 'bank' ? 'To bank' + (t.bankInfo ? ' · ' + esc(t.bankInfo) : '') : t.payMethod === 'split' ? `${tk(t.bankPart)} to bank${t.bankInfo ? ' (' + esc(t.bankInfo) + ')' : ''}, rest in cash` : 'In cash'}</dd>
       ${SAL_PARTS.map(([k, l]) => { const v = +(curRate(t) || {})[k] || 0; return v ? `<dt>${l}</dt><dd>${tk(v)}</dd>` : ''; }).join('')}
       <dt class="tot">Gross a month</dt><dd class="tot">${tk(grossOf(curRate(t)))}</dd>${+(curRate(t) || {}).tax ? `<dt>Tax deducted</dt><dd>${tk(curRate(t).tax)}</dd>` : ''}
       ${advOut(t.id) ? `<dt>Advance still to recover</dt><dd style="color:var(--warn)">${tk(advOut(t.id))}</dd>` : ''}</dl>
@@ -1246,11 +1259,12 @@ function runSheet(r) {
   const L = JSON.parse(JSON.stringify(r.lines || []));
   const num = (i, k, v) => `<input type="number" step="1" min="0" data-li="${i}" data-k="${k}" value="${esc(v ?? 0)}" aria-label="${k}" style="width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:5px 6px;font-family:var(--f-mono);font-size:13px">`;
   const lineHtml = (l, i) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default;align-items:start" data-line="${i}">
-    <div style="min-width:0"><div class="t">${esc(l.name)} <span class="sub" style="font-weight:400">· ${esc(l.designation || '')} · ${l.method === 'bank' ? 'Bank' : 'Cash'}</span></div>
-      ${editable ? `<div style="display:grid;grid-template-columns:repeat(${bonus ? 3 : 5},minmax(0,1fr));gap:6px;margin-top:6px;font-size:11px;color:var(--muted)">
+    <div style="min-width:0"><div class="t">${esc(l.name)} <span class="sub" style="font-weight:400">· ${esc(l.designation || '')} · ${PAY_LABEL[l.method] || 'Cash'}</span></div>
+      ${editable ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px;margin-top:6px;font-size:11px;color:var(--muted)">
         ${bonus ? `<label>Bonus${num(i, 'gross', l.gross)}</label><label>Tax${num(i, 'tax', l.tax)}</label><label>Other ded.${num(i, 'otherDed', l.otherDed)}</label>`
-          : `<label>Leave days${num(i, 'leaveDays', l.leaveDays)}</label><label>Allowance / OT${num(i, 'extra', l.extra)}</label><label>Advance${num(i, 'adv', l.adv)}</label><label>Tax${num(i, 'tax', l.tax)}</label><label>Other ded.${num(i, 'otherDed', l.otherDed)}</label>`}</div>`
+          : `<label>Leave days${num(i, 'leaveDays', l.leaveDays)}</label><label>Allowance / OT${num(i, 'extra', l.extra)}</label><label>Advance${num(i, 'adv', l.adv)}</label><label>Tax${num(i, 'tax', l.tax)}</label><label>Other ded.${num(i, 'otherDed', l.otherDed)}</label>`}${l.method === 'split' ? `<label>To bank${num(i, 'bankAmt', l.bankAmt)}</label>` : ''}</div>`
         : `<div class="sub" style="white-space:normal">${bonus ? `Bonus ${tk(l.gross)}` : `Gross ${tk(l.gross)}${+l.leaveDays ? ` · ${l.leaveDays} leave day${+l.leaveDays === 1 ? '' : 's'} − ${tk(l.leaveDed)}` : ''}${+l.extra ? ` · + ${tk(l.extra)}` : ''}${+l.adv ? ` · advance − ${tk(l.adv)}` : ''}`}${+l.tax ? ` · tax − ${tk(l.tax)}` : ''}${+l.otherDed ? ` · other − ${tk(l.otherDed)}` : ''}</div>`}
+      ${l.method === 'split' ? `<div class="sub" data-split="${i}">${tk(lineBank(l))} bank · ${tk((+l.net || 0) - lineBank(l))} cash</div>` : ''}
       ${l.note ? `<div class="sub">${esc(l.note)}</div>` : ''}</div>
     <div class="amt" data-net="${i}">${tk(l.net)}${!bonus ? `<small>of ${tk(l.gross)}</small>` : ''}</div></div>`;
   const totHtml = () => { const t = runTotals({ lines: L }); return `<dt>Staff</dt><dd>${L.length}</dd>${!bonus ? `<dt>Gross</dt><dd>${tk(t.gross)}</dd><dt>Advances recovered</dt><dd>${tk(t.adv)}</dd>` : ''}<dt>Tax withheld</dt><dd>${tk(t.tax)}</dd><dt>Cash to pay</dt><dd>${tk(t.cash)}</dd><dt>Bank to pay</dt><dd>${tk(t.bank)}</dd><dt class="tot">Net payable</dt><dd class="tot">${tk(t.net)}</dd>`; };
@@ -1273,7 +1287,7 @@ function runSheet(r) {
       ${!lk && isPrincipal() && st === 'paid' ? `<button class="btn" data-act="unpay-run" data-id="${r.id}">Mark unpaid</button>` : ''}
     </div>`, root => {
     root.addEventListener('input', e => { const x = e.target.closest('[data-li]'); if (!x) return; const l = L[+x.dataset.li]; l[x.dataset.k] = +x.value || 0; calcLine(l, r.kind);
-      const n = $(`[data-net="${x.dataset.li}"]`, root); n.innerHTML = `${tk(l.net)}${!bonus ? `<small>of ${tk(l.gross)}</small>` : ''}`; n.style.color = l.net < 0 ? 'var(--bad)' : ''; $('#runTot', root).innerHTML = totHtml(); });
+      const n = $(`[data-net="${x.dataset.li}"]`, root); n.innerHTML = `${tk(l.net)}${!bonus ? `<small>of ${tk(l.gross)}</small>` : ''}`; n.style.color = l.net < 0 ? 'var(--bad)' : ''; const sp = $(`[data-split="${x.dataset.li}"]`, root); if (sp) sp.textContent = `${tk(lineBank(l))} bank · ${tk((+l.net || 0) - lineBank(l))} cash`; $('#runTot', root).innerHTML = totHtml(); });
     const go = async status => { if (L.some(l => l.net < 0)) { toast('Someone would be paid less than zero. Reduce their deductions.'); return; }
       for (const l of L) { if (+l.adv > advOut(l.staffId, r.id) + 1) { toast(`${l.name}'s advance recovery is more than they still owe (${tk(advOut(l.staffId, r.id))}).`); return; } }
       if (await save(status)) { const nr = S.payruns.find(x => x.id === r.id); if (nr) runSheet(nr); } };
@@ -1304,7 +1318,7 @@ function runDoc(r) {
   const body = `<h1>${bonus ? esc(r.label || 'Bonus') : 'Salary sheet'}${draft ? ' <span class="dr">Draft</span>' : ''}</h1>
   <div class="ref"><span>${bonus ? 'Paid with' : 'Month'} <b>${monthName(r.month)}</b></span>${r.payDate ? `<span>Paid <b>${fmtDate(r.payDate)}</b></span>` : ''}<span>Staff <b>${(r.lines || []).length}</b></span></div>
   <table style="font-size:8.5pt"><thead><tr><th>#</th><th>Name</th><th class="n">${bonus ? 'Bonus' : 'Gross'}</th>${bonus ? '' : '<th class="n">Leave</th><th class="n">Add.</th><th class="n">Adv.</th>'}<th class="n">Tax</th><th class="n">Other</th><th class="n">Net</th><th style="padding-left:4mm">Paid</th><th style="width:22mm">Signature</th></tr></thead><tbody>
-  ${(r.lines || []).map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.name)}<br><span style="color:#5F6670;font-size:7.5pt">${esc(l.designation || '')}</span></td><td class="n">${n(l.gross)}</td>${bonus ? '' : `<td class="n">${+l.leaveDed ? n(l.leaveDed) : '–'}</td><td class="n">${+l.extra ? n(l.extra) : '–'}</td><td class="n">${+l.adv ? n(l.adv) : '–'}</td>`}<td class="n">${+l.tax ? n(l.tax) : '–'}</td><td class="n">${+l.otherDed ? n(l.otherDed) : '–'}</td><td class="n"><b>${n(l.net)}</b></td><td style="padding-left:4mm">${l.method === 'bank' ? 'Bank' : 'Cash'}</td><td></td></tr>`).join('')}
+  ${(r.lines || []).map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.name)}<br><span style="color:#5F6670;font-size:7.5pt">${esc(l.designation || '')}</span></td><td class="n">${n(l.gross)}</td>${bonus ? '' : `<td class="n">${+l.leaveDed ? n(l.leaveDed) : '–'}</td><td class="n">${+l.extra ? n(l.extra) : '–'}</td><td class="n">${+l.adv ? n(l.adv) : '–'}</td>`}<td class="n">${+l.tax ? n(l.tax) : '–'}</td><td class="n">${+l.otherDed ? n(l.otherDed) : '–'}</td><td class="n"><b>${n(l.net)}</b></td><td style="padding-left:4mm">${l.method === 'split' ? `Bank ${n(lineBank(l))}<br>Cash ${n((+l.net || 0) - lineBank(l))}` : l.method === 'bank' ? 'Bank' : 'Cash'}</td><td></td></tr>`).join('')}
   <tr class="tot"><td></td><td>Total</td><td class="n">${n(t.gross)}</td>${bonus ? '' : `<td></td><td></td><td class="n">${n(t.adv)}</td>`}<td class="n">${n(t.tax)}</td><td></td><td class="n">${n(t.net)}</td><td></td><td></td></tr></tbody></table>
   <p class="words">Net payable: ${esc(takaWords(t.net))} · cash ${n(t.cash)} · bank ${n(t.bank)}</p>
   <div class="sig"><div><b>Prepared by</b>${esc(S.people[r.createdBy] || 'COO')}</div><div><b>Approved by</b>${r.decidedBy ? esc(S.people[r.decidedBy] || 'Principal') : 'Principal'}</div></div>`;
@@ -1314,7 +1328,7 @@ function slipsDoc(r, staffId) {
   const bonus = r.kind === 'bonus', n = v => nf.format(Math.round(+v || 0));
   const pages = (r.lines || []).filter(l => !staffId || l.staffId === staffId).map(l => `<h1>Payslip</h1>
   <div class="ref"><span>${esc(runLabel(r))}</span>${r.payDate ? `<span>Paid <b>${fmtDate(r.payDate)}</b></span>` : ''}</div>
-  <div class="to"><b>${esc(l.name)}</b>${esc(l.designation || '')}<br>${l.method === 'bank' ? 'Paid to bank account' + ((staffOf(l.staffId) || {}).bankInfo ? ' · ' + esc(staffOf(l.staffId).bankInfo) : '') : 'Paid in cash'}</div>
+  <div class="to"><b>${esc(l.name)}</b>${esc(l.designation || '')}<br>${l.method === 'bank' ? 'Paid to bank account' + ((staffOf(l.staffId) || {}).bankInfo ? ' · ' + esc(staffOf(l.staffId).bankInfo) : '') : l.method === 'split' ? `BDT ${n(lineBank(l))} to bank${(staffOf(l.staffId) || {}).bankInfo ? ' (' + esc(staffOf(l.staffId).bankInfo) + ')' : ''} · BDT ${n((+l.net || 0) - lineBank(l))} in cash` : 'Paid in cash'}</div>
   <table><tbody>
     <tr><td>${bonus ? esc(r.label || 'Bonus') : 'Gross salary'}</td><td class="n">${n(l.gross)}</td></tr>
     ${!bonus && +l.extra ? `<tr><td>Allowance / overtime</td><td class="n">${n(l.extra)}</td></tr>` : ''}
