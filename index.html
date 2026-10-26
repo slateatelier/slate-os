@@ -613,6 +613,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .row.fx-leave{opacity:.45;transition:opacity .24s ease-out}
 @keyframes fxPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
 .badge.fx-pulse{animation:fxPulse .5s ease-out}
+.tag-tech{background:#FFF4E5;color:#B25000}
+.tech-pill{background:#FFF4E5;color:#B25000;font-weight:700}
+.tech-mark{color:#B25000;font-weight:600;white-space:nowrap}
 /* Home */
 .home-h{border-bottom:0;padding-bottom:4px}
 .home-h .eyebrow{color:var(--muted)}
@@ -1921,6 +1924,7 @@ function row(t,o={}){
   const p=S.projects[t.projectId];
   const meta=[];
   if(o.project!==false&&p){ if(p.code) meta.push(h('span',{class:'mono',text:p.code})); meta.push(h('span',{text:p.name})); }
+  if(noTech(p)) meta.push(h('span',{class:'tech-mark',title:TECH_TIP+(p.techNote?': '+p.techNote:''),'aria-label':TECH_TIP,text:'⚠ No client tech'}));
   if(t.phase) meta.push(h('span',{text:t.phase}));
   if(o.person!==false){ const pid=t.assignReq?t.assignReq.to:t.assignee; meta.push(h('span',{class:'who'},pid?avaEl(pid,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (awaiting approval)`:nameOf(t.assignee))); }
   const metaEls=meta.flatMap((x,i)=>i?[h('span',{'aria-hidden':'true',text:'·'}),x]:[x]);
@@ -3493,7 +3497,7 @@ function viewSetup(){
 /* ---------- sheet ---------- */
 function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
 function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&workable(S.projects[id]), okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
-const PFIELDS=['entry','completedOn','code','name','client','contact','phone','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
+const PFIELDS=['entry','completedOn','code','name','client','contact','phone','tech','techNote','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
 const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
 /* outsourced services: the consultant or vendor doing the work */
@@ -3899,6 +3903,9 @@ function sheetProject(){
         sec('Client and site'),
         h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:80,placeholder:'Company or owner',style:'text-transform:uppercase',autocapitalize:'characters'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Site location *',inp('location',{maxlength:120,placeholder:'e.g. Road 71, Gulshan 2, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
+        h('div',{class:'form-row'},field('Technical person at the client’s end',(()=>{ const el=sel('tech',[['','Not known yet'],['yes','Yes, available'],['no','No, not available']]); el.addEventListener('change',()=>renderSheet()); return el; })(),
+            d.tech==='no'?'The project and its tasks show a caution mark, so the team expects to explain more and check more on site.':'An engineer or technical person who can read drawings and answer site questions.'),
+          field(d.tech==='yes'?'Name and role (optional)':'Note (optional)',inp('techNote',{maxlength:80,placeholder:d.tech==='yes'?'e.g. Eng. Rahman, site engineer':d.tech==='no'?'e.g. Owner decides; no engineer on site':''}))),
         sec('Agreement'),
         h('div',{class:'form-row'},field('Agreement status *',(()=>{ const el=sel('agStatus',AGS); el.addEventListener('change',()=>renderSheet()); return el; })()),field(d.agStatus==='signed'?'Agreement date *':'Agreement date (optional)',inp('agDate',{type:'date'}))),
         field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40,style:'text-transform:uppercase',autocapitalize:'characters'})),
@@ -5457,7 +5464,7 @@ function viewProjects(){
   if(!list.length){ out.push(h('p',{class:'muted',text:all.length?(f.st==='archive'?'Nothing in the archive matches these filters.':f.st==='acct'?(S.acct?'No open accounts. Every closed project is fully billed and collected.':'Checking Finance…'):f.st==='active'&&!f.q&&!f.pod?'No active projects.':'No projects match these filters.'):'No projects yet.'})); if(holdSec) out.push(holdSec); if(acctSec) out.push(acctSec); return out; }
   out.push(h('div',{class:'pgrid'},list.map(p=>{ const st=stats.get(p.id), [hl,hk]=HEALTH[st.health];
     return h('button',{class:'pcard',type:'button',onclick:()=>openProjectView(p.id)},
-      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),abOn(p)?h('span',{class:'pill s-late',text:'As-built'}):null,acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),abOn(p)?h('span',{class:'pill s-late',text:'As-built'}):null,noTech(p)?h('span',{class:'pill tech-pill',title:TECH_TIP,text:'⚠'}):null,acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
       h('div',{class:'pc-name',text:p.name}),
       h('div',{class:'pc-meta',text:[p.client,podText(p),p.katha?p.katha+' katha':'',p.units?p.units+' units'+(p.type==='jv'&&p.loCount!=null?` (LO ${p.loCount} · Dev ${p.devCount})`:''):'',p.farApplies==='yes'&&p.farCalc?Math.round(p.farCalc.saleable/1000)+'k sft saleable':''].filter(Boolean).join(' · ')}),
       ...(()=>{ const pk=p.closed?projParkedTasks(p.id).length:0, dn=st.ts.filter(t=>t.doneAt).length, pc=pk?Math.round(dn/(dn+pk)*100):st.pct;
@@ -5478,10 +5485,10 @@ function sheetProjView(){
   const st=projStats(p), [hl,hk]=HEALTH[st.health], ap=amApprover(), det=canViewProjectDetail(p), tp=p.type&&(T()[p.type]||LEGACY[p.type]);
   const fact=(l,v,sub)=>v?h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v',text:v}),sub&&h('div',{class:'s',text:sub})):null;
   const out=[head(`${p.code} · ${podText(p)}`,p.name),
-    h('div',{class:'sh-status'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),tp&&h('span',{class:'tag',text:tp.name}),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.entry==='completed'&&h('span',{class:'tag',text:'Completed before SLATE OS'+(p.completedOn?' · '+MON[+p.completedOn.slice(5,7)-1]+' '+p.completedOn.slice(0,4):'')}),p.entry==='running'&&h('span',{class:'tag',text:'Running before SLATE OS'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
+    h('div',{class:'sh-status'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),tp&&h('span',{class:'tag',text:tp.name}),techTag(p),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.entry==='completed'&&h('span',{class:'tag',text:'Completed before SLATE OS'+(p.completedOn?' · '+MON[+p.completedOn.slice(5,7)-1]+' '+p.completedOn.slice(0,4):'')}),p.entry==='running'&&h('span',{class:'tag',text:'Running before SLATE OS'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:st.tot?`${st.pct}% complete`:'No tasks yet'}),h('span',{class:'muted',text:st.tot?`${st.ts.filter(t=>t.doneAt).length} of ${st.ts.length} done`:''})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${st.pct}%`})),
       h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%'],['Overdue',String(st.over)],['Open',String(st.open)],['No date',String(st.noDate)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
-    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),
+    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),
       fact('Planned finish',st.end?fmtD(st.end):'',p.dueDate?`Contract: ${fmtD(p.dueDate)}`+(st.end&&st.end>p.dueDate?` · ${diff(p.dueDate,st.end)}d over`:''):null),fact('Current phase',st.phase),(()=>{ const n=st.ts.filter(x=>x.parentId).length; return n?fact('Client revisions',`${n} round${n>1?'s':''}`,`across ${new Set(st.ts.filter(x=>x.parentId).map(x=>x.parentId)).size} item(s)`):null; })())];
   { const cs=closureSection(p); if(cs) out.push(cs); }
   if(p.pod!=='Studio'&&p.farApplies){ const d={...p,upf:p.upf||'',floors:p.floors||''}; const x=p.farApplies==='yes'?(farCalc(d)||p.farCalc):null; const fs=farFacts(d,x,fact);
@@ -5529,6 +5536,10 @@ const outcomeLabel=p=>{ const o=outcomeOf(p); return o==='active'?'Active':o==='
 const outcomePill=p=>{ const o=outcomeOf(p); return o==='active'||o==='closed'?'s-open':OUTCOMES[o].pill; };
 const isOnHold=p=>outcomeOf(p)==='onhold';
 const isArchivedP=p=>!!p&&!!p.closed&&!isOnHold(p);
+/* technical person at the client's end: 'yes' | 'no' | '' (not known). 'no' puts a caution mark on the project and its tasks */
+const noTech=p=>!!p&&p.tech==='no';
+const TECH_TIP='No technical person at the client’s end';
+const techTag=p=>noTech(p)?h('span',{class:'tag tag-tech',title:TECH_TIP+(p.techNote?': '+p.techNote:''),text:'⚠ No client technical person'}):null;
 /* as-built work after completion: phase 9 (check print → final print) runs on a completed project
    without reopening it. The project stays Completed; only the as-built tasks and checklist are live,
    scored like any task once their dates are approved. It ends when the final print is done, or when stopped. */
