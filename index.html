@@ -1751,6 +1751,7 @@ function render(force){
   renderHeader();
   view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView()));
+  try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
   restoreFocus(k);
   dashCount(view);
 }

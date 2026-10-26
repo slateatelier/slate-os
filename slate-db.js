@@ -78,6 +78,26 @@
     return new Error(m.replace(/^not-found:\s*/, 'Not found: '));
   }
 
+  /* ---------------- extras placed on the page after every draw ----------------
+     Messages, the backup reminder and the install / notification banners are added to the page
+     by this file. They used to watch the whole page and re-place themselves on every change;
+     two of them fighting over one spot froze the app (26 Oct). Now the page calls
+     window.slateAfterRender() once at the end of each draw, and every extra is placed once,
+     in a fixed order, by the list below. Nothing watches the page, so nothing can loop. */
+  const decorators = [];
+  let decorating = false;
+  function decorate() {
+    if (decorating) return;                       // never re-enter while placing
+    decorating = true;
+    try { for (const d of decorators) { try { d.fn(); } catch (_) {} } }
+    finally { decorating = false; }
+  }
+  function addDecorator(order, fn) {
+    decorators.push({ order, fn }); decorators.sort((a, b) => a.order - b.order);
+    if (!decorating) { try { fn(); } catch (_) {} }   // place it now; later draws place it in order
+  }
+  window.slateAfterRender = decorate;
+
   /* ---------------- local mirror of what this user may see ---------------- */
   const store = new Map();          // path -> data (documents)
   const people = new Map();         // id -> profile row
@@ -364,7 +384,7 @@
       later.addEventListener('click', () => { done = true; ls.set('slate-notif-asked', '1'); b.remove(); });
       main.prepend(b);
     };
-    new MutationObserver(place).observe(document.body, { childList: true, subtree: true }); place();
+    addDecorator(30, place);
   }
   function alertMsg(box, text) { let m = box.querySelector('.slate-err'); if (!m) { m = el('div', { class: 'slate-err', style: 'color:#ff3b30;font-size:13px;width:100%' }); box.append(m); } m.textContent = text; }
   function setupNotifications() {
@@ -479,7 +499,7 @@
       later.addEventListener('click', () => { done = true; ls.set('slate-install-later', '1'); b.remove(); });
       main.prepend(b);
     };
-    new MutationObserver(place).observe(document.body, { childList: true, subtree: true });
+    addDecorator(40, place);
     window.addEventListener('slate-installable', () => { const b = document.getElementById('slate-install-banner'); if (b) b.remove(); place(); });
     place();
   }
@@ -853,7 +873,7 @@
     if (canAdmin()) loadSent();
     sb.channel('slate-my-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + authUser.id },
       ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); msgRefresh(); syncBadge(); if (ev.new.kind === 'reply') loadSent(); if (ev.new.kind === 'reminder') loadReminders(); } }).subscribe();
-    new MutationObserver(() => placeMessages(false)).observe(document.body, { childList: true, subtree: true });
+    addDecorator(10, () => placeMessages(false));
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); loadAnswered(); } });
   }
 
@@ -1239,7 +1259,7 @@
   function setupBackup() {
     if (!canAdmin()) return;
     loadBackups();
-    new MutationObserver(() => placeBackupBanner(false)).observe(document.body, { childList: true, subtree: true });
+    addDecorator(20, () => placeBackupBanner(false));
   }
 
   /* ---------------- sign-in gate ---------------- */
@@ -1454,7 +1474,6 @@
       b.addEventListener('click', accountPanel);
       chrome.append(b);
     };
-    new MutationObserver(place).observe(document.body, { childList: true, subtree: true });
     place();
   }
 
