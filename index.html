@@ -619,6 +619,26 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 /* Home */
 .home-h{border-bottom:0;padding-bottom:4px}
 .home-h .eyebrow{color:var(--muted)}
+/* Day greeting (full screen, once per working day) */
+#day-splash{position:fixed;inset:0;z-index:9999;background:#fff;color:#000;display:grid;grid-template-rows:auto 1fr auto;cursor:pointer;
+  padding:max(28px,env(safe-area-inset-top)) clamp(24px,7vw,96px) max(28px,env(safe-area-inset-bottom));font-family:Jost,Futura,"Futura PT","Avenir Next",var(--font);
+  animation:dsIn .35s ease both}
+#day-splash.out{animation:dsOut .4s ease both}
+.ds-top{display:flex;justify-content:space-between;align-items:baseline;gap:16px;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#8E8E93}
+.ds-top b{color:#000;font-weight:600}
+.ds-mid{align-self:center;display:grid;gap:6px;min-width:0}
+.ds-hello{font-size:clamp(22px,3.4vw,40px);font-weight:400;letter-spacing:-.01em;animation:dsUp .6s .1s cubic-bezier(.2,.7,.2,1) both}
+.ds-name{font-size:clamp(76px,17vw,220px);line-height:.92;font-weight:600;letter-spacing:-.035em;color:#D7262B;overflow-wrap:anywhere;animation:dsUp .7s .2s cubic-bezier(.2,.7,.2,1) both}
+.ds-rule{display:block;width:56px;height:4px;background:#D7262B;margin-top:22px;animation:dsGrow .6s .55s ease both;transform-origin:left}
+.ds-bot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.ds-go{font:inherit;font-size:16px;font-weight:500;display:inline-flex;align-items:center;gap:12px;background:#000;color:#fff;border:0;border-radius:999px;padding:14px 22px 14px 26px;cursor:pointer;animation:dsUp .6s .7s ease both}
+.ds-go i{font-style:normal;transition:transform .2s}.ds-go:hover i,.ds-go:focus-visible i{transform:translateX(4px)}
+.ds-go:focus-visible{outline:3px solid #D7262B;outline-offset:3px}
+.ds-tag{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#8E8E93}
+@keyframes dsIn{from{opacity:0}to{opacity:1}}@keyframes dsOut{to{opacity:0;transform:scale(1.02)}}
+@keyframes dsUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}@keyframes dsGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){#day-splash,#day-splash *{animation:none!important}}
+
 .day-sum{margin:8px 0 0;font-size:16px;color:var(--ink);line-height:1.4;max-width:480px}
 .h-tip{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--muted);padding:0 4px}
 .h-tip span{flex:1}.h-x{border:0;background:none;font-size:20px;line-height:1;color:var(--faint);cursor:pointer;padding:0 4px}
@@ -1821,6 +1841,30 @@ function applyStd(){ const d=stdDoc(), at=d?d.updatedAt||'x':''; if(at===_stdAt)
   for(const k of Object.keys(DEF_PH)){ const o=d&&d.phases&&d.phases[k];
     PH[k]=o?{...DEF_PH[k],n:o.n||DEF_PH[k].n,gate:o.gate||DEF_PH[k].gate,steps:(o.steps&&o.steps.length?o.steps.map(x=>[x.s,x.t]):DEF_PH[k].steps),items:(o.items||[]).map(x=>({id:x.id,t:x.t,r:x.r,c:x.c?1:0,...(x.o?{o:x.o}:{})}))}:JSON.parse(JSON.stringify(DEF_PH[k])); }
   for(const [key,t] of Object.entries(TEMPLATES)) if(t.std) t.items=t.phases.flatMap(k=>stepsOf(key,k).map(([s,txt])=>[txt,'lead',phLabel(k),0,1])); }
+/* Day greeting: the first time SLATE OS opens on a working day (Sun–Thu), a full white screen with the
+   person's name large in SLATE red. It stays until they tap; after that, Home carries the day's details.
+   Once per person per day on each device. Weekends show the weekend joke on Home instead. */
+function daySplash(){
+  if(S.state!=='ready'||!S.uid||document.getElementById('day-splash')) return;
+  const now=new Date(), td=today(); if([5,6].includes(now.getDay())) return;
+  const key=td+':'+S.uid; if(pref.daySplash===key) return;
+  const first=(nameOf(S.uid)||'').trim().split(/\s+/)[0]; if(!first) return;
+  if(!document.getElementById('jost-font')){ const l=document.createElement('link'); l.id='jost-font'; l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap'; document.head.append(l); }
+  const hr=now.getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+  const day=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+  let done=false;
+  const go=()=>{ if(done) return; done=true; savePref('daySplash',key); el.classList.add('out'); document.removeEventListener('keydown',kd);
+    document.documentElement.style.overflow=''; setTimeout(()=>el.remove(),420); };
+  const kd=e=>{ if(['Enter',' ','Escape'].includes(e.key)){ e.preventDefault(); go(); } };
+  const btn=h('button',{class:'ds-go',type:'button',onclick:e=>{ e.stopPropagation(); go(); }},h('span',{text:'Start my day'}),h('i',{'aria-hidden':'true',text:'→'}));
+  const el=h('div',{id:'day-splash',role:'dialog','aria-modal':'true','aria-label':`${hello}, ${first}`,onclick:go},
+    h('div',{class:'ds-top'},h('b',{text:'SLATE OS'}),h('span',{text:`${day}, ${fmtD(td)}`})),
+    h('div',{class:'ds-mid'},h('div',{class:'ds-hello',text:hello+','}),h('div',{class:'ds-name',text:first}),h('i',{class:'ds-rule','aria-hidden':'true'})),
+    h('div',{class:'ds-bot'},btn,h('span',{class:'ds-tag',text:'Design with purpose'})));
+  document.body.append(el); document.documentElement.style.overflow='hidden'; document.addEventListener('keydown',kd);
+  setTimeout(()=>{ try{ btn.focus({preventScroll:true}); }catch(_){} },60);
+}
 function render(force){
   applyStd();
   const view=$('#view');
@@ -1830,6 +1874,7 @@ function render(force){
   view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView()));
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
+  try{ daySplash(); }catch(e){}
   restoreFocus(k);
   dashCount(view);
 }
