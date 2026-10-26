@@ -1320,6 +1320,79 @@
     addDecorator(20, () => placeBackupBanner(false));
   }
 
+  /* ---------------- entry log: in (morning greeting tap) and out (closed or last active after 7 pm) ----------------
+     Written through log_day_in / log_day_out; computer and mobile are kept apart. Only the Principal and the COO can read it. */
+  const DEV = (() => { const ua = navigator.userAgent || '';
+    return /Android|iPhone|iPad|iPod|Mobi/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'mobile' : 'computer'; })();
+  const dhakaHour = () => (new Date().getUTCHours() + 6) % 24;
+  let dlToken = null, dlInput = Date.now();
+  sb.auth.onAuthStateChange((_e, session) => { dlToken = session ? session.access_token : null; });
+  const canSeeLog = () => !!me && me.active !== false && ['principal', 'coo'].includes(me.designation);
+  function dayIn() { try { sb.rpc('log_day_in', { p_device: DEV }).then(() => {}, () => {}); } catch (_) {} }
+  function dayOut(src) {
+    if (dhakaHour() < 19 || !dlToken) return;
+    try { // keepalive lets the call finish while the window is closing
+      fetch(CFG.url + '/rest/v1/rpc/log_day_out', { method: 'POST', keepalive: true,
+        headers: { apikey: CFG.key, Authorization: 'Bearer ' + dlToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_device: DEV, p_src: src }) }).catch(() => {});
+    } catch (_) {}
+  }
+  function setupDayLog() {
+    window.slateDayIn = dayIn;
+    window.slateEntryLogView = entryLogView;
+    window.slateCanSeeEntryLog = canSeeLog;
+    ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => window.addEventListener(ev, () => { dlInput = Date.now(); }, { passive: true }));
+    window.addEventListener('pagehide', () => dayOut('closed'));
+    // on phones, switching away is how the app is "closed"
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && DEV === 'mobile') dayOut('closed'); });
+    // fallback when the close isn't caught (PC shut down): last activity after 7 pm, every 5 minutes while in use
+    setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - dlInput < 10 * 60000) dayOut('active'); }, 5 * 60000);
+  }
+  /* More › Entry log */
+  const EL = { day: null, rows: null, loading: false, err: '' };
+  const dhakaToday = () => new Date(Date.now() + 6 * 3600e3).toISOString().slice(0, 10);
+  const shiftDay = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const hm = t => t ? new Date(t).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Dhaka' }).replace(' ', ' ') : '';
+  async function loadEntryLog(day) {
+    EL.loading = true; EL.day = day;
+    const { data, error } = await sb.from('day_log').select('user_id,device,in_at,out_at,out_src').eq('day', day);
+    if (EL.day !== day) return;
+    EL.loading = false; EL.err = error ? friendly(error).message : ''; EL.rows = error ? [] : (data || []);
+    try { if (S.view === 'entries') render(true); } catch (_) {}
+  }
+  function entryLogView() {
+    const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
+    if (!canSeeLog()) return [el('p', { class: 'muted' }, 'Only the Principal and the COO can see the entry log.')];
+    const day = EL.day || dhakaToday(); if (EL.day !== day || (!EL.rows && !EL.loading)) loadEntryLog(day);
+    const td = dhakaToday(), dow = new Date(day + 'T00:00:00Z').getUTCDay(), weekend = dow === 5 || dow === 6;
+    const label = new Date(day + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    const nav = (n, t, dis) => { const b = el('button', { class: 'btn btn-sm', type: 'button', 'aria-label': t }, n < 0 ? '‹' : '›'); if (dis) b.disabled = true;
+      b.addEventListener('click', () => { EL.rows = null; loadEntryLog(shiftDay(day, n)); try { render(true); } catch (_) {} }); return b; };
+    const todayBtn = day === td ? null : (() => { const b = el('button', { class: 'linkish', type: 'button' }, 'Today'); b.addEventListener('click', () => { EL.rows = null; loadEntryLog(td); try { render(true); } catch (_) {} }); return b; })();
+    const head = el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Principal and COO'), el('h1', { class: 'h1' }, 'Entry log'),
+      el('p', { class: 'lead' }, 'In: the first tap on the morning greeting. Out: when SLATE OS was closed after 7 pm. Phone times are kept separate.')));
+    const bar = el('div', { class: 'bar', style: 'justify-content:space-between;align-items:center' },
+      el('div', { style: 'display:flex;gap:8px;align-items:center' }, nav(-1, 'Previous day'), el('b', { style: 'font-size:16px;min-width:0' }, label), nav(1, 'Next day', day >= td)), todayBtn || el('span'));
+    if (EL.err) return [head, bar, el('p', { class: 'err' }, EL.err)];
+    if (!EL.rows) return [head, bar, el('p', { class: 'muted' }, 'Loading…')];
+    const by = new Map(); EL.rows.forEach(r => { if (!by.has(r.user_id)) by.set(r.user_id, {}); by.get(r.user_id)[r.device] = r; });
+    const ppl = [...people.values()].filter(p => p.active !== false || by.has(p.id)).map(p => ({ p, c: (by.get(p.id) || {}).computer, m: (by.get(p.id) || {}).mobile }));
+    ppl.sort((a, b) => ((a.c && a.c.in_at) || '9') .localeCompare((b.c && b.c.in_at) || '9') || nm(a.p.id).localeCompare(nm(b.p.id)));
+    const outTxt = r => r && r.out_at ? hm(r.out_at) + (r.out_src === 'active' ? ' *' : '') : '—';
+    const inN = ppl.filter(x => x.c && x.c.in_at).length, outN = ppl.filter(x => x.c && x.c.out_at).length;
+    const tile = (n, l) => el('div', { class: 'slate-ad-t' }, el('b', {}, String(n)), el('span', {}, l));
+    const table = el('div', { class: 'tbl-wrap', style: 'overflow-x:auto' }, el('table', { class: 'tbl', style: 'width:100%;border-collapse:collapse' },
+      el('thead', {}, el('tr', {}, ...['Person', 'In', 'Out', 'Phone in', 'Phone out'].map((t, i) => el('th', { style: `text-align:${i ? 'right' : 'left'};padding:8px 10px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)` }, t)))),
+      el('tbody', {}, ...ppl.map(({ p, c, m }) => el('tr', {},
+        el('td', { style: 'padding:10px;border-bottom:1px solid var(--line)' }, el('b', { style: 'font-weight:600' }, nm(p.id)), el('div', { class: 'f-hint' }, [p.team, p.role_label].filter(Boolean).join(' · '))),
+        ...[c && c.in_at ? hm(c.in_at) : '—', outTxt(c), m && m.in_at ? hm(m.in_at) : '—', outTxt(m)].map((t, i) =>
+          el('td', { style: `padding:10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap;${i > 1 ? 'color:var(--muted)' : t === '—' ? 'color:var(--faint)' : 'font-weight:500'}` }, t)))))));
+    return [head, bar,
+      weekend && !EL.rows.length ? el('p', { class: 'f-hint' }, 'Weekend: no greeting, so nothing is logged.') : el('div', { class: 'slate-ad-ts' }, tile(`${inN}/${ppl.length}`, 'Came in (computer)'), tile(outN, 'Out logged after 7 pm')),
+      table,
+      el('p', { class: 'f-hint', style: 'margin:0' }, '* Last activity seen after 7 pm; the close itself wasn’t caught (for example, the computer was shut down). Out is recorded only after 7 pm, so someone who leaves earlier shows —. Times are Dhaka time.')];
+  }
+
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
   .slate-sheet{position:fixed;inset:0;z-index:1000;background:#fff;display:grid;place-items:center;
@@ -1553,6 +1626,7 @@
     setupMessages();
     setupReports();
     setupBackup();
+    setupDayLog();
     // Finance is a separate page; only ask whether to show its link. Anyone else gets null and sees nothing.
     sb.rpc('fin_role').then(({ data }) => { window.slateFinanceRole = ['principal', 'coo'].includes(data) ? data : null;
       try { if (window.slateFinanceRole && S.view === 'more') render(true); } catch (_) {} }, () => {});
