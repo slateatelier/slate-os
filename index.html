@@ -3380,11 +3380,13 @@ function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; ren
 function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&!S.projects[id].closed, okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
 const PFIELDS=['entry','completedOn','code','name','client','contact','phone','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
-const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
-const scopeLabel=(p,x)=>{ const q=SCOPE_QTY[x], n=q&&p&&p.scopeQty&&+p.scopeQty[x]; return n?`${x} · ${n} ${q.short}`:x; };
-const SCOPES=['Architectural design','Structural design','MEP design','Interior design','Common area interior design','Landscape design','3D visualization','Animation','Authority (RAJUK) drawings','Working drawings','Site supervision'];
+const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
+/* outsourced services: the consultant or vendor doing the work */
+const SCOPE_VENDOR={'Structural design':'Consultant','MEP design':'Consultant','Professional 3D visualization':'Vendor'};
+const scopeLabel=(p,x)=>{ const q=SCOPE_QTY[x], n=q&&p&&p.scopeQty&&+p.scopeQty[x], vn=SCOPE_VENDOR[x]&&p&&p.scopeVendor&&p.scopeVendor[x]; return [x,n?`${n} ${q.short}`:'',vn||''].filter(Boolean).join(' · '); };
+const SCOPES=['Architectural design','Structural design','MEP design','Interior design','Common area interior design','Landscape design','3D visualization','Professional 3D visualization','Animation','Authority (RAJUK) drawings','Working drawings','Site supervision'];
 const AGS=[['','Select…'],['none','Not signed yet'],['loi','Letter of intent'],['signed','Signed agreement'],['internal','Internal (no agreement)']];
-function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.scope=[...(p.scope||[])]; d.scopeQty={...(p.scopeQty||{})}; if(!id&&!amApprover()&&myPod()) d.pod=myPod();
+function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.scope=[...(p.scope||[])]; d.scopeQty={...(p.scopeQty||{})}; d.scopeVendor={...(p.scopeVendor||{})}; if(!id&&!amApprover()&&myPod()) d.pod=myPod();
   d.pods=id?podsOfProject(p):(myPod()&&!amApprover()?[myPod()]:[]); d.people=[]; S.sheet={type:'project',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{const el=document.getElementById('sh-code');el&&el.focus()},30); }
 function closeSheet(){ S.sheet=null; renderSheet(); }
 function renderSheet(fromData){
@@ -3704,10 +3706,12 @@ function sheetProject(){
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
   // standard services, plus any custom services typed in below (stored in scope like the rest)
   const scGrid=h('div',{style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 12px'});
-  const scItem=(x,i)=>{ const q=SCOPE_QTY[x];
-    const qty=q?h('div',{style:'display:'+(d.scope.includes(x)?'flex':'none')+';gap:6px;align-items:center;margin:4px 0 2px 26px;font-size:13px;color:var(--muted)'},h('span',{text:q.lbl}),h('input',{type:'number',min:'1',max:String(q.max),step:'1',inputmode:'numeric',id:'scq-'+i,value:d.scopeQty[x]||'',placeholder:'0','aria-label':x+' — '+q.lbl.toLowerCase()+' ('+q.unit+')',style:'width:76px;padding:4px 8px;font-size:14px',oninput:e=>{ d.scopeQty[x]=e.target.value; }}),h('span',{text:q.unit})):null;
-    const box=h('input',{type:'checkbox',id:'sc-'+i,checked:d.scope.includes(x),onchange:e=>{ e.target.checked?d.scope.push(x):d.scope.splice(d.scope.indexOf(x),1); if(qty){ qty.style.display=e.target.checked?'flex':'none'; if(e.target.checked) setTimeout(()=>qty.querySelector('input').focus(),0); } }});
-    return h('div',null,h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},box,x),qty); };
+  const scItem=(x,i)=>{ const q=SCOPE_QTY[x], vl=SCOPE_VENDOR[x], on=d.scope.includes(x), row='display:flex;gap:6px;align-items:center;margin:4px 0 2px 26px;font-size:13px;color:var(--muted)';
+    const qty=q?h('div',{style:row},h('span',{text:q.lbl}),h('input',{type:'number',min:'1',max:String(q.max),step:'1',inputmode:'numeric',id:'scq-'+i,value:d.scopeQty[x]||'',placeholder:'0','aria-label':x+' — '+q.lbl.toLowerCase()+' ('+q.unit+')',style:'width:76px;padding:4px 8px;font-size:14px',oninput:e=>{ d.scopeQty[x]=e.target.value; }}),h('span',{text:q.unit})):null;
+    const ven=vl?h('div',{style:row},h('span',{style:'flex:none',text:vl}),h('input',{type:'text',maxlength:'80',id:'scv-'+i,value:d.scopeVendor[x]||'',placeholder:vl==='Vendor'?'Vendor name (optional)':'Consultant name (optional)','aria-label':x+' — '+vl.toLowerCase()+' name',style:'flex:1;min-width:0;padding:4px 8px;font-size:14px',oninput:e=>{ d.scopeVendor[x]=e.target.value; }})):null;
+    const extra=qty||ven?h('div',{style:on?'':'display:none'},qty,ven):null;
+    const box=h('input',{type:'checkbox',id:'sc-'+i,checked:on,onchange:e=>{ e.target.checked?d.scope.push(x):d.scope.splice(d.scope.indexOf(x),1); if(extra){ extra.style.display=e.target.checked?'':'none'; if(e.target.checked) setTimeout(()=>extra.querySelector('input').focus(),0); } }});
+    return h('div',null,h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},box,x),extra); };
   const scCustom=(x,i)=>h('div',null,h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'scx-'+i,checked:true,onchange:()=>{ const j=d.scope.indexOf(x); if(j>=0) d.scope.splice(j,1); drawScope(); }}),h('span',{text:x}),h('span',{class:'f-hint',style:'margin:0',text:'custom'})));
   const drawScope=()=>{ const extra=d.scope.filter(x=>!SCOPES.includes(x)); scGrid.replaceChildren(...SCOPES.map(scItem),...extra.map(scCustom)); };
   const scIn=h('input',{type:'text',maxlength:'60',placeholder:'Another service, e.g. Façade lighting design','aria-label':'Add another service',style:'flex:1;min-width:0'});
@@ -3719,7 +3723,7 @@ function sheetProject(){
   drawScope();
   const scopeBox=h('div',null,scGrid,h('div',{style:'display:flex;gap:8px;margin-top:10px'},scIn,h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:scAdd,text:'+ Add'})));
   const submit=e=>{ e.preventDefault(); if(scIn.value.trim()) scAdd();
-    const v={}; PFIELDS.forEach(k=>{v[k]=(d[k]||'').trim()}); v.scope=[...d.scope]; v.scopeQty={}; for(const x of v.scope){ const q=SCOPE_QTY[x]; if(!q) continue; const raw=String(d.scopeQty[x]??'').trim(); if(!raw) continue; const n=Number(raw); if(!Number.isInteger(n)||n<1||n>q.max) return fail(`${x}: enter ${q.lbl.toLowerCase()} as a whole number from 1 to ${q.max} ${q.unit}.`); v.scopeQty[x]=n; }
+    const v={}; PFIELDS.forEach(k=>{v[k]=(d[k]||'').trim()}); v.scope=[...d.scope]; v.scopeQty={}; for(const x of v.scope){ const q=SCOPE_QTY[x]; if(!q) continue; const raw=String(d.scopeQty[x]??'').trim(); if(!raw) continue; const n=Number(raw); if(!Number.isInteger(n)||n<1||n>q.max) return fail(`${x}: enter ${q.lbl.toLowerCase()} as a whole number from 1 to ${q.max} ${q.unit}.`); v.scopeQty[x]=n; } v.scopeVendor={}; for(const x of v.scope){ if(!SCOPE_VENDOR[x]) continue; const nm=String(d.scopeVendor[x]??'').replace(/\s+/g,' ').trim(); if(nm) v.scopeVendor[x]=nm.toUpperCase(); }
     if(internal){
       const mine=myPod(); let ps=d.pods.filter(x=>pods().includes(x)); if(!ap&&mine){ ps=[mine,...ps.filter(x=>x!==mine)]; }
       if(!ps.length&&!(id?projMembers(S.projects[id]).length:d.people.length)) return fail('Choose at least one pod or one person for this project.');
