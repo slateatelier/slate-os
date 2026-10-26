@@ -554,6 +554,45 @@
   const daysAgo = t => t ? Math.floor((Date.now() - new Date(t).getTime()) / 864e5) : null;
   const agoTxt = d => d == null ? 'Never' : d === 0 ? 'Today' : d === 1 ? 'Yesterday' : d + ' days ago';
   const FOLLOW_UP = 'Please open SLATE OS today: answer your messages and check your tasks. From 1 Nov, work is assigned and tracked only there.';
+  /* one adoption percentage from the same four signals: 25 each, partial credit where the chip is amber */
+  function adoptScore(r) {
+    const last = [r.seen_at, r.last_action].filter(Boolean).sort().pop() || null, d = daysAgo(last), od = daysAgo(r.oldest_msg);
+    const push = r.devices_ok > 0 ? 'on' : r.devices > 0 ? 'pending' : 'off', u = r.updates_7d || 0;
+    const parts = [
+      { k: 'open', pts: d != null && d < 2 ? 25 : 0, fix: 'Open SLATE OS every working day' },
+      { k: 'push', pts: push === 'on' ? 25 : push === 'pending' ? 15 : 0, fix: push === 'pending' ? 'Notifications are on but none has reached your phone yet' : 'Turn on notifications on your phone (More › Account)' },
+      { k: 'msgs', pts: !r.msgs_open ? 25 : od >= 1 ? 0 : 15, fix: `Answer your ${r.msgs_open} message${r.msgs_open === 1 ? '' : 's'}` },
+      { k: 'upd', pts: u >= 3 ? 25 : u ? 15 : 0, fix: u ? 'Update your tasks a few more times this week' : 'Update your tasks this week' }];
+    const pct = parts.reduce((a, p) => a + p.pts, 0);
+    return { pct, next: (parts.find(p => p.pts === 0) || parts.find(p => p.pts < 25) || {}).fix || '' };
+  }
+  const adoptTone = p => p >= 85 ? '#34C759' : p >= 60 ? '#FF9500' : '#FF3B30';
+  /* Home: my own adoption, one line, for two weeks around go-live */
+  const ADOPT_HOME_UNTIL = '2026-11-10';
+  const MY_AD = { row: null, at: 0, loading: false };
+  async function loadMyAdoption(force) {
+    if (MY_AD.loading || (!force && MY_AD.at && Date.now() - MY_AD.at < 120000)) return;
+    MY_AD.loading = true;
+    const { data, error } = await sb.rpc('my_adoption');
+    MY_AD.loading = false; MY_AD.at = Date.now();
+    if (!error) { MY_AD.row = (data && data[0]) || null; placeMyAdoption(true); }
+  }
+  function placeMyAdoption(force) {
+    const old = document.getElementById('slate-my-adopt');
+    let show = false;
+    try { show = S.view === 'mine' && today() <= ADOPT_HOME_UNTIL && !!me && me.designation !== 'principal'; } catch (_) {}
+    if (!show) { if (old) old.remove(); return; }
+    loadMyAdoption(false);
+    if (!MY_AD.row) { if (old) old.remove(); return; }
+    const head = document.querySelector('main .page-h.home-h > div'); if (!head) return;
+    if (old && !force && head.contains(old)) return;
+    const { pct, next } = adoptScore(MY_AD.row), col = adoptTone(pct);
+    const box = el('div', { id: 'slate-my-adopt', class: 'slate-my-ad', title: 'Your SLATE OS adoption: opened in the last 2 days, phone notifications, messages answered, task updates this week (25% each)' },
+      el('div', { class: 'slate-my-ad-l' }, el('span', {}, 'SLATE OS adoption'), el('b', { style: 'color:' + col }, pct + '%')),
+      el('div', { class: 'slate-my-ad-bar', 'aria-hidden': 'true' }, el('i', { style: `width:${pct}%;background:${col}` })),
+      el('div', { class: 'slate-my-ad-n' }, pct >= 100 ? 'All set. Keep it up.' : 'Next: ' + next));
+    if (old) old.replaceWith(box); else head.append(box);
+  }
   function adoptionView() {
     loadAdoption(false);
     const nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
@@ -580,7 +619,8 @@
       return el('div', { class: 'slate-ad-r' + (r.flag ? ' flag' : '') },
         el('div', { class: 'bar', style: 'justify-content:space-between;flex-wrap:nowrap' },
           el('div', { style: 'display:flex;gap:8px;align-items:center;min-width:0' }, ...(a ? [a] : []),
-            el('div', { style: 'min-width:0' }, el('b', {}, nm(r.user_id)), el('div', { class: 'f-hint' }, [p.team, p.role_label].filter(Boolean).join(' · ')))), msg),
+            el('div', { style: 'min-width:0' }, el('b', {}, nm(r.user_id)), el('div', { class: 'f-hint' }, [p.team, p.role_label].filter(Boolean).join(' · ')))),
+          el('div', { style: 'display:flex;gap:10px;align-items:center;flex:none' }, (() => { const sc = adoptScore(r).pct; return el('b', { style: 'font-size:17px;font-variant-numeric:tabular-nums;color:' + adoptTone(sc), title: 'Adoption: 25% each for opened, notifications, messages, updates' }, sc + '%'); })(), msg)),
         el('div', { class: 'slate-ad-cs' },
           chip(r.d == null ? 'Never opened' : 'Opened ' + agoTxt(r.d).toLowerCase(), r.silent ? 'bad' : 'ok'),
           chip(r.push === 'on' ? 'Notifications on' : r.push === 'pending' ? 'Notifications on, none delivered yet' : 'Notifications off', r.push === 'on' ? 'ok' : r.push === 'pending' ? 'warn' : 'bad'),
@@ -890,7 +930,9 @@
     sb.channel('slate-my-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + authUser.id },
       ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); msgRefresh(); syncBadge(); if (ev.new.kind === 'reply') loadSent(); if (ev.new.kind === 'reminder') loadReminders(); } }).subscribe();
     addDecorator(10, () => placeMessages(false));
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); loadAnswered(); } });
+    addDecorator(5, () => placeMyAdoption(false));
+
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); loadAnswered(); loadMyAdoption(true); } });
   }
 
   /* ---------------- accounts: the Principal and the COO reset passwords and add people ---------------- */
@@ -1311,6 +1353,10 @@
   .slate-ad-t{background:#F2F2F7;border-radius:12px;padding:12px 14px;display:grid;gap:2px}.slate-ad-t b{font-size:22px}.slate-ad-t span{font-size:13px;color:#636366}
   .slate-ad-r{background:#F2F2F7;border-radius:12px;padding:12px 14px;display:grid;gap:10px}.slate-ad-r.flag{box-shadow:inset 3px 0 0 #d7262b}
   .slate-ad-cs{display:flex;flex-wrap:wrap;gap:6px}.slate-ad-c{font-size:13px;padding:4px 10px;border-radius:999px;background:#fff;color:#3a3a3c}
+  .slate-my-ad{margin-top:10px;max-width:360px;display:grid;gap:5px}
+  .slate-my-ad-l{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;color:var(--muted,#636366)}.slate-my-ad-l b{font-size:15px;font-variant-numeric:tabular-nums}
+  .slate-my-ad-bar{height:4px;border-radius:2px;background:var(--line,#E5E5EA);overflow:hidden}.slate-my-ad-bar i{display:block;height:100%;border-radius:2px}
+  .slate-my-ad-n{font-size:12.5px;color:var(--muted,#636366)}
   .slate-ad-c.ok{color:#1f7a35}.slate-ad-c.warn{color:#a35a00}.slate-ad-c.bad{color:#d70015;font-weight:600}
   .slate-pt{appearance:none;border:0;background:#fff;border-radius:10px;font:inherit;color:inherit;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) 22px;gap:10px;align-items:center;padding:8px 10px;text-align:left}
   .slate-pt:hover{background:#fafafa}
