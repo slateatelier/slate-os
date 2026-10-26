@@ -1,0 +1,113 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Invoice</title>
+<meta name="theme-color" content="#231f20">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one centred card under the black SLATE tab, as on the letterhead pad */
+:root{
+  --bg:#F2F3F4; --card:#FFFFFF; --ink:#1A1D21; --muted:#5F6670; --line:#D8DCE0; --tab:#231F20; --red:#C41E29; --on-red:#FFFFFF;
+  --f-display:"Jost","Futura","Century Gothic",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root{--bg:#111315;--card:#1A1D20;--ink:#E8EBEE;--muted:#9AA2AB;--line:#2E3338;--tab:#000000;--red:#EE4A52;--on-red:#1A0B0C;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased;
+  padding:0 max(16px,env(safe-area-inset-right,0px)) max(32px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:440px;margin:0 auto}
+.tab{width:64px;margin:0 0 0 auto;background:var(--tab);padding:calc(30px + env(safe-area-inset-top,0px)) 0 10px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.tab svg{width:30px;height:auto;display:block}
+.tab span{color:#fff;font:500 8px/1 var(--f-display);letter-spacing:.32em;padding-left:.32em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:24px 22px;margin-top:20px}
+.from{font:500 12px/1 var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+h1{font:600 26px/1.15 var(--f-display);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 2px}
+.no{font:400 13px/1.4 var(--f-mono);color:var(--muted);word-break:break-all}
+dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:20px 0;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+dt{color:var(--muted);font-size:13px}dd{margin:0;text-align:right;min-width:0;overflow-wrap:anywhere}
+.amt{font:600 22px/1.2 var(--f-display);font-variant-numeric:tabular-nums}
+.btns{display:grid;gap:10px}
+.btn{appearance:none;display:flex;justify-content:center;align-items:center;gap:8px;width:100%;padding:13px 16px;border-radius:6px;font:500 15px/1.2 var(--f-body);cursor:pointer;text-decoration:none;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.btn.pri{background:var(--red);border-color:var(--red);color:var(--on-red)}
+.btn:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.btn[disabled]{opacity:.6;cursor:wait}
+.note{font-size:13px;color:var(--muted);margin:16px 0 0}
+.msg h1{font-size:20px;text-transform:none;letter-spacing:.02em}
+.msg p{color:var(--muted);margin:8px 0 0}
+.load{color:var(--muted);text-align:center;padding:24px 0}
+footer{text-align:center;color:var(--muted);font:400 11px/1.6 var(--f-display);letter-spacing:.24em;margin-top:24px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style></head><body>
+<div class="wrap">
+  <div class="tab" aria-hidden="true"><svg viewBox="0 0 106 108"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg><span>SLATE</span></div>
+  <main class="card" id="card" aria-live="polite"><div class="load">Opening your invoice…</div></main>
+  <footer>DESIGN WITH PURPOSE</footer>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/config.js"></script>
+<script>
+(function () {
+  'use strict';
+  var card = document.getElementById('card');
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var nf = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+  var day = function (s) { return s ? new Date(s + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''; };
+  function message(title, body) {
+    card.className = 'card msg';
+    card.innerHTML = '<h1>' + esc(title) + '</h1><p>' + esc(body) + '</p><p>SLATE · 01749-390284 · info@slate-atelier.com</p>';
+  }
+  var token = (location.pathname.match(/^\/i\/([A-Za-z0-9]{32})\/?$/) || [])[1];
+  if (!token) { message('This link isn’t complete', 'Open the link exactly as it came in the WhatsApp message, or ask SLATE to send it again.'); return; }
+  if (!window.supabase || !window.SLATE_CONFIG) { message('Couldn’t open the invoice', 'The page didn’t finish loading. Check your connection and open the link again.'); return; }
+  var sb = window.supabase.createClient(window.SLATE_CONFIG.url, window.SLATE_CONFIG.key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+
+  sb.rpc('fin_link_open', { p_token: token }).then(function (r) {
+    if (r.error) throw r.error;
+    var d = r.data || {};
+    if (!d.ok) {
+      if (d.why === 'expired') return message('This link has expired', 'Please ask SLATE for a fresh copy of the invoice.');
+      if (d.why === 'off') return message('This invoice is no longer available here', 'The link was withdrawn or the invoice was replaced. Please contact SLATE for the current invoice.');
+      return message('We couldn’t find this invoice', 'Open the link exactly as it came in the WhatsApp message, or ask SLATE to send it again.');
+    }
+    var name = String(d.no || 'invoice').replace(/[^\w.-]+/g, '-') + '.pdf';
+    document.title = 'Invoice ' + d.no + ' · ' + d.entity;
+    card.className = 'card';
+    card.innerHTML =
+      '<div class="from">' + esc(d.entity) + '</div>' +
+      '<h1>Invoice</h1><div class="no">' + esc(d.no) + '</div>' +
+      '<dl><dt>Bill to</dt><dd>' + esc(d.client) + '</dd>' +
+      '<dt>Project</dt><dd>' + esc(d.project) + '</dd>' +
+      '<dt>Date</dt><dd>' + esc(day(d.date)) + '</dd>' +
+      '<dt>Due</dt><dd>' + esc(day(d.due)) + '</dd>' +
+      '<dt>Invoice total</dt><dd class="amt">BDT ' + esc(nf.format(d.total || 0)) + '</dd></dl>' +
+      '<div class="btns"><button class="btn pri" id="dl" type="button">Download PDF</button><button class="btn" id="view" type="button">View PDF</button></div>' +
+      '<p class="note">The PDF shows the full invoice, what has been paid on earlier phases, and SLATE’s bank details. Payment is by bank transfer, cheque or cash against an official money receipt.</p>';
+    var blob = null;
+    function getPdf() {
+      if (blob) return Promise.resolve(blob);
+      return sb.storage.from('fin-invoices').download(d.file).then(function (x) { if (x.error) throw x.error; blob = new Blob([x.data], { type: 'application/pdf' }); return blob; });
+    }
+    function busy(btn, on, label) { btn.disabled = on; btn.textContent = label; }
+    document.getElementById('dl').addEventListener('click', function () {
+      var btn = this; busy(btn, true, 'Preparing…');
+      getPdf().then(function (b) {
+        var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000); busy(btn, false, 'Download PDF');
+      }).catch(function () { busy(btn, false, 'Download PDF'); message('Couldn’t download the PDF', 'Please try again in a moment, or ask SLATE to resend it.'); });
+    });
+    document.getElementById('view').addEventListener('click', function () {
+      var btn = this, w = window.open('', '_blank'); busy(btn, true, 'Opening…');
+      getPdf().then(function (b) {
+        var u = URL.createObjectURL(b); if (w) w.location.href = u; else location.href = u; busy(btn, false, 'View PDF');
+      }).catch(function () { if (w) w.close(); busy(btn, false, 'View PDF'); message('Couldn’t open the PDF', 'Please try again in a moment, or ask SLATE to resend it.'); });
+    });
+  }).catch(function () { message('Couldn’t open the invoice', 'Check your connection and open the link again.'); });
+})();
+</script>
+</body></html>

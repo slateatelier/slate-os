@@ -18,7 +18,7 @@ body{margin:0}[hidden]{display:none!important}
   --bg:#F2F3F4; --surface:#FFFFFF; --sunk:#E9EBED; --ink:#1A1D21; --muted:#5F6670; --line:#D8DCE0;
   --red:#C41E29; --red-soft:#F6E2E3; --on-red:#FFFFFF;
   --good:#1D7448; --good-soft:#E0F0E6; --warn:#8F5600; --warn-soft:#F6E9D1; --bad:#B0222B; --bad-soft:#F5E0E1;
-  --inflow:#2C333B; --grid:#E3E6E9;
+  --inflow:#2C333B; --grid:#E3E6E9; --wa:#128C4B;
   --f-display:"Jost","Futura","Century Gothic",system-ui,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
@@ -77,6 +77,8 @@ main{padding-block:20px 64px}
 .btn.pri{background:var(--red);border-color:var(--red);color:var(--on-red)}
 .btn.pri:hover{filter:brightness(1.06)}
 .btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.wa{background:var(--wa);border-color:var(--wa);color:#fff}.btn.wa:hover{filter:brightness(1.06)}a.btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}a.btn.wa{color:#fff}
+.wa-msg{font:13px/1.5 var(--f-body);white-space:pre-wrap;background:var(--sunk);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin:0 0 8px;max-height:40vh;overflow:auto}
 .btn.ghost:hover{color:var(--ink);background:var(--sunk)}
 .btn.sm{padding:5px 10px;font-size:12px}
 .btn.danger{color:var(--bad)}

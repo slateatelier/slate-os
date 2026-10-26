@@ -67,9 +67,10 @@ const entOf = x => ENTITIES.includes(x?.entity) ? x.entity : 'SLATE';
 const INTERNAL_TYPES = ['studioops', 'studiodev', 'studiomgmt', 'studiobd', 'studiohr', 'studiofin'];
 
 /* ---------- state ---------- */
-const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, woTerms: DEFAULT_WO_TERMS, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [] };
+const DEFAULT_WA_MSG = 'Dear {client},\n\nPlease find invoice {no} for {project}. Amount payable: BDT {amount}, due {due}.\n\nView and download: {link}\n\nThank you,\n{company}';
+const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, woTerms: DEFAULT_WO_TERMS, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [], waOn: false, waMsg: DEFAULT_WA_MSG };
 const S = {
-  role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
+  role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], links: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
   os: [], people: {}, audit: null, loaded: false, fy: fyOf(today()), tab: 'overview',
   f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open', rep: 'pl', basis: 'billed', bm: '', guide: '' }
 };
@@ -188,6 +189,11 @@ async function loadAux() {
     .sort((a, b) => (a.code || '').localeCompare(b.code || ''));
   S.people = {}; (ppl.data || []).forEach(p => { S.people[p.id] = p.label || p.full_name || 'Someone'; });
   S.profiles = (ppl.data || []).filter(p => p.active && p.team !== 'Chalk Create');
+  await loadLinks();
+}
+async function loadLinks() {
+  const { data, error } = await sb.from('fin_links').select('*').order('created_at', { ascending: false }).limit(1000);
+  if (!error) S.links = data || [];
 }
 async function loadAudit() {
   const { data, error } = await sb.from('fin_audit').select('*').order('id', { ascending: false }).limit(300);
@@ -419,6 +425,7 @@ function projectForm(p) {
       <label class="f" for="p_acct">Pays into (bank invoices)<select id="p_acct" name="payAcctId"></select></label>
     </div>
     <p class="hint" id="pEntHint" style="margin:-6px 0 0">${p ? 'Changing this applies to new invoices. Issued invoices keep the name and account they went out with.' : 'The name on this project’s invoices and the account clients pay into. You can change it later.'}</p>
+    <label class="f" for="p_wa">Billing contact's WhatsApp<input id="p_wa" name="clientWa" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="${esc(src.clientWa ? '0' + String(src.clientWa).slice(3) : '')}"></label>
     <label class="f" for="p_caddr">Client billing address<textarea id="p_caddr" name="clientAddress" rows="2" placeholder="Printed under Bill to on invoices">${esc(src.clientAddress)}</textarea></label>
     <div class="fg">
       <label class="f" for="p_area">Construction area (sft)<input id="p_area" name="areaSft" type="number" min="0" step="1" value="${esc(src.areaSft)}"></label>
@@ -447,6 +454,8 @@ function projectForm(p) {
       const data = { osId: f.osId.value, code: f.code.value.trim().toUpperCase(), name: f.name.value.trim(), client: f.client.value.trim(), location: f.location.value.trim(), clientAddress: f.clientAddress.value.trim(),
         entity: f.entity.value, payAcctId: f.payAcctId.value, type: f.type.value, areaSft: +f.areaSft.value || 0, rate: +f.rate.value || 0, fee: +f.fee.value || 0, milestones, note: f.note.value.trim(), status: f.status ? f.status.value : (p?.status || 'active') };
       if (S.projects.some(x => x.code === data.code && x.id !== p?.id)) { toast('Another project already uses that code.'); return; }
+      const wa = f.clientWa.value.trim(); data.clientWa = wa ? waNum(wa) : '';
+      if (wa && !data.clientWa) { toast('Enter the WhatsApp number as a Bangladeshi mobile, e.g. 01712345678.'); f.clientWa.focus(); return; }
       const ok = p ? await run(() => putDoc('projects', p.id, { ...strip(p), ...data }), 'Project saved') : await run(() => addDoc('projects', data), 'Project fee added');
       if (ok) closeSheet(); });
   });
@@ -603,12 +612,14 @@ function invoiceSheet(i) {
     ${st !== 'draft' ? `<div class="sec-t" style="margin-top:18px">Payments received</div>
     <div class="mini-list rows" style="margin-top:10px">${recs.length ? recs.map(r => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;cursor:default"><div style="min-width:0"><div class="t">${fmtDate(r.date)} · ${esc(partsLabel(r) || r.method || '')}</div><div class="sub">${r.mrNo ? `<span class="mono">${esc(r.mrNo)}</span> · ` : ''}${r.ref ? `Ref ${esc(r.ref)} · ` : ''}${+r.ait ? `AIT ${tk(r.ait)} · ` : ''}${+r.vds ? `VDS ${tk(r.vds)} · ` : ''}by ${who(r.createdBy)}</div></div><div class="amt">${tk(r.received)}</div>
       <div style="display:flex;gap:4px">${r.mrNo ? `<button class="btn ghost sm" data-act="doc-receipt" data-id="${r.id}">Receipt</button>` : ''}${!locked(r.date) ? `<button class="btn ghost sm danger" data-act="del-receipt" data-id="${r.id}">Remove</button>` : ''}</div></div>`).join('') : `<div class="empty" style="padding:14px">No payments recorded yet.</div>`}</div>` : ''}
+    ${waBlock(i, st)}
     <p class="hint">Raised by ${who(i.createdBy)}${i.updatedBy && i.updatedAt !== i.createdAt ? ` · last change by ${who(i.updatedBy)}, ${fmtWhen(i.updatedAt)}` : ''}</p>
     <div class="foot">
       ${st !== 'void' ? `<button class="btn" data-act="doc-invoice" data-id="${i.id}">${st === 'draft' ? 'Preview' : 'Print / PDF'}</button>` : ''}
       ${st === 'draft' && !lk ? `<button class="btn danger" data-act="del-invoice" data-id="${i.id}">Delete draft</button><button class="btn" data-act="edit-invoice" data-id="${i.id}">Edit</button><button class="btn pri" data-act="issue-invoice" data-id="${i.id}">Issue invoice</button>` : ''}
       ${['issued', 'part', 'overdue'].includes(st) && !lk ? `<button class="btn" data-act="due-invoice" data-id="${i.id}">Change due date</button>` : ''}
       ${['issued', 'overdue'].includes(st) && !recs.length && !lk ? `<button class="btn danger" data-act="void-invoice" data-id="${i.id}">Void</button>` : ''}
+      ${waReady(i) ? `<button class="btn" data-act="wa-share" data-id="${i.id}">Share PDF</button><button class="btn wa" data-act="wa-send" data-id="${i.id}">Send to client</button>` : ''}
       ${['issued', 'part', 'overdue'].includes(st) ? `<button class="btn pri" data-act="new-receipt" data-id="${i.id}">Record payment</button>` : ''}
     </div>`);
 }
@@ -804,6 +815,93 @@ function openDoc(html, name) {
   const w = window.open(url, '_blank');
   if (!w) { saveFile(name, html, 'text/html'); toast('Pop-ups are blocked, so the document was downloaded instead.'); }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* ----- Invoices by WhatsApp (switched on in Settings) -----
+   Share PDF: the letterhead invoice as a PDF, handed to the phone's share menu, sent from the user's own WhatsApp.
+   Send to client: the PDF goes to a private bucket under a random 32-character token; the client gets
+   os.slate-atelier.com/i/<token> in a pre-written WhatsApp message. Each open is counted for Finance. */
+const waNum = raw => { let n = String(raw || '').replace(/\D/g, ''); if (n.startsWith('00')) n = n.slice(2);
+  if (/^01\d{9}$/.test(n)) n = '88' + n; if (/^1\d{9}$/.test(n)) n = '880' + n; return /^8801\d{9}$/.test(n) ? n : ''; };
+const waShow = n => n ? '+' + n.slice(0, 3) + ' ' + n.slice(3, 7) + '-' + n.slice(7) : '';
+const waReady = i => !!S.settings.waOn && ['issued', 'part', 'overdue'].includes(invStatus(i));
+const linksOf = i => S.links.filter(l => l.invoice_id === i.id);
+const linkUrl = t => `${location.origin}/i/${t}`;
+function waBlock(i, st) {
+  const ls = linksOf(i); if (!ls.length && !waReady(i)) return '';
+  const p = prj(i.projectId) || {};
+  const row = l => { const off = l.revoked_at || new Date(l.expires_at) < new Date();
+    const seen = l.open_count ? `opened ${l.open_count}×, last ${fmtWhen(l.last_opened_at)}` : 'not opened yet';
+    return l.kind === 'pdf' ? `<div class="row" style="grid-template-columns:minmax(0,1fr);cursor:default"><div style="min-width:0"><div class="t">PDF shared</div><div class="sub">${fmtWhen(l.created_at)} · by ${who(l.created_by)}</div></div></div>`
+      : `<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><div style="min-width:0"><div class="t">Link to ${esc(waShow(l.phone) || 'client')} · <span style="color:var(${off ? '--muted' : l.open_count ? '--good' : '--warn'})">${l.revoked_at ? 'switched off' : off ? 'expired' : seen}</span></div><div class="sub">${fmtWhen(l.created_at)} · by ${who(l.created_by)}</div></div>
+        ${!off ? `<div style="display:flex;gap:4px"><button class="btn ghost sm" data-act="wa-copy" data-v="${esc(linkUrl(l.token))}">Copy link</button><button class="btn ghost sm danger" data-act="wa-off" data-id="${l.id}">Switch off</button></div>` : '<span></span>'}</div>`; };
+  return `<div class="sec-t" style="margin-top:18px">WhatsApp</div>
+    ${waReady(i) && !p.clientWa ? `<p class="hint" style="margin:8px 0 0">No billing WhatsApp number on this project yet. Add it with Edit on the project to use Send to client.</p>` : ''}
+    ${ls.length ? `<div class="mini-list rows" style="margin-top:10px">${ls.map(row).join('')}</div>` : `<p class="hint" style="margin:8px 0 0">Not sent by WhatsApp yet.</p>`}`;
+}
+/* the letterhead invoice as an A4 PDF: rendered off-screen at full size, captured, placed on one page */
+let pdfLibs;
+const loadScript = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('Couldn’t load the PDF maker. Check your connection and try again.')); document.head.append(s); });
+async function invoicePdf(i) {
+  pdfLibs = pdfLibs || Promise.all([window.html2canvas || loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
+    window.jspdf || loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')]).catch(e => { pdfLibs = null; throw e; });
+  await pdfLibs;
+  const fr = document.createElement('iframe');
+  fr.setAttribute('aria-hidden', 'true'); fr.tabIndex = -1;
+  fr.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:1300px;border:0;opacity:0;pointer-events:none';
+  document.body.append(fr);
+  try {
+    await new Promise(ok => { fr.onload = ok; fr.srcdoc = invoiceDoc(i).replace(/<div class="bar">[\s\S]*?<\/div>/, ''); });
+    const d = fr.contentDocument; try { await Promise.race([d.fonts.ready, new Promise(r => setTimeout(r, 4000))]); } catch (_) {}
+    await new Promise(r => setTimeout(r, 150));
+    const page = d.querySelector('.page'); page.style.margin = '0'; page.style.boxShadow = 'none'; page.style.zoom = '1';
+    const canvas = await window.html2canvas(page, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 900 });
+    const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 210, 297);
+    pdf.setProperties({ title: `Invoice ${i.no}`, author: entOf(i.entity ? i : prj(i.projectId)) });
+    return new File([pdf.output('blob')], `${fileSafe(i.no)}.pdf`, { type: 'application/pdf' });
+  } finally { fr.remove(); }
+}
+/* Phones only share when the share call comes straight from a tap, so the PDF is made first and the
+   person taps once more to send it. */
+async function waShare(i, btn) {
+  btn.disabled = true; const t = btn.textContent; btn.textContent = 'Making PDF…';
+  let file; try { file = await invoicePdf(i); } catch (e) { toast(e.message || 'Couldn’t make the PDF.'); btn.disabled = false; btn.textContent = t; return; }
+  const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+  openSheet(`${sheetHead('Share PDF', `${esc(i.no)} · ${esc((prj(i.projectId) || {}).client || '')}`)}
+    <p style="margin:0 0 6px">${canShare ? 'The PDF is ready. Tap Share, choose WhatsApp, then pick the client.' : 'This device can’t pass files to WhatsApp directly. Download the PDF, then attach it in WhatsApp.'}</p>
+    <p class="hint">${esc(file.name)} · ${Math.max(1, Math.round(file.size / 1024))} KB</p>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Close</button><button class="btn" type="button" id="waDl">Download PDF</button>${canShare ? '<button class="btn wa" type="button" id="waGo">Share</button>' : ''}</div>`, root => {
+    $('#waDl', root).addEventListener('click', () => saveFile(file.name, file, 'application/pdf'));
+    const go = $('#waGo', root); if (go) go.addEventListener('click', async () => {
+      try { await navigator.share({ files: [file], title: `Invoice ${i.no}` }); }
+      catch (e) { if (e.name !== 'AbortError') toast('Sharing didn’t work on this device. Download the PDF instead.'); return; }
+      await sb.from('fin_links').insert({ kind: 'pdf', invoice_id: i.id }); await loadLinks(); toast('Shared'); invoiceSheet(i); });
+  });
+}
+async function waSend(i, btn) {
+  const p = prj(i.projectId) || {};
+  if (!p.clientWa) { toast('Add the billing contact’s WhatsApp number on the project first.'); return; }
+  btn.disabled = true; const t = btn.textContent; btn.textContent = 'Preparing…';
+  try {
+    const file = await invoicePdf(i);
+    const tok = Array.from(crypto.getRandomValues(new Uint8Array(32)), x => ABC[x % ABC.length]).join('');
+    const path = `${tok}/${fileSafe(i.no)}.pdf`;
+    const up = await sb.storage.from('fin-invoices').upload(path, file, { contentType: 'application/pdf', upsert: false });
+    if (up.error) throw up.error;
+    const ins = await sb.from('fin_links').insert({ kind: 'link', token: tok, invoice_id: i.id, file_path: path, phone: p.clientWa, expires_at: new Date(Date.now() + 365 * 864e5).toISOString() });
+    if (ins.error) throw ins.error;
+    await loadLinks();
+    const btd = billingToDate(i, p), amount = nf.format(Math.round(btd ? btd.payNow : Math.max(0, invTotal(i) - invSettled(i))));
+    const fill = { client: p.client || '', no: i.no, project: p.name || '', amount, due: fmtDate(i.due), link: linkUrl(tok), company: entOf(i.entity ? i : p) };
+    const msg = (S.settings.waMsg || DEFAULT_WA_MSG).replace(/\{(\w+)\}/g, (m, k) => k in fill ? fill[k] : m);
+    const href = `https://wa.me/${p.clientWa}?text=${encodeURIComponent(msg)}`;
+    openSheet(`${sheetHead('Send to client', `${esc(i.no)} · ${esc(waShow(p.clientWa))}`)}
+      <p style="margin:0 0 8px">The private link is ready. Open WhatsApp, check the message and tap send there.</p>
+      <pre class="wa-msg">${esc(msg)}</pre>
+      <p class="hint">The client sees this invoice only. Its opens show on the invoice under WhatsApp, and you can switch the link off there.</p>
+      <div class="foot"><button class="btn ghost" type="button" data-act="close">Close</button><button class="btn" type="button" data-act="wa-copy" data-v="${esc(msg)}">Copy message</button><a class="btn wa" href="${esc(href)}" target="_blank" rel="noopener">Open WhatsApp</a></div>`);
+  } catch (e) { toast(friendly(e)); btn.disabled = false; btn.textContent = t; }
 }
 
 /* ----- Expenses (the Principal approves every one) ----- */
@@ -2275,6 +2373,13 @@ function settings() {
     <label class="f" for="s_wot">Standard terms on new work orders<textarea id="s_wot" name="woTerms" rows="3">${esc(s.woTerms)}</textarea></label>
     <div class="foot"><button class="btn pri" type="submit">Save settings</button></div>
   </form></div></div>
+  <div class="panel"><div class="ph"><h3>Send invoices by WhatsApp</h3>${chip(s.waOn ? 'paid' : '', s.waOn ? 'On' : 'Off')}</div><div class="pb"><form id="waForm">
+    <label class="check" for="w_on"><input id="w_on" name="waOn" type="checkbox" ${s.waOn ? 'checked' : ''}> Show <b>Share PDF</b> and <b>Send to client</b> on issued invoices</label>
+    <p class="hint">Share PDF sends the invoice as an attachment from your own WhatsApp; you pick the contact. Send to client opens the client's chat, using the number saved on the project, with a private link to the invoice, and shows here when they open it. Switching this off hides the buttons; links already sent keep working until you switch them off on the invoice.</p>
+    <label class="f" for="w_msg">Message for Send to client<textarea id="w_msg" name="waMsg" rows="7">${esc(s.waMsg || DEFAULT_WA_MSG)}</textarea></label>
+    <p class="hint">Fill-ins: {client} {no} {project} {amount} (total payable now) {due} {link} {company} (SLATE or SLATE ATELIER, from the project).</p>
+    <div class="foot"><button class="btn" type="button" data-act="wa-msg-reset">Reset message</button><button class="btn pri" type="submit">Save</button></div>
+  </form></div></div>
   <div class="panel"><div class="ph"><h3>Close a financial year</h3><span class="meta">${isPrincipal() ? 'Principal only' : 'The Principal closes and reopens years'}</span></div>
     <div class="pb hint" style="padding-bottom:4px">Once a year is closed, its invoices, payments, expenses, transfers and month-end checks can't be added, changed or removed. Reopen it for a late correction, then close it again.</div>
     <div class="rows">${fys.map(y => { const isL = (s.lockedFYs || []).map(Number).includes(y);
@@ -2315,6 +2420,12 @@ document.addEventListener('click', async ev => {
     case 'due-invoice': { const i = inv(); if (i) dueForm(i); break; }
     case 'new-receipt': { const i = inv(); if (i) receiptForm(i); break; }
     case 'del-receipt': { const r = S.receipts.find(x => x.id === id); if (r && armed(b) && await run(() => delDoc('receipts', id), 'Payment removed')) { const i = S.invoices.find(x => x.id === r.invoiceId); if (i) invoiceSheet(i); else closeSheet(); } break; }
+    case 'wa-share': { const i = inv(); if (i) waShare(i, b); break; }
+    case 'wa-send': { const i = inv(); if (i) waSend(i, b); break; }
+    case 'wa-off': { const l = S.links.find(x => String(x.id) === id); if (l && armed(b)) { const { error } = await sb.from('fin_links').update({ revoked_at: new Date().toISOString() }).eq('id', l.id);
+      if (error) toast(friendly(error)); else { await loadLinks(); toast('Link switched off. The client can no longer open it.'); const i = S.invoices.find(x => x.id === l.invoice_id); if (i) invoiceSheet(i); } } break; }
+    case 'wa-copy': { const t = b.dataset.v; try { await navigator.clipboard.writeText(t); toast('Copied'); } catch (_) { toast('Couldn’t copy. Select the text and copy it.'); } break; }
+    case 'wa-msg-reset': { const t = $('#w_msg'); if (t) t.value = DEFAULT_WA_MSG; break; }
     case 'doc-invoice': { const i = inv(); if (i) openDoc(invoiceDoc(i), `${fileSafe(i.no)}.html`); break; }
     case 'export-inv': exportInv(); break;
     case 'new-acct': accountForm(null, b.dataset.v); break;
@@ -2392,6 +2503,12 @@ document.addEventListener('input', ev => {
 document.addEventListener('change', ev => { if (ev.target.id === 'fySel') { S.fy = +ev.target.value; schedule(); } if (ev.target.id === 'expCat') { S.f.expCat = ev.target.value; schedule(); } if (ev.target.id === 'pettyMonth') { S.f.pettyMonth = ev.target.value; schedule(); } if (ev.target.id === 'bmSel') { S.f.bm = ev.target.value; schedule(); }
   if (ev.target.classList.contains('msExpect')) { const p = prj(ev.target.dataset.pid); if (!p) return; const ms = (p.milestones || []).map(m => m.id === ev.target.dataset.mid ? { ...m, expect: ev.target.value } : m);
     run(() => putDoc('projects', p.id, { ...strip(p), milestones: ms }), ev.target.value ? `Expected ${monthName(ev.target.value)}` : 'Cleared'); } });
+document.addEventListener('submit', async ev => {
+  if (ev.target.id !== 'waForm') return; ev.preventDefault();
+  const f = ev.target, msg = f.waMsg.value.trim() || DEFAULT_WA_MSG;
+  if (!msg.includes('{link}')) { toast('Keep {link} in the message so the client gets the invoice.'); return; }
+  await run(() => saveSettings({ ...S.settings, waOn: f.waOn.checked, waMsg: msg }), f.waOn.checked ? 'WhatsApp sending is on' : 'WhatsApp sending is off');
+});
 document.addEventListener('submit', async ev => {
   if (ev.target.id !== 'setForm') return; ev.preventDefault();
   const f = ev.target;

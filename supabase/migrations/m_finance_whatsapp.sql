@@ -104,7 +104,7 @@ begin
     perform set_config('slate.fin_link_open', '', true);
   end if;
   return jsonb_build_object('ok', true, 'file', l.file_path, 'no', d->>'no', 'date', d->>'date', 'due', d->>'due',
-    'client', coalesce(p->>'client', ''), 'project', coalesce(p->>'name', ''), 'total', round(total));
+    'client', coalesce(p->>'client', ''), 'project', coalesce(p->>'name', ''), 'entity', coalesce(nullif(d->>'entity', ''), nullif(p->>'entity', ''), 'SLATE'), 'total', round(total));
 end $$;
 revoke all on function public.fin_link_open(text) from public;
 grant execute on function public.fin_link_open(text) to anon, authenticated;
