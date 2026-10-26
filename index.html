@@ -1861,7 +1861,7 @@ function applyStd(){ const d=stdDoc(), at=d?d.updatedAt||'x':''; if(at===_stdAt)
   for(const k of Object.keys(DEF_PH)){ const o=d&&d.phases&&d.phases[k];
     PH[k]=o?{...DEF_PH[k],n:o.n||DEF_PH[k].n,gate:o.gate||DEF_PH[k].gate,steps:(o.steps&&o.steps.length?o.steps.map(x=>[x.s,x.t]):DEF_PH[k].steps),items:(o.items||[]).map(x=>({id:x.id,t:x.t,r:x.r,c:x.c?1:0,...(x.o?{o:x.o}:{})}))}:JSON.parse(JSON.stringify(DEF_PH[k])); }
   for(const [key,t] of Object.entries(TEMPLATES)) if(t.std) t.items=t.phases.flatMap(k=>stepsOf(key,k).map(([s,txt])=>[txt,'lead',phLabel(k),0,1])); }
-/* Day greeting: the first time SLATE OS opens on a working day (Sun–Thu), a full white screen with the
+/* Day greeting: from 9 am, the first time SLATE OS opens on a working day (Sun–Thu), a full white screen with the
    person's name large in SLATE red. It stays until they tap; after that, Home carries the day's details.
    Once per person per day on each device. Weekends show the weekend joke on Home instead. */
 /* small line drawing above the greeting: sunrise (morning), turning sun (afternoon), moon and stars (evening) */
@@ -1915,6 +1915,9 @@ function daySplash(){
   const now=new Date(), td=today(), wkend=[5,6].includes(now.getDay());
   if(wkend) return weekendGate();
   const key=td+':'+S.uid; if(pref.daySplash===key) return;
+  /* the morning greeting (and the entry it logs) starts at 9 am; if SLATE OS is already open, it appears at 9 */
+  if(now.getHours()<9){ if(!window.slateNineTimer){ const ms=new Date(now.getTime()).setHours(9,0,0,0)-now.getTime();
+    window.slateNineTimer=setTimeout(()=>{ window.slateNineTimer=null; try{ daySplash(); }catch(_){} },ms+500); } return; }
   const first=(nameOf(S.uid)||'').trim().split(/\s+/)[0]; if(!first) return;
   if(!document.getElementById('jost-font')){ const l=document.createElement('link'); l.id='jost-font'; l.rel='stylesheet';
     l.href='https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap'; document.head.append(l); }
