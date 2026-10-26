@@ -60,7 +60,7 @@ const DEFAULT_WO_TERMS = 'Deliverables to be submitted in the agreed format and 
 const PTYPES = ['Residential', 'Commercial', 'Mixed use', 'Interior', 'Master planning', 'Real estate consultancy', 'Other'];
 const DEFAULT_MS = [['Signing advance', 25], ['Final architectural design', 25], ['Authority (RAJUK) drawings', 25], ['Working drawings', 25]];
 const STUDIO = { name: 'SLATE Architecture & Design', addr: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212', phone: '01749-390284', email: 'info@slate-atelier.com', web: 'slate-atelier.com', tag: 'Design with purpose' };
-const INTERNAL_TYPES = ['studioops', 'studiodev', 'studiomgmt'];
+const INTERNAL_TYPES = ['studioops', 'studiodev', 'studiomgmt', 'studiobd'];
 
 /* ---------- state ---------- */
 const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, woTerms: DEFAULT_WO_TERMS, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [] };

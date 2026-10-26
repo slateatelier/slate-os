@@ -1355,7 +1355,8 @@ const canTypes=()=>S.isOwner||amApprover();
 /* studio work: running and growing the studio rather than a client job. One project can hold several pods and named people. */
 Object.assign(TEMPLATES,{
   studioops:{name:'Studio operation',internal:1,note:'Running the studio: admin, HR, IT, office, recruitment, accounts follow-up',items:[]},
-  studiodev:{name:'Development',internal:1,note:'Growing the studio: R&D, standards, templates, training, business development',items:[]},
+  studiodev:{name:'Development',internal:1,note:'Growing the studio: R&D, standards, templates, training',items:[]},
+  studiobd:{name:'Business development',internal:1,note:'Winning work: leads, lead meetings, follow-ups, proposals and pitches',items:[]},
   studiomgmt:{name:'Management',internal:1,note:'Leading the studio: planning, reviews, client relationships, reporting',items:[]}});
 const isInternalT=k=>!!(k&&TEMPLATES[k]&&TEMPLATES[k].internal);
 const isInternalP=p=>!!p&&isInternalT(p.type);
@@ -1497,7 +1498,7 @@ const STUDIO_TASKS=[
   ['People','Recruitment: shortlist and interview candidates'],['People','Onboard a new team member'],['People','Team training or knowledge session'],['People','Quarterly performance review',1],
   ['Systems','Update SOPs, templates and drawing standards',1],['Systems','Software licences and equipment check'],['Systems','Server and file backup check'],['Systems','CAD and BIM library update'],
   ['Portfolio and brand','Update portfolio with completed projects',1],['Portfolio and brand','Website and social media content'],['Portfolio and brand','Project photography'],['Portfolio and brand','Award or publication submission',1],
-  ['Business development','Developer and partner outreach'],['Business development','Design proposal or pitch for a lead',1],
+  ['Business development','Lead meeting'],['Business development','Lead follow-up'],['Business development','Developer and partner outreach'],['Business development','Design proposal or pitch for a lead',1],
   ['Office','Office maintenance and supplies']];
 function taskLib(){ const m=new Map();
   const add=(title,cat,del,src)=>{ title=(title||'').trim(); if(!title) return; const k=title.toLowerCase(); if(!m.has(k)) m.set(k,{title,cat:(cat||'General').trim(),del:!!del,src}); };
@@ -2585,12 +2586,12 @@ function rulesView(){
   return out;
 }
 /* weekly-meeting action items go under a studio area, not a client project */
-const STUDIO_AREAS=[['studiomgmt','Management'],['studioops','Operation'],['studiodev','Development']];
+const STUDIO_AREAS=[['studiomgmt','Management'],['studioops','Operation'],['studiodev','Development'],['studiobd','Business development']];
 const areaName=k=>(STUDIO_AREAS.find(x=>x[0]===k)||['',''])[1];
 const areaProject=k=>Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>p.type===k&&isLive(p)&&!p.closed).sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''))[0]||null;
 const _areaMade={};
 async function ensureAreaProject(k){ const ex=areaProject(k); if(ex) return ex.id; if(_areaMade[k]) return _areaMade[k];
-  const now=new Date().toISOString(), ref=S.db.collection('projects').doc(), nm={studiomgmt:'STUDIO MANAGEMENT',studioops:'STUDIO OPERATION',studiodev:'STUDIO DEVELOPMENT'}[k];
+  const now=new Date().toISOString(), ref=S.db.collection('projects').doc(), nm={studiomgmt:'STUDIO MANAGEMENT',studioops:'STUDIO OPERATION',studiodev:'STUDIO DEVELOPMENT',studiobd:'STUDIO BUSINESS DEVELOPMENT'}[k];
   await ref.set({name:nm,type:k,pod:'Studio',pod2:'',pods:[],katha:'',client:'',location:'',agStatus:'internal',scope:[],note:'Studio work from the weekly meeting',closed:false,status:'active',createdAt:now,createdBy:S.uid,approvedBy:S.uid,approvedAt:now});
   _areaMade[k]=ref.id; return ref.id; }
 const actOwners=a=>Array.isArray(a.owners)&&a.owners.length?[...a.owners]:a.owner?[a.owner]:[];
@@ -3314,9 +3315,9 @@ function form(title,fields,submit,onSubmit,danger){
 }
 function head(eyebrow,title){ return h('div',{class:'sh-head'},h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:eyebrow,style:keepCase(eyebrow)}),h('h2',{class:'sh-title',text:title})),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})); }
 const memberOpts=keep=>[['','Select person…'],...people().filter(id=>(((!isCOO(id)||amApprover())&&canAssignTo(id))||id===keep)&&(!isPriv(id)||seePriv()||id===S.uid)).map(id=>[id,nameOf(id)])];
-const projectOpts=(incl)=>{ const ps=projects().filter(p=>!p.closed||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2})[p.type];
+const projectOpts=(incl)=>{ const ps=projects().filter(p=>!p.closed||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2,studiobd:3})[p.type];
   const st=ps.filter(p=>isInternalP(p)).sort((a,b)=>rank(a)-rank(b)||(a.name||'').localeCompare(b.name||'')), rest=ps.filter(p=>!isInternalP(p));
-  return [['','Select project…'],...st.map(p=>[p.id,'Studio work · '+(/^STUDIO (MANAGEMENT|OPERATION|DEVELOPMENT)$/.test(p.name||'')?areaName(p.type):p.name)]),...rest.map(p=>[p.id,projLabel(p)])]; };
+  return [['','Select project…'],...st.map(p=>[p.id,'Studio work · '+(/^STUDIO (MANAGEMENT|OPERATION|DEVELOPMENT|BUSINESS DEVELOPMENT)$/.test(p.name||'')?areaName(p.type):p.name)]),...rest.map(p=>[p.id,projLabel(p)])]; };
 /* everyone can add a task for themselves; managers assign to others */
 const canNewTask=()=>!!S.canWrite&&!amChalkMember();
 const newTaskPeople=()=>amMgr()?memberOpts():[['','Select person…'],...msgTaskPeople().map(id=>[id,nameOf(id)])];
@@ -4283,7 +4284,7 @@ function hxWeekly(){
   const node=(c,t,s)=>h('div',{class:'hx-node',style:`--c:${c}`},h('b',{text:t}),h('span',{text:s}));
   const arr=()=>h('div',{class:'hx-arr','aria-hidden':'true'},hxIco('arrow'));
   return h('div',{class:'hx-card'},
-    h('div',{class:'hx-flow'},node('var(--muted)','Sunday meeting','Organiser comes from the rotation'),arr(),node('var(--late)','Minutes written','Attendance, review, decisions, actions'),arr(),node('var(--ink)','COO approves','Submitted, then published'),arr(),node('var(--early)','Actions become tasks','One for each person, in Management, Operation or Development'),arr(),node('var(--ontime)','Reviewed next week','Done, carried on or dropped')),
+    h('div',{class:'hx-flow'},node('var(--muted)','Sunday meeting','Organiser comes from the rotation'),arr(),node('var(--late)','Minutes written','Attendance, review, decisions, actions'),arr(),node('var(--ink)','COO approves','Submitted, then published'),arr(),node('var(--early)','Actions become tasks','One for each person, in Management, Operation, Development or Business development'),arr(),node('var(--ontime)','Reviewed next week','Done, carried on or dropped')),
     h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('clock')),h('div',{},h('b',{text:'No fixed end?'}),h('span',{text:' Tick Ongoing for continuous actions; they need no target date.'}))),
     h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('shield')),h('div',{},h('b',{text:'A decision that should always apply?'}),h('span',{text:' Mark it as a studio rule. It is kept once in Studio rules, not repeated in every set of minutes.'}))));
 }
