@@ -2106,33 +2106,68 @@ function hGroup(title,rows,extra){ rows=rows.filter(Boolean); if(!rows.length) r
 function hMore(key,list,n,render1){ const open=!!(S.homeMore&&S.homeMore[key]), shown=open?list:list.slice(0,n);
   const more=list.length>n?h('button',{class:'h-more',type:'button',onclick:()=>{ S.homeMore={...(S.homeMore||{}),[key]:!open}; render(true); },text:open?'Show less':`Show all ${list.length}`}):null;
   return [...shown.map(render1),more]; }
-/* Weekend lines for Home (Fri and Sat): one per day, the same all day, different each weekend */
+/* Weekend jokes for Home (Fri and Sat): 52, one per weekend of the year.
+   Everyone sees a different one on the same weekend (offset by join order), and each person
+   goes through all 52 before any repeats. Edit the list here; the readable copy is content/weekend-jokes.md. */
 const WEEKEND_LINES=[
-  'It’s the weekend. Your CAD file misses you, but it’ll survive.',
-  'Day off. The drawings aren’t going anywhere, and neither should you.',
-  'Weekend mode on. The only thing to align today is your nap.',
-  'No deadlines today. Just you, your tea and zero revision clouds.',
-  'Day off. Even the columns get a break from carrying loads.',
-  'It’s the weekend. Close the laptop slowly and back away.',
-  'The only setback today should be you, on the sofa.',
-  'No clients, no comments, no “one small last change”. Enjoy.',
-  'Your only deliverable today: one very good meal.',
-  'Day off. Let the render queue think about its life choices.',
-  'Weekend FAR: zero work, maximum rest.',
-  'Plot twist: nothing is due today.',
-  'Today’s site visit: your own bed.',
-  'Day off. Layers frozen, mind thawed.',
-  'The studio is closed. Sketch something just for fun.',
-  'Weekend. If anyone says “urgent”, they mean Sunday.',
-  'No markups today. Mark up your weekend plans instead.',
-  'Zoning rule for today: full ground coverage on the couch.',
-  'Weekend. Press Ctrl+S on your energy for Sunday.',
-  'Rest is part of the design process. Design some rest today.',
-  'Today’s gate review: did you rest? Approved.',
-  'Day off. Today’s scale is 1:1 with real life.',
-  'No setbacks, no side yards, no site plans. Just the weekend.',
-  'Your drawings are resting. You should too.'];
-function weekendLine(td){ let x=0; for(const c of td) x=(x*31+c.charCodeAt(0))>>>0; return WEEKEND_LINES[x%WEEKEND_LINES.length]; }
+  "It’s the weekend. Your CAD file misses you, but it’ll survive.",
+  "Day off. The drawings aren’t going anywhere, and neither should you.",
+  "Weekend mode on. The only thing to align today is your nap.",
+  "No deadlines today. Just you, your tea and zero revision clouds.",
+  "Day off. Even the columns get a break from carrying loads.",
+  "It’s the weekend. Close the laptop slowly and back away.",
+  "The only setback today should be you, on the sofa.",
+  "No clients, no comments, no “one small last change”. Enjoy.",
+  "Your only deliverable today: one very good meal.",
+  "Day off. Let the render queue think about its life choices.",
+  "Weekend FAR: zero work, maximum rest.",
+  "Plot twist: nothing is due today.",
+  "Today’s site visit: your own bed.",
+  "Day off. Layers frozen, mind thawed.",
+  "The studio is closed. Sketch something just for fun.",
+  "Weekend. If anyone says “urgent”, they mean Sunday.",
+  "No markups today. Mark up your weekend plans instead.",
+  "Zoning rule for today: full ground coverage on the couch.",
+  "Weekend. Press Ctrl+S on your energy for Sunday.",
+  "Rest is part of the design process. Design some rest today.",
+  "Today’s gate review: did you rest? Approved.",
+  "Day off. Today’s scale is 1:1 with real life.",
+  "No setbacks, no side yards, no site plans. Just the weekend.",
+  "Your drawings are resting. You should too.",
+  "Weekend forecast: 100% chance of no authority comments.",
+  "Today’s floor plan: bed, kitchen, bed again.",
+  "The only thing under construction today is your weekend plan.",
+  "Day off. Your mouse has quietly applied for leave too.",
+  "No elevations today, except your mood.",
+  "Weekend. The client’s “quick call” can wait till Sunday.",
+  "Today’s structural concept: you, fully relaxed, zero load.",
+  "Weekend. Your only section cut should be a slice of cake.",
+  "Day off. Even the north arrow is pointing at the sofa.",
+  "No layouts today. Just lie out.",
+  "Weekend. Explode your to-do list, then purge it.",
+  "Today’s lighting study: real sunlight, outdoors, on your face.",
+  "Day off. Even the printer is pretending it’s out of paper.",
+  "Weekend. No need for Undo: nothing was done.",
+  "Today’s landscape plan: a park bench and a good book.",
+  "Treat today like a fast-track project: start relaxing immediately.",
+  "Weekend circulation core: kitchen to sofa and back.",
+  "No walkthroughs today, just walks.",
+  "Day off. The 3D model has gone to sleep. Follow its lead.",
+  "Officially approved today: doing absolutely nothing.",
+  "Today’s material palette: comfy clothes and warm tea.",
+  "Tropical Modernism tip for today: shade, a breeze and a long nap.",
+  "Day off. Today’s hatch pattern: blanket.",
+  "No coordination meetings today. Coordinate your snacks instead.",
+  "Weekend. The only thing you need to dimension is your lunch.",
+  "Day off. Let your ideas cure like concrete. Good things take time.",
+  "Today’s design brief: be happy. Budget unlimited.",
+  "Day off. See you Sunday, fully rendered and refreshed."];
+const WEEKEND_EPOCH='2026-10-30';   // weekend 1 (a Friday)
+function weekendLine(td){
+  const fri=new Date(td+'T00:00').getDay()===6?addDays(td,-1):td, wk=Math.floor(diff(WEEKEND_EPOCH,fri)/7);
+  const ids=Object.keys(S.members||{}).sort((a,b)=>String((S.members[a]||{}).joinedAt||'').localeCompare(String((S.members[b]||{}).joinedAt||''))||a.localeCompare(b));
+  let me=ids.indexOf(S.uid); if(me<0){ me=0; for(const c of String(S.uid||'')) me=(me*31+c.charCodeAt(0))>>>0; }
+  const n=WEEKEND_LINES.length; return WEEKEND_LINES[(((wk+me)%n)+n)%n]; }
 /* Home: a personal sentence under the greeting — "You have 1 overdue task, 2 tasks due today and a meeting at 11:00." */
 function daySummary(mine,td,ap){
   const open=mine.filter(t=>!t.doneAt&&t.target), over=open.filter(t=>t.target<td).length, due=open.filter(t=>t.target===td).length;
