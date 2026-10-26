@@ -613,6 +613,11 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .row.fx-leave{opacity:.45;transition:opacity .24s ease-out}
 @keyframes fxPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
 .badge.fx-pulse{animation:fxPulse .5s ease-out}
+.sw-btn{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:4px 0;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;white-space:nowrap}
+.sw-btn .sw{position:relative;flex:none;width:40px;height:24px;border-radius:12px;background:var(--faint);transition:background-color .2s ease-out}
+.sw-btn .sw::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s ease-out}
+.sw-btn[aria-checked=true] .sw{background:#D7262B}.sw-btn[aria-checked=true] .sw::after{transform:translateX(16px)}
+.sw-btn:focus-visible{outline:2px solid #D7262B;outline-offset:3px;border-radius:6px}
 @keyframes shIn{from{transform:translateX(28px);opacity:0}}
 @keyframes shUp{from{transform:translateY(24px);opacity:0}}
 @keyframes bdIn{from{opacity:0}}
@@ -2958,13 +2963,20 @@ function personRow(id,opts={}){
     h('div',{style:'min-width:0'},h('div',{class:'nm',text:nameOf(id)+(id===S.uid?' (you)':'')}),h('div',{class:'rl',text:role||opts.fallback||'—'})),
     h('div',{class:'ld'},opts.extra||null,n?[h('span',{class:'mini',text:`${n.open} open`}),n.over?h('span',{class:'mini bad',text:`${n.over} overdue`}):null,n.rt!=null?h('span',{class:'mini',text:`${Math.round(n.rt*100)}% on time`}):null]:null)); }
 function viewTeam(){
-  const tv=S.tv||(S.tv='status'), ppl=people().filter(id=>S.members[id]||id===ownerId());
+  const tv=S.tv||(S.tv='status'), allP=people().filter(id=>S.members[id]||id===ownerId());
+  // Principal and COO can hide Chalk Create people from every Team view (remembered on this device)
+  const nChalk=allP.filter(isChalkP).length, chalkSw=amApprover()&&nChalk>0, hideChalk=chalkSw&&!!pref.hideChalk;
+  const ppl=hideChalk?allP.filter(id=>!isChalkP(id)):allP;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${ppl.length} people`}),h('h1',{class:'h1',text:'Team'}),h('p',{class:'lead',text:fullView()?'Who is where, how loaded they are, and who works on each project. Numbers are for open work and this month’s due dates.':'Who is where and who works on each project. Workload numbers show for your own pod.'})))];
-  out.push(seg('View',[['status','Who’s online'],['full','Full team'],['pod','By pod'],['project','By project']],tv,v=>{S.tv=v;render(true)}));
+  const viewSeg=seg('View',[['status','Who’s online'],['full','Full team'],['pod','By pod'],['project','By project']],tv,v=>{S.tv=v;render(true)});
+  out.push(chalkSw?h('div',{class:'bar',style:'justify-content:space-between;align-items:center;gap:12px'},viewSeg,
+    h('button',{class:'sw-btn',type:'button',role:'switch','aria-checked':String(!hideChalk),title:hideChalk?'Show Chalk Create people':'Hide Chalk Create people',onclick:()=>{ savePref('hideChalk',!hideChalk); render(true); }},
+      h('span',{class:'sw','aria-hidden':'true'}),h('span',{text:`Chalk people (${nChalk})`}))):viewSeg);
   if(tv==='status'){
     const lead=[ownerId(),...ppl.filter(isCOO)].filter((x,i,a)=>x&&a.indexOf(x)===i), seen=id=>id===S.uid?{st:'on',label:'Online'}:window.slateSeen?window.slateSeen(id):{st:'off',label:''};
     const rank=id=>({on:0,away:1,off:2})[seen(id).st];
     const groups=[['Leadership',lead],...pods().map(p=>[podLabel(p),ppl.filter(id=>teamOf(id)===p&&!lead.includes(id))]),...teams().filter(t=>!/^pod\b/i.test(t)&&!/principal/i.test(t)).map(t=>[t,ppl.filter(id=>teamOf(id)===t&&!lead.includes(id))]),['Principal’s Office',ppl.filter(id=>/principal/i.test(teamOf(id))&&!lead.includes(id))],['No team yet',ppl.filter(id=>teamOf(id)==='No team set'&&!lead.includes(id))]].filter(g=>g[1].length);
+    if(hideChalk) groups.splice(0,groups.length,...groups.filter(([g,ids])=>ids.length||!isChalkName(g)));
     const all=ppl.filter(id=>id!==S.uid), nOn=all.filter(id=>rank(id)===0).length, nAway=all.filter(id=>rank(id)===1).length;
     out.push(h('div',{class:'n-sum',style:'grid-template-columns:repeat(3,minmax(0,1fr))'},[['Online',nOn,'#34C759'],['Away · app open',nAway,'#FF9F0A'],['Offline',all.length-nOn-nAway,'#C7C7CC']].map(([l,n,c])=>h('div',{},h('b',{text:String(n)}),h('span',{},h('i',{style:`display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:6px`}),l)))));
     const DOT={on:'#34C759',away:'#FF9F0A',off:'#C7C7CC'};
@@ -2978,6 +2990,7 @@ function viewTeam(){
   if(tv==='full'){
     const lead=[ownerId(),...ppl.filter(isCOO)].filter((x,i,a)=>x&&a.indexOf(x)===i);
     const groups=[['Leadership',lead],...pods().map(p=>[podLabel(p),ppl.filter(id=>teamOf(id)===p&&!lead.includes(id))]),...teams().filter(t=>!/^pod\b/i.test(t)&&!/principal/i.test(t)).map(t=>[t,ppl.filter(id=>teamOf(id)===t&&!lead.includes(id))]),['Principal’s Office',ppl.filter(id=>/principal/i.test(teamOf(id))&&!lead.includes(id))],['No team yet',ppl.filter(id=>teamOf(id)==='No team set'&&!lead.includes(id))]].filter(g=>g[1].length);
+    if(hideChalk) groups.splice(0,groups.length,...groups.filter(([g,ids])=>ids.length||!isChalkName(g)));
     out.push(h('div',{class:'tgrid'},groups.map(([g,ids])=>h('div',{class:'tcard'},h('div',{class:'tc-h'},h('div',{class:'tc-t',text:g}),h('div',{class:'tc-s',text:`${ids.length} ${ids.length===1?'person':'people'}`})),
       h('div',{},ids.sort((a,b)=>(pods().some(p=>isPodLead(b,p))-pods().some(p=>isPodLead(a,p)))||nameOf(a).localeCompare(nameOf(b))).map(id=>personRow(id,{fallback:id===ownerId()?'Principal':isCOO(id)?'COO':teamOf(id)==='No team set'?'Waiting for a team':'Member'})))))));
   }
