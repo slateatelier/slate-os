@@ -629,9 +629,24 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ds-name{font-size:clamp(64px,17vw,260px);font-weight:600;line-height:.9;letter-spacing:-.01em;color:#D7262B;white-space:nowrap;overflow:hidden;padding:.04em 0 .06em}
 .ds-name span{display:inline-block;animation:dsRise .9s cubic-bezier(.16,.8,.24,1) both}
 .ds-hint{position:absolute;left:0;right:0;bottom:max(28px,env(safe-area-inset-bottom));text-align:center;font-size:11px;font-weight:500;letter-spacing:.3em;text-indent:.3em;text-transform:uppercase;color:#C7C7CC;animation:dsFade .8s 1.6s ease both}
+.ds-icon{display:flex;justify-content:center;margin-bottom:clamp(6px,1vw,14px)}
+.dsi{width:clamp(72px,7vw,104px);height:auto;overflow:visible}
+.dsi-hz{stroke-dasharray:70;stroke-dashoffset:70;animation:dsiDraw .7s .05s ease-out forwards}
+.dsi-rise{animation:dsiRise 1.6s .35s cubic-bezier(.2,.7,.2,1) both}
+.dsi-ray{opacity:0;transform-box:fill-box;transform-origin:center;animation:dsiRay .5s ease-out forwards,dsiGlow 3.2s 2.6s ease-in-out infinite}
+.dsi-ray:nth-child(1){animation-delay:1.5s,2.6s}.dsi-ray:nth-child(2){animation-delay:1.58s,2.7s}.dsi-ray:nth-child(3){animation-delay:1.66s,2.8s}.dsi-ray:nth-child(4){animation-delay:1.74s,2.9s}
+.dsi-ray:nth-child(5){animation-delay:1.82s,3s}.dsi-ray:nth-child(6){animation-delay:1.9s,3.1s}.dsi-ray:nth-child(7){animation-delay:1.98s,3.2s}.dsi-ray:nth-child(8){animation-delay:2.06s,3.3s}
+.dsi-spin{transform-origin:48px 28px;animation:dsFade .6s .4s ease both,dsiSpin 24s linear infinite}
+.dsi-pop{transform-origin:48px 28px;animation:dsiPop .8s .1s cubic-bezier(.2,.9,.3,1.3) both}
+.dsi-moon{transform-origin:47px 28px;animation:dsiPop .9s .1s cubic-bezier(.2,.9,.3,1.2) both,dsiSway 6s 1.2s ease-in-out infinite}
+.dsi-star{opacity:0;transform-box:fill-box;transform-origin:center;animation:dsiTwinkle 2.4s .8s ease-in-out infinite}
+@keyframes dsiDraw{to{stroke-dashoffset:0}}@keyframes dsiRise{from{transform:translateY(30px)}to{transform:none}}
+@keyframes dsiRay{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:none}}@keyframes dsiGlow{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes dsiSpin{to{transform:rotate(360deg)}}@keyframes dsiPop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}
+@keyframes dsiSway{0%,100%{transform:rotate(0)}50%{transform:rotate(-8deg)}}@keyframes dsiTwinkle{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.15)}}
 @keyframes dsIn{from{opacity:0}to{opacity:1}}@keyframes dsOut{to{opacity:0}}
 @keyframes dsRise{from{opacity:0;transform:translateY(.35em)}to{opacity:1;transform:none}}@keyframes dsFade{from{opacity:0}to{opacity:1}}
-@media (prefers-reduced-motion:reduce){#day-splash,#day-splash *{animation:none!important}}
+@media (prefers-reduced-motion:reduce){#day-splash,#day-splash *{animation:none!important}.dsi-ray,.dsi-star{opacity:1}.dsi-hz{stroke-dashoffset:0}}
 
 .day-sum{margin:8px 0 0;font-size:16px;color:var(--ink);line-height:1.4;max-width:480px}
 .h-tip{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--muted);padding:0 4px}
@@ -1838,6 +1853,20 @@ function applyStd(){ const d=stdDoc(), at=d?d.updatedAt||'x':''; if(at===_stdAt)
 /* Day greeting: the first time SLATE OS opens on a working day (Sun–Thu), a full white screen with the
    person's name large in SLATE red. It stays until they tap; after that, Home carries the day's details.
    Once per person per day on each device. Weekends show the weekend joke on Home instead. */
+/* small line drawing above the greeting: sunrise (morning), turning sun (afternoon), moon and stars (evening) */
+function dsIcon(hr){
+  const rays=(cx,cy,r1,r2)=>[0,45,90,135,180,225,270,315].map(a=>{ const t=a*Math.PI/180;
+    return `<line x1="${(cx+r1*Math.cos(t)).toFixed(1)}" y1="${(cy+r1*Math.sin(t)).toFixed(1)}" x2="${(cx+r2*Math.cos(t)).toFixed(1)}" y2="${(cy+r2*Math.sin(t)).toFixed(1)}"/>`; }).join('');
+  let svg;
+  if(hr<12) svg=`<svg viewBox="0 0 96 56" class="dsi dsi-am"><defs><clipPath id="dsi-sky"><rect x="0" y="0" width="96" height="40"/></clipPath></defs>
+    <g clip-path="url(#dsi-sky)"><g class="dsi-rise"><g class="dsi-rays" stroke="#D7262B" stroke-width="2.4" stroke-linecap="round">${rays(48,40,19,26).replace(/<line /g,'<line class="dsi-ray" ')}</g><circle cx="48" cy="40" r="13" fill="#D7262B"/></g></g>
+    <line x1="14" y1="40" x2="82" y2="40" stroke="#111" stroke-width="2" stroke-linecap="round" class="dsi-hz"/></svg>`;
+  else if(hr<17) svg=`<svg viewBox="0 0 96 56" class="dsi dsi-pm"><g class="dsi-spin" stroke="#D7262B" stroke-width="2.4" stroke-linecap="round">${rays(48,28,18,25)}</g><circle class="dsi-pop" cx="48" cy="28" r="12" fill="#D7262B"/></svg>`;
+  else svg=`<svg viewBox="0 0 96 56" class="dsi dsi-ev"><defs><mask id="dsi-cres"><rect width="96" height="56" fill="#fff"/><circle cx="55" cy="22" r="13" fill="#000"/></mask></defs>
+    <circle class="dsi-moon" cx="47" cy="28" r="15" fill="#D7262B" mask="url(#dsi-cres)"/>
+    <g fill="#111"><circle class="dsi-star" cx="72" cy="14" r="1.8"/><circle class="dsi-star" cx="80" cy="32" r="1.3" style="animation-delay:.7s"/><circle class="dsi-star" cx="22" cy="18" r="1.5" style="animation-delay:1.3s"/></g></svg>`;
+  const w=document.createElement('div'); w.className='ds-icon'; w.setAttribute('aria-hidden','true'); w.innerHTML=svg; return w;
+}
 function daySplash(){
   if(S.state!=='ready'||!S.uid||document.getElementById('day-splash')) return;
   const now=new Date(), td=today(); if([5,6].includes(now.getDay())) return;
@@ -1852,7 +1881,7 @@ function daySplash(){
   const kd=e=>{ if(['Enter',' ','Escape'].includes(e.key)){ e.preventDefault(); go(); } };
   const name=h('div',{class:'ds-name'},...[...first.toUpperCase()].map((c,i)=>h('span',{style:`animation-delay:${.3+i*.05}s`,text:c})));
   const el=h('div',{id:'day-splash',role:'dialog','aria-modal':'true','aria-label':`${hello}, ${first}. Tap anywhere to continue.`,onclick:go},
-    h('div',{class:'ds-mid'},h('div',{class:'ds-hello',text:hello+','}),name),
+    h('div',{class:'ds-mid'},dsIcon(hr),h('div',{class:'ds-hello',text:hello+','}),name),
     h('div',{class:'ds-hint','aria-hidden':'true',text:'Tap anywhere'}));
   document.body.append(el); document.documentElement.style.overflow='hidden'; document.addEventListener('keydown',kd);
   const fit=()=>{ name.style.fontSize=''; let f=parseFloat(getComputedStyle(name).fontSize);
