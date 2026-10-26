@@ -613,6 +613,15 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .row.fx-leave{opacity:.45;transition:opacity .24s ease-out}
 @keyframes fxPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
 .badge.fx-pulse{animation:fxPulse .5s ease-out}
+.meet-strip{display:flex;align-items:center;gap:8px;width:100%;min-width:0;border:0;border-radius:var(--r);background:var(--group);padding:10px 14px;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer;transition:background-color .15s ease-out}
+.meet-strip:hover{background:var(--fill)}
+.meet-strip .ms-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.meet-strip.today .ms-dot{background:#D7262B}
+.meet-strip .ms-txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meet-strip .ms-soon{margin-left:6px;color:#D7262B;font-weight:600}
+.meet-strip .ms-more{flex:none;font-size:12.5px;color:var(--muted);background:var(--bg);border-radius:10px;padding:2px 8px}
+.meet-strip .ms-go{flex:none;color:var(--faint);font-size:18px;line-height:1}
+.meet-strip .tag{flex:none}
 .sw-btn{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:4px 0;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;white-space:nowrap}
 .sw-btn .sw{position:relative;flex:none;width:40px;height:24px;border-radius:12px;background:var(--faint);transition:background-color .2s ease-out}
 .sw-btn .sw::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s ease-out}
@@ -2037,7 +2046,24 @@ function viewQueue(){
   gs.filter(g=>!f||g.key===f).sort((a,b)=>(a.oldest||'9').localeCompare(b.oldest||'9')).forEach(g=>{ const el=g.build(); if(el) out.push(el); });
   return out;
 }
-function viewMine(){
+/* Home: one line with the next meeting this person is in (weekly meeting, or a meeting they set up or were invited to) */
+function nextMeets(){ const now=new Date(), td=today(), hm=now.toTimeString().slice(0,5), out=[];
+  if(!amChalkMember()){ let d=upcomingSunday(); const t=(S.meetings[d]&&S.meetings[d].time)||meetTime(); if(d===td&&t<hm) d=addDays(d,7);
+    const t2=(S.meetings[d]&&S.meetings[d].time)||meetTime(); if(!(S.meetings[d]&&S.meetings[d].status==='cancelled')&&(amApprover()||meetPeople(d,(S.meetings[d]||{}).attendance).includes(S.uid))) out.push({date:d,time:t2,title:meetTitle(d),weekly:true}); }
+  allMeets().filter(m=>m.status==='scheduled'&&((m.attendees||[]).includes(S.uid)||m.createdBy===S.uid)&&(m.date>td||(m.date===td&&(!m.time||m.time>=hm))))
+    .forEach(m=>out.push({date:m.date,time:m.time||'',title:mTitle(m),where:(()=>{ const p=mProj(m); return mCat(m)==='project'&&p?(p.code||p.name):''; })(),id:m.id,reply:mNeedsReply(m)}));
+  return out.sort((a,b)=>(a.date+(a.time||'99')).localeCompare(b.date+(b.time||'99'))); }
+function meetStrip(){ const ms=nextMeets(); if(!ms.length) return null; const m=ms[0], td=today(), wk=addDays(td,7), more=ms.slice(1).filter(x=>x.date<=wk).length;
+  let soon=''; if(m.date===td&&m.time){ const [H,M]=m.time.split(':').map(Number), mins=Math.round((new Date().setHours(H,M,0,0)-Date.now())/60000); if(mins>=0&&mins<120) soon=mins<1?'now':`in ${mins} min`; }
+  const day=m.date===td?'Today':m.date===addDays(td,1)?'Tomorrow':`${wd(m.date)} ${fmtD(m.date)}`;
+  const go=()=>{ if(m.id) return openPMeet(m.id); S.mhub='weekly'; goView('meet'); };
+  return h('button',{class:'meet-strip'+(m.date===td?' today':''),type:'button',onclick:go,'aria-label':`Next meeting: ${m.title}, ${day}${m.time?' at '+fmtTime(m.time):''}`},
+    h('span',{class:'ms-dot','aria-hidden':'true'}),
+    h('span',{class:'ms-txt'},h('b',{text:`${day}${m.time?' · '+fmtTime(m.time):''}`}),soon?h('span',{class:'ms-soon',text:soon}):null,` ${m.title}`+(m.where?` · ${m.where}`:'')),
+    m.reply?h('span',{class:'tag tag-req',text:'Reply'}):null,
+    more?h('span',{class:'ms-more',text:`+${more}`}):null,h('span',{class:'ms-go','aria-hidden':'true',text:'›'})); }
+function viewMine(){ const out=viewMineBody(); const ms=meetStrip(); if(ms) out.splice(1,0,ms); return out; }
+function viewMineBody(){
   const mine=activeTasks().filter(t=>t.assignee===S.uid);
   const role=S.isOwner?'Owner':(isMgr(S.uid)?'Manager':'Member');
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${nameOf(S.uid)} · ${roleOf(S.uid)||role}`}),h('h1',{class:'h1',text:'Home'})),
