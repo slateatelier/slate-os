@@ -620,23 +620,47 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .home-h{border-bottom:0;padding-bottom:4px}
 .home-h .eyebrow{color:var(--muted)}
 /* Day greeting (full screen, once per working day) */
-#day-splash{position:fixed;inset:0;z-index:9999;background:#fff;color:#000;display:grid;grid-template-rows:auto 1fr auto;cursor:pointer;
-  padding:max(28px,env(safe-area-inset-top)) clamp(24px,7vw,96px) max(28px,env(safe-area-inset-bottom));font-family:Jost,Futura,"Futura PT","Avenir Next",var(--font);
-  animation:dsIn .35s ease both}
-#day-splash.out{animation:dsOut .4s ease both}
-.ds-top{display:flex;justify-content:space-between;align-items:baseline;gap:16px;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#8E8E93}
-.ds-top b{color:#000;font-weight:600}
-.ds-mid{align-self:center;display:grid;gap:6px;min-width:0}
-.ds-hello{font-size:clamp(22px,3.4vw,40px);font-weight:400;letter-spacing:-.01em;animation:dsUp .6s .1s cubic-bezier(.2,.7,.2,1) both}
-.ds-name{font-size:clamp(76px,17vw,220px);line-height:.92;font-weight:600;letter-spacing:-.035em;color:#D7262B;overflow-wrap:anywhere;animation:dsUp .7s .2s cubic-bezier(.2,.7,.2,1) both}
-.ds-rule{display:block;width:56px;height:4px;background:#D7262B;margin-top:22px;animation:dsGrow .6s .55s ease both;transform-origin:left}
-.ds-bot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
-.ds-go{font:inherit;font-size:16px;font-weight:500;display:inline-flex;align-items:center;gap:12px;background:#000;color:#fff;border:0;border-radius:999px;padding:14px 22px 14px 26px;cursor:pointer;animation:dsUp .6s .7s ease both}
-.ds-go i{font-style:normal;transition:transform .2s}.ds-go:hover i,.ds-go:focus-visible i{transform:translateX(4px)}
-.ds-go:focus-visible{outline:3px solid #D7262B;outline-offset:3px}
-.ds-tag{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#8E8E93}
-@keyframes dsIn{from{opacity:0}to{opacity:1}}@keyframes dsOut{to{opacity:0;transform:scale(1.02)}}
-@keyframes dsUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}@keyframes dsGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+#day-splash{--ds-red:#D7262B;--ds-ink:#111;--ds-mute:#9A9AA0;--ds-pad:clamp(22px,6.5vw,104px);
+  position:fixed;inset:0;z-index:9999;background:#fff;color:var(--ds-ink);cursor:pointer;overflow:hidden;
+  display:grid;grid-template-rows:auto 1fr auto;padding:max(26px,env(safe-area-inset-top)) var(--ds-pad) max(26px,env(safe-area-inset-bottom));
+  font-family:Jost,Futura,"Futura PT","Avenir Next",var(--font);-webkit-font-smoothing:antialiased;animation:dsIn .4s ease both}
+#day-splash.out{animation:dsOut .45s cubic-bezier(.4,0,.2,1) both}
+/* faint drafting grid, fading out towards the edges */
+.ds-grid{position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(17,17,17,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(17,17,17,.045) 1px,transparent 1px);
+  background-size:clamp(48px,6vw,88px) clamp(48px,6vw,88px);background-position:var(--ds-pad) 0;
+  -webkit-mask-image:radial-gradient(120% 90% at 20% 55%,#000 30%,transparent 78%);mask-image:radial-gradient(120% 90% at 20% 55%,#000 30%,transparent 78%)}
+.ds-top,.ds-mid,.ds-bot{position:relative}
+.ds-top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:18px;border-bottom:1px solid rgba(17,17,17,.1)}
+.ds-brand{display:flex;align-items:baseline;gap:10px}
+.ds-brand b{font-weight:600;font-size:15px;letter-spacing:.34em}
+.ds-brand span{font-size:11px;font-weight:500;letter-spacing:.28em;color:#fff;background:var(--ds-red);padding:3px 5px 2px 7px;border-radius:2px}
+.ds-date{font-size:12px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:var(--ds-mute);text-align:right}
+.ds-mid{align-self:center;min-width:0;display:grid}
+.ds-hello{display:flex;align-items:center;gap:14px;font-size:clamp(13px,1.3vw,16px);font-weight:500;letter-spacing:.34em;text-transform:uppercase;color:var(--ds-ink);
+  margin-bottom:clamp(10px,1.6vw,22px);animation:dsUp .7s .05s cubic-bezier(.2,.7,.2,1) both}
+.ds-hello i{display:block;width:34px;height:2px;background:var(--ds-red)}
+.ds-name{font-size:clamp(64px,16.5vw,250px);font-weight:600;line-height:.86;letter-spacing:-.012em;color:var(--ds-red);white-space:nowrap;
+  margin-left:-.04em;padding-bottom:.06em;overflow:hidden}
+.ds-name span{display:inline-block;animation:dsRise .8s cubic-bezier(.16,.8,.24,1) both}
+.ds-datum{display:flex;align-items:center;gap:16px;margin-top:clamp(18px,2.4vw,34px);font-size:11.5px;font-weight:500;letter-spacing:.24em;text-transform:uppercase;color:var(--ds-mute)}
+.ds-datum i{flex:1;height:1px;background:rgba(17,17,17,.14);position:relative;max-width:640px;transform-origin:left;animation:dsGrow .9s .55s cubic-bezier(.2,.7,.2,1) both}
+.ds-datum i::before{content:"";position:absolute;left:0;top:-1px;width:64px;height:3px;background:var(--ds-red)}
+.ds-datum span{white-space:nowrap;animation:dsFade .6s .9s ease both}
+.ds-bot{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-top:18px;border-top:1px solid rgba(17,17,17,.1)}
+.ds-tag{font-size:12px;font-weight:500;letter-spacing:.26em;text-transform:uppercase;color:var(--ds-mute)}
+.ds-go{font:inherit;display:inline-flex;align-items:center;gap:16px;background:none;border:0;padding:0;cursor:pointer;color:var(--ds-ink);animation:dsFade .6s 1s ease both}
+.ds-go-t{font-size:13px;font-weight:600;letter-spacing:.26em;text-transform:uppercase}
+.ds-go-c{width:56px;height:56px;border-radius:50%;background:var(--ds-red);color:#fff;display:grid;place-items:center;font-size:20px;box-shadow:0 8px 24px rgba(215,38,43,.28);transition:transform .25s cubic-bezier(.2,.7,.2,1)}
+.ds-go-c i{font-style:normal;transition:transform .25s}
+.ds-go:hover .ds-go-c,.ds-go:focus-visible .ds-go-c{transform:scale(1.06)}.ds-go:hover .ds-go-c i,.ds-go:focus-visible .ds-go-c i{transform:translateX(3px)}
+.ds-go:focus-visible{outline:none}.ds-go:focus-visible .ds-go-c{outline:3px solid rgba(215,38,43,.35);outline-offset:4px}
+.ds-d-s{display:none}
+@media (max-width:600px){.ds-d-l{display:none}.ds-d-s{display:inline}.ds-date{letter-spacing:.16em;font-size:11px}.ds-tag{display:none}.ds-bot{justify-content:flex-end}.ds-datum{font-size:10.5px;letter-spacing:.18em}}
+@keyframes dsIn{from{opacity:0}to{opacity:1}}@keyframes dsOut{to{opacity:0;transform:translateY(-12px)}}
+@keyframes dsUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes dsRise{from{opacity:0;transform:translateY(.5em)}to{opacity:1;transform:none}}
+@keyframes dsGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}@keyframes dsFade{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){#day-splash,#day-splash *{animation:none!important}}
 
 .day-sum{margin:8px 0 0;font-size:16px;color:var(--ink);line-height:1.4;max-width:480px}
@@ -1854,16 +1878,24 @@ function daySplash(){
   const hr=now.getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const day=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
   let done=false;
-  const go=()=>{ if(done) return; done=true; savePref('daySplash',key); el.classList.add('out'); document.removeEventListener('keydown',kd);
+  const go=()=>{ if(done) return; done=true; savePref('daySplash',key); el.classList.add('out'); document.removeEventListener('keydown',kd); window.removeEventListener('resize',fit);
     document.documentElement.style.overflow=''; setTimeout(()=>el.remove(),420); };
   const kd=e=>{ if(['Enter',' ','Escape'].includes(e.key)){ e.preventDefault(); go(); } };
-  const btn=h('button',{class:'ds-go',type:'button',onclick:e=>{ e.stopPropagation(); go(); }},h('span',{text:'Start my day'}),h('i',{'aria-hidden':'true',text:'→'}));
+  const MO=['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()];
+  const btn=h('button',{class:'ds-go',type:'button',onclick:e=>{ e.stopPropagation(); go(); }},h('span',{class:'ds-go-t',text:'Start my day'}),h('span',{class:'ds-go-c','aria-hidden':'true'},h('i',{text:'→'})));
+  const name=h('div',{class:'ds-name'},...[...first.toUpperCase()].map((c,i)=>h('span',{style:`animation-delay:${.18+i*.045}s`,text:c})));
   const el=h('div',{id:'day-splash',role:'dialog','aria-modal':'true','aria-label':`${hello}, ${first}`,onclick:go},
-    h('div',{class:'ds-top'},h('b',{text:'SLATE OS'}),h('span',{text:`${day}, ${fmtD(td)}`})),
-    h('div',{class:'ds-mid'},h('div',{class:'ds-hello',text:hello+','}),h('div',{class:'ds-name',text:first}),h('i',{class:'ds-rule','aria-hidden':'true'})),
-    h('div',{class:'ds-bot'},btn,h('span',{class:'ds-tag',text:'Design with purpose'})));
+    h('div',{class:'ds-grid','aria-hidden':'true'}),
+    h('header',{class:'ds-top'},h('div',{class:'ds-brand'},h('b',{text:'SLATE'}),h('span',{text:'OS'})),h('span',{class:'ds-date'},h('span',{class:'ds-d-l',text:`${day} · ${now.getDate()} ${MO} ${now.getFullYear()}`}),h('span',{class:'ds-d-s',text:`${day.slice(0,3)} · ${now.getDate()} ${MO.slice(0,3)}`}))),
+    h('div',{class:'ds-mid'},
+      h('div',{class:'ds-hello'},h('i',{'aria-hidden':'true'}),h('span',{text:hello})),
+      name,
+      h('div',{class:'ds-datum','aria-hidden':'true'},h('i'),h('span',{text:'± 0.00 · Start of day'}))),
+    h('footer',{class:'ds-bot'},h('span',{class:'ds-tag',text:'Design with purpose'}),btn));
   document.body.append(el); document.documentElement.style.overflow='hidden'; document.addEventListener('keydown',kd);
-  setTimeout(()=>{ try{ btn.focus({preventScroll:true}); }catch(_){} },60);
+  const fit=()=>{ name.style.fontSize=''; let f=parseFloat(getComputedStyle(name).fontSize);
+    for(let k=0;k<30&&name.scrollWidth>name.clientWidth+1&&f>40;k++){ f*=.94; name.style.fontSize=f+'px'; } };
+  fit(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit); window.addEventListener('resize',fit);
 }
 function render(force){
   applyStd();
