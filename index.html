@@ -48,6 +48,19 @@ main{padding-block:24px 80px;display:grid;gap:24px}
 .sec-h{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 4px}
 .sec-h h2{font-size:12px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--muted);margin:0}
 .sec-h .cnt{font-size:12px;color:var(--muted)}
+.tsum{display:flex;gap:8px;overflow-x:auto;min-width:0;max-width:100%;padding:2px 0;scrollbar-width:none}.tsum::-webkit-scrollbar{display:none}
+.tsum button{flex:none;border:0;background:var(--group);border-radius:12px;padding:8px 12px;display:grid;gap:1px;text-align:left;cursor:pointer;font:inherit;color:inherit;min-width:86px}
+.tsum button b{font-size:19px;font-weight:600;line-height:1.1}.tsum button span{font-size:11.5px;color:var(--muted)}
+.tsum button.on{background:var(--ink);color:#fff}.tsum button.on span{color:#ccc}
+.tsum button.s-overdue b{color:var(--overdue)}.tsum button.s-late b{color:var(--late)}.tsum button.on b{color:#fff}
+.tg{display:grid;gap:8px;min-width:0}.tg+.tg{margin-top:2px}
+.tg-row{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;justify-content:flex-end}
+.tg-h{flex:1 1 300px;min-width:0;display:flex;align-items:center;gap:10px;background:var(--group);border:0;border-radius:var(--r);padding:12px 14px;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.tg-h .tg-chev{flex:none;width:16px;color:var(--muted);transition:transform .15s}.tg.open .tg-chev{transform:rotate(90deg)}
+.tg-t{flex:1;min-width:0;display:grid;gap:4px}.tg-t b{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg-m{display:flex;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}.tg-m .o{color:var(--overdue);font-weight:600}.tg-m .s{color:var(--late);font-weight:600}
+.tg-n{flex:none;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tg-row .btn{flex:none;align-self:center}
 .list{display:grid;background:var(--group);border-radius:var(--r);overflow:hidden}
 .list>p{padding:14px 16px}
 /* Approvals: tick-and-approve rows (the whole row is the tap target) */
@@ -104,7 +117,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ink);outline-off
 .field{display:grid;gap:6px}
 .f-hint{font-size:12.5px;color:var(--muted)}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.bar>select,.bar>input{width:auto;flex:1 1 150px}
+.bar>select,.bar>input{width:auto;flex:1 1 150px;min-width:0;max-width:100%}
+#view{min-width:0}#view>*{min-width:0;max-width:100%}
 .bar .grow{flex:1 1 auto}
 
 .seg{display:inline-flex;background:var(--fill);border-radius:9px;padding:2px;flex:none}
@@ -2040,15 +2054,20 @@ function viewMine(){
 
 function viewAll(){
   const f=S.f, q=f.q.trim().toLowerCase();
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'All projects'}),h('h1',{class:'h1',text:'Tasks & deliverables'})),
-    S.canWrite&&!amChalkMember()&&h('div',{class:'actions'},canProjReq()?h('button',{class:'btn',type:'button',onclick:()=>openProject(),text:amApprover()?'New project':'Request a project'}):null,amMgr()&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'})))];
+  /* new tasks: the + button; new projects: the Projects tab */
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:fullView()?'All projects':'Your projects'}),h('h1',{class:'h1',text:'Tasks & deliverables'})))];
   if(!fullView()&&myPod()){ const pc=podTeamCard(); if(pc) out.push(pc); }
   { const mr=myProjReqs(); if(mr) out.push(mr); const nt=newProjectsCard(); if(nt) out.push(nt); }
   if(!projects().length&&!allTasks().length){ out.push(onboarding()); return out; }
   const pSel=h('select',{id:'f-project','aria-label':'Project',onchange:e=>{f.project=e.target.value;render(true)}},h('option',{value:'',text:'All projects'}),projects().filter(p=>fullView()||inMyPodProject(p)).map(p=>h('option',{value:p.id,text:projLabel(p)})));pSel.value=f.project;
   const uSel=h('select',{id:'f-person','aria-label':'Person',onchange:e=>{f.person=e.target.value;render(true)}},h('option',{value:'',text:'Everyone'}),visiblePeople().map(id=>h('option',{value:id,text:nameOf(id)})));uSel.value=f.person;
   const sSel=h('select',{id:'f-status','aria-label':'Status',onchange:e=>{f.status=e.target.value;render(true)}},
-    [['active','Open tasks'],['overdue','Overdue'],['soon','Due soon'],['requests','Date requests'],['done','Completed'],['early',ST.early],['ontime',ST.ontime],['late',ST.late],['all','Everything'],['archived','Archived']].map(([v,l])=>h('option',{value:v,text:l})));sSel.value=f.status;
+    [['active','Open tasks'],['overdue','Overdue'],['soon','Due soon'],['nodate','No date yet'],['requests','Date requests'],['done','Completed'],['early',ST.early],['ontime',ST.ontime],['late',ST.late],['all','Everything'],['archived','Archived']].map(([v,l])=>h('option',{value:v,text:l})));sSel.value=f.status;
+  /* one line of counts on top: tap one to see just those */
+  { const base=allTasks().filter(t=>!t.archived&&!t.doneAt&&(!f.project||t.projectId===f.project)&&(!f.person||t.assignee===f.person));
+    const n={overdue:base.filter(t=>status(t)==='overdue').length,soon:base.filter(t=>status(t)==='soon').length,nodate:base.filter(t=>!t.target&&!t.ongoing).length,requests:base.filter(t=>t.request).length,active:base.length};
+    out.push(h('div',{class:'tsum',role:'group','aria-label':'Quick filters'},[['overdue','Overdue','s-overdue'],['soon','Due in 3 days','s-late'],['nodate','No date',''],['requests','Date requests',''],['active','All open','']].map(([k,l,c])=>
+      h('button',{type:'button',class:c+(f.status===k?' on':''),'aria-pressed':String(f.status===k),onclick:()=>{ f.status=f.status===k&&k!=='active'?'active':k; render(true); }},h('b',{text:String(n[k])}),h('span',{text:l}))))); }
   out.push(h('div',{class:'bar'},h('input',{id:'f-q',type:'search',placeholder:'Search tasks',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),pSel,uSel,sSel));
   const match=t=>{
     if(f.status==='archived'){ if(!t.archived) return false; } else if(t.archived) return false;
@@ -2058,6 +2077,7 @@ function viewAll(){
     if(f.status==='active'&&t.doneAt) return false;
     if(f.status==='done'&&!t.doneAt) return false;
     if(f.status==='requests'&&!t.request) return false;
+    if(f.status==='nodate'&&(t.doneAt||t.target||t.ongoing)) return false;
     if(['overdue','soon','early','ontime','late'].includes(f.status)&&s!==f.status) return false;
     if(q){ const p=S.projects[t.projectId]; const hay=(t.title+' '+(p?(p.name+' '+(p.code||'')):'')+' '+nameOf(t.assignee)).toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
@@ -2065,11 +2085,30 @@ function viewAll(){
   const list=allTasks().filter(match).sort(byTarget);
   const groups=new Map();
   for(const t of list){ const k=S.projects[t.projectId]?t.projectId:'_none'; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(t); }
-  const order=[...projects().map(p=>p.id),'_none'].filter(k=>groups.has(k));
-  if(!order.length) out.push(h('p',{class:'muted',text:'No tasks match these filters.'}));
-  for(const k of order){ const p=S.projects[k]; const items=groups.get(k);
+  /* one folded line per project: what's overdue, due soon or undated, and what's next. Tap to open its tasks.
+     The Principal and the COO start folded; everyone else starts open. Narrowing the list opens every project. */
+  const gst=items=>{ const op=items.filter(t=>!t.doneAt); return {over:op.filter(t=>status(t)==='overdue').length,soon:op.filter(t=>status(t)==='soon').length,nod:op.filter(t=>!t.target&&!t.ongoing).length,next:op.filter(t=>t.target).sort(byTarget)[0]}; };
+  const stats=new Map([...groups].map(([k,v])=>[k,gst(v)]));
+  const order=[...projects().map(p=>p.id),'_none'].filter(k=>groups.has(k)).sort((a,b)=>{ const x=stats.get(a), y=stats.get(b); return (y.over-x.over)||(y.soon-x.soon)||((x.next&&x.next.target)||'9999').localeCompare((y.next&&y.next.target)||'9999'); });
+  if(!order.length){ out.push(h('p',{class:'muted',text:'No tasks match these filters.'})); return out; }
+  const narrowed=!!(q||f.person||f.project||f.status!=='active')||order.length<=2;
+  const opened=new Set(pref.tgOpen||[]), folded=new Set(pref.tgFold||[]), foldDef=fullView();
+  const isOpen=k=>narrowed||(foldDef?opened.has(k):!folded.has(k));
+  const toggle=k=>{ const o=isOpen(k); if(foldDef){ o?opened.delete(k):opened.add(k); savePref('tgOpen',[...opened]); } else { o?folded.add(k):folded.delete(k); savePref('tgFold',[...folded]); } render(true); };
+  if(!narrowed) out.push(h('div',{class:'pc-row',style:'padding:0 4px'},h('span',{class:'f-hint',style:'margin:0',text:`${order.length} projects · ${list.length} tasks`}),
+    h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ const all=order.every(isOpen); if(foldDef) savePref('tgOpen',all?[]:order); else savePref('tgFold',all?order:[]); render(true); },text:order.every(isOpen)?'Fold all':'Open all'})));
+  for(const k of order){ const p=S.projects[k]; const items=groups.get(k), st=stats.get(k), op=isOpen(k);
     const need=p&&leadsProj(k)&&S.canWrite?unscheduled(k).filter(t=>!t.request||amApprover()).length:0;
-    out.push(sec(p?projLabel(p)+(p.pod?' · '+podLabel(p.pod):''):'No project',items.map(t=>row(t,{project:false})),need?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openTimeline(k),text:(amApprover()?'Set':'Propose')+` timeline (${need})`}):h('span',{class:'cnt',text:`${items.length} item${items.length>1?'s':''}`}))); }
+    const title=p?(isInternalP(p)?'Studio · '+(areaName(p.type)||p.name):projLabel(p)):'No project';
+    const meta=[st.over?h('span',{class:'o',text:`${st.over} overdue`}):null,st.soon?h('span',{class:'s',text:`${st.soon} due soon`}):null,st.nod?h('span',{text:`${st.nod} no date`}):null,
+      st.next?h('span',{text:`Next ${fmtD(st.next.target)}`}):null,p&&p.pod&&!isInternalP(p)?h('span',{text:podLabel(p.pod)}):null].filter(Boolean);
+    out.push(h('section',{class:'tg'+(op?' open':'')},h('div',{class:'tg-row'},
+      h('button',{class:'tg-h',type:'button','aria-expanded':String(op),onclick:()=>toggle(k)},
+        svgEl('svg',{class:'tg-chev',viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2.2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M9 6l6 6-6 6'})),
+        h('div',{class:'tg-t'},h('b',{text:title}),meta.length?h('div',{class:'tg-m'},meta):null),
+        h('span',{class:'tg-n',text:String(items.length)})),
+      need?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openTimeline(k),text:(amApprover()?'Set':'Propose')+` timeline (${need})`}):null),
+      op?h('div',{class:'list'},items.map(t=>row(t,{project:false}))):null)); }
   return out;
 }
 
