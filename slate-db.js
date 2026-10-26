@@ -530,6 +530,18 @@
   /* ---------------- adoption: who is using SLATE OS (Principal and COO) ----------------
      One row per person: last opened, whether notifications reach their phone, unanswered messages,
      updates this week. Anyone silent for 2 working days also gets an automatic nudge (10:30, Sun–Thu). */
+  /* Chalk Create people: the Principal and the COO can hide them here and on the Team tab (one setting, kept per device) */
+  const isChalkTeam = t => /^\s*chalk\s*create\s*$/i.test(t || '');
+  const chalkHidden = () => { try { return canAdmin() && typeof pref !== 'undefined' && !!pref.hideChalk; } catch (_) { return false; } };
+  const showP = p => !(chalkHidden() && p && isChalkTeam(p.team));
+  function chalkSwitch(n) {
+    if (!canAdmin() || !n) return null;
+    const on = !chalkHidden();
+    const b = el('button', { class: 'sw-btn', type: 'button', role: 'switch', 'aria-checked': String(on), title: on ? 'Hide Chalk Create people' : 'Show Chalk Create people' },
+      el('span', { class: 'sw', 'aria-hidden': 'true' }), el('span', {}, `Chalk people (${n})`));
+    b.addEventListener('click', () => { try { savePref('hideChalk', on); } catch (_) {} try { render(true); } catch (_) {} });
+    return b;
+  }
   const AD = { rows: null, at: 0, loading: false, err: '' };
   async function loadAdoption(force) {
     if (AD.loading || (!force && AD.rows && Date.now() - AD.at < 60000)) return;
@@ -548,7 +560,7 @@
     const rerender = () => { try { render(true); } catch (_) {} };
     if (AD.err) return el('p', { class: 'err' }, AD.err);
     if (!AD.rows) return el('p', { class: 'muted' }, 'Loading…');
-    const rows = AD.rows.filter(r => r.user_id !== authUser.id && people.has(r.user_id)).map(r => {
+    const rows = AD.rows.filter(r => r.user_id !== authUser.id && people.has(r.user_id) && showP(people.get(r.user_id))).map(r => {
       const last = [r.seen_at, r.last_action].filter(Boolean).sort().pop() || null, d = daysAgo(last), od = daysAgo(r.oldest_msg);
       const push = r.devices_ok > 0 ? 'on' : r.devices > 0 ? 'pending' : 'off';
       const silent = d == null || d >= 2, flag = silent || push !== 'on' || (r.msgs_open > 0 && od >= 1);
@@ -585,11 +597,12 @@
   function peopleView() {
     const nm = p => { try { return nameOf(p.id); } catch (_) { return displayName(p); } };
     const rerender = () => { try { render(true); } catch (_) {} };
-    const all = [...people.values()].filter(canMessageClient);
+    const allM = [...people.values()].filter(canMessageClient), nChalk = allM.filter(p => isChalkTeam(p.team)).length;
+    const all = allM.filter(showP);
     const order = t => t === "Principal's Office" ? '0' : /^Pod/.test(t || '') ? '1' + t : t ? '2' + t : '9';
     all.sort((a, b) => order(a.team).localeCompare(order(b.team)) || (isLeadP(b) - isLeadP(a)) || nm(a).localeCompare(nm(b)));
     const groups = new Map(); all.forEach(p => { const t = p.team || 'No team'; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(p); });
-    for (const id of [...PS.sel]) if (!people.has(id) || !canMessageClient(people.get(id))) PS.sel.delete(id);
+    for (const id of [...PS.sel]) if (!people.has(id) || !canMessageClient(people.get(id)) || !showP(people.get(id))) PS.sel.delete(id);
     const tab = PS.tab || 'send';
     const acctBtn = canAdmin() ? el('button', { class: 'btn', type: 'button', id: 'slate-accounts-btn' }, 'Accounts and passwords') : null;
     if (acctBtn) acctBtn.addEventListener('click', accountsSheet);
@@ -598,8 +611,11 @@
     const tabs = el('div', { class: 'seg', role: 'group', 'aria-label': 'People' }, ...[['send', 'Send a message'], ['sent', 'Sent and replies' + (nSent ? ' · ' + nSent : '')], ...(canAdmin() ? [['adopt', 'Adoption']] : [])].map(([k, l]) => {
       const b = el('button', { type: 'button', 'aria-pressed': String(tab === k) }, l); b.addEventListener('click', () => { PS.tab = k; rerender(); }); return b; }));
     const headEl = el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Studio'), el('h1', { class: 'h1' }, 'People')), ...(acctBtn ? [acctBtn] : []));
-    if (tab === 'sent') return [headEl, tabs, sent.length ? sentView() : el('p', { class: 'muted' }, 'Nothing sent yet.')];
-    if (tab === 'adopt' && canAdmin()) return [headEl, tabs, adoptionView()];
+    const sw = tab === 'sent' ? null : chalkSwitch(nChalk);
+    if (sw) tabs.style.flex = '1 1 320px';
+    const tabsBar = sw ? el('div', { class: 'bar', style: 'justify-content:space-between;align-items:center;gap:12px' }, tabs, sw) : tabs;
+    if (tab === 'sent') return [headEl, tabsBar, sent.length ? sentView() : el('p', { class: 'muted' }, 'Nothing sent yet.')];
+    if (tab === 'adopt' && canAdmin()) return [headEl, tabsBar, adoptionView()];
     const n = PS.sel.size;
     const ta = el('textarea', { id: 'slate-people-msg', maxlength: '300', rows: '2', placeholder: 'Message, e.g. Site visit moved to 3 pm today', 'aria-label': 'Message' }); ta.value = PS.msg;
     const send = el('button', { class: 'btn btn-primary', type: 'button' }, n ? `Notify ${n} ${n === 1 ? 'person' : 'people'}` : 'Notify');
@@ -635,7 +651,7 @@
       hb.addEventListener('click', () => { ps.forEach(p => allOn ? PS.sel.delete(p.id) : PS.sel.add(p.id)); rerender(); });
       return el('div', { class: 'slate-pc' + (allOn ? ' on' : '') }, hb, el('div', { class: 'slate-pc-b' }, ...ps.map(tile))); };
     const grid = el('div', { class: 'slate-pgrid' }, ...[...groups.entries()].map(card));
-    return [headEl, tabs, compose, el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, 'Tap a person, or a team’s heading to choose the whole team.'), everyone), grid];
+    return [headEl, tabsBar, compose, el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, 'Tap a person, or a team’s heading to choose the whole team.'), everyone), grid];
   }
   /* what I sent, with each person's reply; follow up anyone who hasn't finished */
   let sent = [], sentLoaded = false;
