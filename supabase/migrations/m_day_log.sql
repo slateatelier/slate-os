@@ -1,7 +1,7 @@
 -- Entry log (More › Entry log), Principal and COO only.
 -- One row per person, per day, per device type (computer / mobile), so phone use is recorded separately.
 --   in_at  : first tap on the morning greeting on that device type (server time)
---   out_at : the latest time SLATE OS was closed, or last used, after 7 pm Dhaka on that device type
+--   out_at : the latest time SLATE OS was closed (or last used) that day on that device type; a reopen and close replaces it
 --   out_src: 'closed' (the app was closed) or 'active' (last activity seen; the close itself wasn't caught)
 create table if not exists public.day_log (
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -38,11 +38,11 @@ language plpgsql
 security definer
 set search_path to ''
 as $function$
-declare loc timestamp := now() at time zone 'Asia/Dhaka'; dev text := case when p_device = 'mobile' then 'mobile' else 'computer' end;
+declare d date := (now() at time zone 'Asia/Dhaka')::date; dev text := case when p_device = 'mobile' then 'mobile' else 'computer' end;
         src text := case when p_src = 'closed' then 'closed' else 'active' end;
 begin
-  if (select auth.uid()) is null or loc::time < time '19:00' then return; end if;
-  insert into public.day_log (user_id, day, device, out_at, out_src) values ((select auth.uid()), loc::date, dev, now(), src)
+  if (select auth.uid()) is null then return; end if;
+  insert into public.day_log (user_id, day, device, out_at, out_src) values ((select auth.uid()), d, dev, now(), src)
   on conflict (user_id, day, device) do update set out_at = excluded.out_at, out_src = excluded.out_src;
 end $function$;
 
