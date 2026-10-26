@@ -624,9 +624,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
   padding:max(24px,env(safe-area-inset-top)) clamp(20px,5vw,80px) max(24px,env(safe-area-inset-bottom));
   font-family:Jost,Futura,"Futura PT","Avenir Next",var(--font);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;animation:dsIn .35s ease both}
 #day-splash.out{animation:dsOut .45s cubic-bezier(.4,0,.2,1) both}
-.ds-mid{width:100%;min-width:0;text-align:center;display:grid;gap:clamp(8px,1.4vw,18px)}
-.ds-hello{font-size:clamp(13px,1.25vw,17px);font-weight:500;letter-spacing:.42em;text-indent:.42em;text-transform:uppercase;color:#8E8E93;animation:dsFade .8s .05s ease both}
-.ds-name{font-size:clamp(64px,19vw,300px);font-weight:600;line-height:.9;letter-spacing:-.01em;color:#D7262B;white-space:nowrap;overflow:hidden;padding:.04em 0 .06em}
+.ds-mid{width:100%;min-width:0;text-align:center;display:grid;gap:clamp(4px,.8vw,12px)}
+.ds-hello{font-size:clamp(30px,4.6vw,68px);font-weight:400;line-height:1.1;letter-spacing:-.01em;color:#111;animation:dsRise .8s .05s cubic-bezier(.16,.8,.24,1) both}
+.ds-name{font-size:clamp(64px,17vw,260px);font-weight:600;line-height:.9;letter-spacing:-.01em;color:#D7262B;white-space:nowrap;overflow:hidden;padding:.04em 0 .06em}
 .ds-name span{display:inline-block;animation:dsRise .9s cubic-bezier(.16,.8,.24,1) both}
 .ds-hint{position:absolute;left:0;right:0;bottom:max(28px,env(safe-area-inset-bottom));text-align:center;font-size:11px;font-weight:500;letter-spacing:.3em;text-indent:.3em;text-transform:uppercase;color:#C7C7CC;animation:dsFade .8s 1.6s ease both}
 @keyframes dsIn{from{opacity:0}to{opacity:1}}@keyframes dsOut{to{opacity:0}}
@@ -1850,9 +1850,9 @@ function daySplash(){
   const go=()=>{ if(done) return; done=true; savePref('daySplash',key); el.classList.add('out'); document.removeEventListener('keydown',kd); window.removeEventListener('resize',fit);
     document.documentElement.style.overflow=''; setTimeout(()=>el.remove(),420); };
   const kd=e=>{ if(['Enter',' ','Escape'].includes(e.key)){ e.preventDefault(); go(); } };
-  const name=h('div',{class:'ds-name'},...[...first.toUpperCase()].map((c,i)=>h('span',{style:`animation-delay:${.15+i*.05}s`,text:c})));
+  const name=h('div',{class:'ds-name'},...[...first.toUpperCase()].map((c,i)=>h('span',{style:`animation-delay:${.3+i*.05}s`,text:c})));
   const el=h('div',{id:'day-splash',role:'dialog','aria-modal':'true','aria-label':`${hello}, ${first}. Tap anywhere to continue.`,onclick:go},
-    h('div',{class:'ds-mid'},h('div',{class:'ds-hello',text:hello}),name),
+    h('div',{class:'ds-mid'},h('div',{class:'ds-hello',text:hello+','}),name),
     h('div',{class:'ds-hint','aria-hidden':'true',text:'Tap anywhere'}));
   document.body.append(el); document.documentElement.style.overflow='hidden'; document.addEventListener('keydown',kd);
   const fit=()=>{ name.style.fontSize=''; let f=parseFloat(getComputedStyle(name).fontSize);
