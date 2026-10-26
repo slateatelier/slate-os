@@ -846,6 +846,9 @@ async function invoicePdf(i) {
   pdfLibs = pdfLibs || Promise.all([window.html2canvas || loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
     window.jspdf || loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')]).catch(e => { pdfLibs = null; throw e; });
   await pdfLibs;
+  /* The capture draws text on a canvas that belongs to this page, not to the invoice frame. The letterhead
+     fonts must be loaded here too, or the phone draws them in a fallback face and words run together. */
+  try { await Promise.race([Promise.all(['400 16px "Didact Gothic"', '400 16px Jost', '500 16px Jost', '600 16px Jost'].map(f => document.fonts.load(f))), new Promise(r => setTimeout(r, 5000))]); } catch (_) {}
   const fr = document.createElement('iframe');
   fr.setAttribute('aria-hidden', 'true'); fr.tabIndex = -1;
   fr.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:1300px;border:0;opacity:0;pointer-events:none';
