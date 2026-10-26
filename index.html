@@ -3497,6 +3497,17 @@ function sheetMsgTask(){
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Create task'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})),
       h('div',{class:'f-hint',text:`${nameOf(sh.msg.sender)} gets the reply “Made it a task”, and the task is tracked like any other.`}))];
 }
+/* quick add: more people on the same task, shown as chips; each one gets their own copy */
+function alsoPeople(d){
+  if(!d.assignee) return null;
+  d.also=(d.also||[]).filter(id=>id!==d.assignee);
+  const opts=newTaskPeople().slice(1).filter(([id])=>id!==d.assignee&&!d.also.includes(id));
+  const add=opts.length?h('select',{id:'sh-also','aria-label':'Add another person',style:'background:#fff',onchange:e=>{ const v=e.target.value; if(v){ d.also.push(v); renderSheet(); } }},h('option',{value:'',text:d.also.length?'Add another person…':'Also assign to…'}),opts.map(([id,l])=>h('option',{value:id,text:l}))):null;
+  return h('div',{style:'display:grid;gap:8px'},
+    d.also.length?h('div',{class:'chips'},d.also.map(id=>h('span',{class:'chip',style:'background:#fff'},nameOf(id),h('button',{type:'button','aria-label':'Remove '+nameOf(id),onclick:()=>{ d.also=d.also.filter(x=>x!==id); renderSheet(); },text:'×'})))):null,
+    add,
+    d.also.length?h('div',{class:'f-hint',text:`Each of the ${d.also.length+1} people gets their own copy of the task, tracked on its own.`}):null);
+}
 function sheetNewTask(){
   const d=S.sheet.d;
   if(!projects().filter(p=>!p.closed).length) return [head('New task','No projects in the list yet'),
@@ -3509,10 +3520,13 @@ function sheetNewTask(){
       if(!title) return fail('Write the task or deliverable.');
       if(!d.assignee) return fail('Choose who it’s assigned to.');
       if(d.start&&d.target&&d.start>d.target) return fail('The start date can’t be after the target date.');
-      const ap=amApprover(); run(()=>createTask({...d,target:ap?d.target:'',proposed:ap?'':d.target}),'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${nameOf(d.assignee)}${needsAssignApproval(d.assignee,d.projectId)?' (awaiting COO)':''}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
+      /* several people: each gets their own copy of the task, tracked and scored on its own */
+      const who=[d.assignee,...(d.also||[]).filter(id=>id&&id!==d.assignee)];
+      const ap=amApprover(); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:ap?d.target:'',proposed:ap?'':d.target}); },who.length>1?`Task added for ${who.length} people`:'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
     }},
       (()=>{ const tf=titleField(d); return tf[0]; })(),
-      h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',sel('assignee',newTaskPeople()))),
+      h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',(()=>{ const el=sel('assignee',newTaskPeople()); el.addEventListener('change',()=>renderSheet()); return el; })())),
+      alsoPeople(d),
       field(amApprover()?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
       S.sheet.more?[
