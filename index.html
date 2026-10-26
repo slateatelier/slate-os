@@ -3606,7 +3606,7 @@ function farFormSection(d,sec){
     d.farApplies==='yes'&&x?h('div',{class:'f-hint',text:'Worked out with the same rules as the SLATE FAR Calculator. Saleable = FAR area × 1.22; construction adds 25%, 35% or 45% for 0, 1 or 2 basements.'}):null);
   return [sec('Building and FAR'),
     field('Is FAR applicable? *',rr(sel('farApplies',[['','Select…'],['yes','Yes: use RAJUK FAR (DAP)'],['no','No: FAR not applicable']]))),
-    d.farApplies==='yes'?h('div',{class:'form-row'},field('Density block *',rr(sel('block',[['','Select block…'],...FAR_BLOCKS.map(b=>[b[0],b[0]])]))),field('Front road *',rr(sel('road',[['','Select width…'],...FAR_ROADS.map(r=>[r[0],r[0]])])))):null,
+    d.farApplies==='yes'?h('div',{class:'form-row'},field('Density block *',rr(sel('block',[['','Select block…'],...FAR_BLOCKS.map(b=>[b[0],b[0]])]))),field('Front road *',roadPicker(d,'sh-',focusW=>{ renderSheet(); if(focusW) setTimeout(()=>{ const el=document.getElementById('sh-roadw'); if(el) el.focus(); },0); },true))):null,
     h('div',{class:'form-row'},field('Units per floor',num('upf','e.g. 4')),field('Floors with units',num('floors','e.g. 9'))),
     h('div',{class:'form-row'},field('Basements',rr(sel('basements',[['0','None'],['1','1 basement'],['2','2 basements']]))),field('Mezzanine floor?',rr(sel('mezz',[['','No'],['no','No'],['yes','Yes']].filter((o,i)=>i!==0))))),
     d.mezz==='yes'?field('What do we call the mezzanine? *',rr(sel('mezzName',[['','Select…'],['Mezzanine','Mezzanine (G + M + floors)'],['1st floor','1st floor (counted as a floor)']]))):null,
@@ -3645,7 +3645,8 @@ function sheetProject(){
       if(v.agStatus==='signed'&&!v.agDate) return fail('Add the agreement date.');
       if(!v.scope.length) return fail('Tick at least one service in the scope.');
       if(!v.farApplies) return fail('Say whether FAR applies to this project.');
-      if(v.farApplies==='yes'&&(!v.block||!v.road)) return fail('Choose the density block and the front road.');
+      if(v.farApplies==='yes'&&(!v.block||!v.road)) return fail(d.roadMode==='custom'&&v.block?'Type the custom road width in feet.':'Choose the density block and the front road.');
+      if(v.farApplies==='yes'&&(plotFarOf(v.road)||{}).under) return fail(`A ${v.road} road is under ${ROAD_MIN} ft, outside the DAP plot FAR table. Set FAR to “not applicable” and enter the areas by hand, or check the road width.`);
       if(v.mezz==='yes'&&!v.mezzName) return fail('Choose what to call the mezzanine: Mezzanine or 1st floor.');
       if(v.mezz!=='yes') v.mezzName='';
       v.units=unitsOf(v)||null;
@@ -4479,7 +4480,7 @@ const HOWDO=[
  ['admin','boss','Reply to issues the team reported',['More › Report log.','Set Being fixed, Fixed or Close, with a note for the reporter.'],'The reporter is told.',null],
 
  // ---- tools
- ['tools','all','Check FAR and areas for a site',['More › FAR calculator.','Enter land size (katha), density block, front road and basements.','Tap Calculate.'],'You see FAR, ground coverage, unit count and areas. Every calculation is saved in the FAR log.','Tap a row in the log to load it again.'],
+ ['tools','all','Check FAR and areas for a site',['More › FAR calculator.','Enter land size (katha), density block, front road and basements. For a road width not in the list, choose Custom width… and type it in feet.','Tap Calculate.'],'You see FAR, ground coverage, unit count and areas. Every calculation is saved in the FAR log.','Tap a row in the log to load it again.'],
  ['tools','all','Read the SLATE standard process',['More › SLATE standard process.'],'Every project type, phase, gate deliverable and checklist item, with who owns it.',null],
  ['tools','boss','Open Finance',['More › Finance.'],'Invoices, payments, costs, payroll and reports. Only the Principal and COO can open it; it has its own Guide tab.',null]
 ];
@@ -4727,7 +4728,8 @@ function farState(){ if(!S.far) S.far={d:{site:'',projectId:'',katha:'',block:''
 function farRun(){
   const F=farState(), d=F.d, k=parseFloat(d.katha)||0;
   if(!k) { F.err='Enter the land size in katha.'; render(true); return; }
-  if(!d.block||!d.road){ F.err='Choose the density block and the front road.'; render(true); return; }
+  if(!d.block||!d.road){ F.err=d.roadMode==='custom'&&d.block?'Type the custom road width in feet.':'Choose the density block and the front road.'; render(true); return; }
+  const pr=plotFarOf(d.road); if(pr&&pr.under){ F.err=`A ${d.road} road is under ${ROAD_MIN} ft, which the DAP plot FAR table does not cover. Check this site manually.`; render(true); return; }
   const x=farCalc({...d,katha:k}); if(!x){ F.err='These inputs do not give a result. Check the block and road.'; render(true); return; }
   F.err=''; F.res={d:{...d},x};
   if(!S.canWrite||!S.db){ render(true); return; }
@@ -4751,7 +4753,7 @@ function viewFar(){
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); farRun(); }},
       h('div',{class:'form-row'},field('Site or client (optional)',inp('site',{maxlength:80,placeholder:'e.g. Plot 24A, Gulshan 2'})),field('Project (optional)',sel('projectId',pj.map(p=>[p.id,projLabel(p)]),'Not linked to a project'))),
       h('div',{class:'form-row'},field('Land size (katha) *',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal',placeholder:'e.g. 5.99'})),field('Basements',sel('basements',[['0','None'],['1','1 basement'],['2','2 basements']]))),
-      h('div',{class:'form-row'},field('Density block *',sel('block',FAR_BLOCKS.map(b=>b[0]),'Select block…')),field('Front road *',sel('road',FAR_ROADS.map(r=>r[0]),'Select road width…'))),
+      h('div',{class:'form-row'},field('Density block *',sel('block',FAR_BLOCKS.map(b=>b[0]),'Select block…')),field('Front road *',roadPicker(d,'far-',focusW=>{ render(true); if(focusW) setTimeout(()=>{ const el=document.getElementById('far-roadw'); if(el) el.focus(); },0); },false))),
       h('div',{class:'form-row'},field('Units per floor (optional)',inp('upf',{type:'number',min:0,step:1,inputmode:'numeric'})),field('Floors with units (optional)',inp('floors',{type:'number',min:0,step:1,inputmode:'numeric'}))),
       F.err?h('div',{class:'err',role:'alert',text:F.err}):null,
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Calculate'}),h('button',{class:'btn',type:'button',onclick:()=>{ S.far=null; render(true); },text:'Clear'}))),
@@ -4770,14 +4772,49 @@ function viewFar(){
 
 const FAR_BLOCKS=[["Block 1 - Biman Bondar (Restricted)",0,0],["Block 2 - Zinzira-Kalindi-Aganagar",2.3,3.0],["Block 3 - Bashundhara Residential",2.0,4.1],["Block 4 - Dakshinkhahn",1.9,3.1],["Block 5 - Faridabad",2.2,3.1],["Block 6 - Kawla",2.0,3.2],["Block 7 - Uttara Phase 1 & 2",2.0,4.5],["Block 8 - Kamarpara",2.3,3.1],["Block 9 - Mirpur",1.9,3.4],["Block 10 - Keraniganj-Taranagar-Vakurta",2.1,2.5],["Block 11 - Anandanagar Beribadh",2.0,2.6],["Block 12 - Shewrapara",1.9,3.0],["Block 13 - Ibrahimpur East Shewrapara",1.9,3.0],["Block 14 - Bawnia",2.1,3.5],["Block 15 - Khilkhet Vatara",1.9,3.1],["Block 16 - Baridhara",1.8,4.7],["Block 17 - Gulshan Banani",1.9,5.5],["Block 18 - Ashulia-Dhamsona-Hazarpur",2.1,2.7],["Block 19 - Korail",1.8,2.0],["Block 20 - Mohakhali DOHS",2.0,4.4],["Block 21 - Niketon",1.8,3.8],["Block 22 - Mohakhali",2.5,3.3],["Block 23 - Rampura",2.2,3.6],["Block 24 - Tejgaon IA",2.3,3.3],["Block 25 - Mohammadpur",2.2,3.4],["Block 26 - Bonogram",1.6,2.1],["Block 27 - Baitul Aman",2.1,3.2],["Block 28 - Mogbazar",2.2,3.2],["Block 29a - Puran Dhaka (29a)",2.8,3.3],["Block 29b - Dhania-Muradpur",2.4,3.3],["Block 30 - Green Model Town",2.1,3.9],["Block 31 - Shatarkul-Nasirabad",1.3,1.9],["Block 32 - Basabo-Milgaw",2.1,3.4],["Block 33 - Bondar-Mograpara-Kachpur",2.1,2.5],["Block 34 - Ramna-Dhaka University",2.3,3.3],["Block 35 - Panthapath",2.2,3.4],["Block 36 - Dhanmondi Residential",1.8,5.0],["Block 37 - Narayanganj Center",2.8,3.5],["Block 38 - Tongi",2.3,3.2],["Block 39 - Birulia",1.8,2.4],["Block 40 - Gogonagar NCC-27",2.1,2.7],["Block 41 - Dasherkandi-Kayetpara",1.8,2.4],["Block 42a - Matuail-Sarulia (42a)",1.9,3.4],["Block 42b - Kutubpur-fatullah (42b)",1.9,3.4],["Block 43 - Pathalia",2.1,2.7],["Block 44 - Rupganj-Isapur",2.1,2.7],["Block 45 - Bhulta-Golakandail",2.1,2.7],["Block 46 - Savar Municipality",2.3,3.4],["Block 47 - Jhilmil Residential",1.9,4.3],["Block 48 - Hemayetpur-Tetulzhora",2.3,2.8],["Block 49 - Tarabo Paurashava",2.3,3.0],["Block 50 - Jolshiri",2.1,4.1],["Block 51 - Badda",2.1,3.4],["Block 52 - Aftabnagar-Banasree",1.9,3.7],["Block 53 - United-Sundiali",1.9,3.7],["Block 54 - Purbachal Residential",1.9,4.5],["Block 55 - Uttara Phase 3",1.9,4.7],["Block 56 - POHS-Shornali Residential",1.9,4.1],["Block 57 - Naldobhag",2.0,2.6],["Block 58 - Kalyanpur-Retention (FAR=0)",0,0],["Block 59 - Bisila-Chandrima",2.3,3.1],["Block 60 - Khilkhet Residential",1.9,4.4],["Block 61 - Mirpur DOHS",1.9,4.8],["Block 62 - Paikpara-Tailarbag",1.9,3.3],["Block 63 - Kawdia-Aminbazar",1.3,2.0],["Block 64 - Kachkura Moinartek",2.1,2.6],["Block 65 - Pallabi 2",1.9,3.3],["Block 66 - Ghatarchar",2.0,3.2],["Block 67 - Demra-Konapara",1.8,3.2],["Block 68 - Subacha-Arakul-Beyara",2.1,2.7]];
 const FAR_ROADS=[["20 ft",3.258],["25 ft",3.385],["30 ft",3.524],["35 ft",3.778],["40 ft",4.008],["50 ft",4.135],["60 ft",4.274],["75 ft",4.631],["80 ft",4.75],["100 ft",4.75]];
+/* Plot FAR for any front-road width. A listed width uses the DAP figure as is; a width between two listed
+   widths is taken pro rata (straight-line ratio) between them; 100 ft and over stays at the 100 ft figure.
+   Under 20 ft is outside the table, so no figure is given. `band` is the lower listed width's figure,
+   shown alongside so the conservative reading is never hidden. */
+const ROAD_MIN=+parseFloat(FAR_ROADS[0][0]), ROAD_MAX_INPUT=300;
+function plotFarOf(road){
+  const w=parseFloat(road); if(!(w>0)) return null;
+  const t=FAR_ROADS.map(r=>[parseFloat(r[0]),r[1]]), last=t[t.length-1];
+  if(w<t[0][0]) return {w,far:0,under:true};
+  if(w>=last[0]) return {w,far:last[1],exact:true};
+  for(let i=0;i<t.length-1;i++){ const [a,fa]=t[i], [b,fb]=t[i+1];
+    if(w===a) return {w,far:fa,exact:true};
+    if(w>a&&w<b) return {w,far:+(fa+(fb-fa)*(w-a)/(b-a)).toFixed(3),exact:false,lo:[a,fa],hi:[b,fb],band:fa}; }
+  return null;
+}
+const isStdRoad=road=>FAR_ROADS.some(r=>r[0]===road);
+const roadLabel=w=>{ const n=Math.round(parseFloat(w)*10)/10; return n>0?n+' ft':''; };
+/* Front-road picker: the standard widths plus “Custom width…”, which opens a number box (feet). d.road keeps a
+   plain “28 ft” string either way, so saved projects and the FAR log need no change. */
+function roadPicker(d,idp,redraw,inline){
+  const custom=d.roadMode==='custom'||(!!d.road&&!isStdRoad(d.road));
+  const s=h('select',{id:idp+'road',onchange:e=>{ const v=e.target.value;
+      if(v==='custom'){ d.roadMode='custom'; if(isStdRoad(d.road)) d.road=''; d.roadRaw=null; } else { d.roadMode=''; d.road=v; d.roadRaw=null; }
+      redraw(v==='custom'); }},
+    h('option',{value:'',text:'Select width…'}),FAR_ROADS.map(r=>h('option',{value:r[0],text:r[0]})),h('option',{value:'custom',text:'Custom width…'}));
+  s.value=custom?'custom':(d.road||'');
+  if(!custom) return s;
+  const noteOf=()=>{ const p=plotFarOf(d.road);
+    return !d.road||!p?`Type the measured road width in feet (up to ${ROAD_MAX_INPUT}).`:p.under?`Under ${ROAD_MIN} ft is outside the DAP plot FAR table: check this site manually.`:
+      p.exact?`Plot FAR ${p.far.toFixed(3)}`:`Plot FAR ${p.far.toFixed(3)}, pro rata between ${p.lo[0]} ft (${p.lo[1].toFixed(3)}) and ${p.hi[0]} ft (${p.hi[1].toFixed(3)})`; };
+  const note=h('span',{class:'f-hint',id:idp+'roadnote',text:noteOf()});
+  const n=h('input',{id:idp+'roadw',type:'number',min:1,max:ROAD_MAX_INPUT,step:'any',inputmode:'decimal',placeholder:'Width in feet, e.g. 28','aria-label':'Custom front road width in feet',
+    value:d.roadRaw!=null?d.roadRaw:(d.road?parseFloat(d.road):''),oninput:e=>{ d.roadRaw=e.target.value; const w=parseFloat(e.target.value); d.road=w>0&&w<=ROAD_MAX_INPUT?roadLabel(w):''; note.textContent=noteOf(); if(inline) redraw(false); }});
+  return h('div',{style:'display:grid;gap:6px'},s,n,note);
+}
 const isJolshiri=b=>/jolshiri/i.test(b||'');
 function sizeBonus(k){ return k>=20?.75:k>=15?.65:k>=10?.5:k>=6?.35:k>=3?.2:0; }
 function mgcTier(k){ const m=k*66.89; return m<=134?[.625,.70]:m<=201?[.60,.675]:m<=268?[.485,.65]:m<=402?[.465,.625]:m<=670?[.45,.60]:m<=937?[null,.55]:m<=1339?[null,.50]:m<=2699?[null,.45]:[null,.40]; }
 function farCalc(d){
-  const b=FAR_BLOCKS.find(x=>x[0]===d.block), r=FAR_ROADS.find(x=>x[0]===d.road), k=parseFloat(d.katha)||0;
-  if(!b||!r||k<=0) return null;
-  const [,du,areaFar]=b, plotFar=r[1], land=k*720, eligible=k>=30, large=k>=60;
-  const regional=/Purbachal|Jhilmil/.test(d.block)?.5:0, rw=parseFloat(d.road), roadB=rw>30?Math.min(1,(rw-30)*.02):0;
+  const b=FAR_BLOCKS.find(x=>x[0]===d.block), r=plotFarOf(d.road), k=parseFloat(d.katha)||0;
+  if(!b||!r||r.under||k<=0) return null;
+  const [,du,areaFar]=b, plotFar=r.far, land=k*720, eligible=k>=30, large=k>=60;
+  const regional=/Purbachal|Jhilmil/.test(d.block)?.5:0, rw=r.w, roadB=rw>30?Math.min(1,(rw-30)*.02):0;
   const nbBase=areaFar>0&&plotFar>0?Math.min(areaFar,plotFar):0, nbMax=Math.max(areaFar,plotFar);
   const nonBlock=nbBase>0?Math.min(nbBase+sizeBonus(k)+roadB+regional,nbMax):0;
   const inc=large?.2:.15, avg=du>0?areaFar*720/du:0;
@@ -4787,7 +4824,7 @@ function farCalc(d){
   const [tMin,tMax]=mgcTier(k), mgcMax=eligible?(large?.45:.40):tMax, mgcMin=tMin;
   const far=eligible?blockFar:nonBlock, farArea=land*far, sale=farArea*1.22, bs=+d.basements||0, cons=sale*(bs===2?1.45:bs===1?1.35:1.25);
   const base=Math.ceil(k*du), maxUnits=eligible?Math.ceil(Math.ceil(base*(1+inc))*1.1):Math.ceil(base*1.1);
-  return {farType:eligible?'Block FAR':'Non-block FAR',far:+far.toFixed(3),areaFar,plotFar,mgcMinPct:mgcMin,mgcMaxPct:mgcMax,mgcMin:mgcMin!=null?Math.round(land*mgcMin):null,mgcMax:Math.round(land*mgcMax),maxUnits,farArea:Math.round(farArea),saleable:Math.round(sale),construction:Math.round(cons),zero:areaFar===0};
+  return {farType:eligible?'Block FAR':'Non-block FAR',far:+far.toFixed(3),areaFar,plotFar,roadW:rw,plotExact:!!r.exact,plotLo:r.lo||null,plotHi:r.hi||null,mgcMinPct:mgcMin,mgcMaxPct:mgcMax,mgcMin:mgcMin!=null?Math.round(land*mgcMin):null,mgcMax:Math.round(land*mgcMax),maxUnits,farArea:Math.round(farArea),saleable:Math.round(sale),construction:Math.round(cons),zero:areaFar===0};
 }
 const unitsOf=d=>(parseInt(d.upf)||0)*(parseInt(d.floors)||0);
 function floorText(d){ const n=parseInt(d.floors)||0; if(!n) return ''; const bs=+d.basements||0, pre=bs?bs+'B + ':'';
@@ -4802,6 +4839,7 @@ function farFacts(d,x,fact){
   out.push(fact('Building',floorText(d),[d.upf?d.upf+' units per floor':'',d.basements&&+d.basements?d.basements+' basement'+(+d.basements>1?'s':''):''].filter(Boolean).join(' · ')));
   if(d.farApplies==='yes'&&x){
     out.push(fact('FAR used',x.zero?'0 (no building permitted)':`${x.far.toFixed(3)} · ${x.farType}`,`${d.block} · ${d.road} road`));
+    if(x.plotExact===false&&x.plotLo) out.push(fact('Plot FAR (custom road)',`${x.plotFar.toFixed(3)} · ${d.road}`,`Pro rata between ${x.plotLo[0]} ft (${x.plotLo[1].toFixed(3)}) and ${x.plotHi[0]} ft (${x.plotHi[1].toFixed(3)})`));
     out.push(fact('Ground coverage',`Max ${pctTxt(x.mgcMaxPct)} · ${sqft(x.mgcMax)}`,x.mgcMin!=null?`Min ${pctTxt(x.mgcMinPct)} · ${sqft(x.mgcMin)}`:'No minimum for this land size'));
     out.push(fact('Units',`${units||'—'} proposed · ${x.maxUnits} max`,units>x.maxUnits?`${units-x.maxUnits} over the maximum`:null));
     out.push(fact('Total FAR area',sqft(x.farArea)));
