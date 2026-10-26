@@ -2040,10 +2040,11 @@ function viewMine(){
   { const pl=pmLogCard(); if(pl) out.push(pl); }
   if(!amChalkMember()){ const up=upcomingSunday(); if(organiserFor(up)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{S.mhub='weekly';S.view='meet';render(true)},text:'All minutes'})),meetingCard(up,true))); }
   if(!pref.helpSeen&&!amChalkMember()) out.splice(1,0,h('div',{class:'banner'},h('span',{text:'New here? See how to use SLATE OS for your role.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Dismiss'}))));
+  const mrq=meetReqHomeSec(); if(mrq){ const qi=out.findIndex(el=>el&&el.classList&&el.classList.contains('q-banner')); out.splice(qi>=0?qi+1:(pref.helpSeen||amChalkMember()?1:2),0,mrq); }
   const drq=amApprover()?null:delReqCards(); if(drq) out.push(drq);
   const pmq=pmHomeSec(); if(pmq) out.push(pmq);
   const mcl=myChecklist(); if(mcl.length) out.push(myChecklistSec(mcl));
-  if(!mine.length){ if(!qn&&!mcl.length&&!pmq&&!drq) out.push(onboarding()); return out; }
+  if(!mine.length){ if(!qn&&!mcl.length&&!pmq&&!drq&&!mrq) out.push(onboarding()); return out; }
   const r=range('month',0); const mm=mine.filter(t=>{const g=t.target;return g>=r.s&&g<=r.e});
   const c=count(mm,'approved');
   out.push(h('div',{class:'tiles'},
@@ -4307,6 +4308,32 @@ function extraCard(id,m){ const key='xr:'+id, p=S.projects[m.projectId];
       h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>decideExtra(id,m,false),text:'Within scope'}))); }
 function extraReqCards(){ const xs=extraReqs(); if(!xs.length) return null;
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Extra revision rounds to approve'}),h('span',{class:'cnt',text:String(xs.length)})),h('div',{class:'list'},xs.map(x=>extraCard(x.id,x.m)))); }
+/* Home: meeting requests. Invites waiting for my reply (Accept here, or Tentative / Decline with a reason),
+   then meetings I set up that still have people who haven't replied. */
+function meetReqHomeSec(){
+  const ms=allMeets().filter(mOpenForReply).sort((a,b)=>(a.date+(a.time||'99')).localeCompare(b.date+(b.time||'99')));
+  const need=ms.filter(mNeedsReply), wait=ms.filter(m=>m.createdBy===S.uid&&mAwaiting(m).length);
+  if(!need.length&&!wait.length) return null;
+  const openWith=(id,c)=>{ openPMeet(id); if(S.sheet&&S.sheet.id===id){ S.sheet.reply={edit:false,c,note:''}; renderSheet(); setTimeout(()=>{ const t=document.getElementById('rv-note'); if(t) t.focus(); },60); } };
+  const card=m=>{ const p=mProj(m), c=mCat(m), where=c==='project'?(p?(p.code||p.name):''):mCatName(c), moved=m.rsvp&&m.rsvp[S.uid];
+    return h('div',{class:'card',style:'display:grid;gap:10px;box-shadow:inset 3px 0 0 var(--overdue)'},
+      h('div',{role:'button',tabindex:'0',style:'cursor:pointer;min-width:0',onclick:()=>openPMeet(m.id),onkeydown:e=>{ if(e.key==='Enter') openPMeet(m.id); }},
+        h('div',{class:'row-title'},h('span',{text:mTitle(m)}),h('span',{class:'tag tag-req',text:moved?'Moved: reply again':'Reply needed'})),
+        h('div',{class:'row-meta'},h('span',{text:[mWhen(m),m.venue||'',where].filter(Boolean).join(' · ')})),
+        h('div',{class:'rv-sum',text:`From ${nameOf(m.createdBy)} · ${(m.attendees||[]).length} invited`})),
+      S.canWrite?h('div',{class:'rv-btns'},
+        h('button',{class:'btn',type:'button',style:'--c:'+RSVP.yes[1],disabled:S.busy,onclick:()=>meetRespond(m.id,'yes',''),text:'Accept'}),
+        h('button',{class:'btn',type:'button',style:'--c:'+RSVP.maybe[1],disabled:S.busy,onclick:()=>openWith(m.id,'maybe'),text:'Tentative'}),
+        h('button',{class:'btn',type:'button',style:'--c:'+RSVP.no[1],disabled:S.busy,onclick:()=>openWith(m.id,'no'),text:'Decline'})):null); };
+  const out=[h('div',{class:'sec-h'},h('h2',{text:'Meeting requests'}),h('span',{class:'cnt',text:String(need.length)}),
+    h('button',{class:'linkish',type:'button',style:'font-size:12.5px;margin-left:auto',onclick:()=>{ S.mhub='up'; S.view='meet'; render(true); window.scrollTo(0,0); },text:'All meetings'}))];
+  if(need.length) out.push(h('div',{style:'display:grid;gap:10px'},need.map(card)));
+  if(wait.length) out.push(h('div',{class:'list'},wait.map(m=>{ const w=mAwaiting(m);
+    return h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openPMeet(m.id),onkeydown:e=>{ if(e.key==='Enter') openPMeet(m.id); }},
+      h('div',{style:'min-width:0'},h('div',{class:'row-title'},h('span',{text:mTitle(m)}),h('span',{class:'tag',text:`${w.length} awaiting reply`})),
+        h('div',{class:'row-meta'},h('span',{text:`${mWhen(m)} · waiting on ${w.map(id=>nameOf(id).split(' ')[0]).join(', ')}`}))),
+      h('span',{class:'mi-a',text:'›'})); })));
+  return h('section',{class:'sec'},out); }
 /* Home: minutes to finish or send (whoever logged them, the pod lead, the COO) */
 function pmHomeSec(){
   const xs=allMeets().filter(m=>{ const p=mProj(m); if(m.projectId&&(!p||p.closed)) return false; if(['scheduled','cancelled'].includes(m.status)) return false;
