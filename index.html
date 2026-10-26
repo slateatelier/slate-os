@@ -1606,7 +1606,7 @@ function sheetTimeline(){
       h('input',{id:'tl-'+t.id,type:'date','aria-label':'Date for '+t.title,value:cur,style:'background:#fff',oninput:e=>{sh.d[t.id]=e.target.value}})));
   });
   return [head(projLabel(p),ap?'Set the timeline':'Propose the timeline'),
-    h('p',{class:'lead',style:'margin:0',text:ap?'Dates you set here become the approved targets (R0).':'Enter a target date for each task. They go to the COO for approval; nothing is counted until approved. You can fill some now and the rest later.'}),
+    h('p',{class:'lead',style:'margin:0',text:ap?'Dates you set here become the approved targets (Date 1).':'Enter a target date for each task. They go to the COO for approval; nothing is counted until approved. You can fill some now and the rest later.'}),
     list,
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
@@ -1864,7 +1864,7 @@ function row(t,o={}){
         t.revCount&&h('span',{class:'tag',text:`${t.revCount} revision${t.revCount>1?'s':''}`}),
         t.archived&&h('span',{class:'tag',text:'Archived'})),
       metaEls.length?h("div",{class:"row-meta"},metaEls):null),
-    h('div',{class:'row-date'},h('div',{class:'lbl',text:t.doneAt?'Completed':t.target?`Target R${t.revisions||0}`:'Target'}),h('div',{class:'mono',text:t.doneAt||t.target?fmtD(t.doneAt||t.target):'Pending'})),
+    h('div',{class:'row-date'},h('div',{class:'lbl',text:t.doneAt?'Completed':t.target?((t.revisions||0)?`Target · Date ${(t.revisions||0)+1}`:'Target'):'Target'}),h('div',{class:'mono',text:t.doneAt||t.target?fmtD(t.doneAt||t.target):'Pending'})),
     pill(t));
 }
 /* labels are set in capitals, but project names keep the case they were typed in */
@@ -1936,7 +1936,7 @@ function quickItems(){
     out.push({id:'tl:'+pid,def:true,at:xs.map(t=>t.request.at).sort()[0],kind:'Timeline',title:projLabel(p),meta:`${xs.length} date${xs.length===1?'':'s'} · proposed by ${nameOf(xs[0].request.by)}`,
       fn:async()=>{ for(const t of xs){ const [pa,e]=approvalOf(S.tasks[t.id]?{...S.tasks[t.id],id:t.id}:t,''); await taskUpdate(t.id,pa,e); } }}); }
   ts.filter(t=>t.request&&!t.request.initial).forEach(t=>{ const r=t.request, sh=diff(t.target,r.date);
-    out.push({id:'rv:'+t.id,def:false,at:r.at,kind:'Revised date',title:t.title,meta:`${projLabel(S.projects[t.projectId])} · ${nameOf(r.by)} · ${fmtD(t.target)} → ${fmtD(r.date)} (${sh>0?'+':''}${sh}d) · becomes R${(t.revisions||0)+1}`,quote:r.reason,
+    out.push({id:'rv:'+t.id,def:false,at:r.at,kind:'Revised date',title:t.title,meta:`${projLabel(S.projects[t.projectId])} · ${nameOf(r.by)} · ${fmtD(t.target)} → ${fmtD(r.date)} (${sh>0?'+':''}${sh}d) · becomes Date ${(t.revisions||0)+2}`,quote:r.reason,
       fn:async()=>{ const [pa,e]=approvalOf(t,''); await taskUpdate(t.id,pa,e); }}); });
   ts.filter(t=>t.assignReq).forEach(t=>{ const r=t.assignReq, c=loadOf(r.to,t.id);
     out.push({id:'as:'+t.id,def:true,at:r.at,kind:'Support',title:`${nameOf(r.to)} for “${t.title}”`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,
@@ -2084,6 +2084,22 @@ function approvalBlocks(reqs){
   if(rev.length) out.push(approvalCards(rev.sort((a,b)=>(paceOf(S.projects[a.projectId])==='fast'?0:1)-(paceOf(S.projects[b.projectId])==='fast'?0:1))));
   return out;
 }
+/* every date a task has had, in order: Date 1 is the first approved target, each approved change is Date 2, 3…
+   Requests that were returned, withdrawn or changed are listed without a number; a waiting one shows last. */
+function dateLog(t){
+  const out=[], hist=t.history||[]; let ask=null, n=0;
+  const push=(date,who,reason,note,at)=>{ n++; out.push({n,date,who,reason,note,state:'set',at}); };
+  for(const e of hist){
+    if((e.type==='created'||e.type==='scheduled')&&e.to&&!n) push(e.to,`Set by ${nameOf(e.by)} · ${fmtTs(e.at)}`,'','',e.at);
+    else if(e.type==='request'||e.type==='proposed'){ if(ask) out.push({...ask,state:'replaced'}); ask={date:e.to,who:`Asked by ${nameOf(e.by)} · ${fmtTs(e.at)}`,reason:e.note||'',by:e.by,at:e.at}; }
+    else if(e.type==='withdrawn'||e.type==='declined'){ if(ask){ out.push({...ask,state:e.type,note:e.note||''}); ask=null; } }
+    else if(e.type==='approved'&&e.rev!=null){ const a=ask&&ask.date===e.to?ask:null; push(e.to,(a?`Asked by ${nameOf(a.by)} · `:'')+`Approved by ${nameOf(e.by)} · ${fmtTs(e.at)}`,a?a.reason:'',e.note||'',e.at); ask=null; }
+    else if(e.type==='target'&&e.to){ if(!n&&e.from) push(e.from,'Set before this log','','',''); push(e.to,`Changed by ${nameOf(e.by)} · ${fmtTs(e.at)}`,e.note||'','',e.at); }
+  }
+  if(!n&&t.target){ if(t.originalTarget&&t.originalTarget!==t.target) push(t.originalTarget,'Original date','','',''); push(t.target,'Current target','','',''); }
+  const last=[...out].reverse().find(x=>x.n); if(last&&t.target===last.date) last.cur=true;
+  if(t.request) out.push({date:t.request.date,who:`Asked by ${nameOf(t.request.by)} · ${fmtTs(t.request.at)}`,reason:t.request.reason||'',state:'pending'});
+  return out; }
 function approvalOf(t,note){ const r=t.request;
   if(!t.target) return [{target:r.date,originalTarget:t.originalTarget||r.date,request:null},[{type:'approved',from:null,to:r.date,rev:0,note}]];
   const rev=(t.revisions||0)+1; return [{target:r.date,revisions:rev,request:null},[{type:'approved',from:t.target,to:r.date,rev,note}]]; }
@@ -3098,9 +3114,10 @@ const histText=e=>{
     case 'proposed': return `${by} proposed ${fmtD(e.to)} as the target date`;
     case 'scheduled': return `${by} set the target date to ${fmtD(e.to)}`;
     case 'reassigned': return `${by} reassigned it from ${nameOf(e.from)} to ${nameOf(e.to)}`;
-    case 'target': return `${by} changed the target from ${fmtD(e.from)} to ${fmtD(e.to)} (now R${e.rev})`;
-    case 'request': return `${by} requested a new date: ${fmtD(e.to)} (current target ${fmtD(e.from)})`;
-    case 'approved': return e.from?`${by} approved the new date ${fmtD(e.to)}, previously ${fmtD(e.from)} (now R${e.rev})`:`${by} approved the target date ${fmtD(e.to)}`;
+    case 'target': return `${by} changed the target from ${fmtD(e.from)} to ${fmtD(e.to)} (now Date ${e.rev+1})`;
+    case 'request': return e.replaced?`${by} changed the date request to ${fmtD(e.to)} (was ${fmtD(e.replaced)}; current target ${fmtD(e.from)})`:`${by} requested a new date: ${fmtD(e.to)} (current target ${fmtD(e.from)})`;
+    case 'withdrawn': return `${by} withdrew the date request for ${fmtD(e.to)}`;
+    case 'approved': return e.from?`${by} approved the new date ${fmtD(e.to)}, previously ${fmtD(e.from)} (now Date ${e.rev+1})`:`${by} approved the target date ${fmtD(e.to)}`;
     case 'declined': return `${by} returned the proposed date ${fmtD(e.to)}`;
     case 'done': return `${by} marked it done, completed ${fmtD(e.to)}`;
     case 'revisionAdded': return `${by} logged client revision ${e.n} (feedback received ${fmtD(e.to)})`;
@@ -3328,12 +3345,12 @@ function sheetTask(){
   const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((!ck&&leadsProj(t.projectId))||amApprover()||cctl)&&S.canWrite, ap=(ck?(S.isOwner||(canChalkAssign()&&!t.target&&!t.request)):amApprover())&&S.canWrite, boss=ck?'the Principal':'the COO', mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
   const canAct=S.canWrite&&!t.archived&&(mine||mgr);
   const out=[head(`${projLabel(p)} · ${t.kind||'Task'}`,t.title)];
-  out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',text:`Target revised ${t.revisions}×`})));
+  out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',text:`Date revised ${t.revisions}×`})));
   const fact=(l,v,s,mono)=>h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v'+(mono?' mono':''),text:v}),s&&h('div',{class:'s',text:s}));
   out.push(h('div',{class:'facts'},
     fact('Assigned to',t.assignee?nameOf(t.assignee):(t.assignReq?'Awaiting approval':'Unassigned'),t.assignee?[teamLabel(t.assignee),roleOf(t.assignee)].filter(Boolean).join(' · '):''),
-    fact(t.target?`Target R${t.revisions||0}`:'Target',t.target?fmtD(t.target):'Not approved yet',null,true),
-    t.target&&fact('Original target R0',fmtD(t.originalTarget||t.target),t.originalTarget&&t.originalTarget!==t.target?`${diff(t.originalTarget,t.target)>0?'+':''}${diff(t.originalTarget,t.target)}d from original`:null,true),
+    fact(t.target?`Target · Date ${(t.revisions||0)+1}`:'Target',t.target?fmtD(t.target):'Not approved yet',null,true),
+    t.target&&(t.revisions||0)>0&&fact('Original · Date 1',fmtD(t.originalTarget||t.target),t.originalTarget&&t.originalTarget!==t.target?`${diff(t.originalTarget,t.target)>0?'+':''}${diff(t.originalTarget,t.target)}d from original`:null,true),
     fact('Completed',t.doneAt?fmtD(t.doneAt):'Not yet',t.doneAt&&t.doneBy?`Recorded by ${nameOf(t.doneBy)}`:null,true),
     t.repeat&&fact('Repeats',t.repeat==='weekly'?'Every week':'Every month','The next one is created when this is marked done, with its date already set.')));
   if(t.gate&&p&&p.std&&PH[t.gate.k]){ const k=t.gate.k, tot=clItems(k).length, left=clLeft(p,k);
@@ -3344,7 +3361,7 @@ function sheetTask(){
   if(!t.doneAt&&!t.archived&&canMove(t)&&!m) out.push(h('div',{class:'bar'},h('span',{class:'lbl',text:'Stage'}),seg('Stage',STAGES.filter(x=>x[0]!=='done'),stageOf(t),v=>moveStage(t.id,v))));
   if(t.assignReq) out.push(assignCard(t,true));
   if(t.request){ const r=t.request;
-    out.push(h('div',{class:'callout'},h('div',{class:'lbl',text:t.target?'Revised date requested':'Date proposed'}),
+    out.push(h('div',{class:'callout'},h('div',{class:'lbl',text:t.target?`Revised date requested · would be Date ${(t.revisions||0)+2}`:'Date proposed'}),
       t.target?h('div',{class:'req-dates'},h('span',{class:'mono',text:fmtD(t.target)}),h('span',{class:'arrow',text:'→'}),h('span',{class:'mono',style:'font-weight:500',text:fmtD(r.date)}),h('span',{class:'tag tag-rev',text:(diff(t.target,r.date)>0?'+':'')+diff(t.target,r.date)+'d'}))
         :h('div',{class:'mono',style:'font-weight:500',text:fmtD(r.date)}),
       r.reason&&h('p',{class:'quote',text:r.reason}),h('div',{class:'f-hint',text:`${nameOf(r.by)} · ${fmtTs(r.at)}`}),
@@ -3357,7 +3374,10 @@ function sheetTask(){
     const btns=[];
     if(canAct&&!t.doneAt) btns.push(h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done today'}),h('button',{class:'btn',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Done on another date'}));
     if(false) btns.push(h('button',{class:'btn btn-primary',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Mark as done'}));
-    if(S.canWrite&&!t.archived&&!t.doneAt&&(mine||mgr)&&!t.request&&!ap&&!t.ongoing&&(t.target||mgr)) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:'',reason:''}),text:t.target?'Request new date':'Propose date'}));
+    if(S.canWrite&&!t.archived&&!t.doneAt&&(mine||mgr)&&!ap&&!t.ongoing&&(t.target||mgr)){
+      if(!t.request) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:'',reason:''}),text:t.target?'Request new date':'Propose date'}));
+      else if(t.request.by===S.uid||mgr) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:t.request.date,reason:t.request.reason||''}),text:t.target?'Change my request':'Change proposed date'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>run(()=>taskUpdate(t.id,{request:null},[{type:'withdrawn',to:t.request.date}]),'Request withdrawn'),text:'Withdraw request'})); }
     if(mgr&&!t.archived){
       if(!t.doneAt&&ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('target',{date:t.target||(t.request&&t.request.date)||'',reason:''}),text:t.target?'Change target date':'Set target date'}));
       if(!t.doneAt||amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('rename',{title:t.title}),text:'Rename'}));
@@ -3385,14 +3405,15 @@ function sheetTask(){
     field(t.target?'Reason':'Note (optional)',ta('reason',{placeholder:t.target?'e.g. Client changed the brief on 18 Oct; structural input pending':''}),t.target?`${boss[0].toUpperCase()+boss.slice(1)} reviews this. Your current target stays until it is approved.`:`${boss[0].toUpperCase()+boss.slice(1)} reviews this before it counts.`)],'Send for approval',()=>{
       if(!d.date) return fail('Choose the date you’re proposing.');
       if(d.date===t.target) return fail('That is already the target date.');
-      const reason=(d.reason||'').trim();
+      const reason=(d.reason||'').trim(), prev=t.request&&t.request.date;
+      if(prev&&prev===d.date&&reason===(t.request.reason||'')) return fail('That is already the date you requested.');
       if(t.target&&!reason) return fail('Give a reason so the COO can decide.');
       const now=new Date().toISOString();
-      run(()=>taskUpdate(t.id,{request:{date:d.date,reason,by:S.uid,at:now,initial:!t.target}},[t.target?{type:'request',from:t.target,to:d.date,note:reason}:{type:'proposed',to:d.date,note:reason}]),'Sent for approval').then(ok=>ok&&setMode(null));
+      run(()=>taskUpdate(t.id,{request:{date:d.date,reason,by:S.uid,at:now,initial:!t.target}},[t.target?{type:'request',from:t.target,to:d.date,note:reason,...(prev?{replaced:prev}:{})}:{type:'proposed',to:d.date,note:reason}]),prev?'Request updated':'Sent for approval').then(ok=>ok&&setMode(null));
     }));
   if(m==='target') out.push(form(t.target?'Change the target date':'Set the target date',[
     field(t.target?'New target date':'Target date',inp('date',{type:'date'})),
-    t.target&&field('Reason',ta('reason',{placeholder:'Why the date is moving'}),`This becomes R${(t.revisions||0)+1}. The original target ${fmtD(t.originalTarget||t.target)} stays on record.`)],'Save date',()=>{
+    t.target&&field('Reason',ta('reason',{placeholder:'Why the date is moving'}),`This becomes Date ${(t.revisions||0)+2}. Date 1 (${fmtD(t.originalTarget||t.target)}) and every later date stay on record.`)],'Save date',()=>{
       if(!d.date) return fail('Choose the target date.');
       if(d.date===t.target) return fail('That is already the target date.');
       if(!t.target) return run(()=>taskUpdate(t.id,{target:d.date,originalTarget:d.date,revisions:0,request:null},[{type:'scheduled',to:d.date}]),'Target date set').then(ok=>ok&&setMode(null));
@@ -3454,6 +3475,11 @@ function sheetTask(){
     if(revs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Client revisions'}),h('span',{class:'cnt',text:String(revs.length)})),
       h('div',{class:'card',style:'gap:4px'},h('div',{class:'pc-row'},h('span',{text:'Original completed'}),h('b',{class:'mono',text:fmtD(root.doneAt)}))),
       h('div',{class:'list'},revs.map(r=>h('div',{class:'rev-item'},row(r,{project:false}),r.feedback?h('div',{class:'rev-fb',text:`“${r.feedback}” · received ${fmtD(r.feedbackAt)}`}):null))))); }
+  { const lg=dateLog(t); if(lg.length>1||lg.some(x=>x.state!=='set')) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Date log'}),h('span',{class:'cnt',text:String(lg.filter(x=>x.n).length)})),
+    h('div',{class:'list'},lg.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:72px minmax(0,1fr) auto;align-items:start;gap:10px'+(x.state==='set'?'':';opacity:.75')},
+      h('span',{style:'font-weight:600',text:x.n?`Date ${x.n}`:x.state==='pending'?'Asked':'Not used'}),
+      h('div',{style:'min-width:0'},h('div',{class:'f-hint',text:x.who}),x.reason?h('div',{class:'quote',style:'font-size:13.5px',text:x.reason}):null,x.note?h('div',{class:'f-hint',text:'Note: '+x.note}):null),
+      h('div',{style:'text-align:right'},h('div',{class:'mono',style:x.cur?'font-weight:600':'',text:fmtD(x.date)}),x.cur?h('div',{class:'f-hint',text:'Current'}):x.state==='pending'?h('div',{class:'f-hint',text:'Waiting'}):x.state==='declined'?h('div',{class:'f-hint',text:'Returned'}):x.state==='withdrawn'?h('div',{class:'f-hint',text:'Withdrawn'}):x.state==='replaced'?h('div',{class:'f-hint',text:'Changed'}):null)))))); }
   const hist=(t.history||[]).slice().reverse();
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'History'}),h('span',{class:'cnt',text:String(hist.length)})),
     h('div',{class:'tl'},hist.map(e=>h('div',{class:'tl-item'},h('time',{text:fmtTs(e.at)}),h('div',{text:histText(e)}),e.note&&h('div',{class:'tl-note',text:e.note}))))));
@@ -4290,7 +4316,7 @@ function hxTaskFlow(){
   const arr=()=>h('div',{class:'hx-arr','aria-hidden':'true'},hxIco('arrow'));
   return h('div',{class:'hx-card'},
     h('div',{class:'hx-flow'},node('var(--muted)','Assigned','Pod lead gives you the task'),arr(),node('var(--late)','Date proposed','Pod lead suggests a target'),arr(),node('var(--ink)','COO approves','Now it counts'),arr(),node('var(--early)','In progress','Move it on the Board'),arr(),node('var(--ontime)','Done','Locked, with the date')),
-    h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('clock')),h('div',{},h('b',{text:'Running late?'}),h('span',{text:' Request a new date with a reason. The COO approves or returns it; the original target stays on record as R0, each change is R1, R2…'}))),
+    h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('clock')),h('div',{},h('b',{text:'Running late?'}),h('span',{text:' Request a new date with a reason. The COO approves or returns it; the first approved date is Date 1 and each approved change becomes Date 2, Date 3… All of them stay in the task’s Date log. You can change or withdraw a request while it waits.'}))),
     h('div',{class:'hx-loop'},h('span',{class:'hx-loop-ic'},hxIco('doc')),h('div',{},h('b',{text:'Client sent changes after it was done?'}),h('span',{text:' Use + Client revision. It becomes a new linked task; the original on-time record is kept.'}))));
 }
 /* infographic: the weekly meeting, from minutes to tasks */
@@ -4371,14 +4397,14 @@ const HOWDO=[
  ['tasks',['lead','boss'],'Remove a task that is no longer needed',['Open the task › Archive.','Add a reason, e.g. Dropped from scope, and confirm.'],'It leaves the lists and the dashboard but keeps its history.','Nothing is deleted. To bring it back: Tasks › Status: Archived › open it › Restore.'],
  ['tasks','boss','Reopen a completed task or fix its completion date',['Open the task.','Tap Reopen, or Correct completion date.','Give the reason (required) and save.'],'The change and the reason stay in the history.','Use it for real mistakes only; client changes go in as + Client revision.'],
  ['tasks','all','Make a task repeat every week or month',['When creating it, open More options › Repeat (or Edit or reassign › Repeat).','Choose Repeats weekly or Repeats monthly.'],'When you mark it done, the next one is created for the same person with its date already set.','Choose Does not repeat to stop the series.'],
- ['tasks','all','Read a task’s history',['Open the task.','The top shows Target Rn and Original target R0.','Scroll to History for every change, who made it and when.'],'R0 is the first approved date; each approved change is R1, R2…',null],
+ ['tasks','all','Read a task’s history',['Open the task.','The top shows the current target and which date it is (Date 2, Date 3…).','The Date log lists every date in order, with who asked, the reason and who approved it; History has every change.'],'Date 1 is the first approved date; each approved change is Date 2, Date 3…',null],
  ['tasks','boss','Keep the Principal’s and COO’s tasks private',['Tasks for a private person are stored apart automatically.','The Principal can mark someone private in More › Settings › People › Private tasks.'],'Only the Principal and the COO see them. They never appear on the dashboard or in anyone else’s lists.','A private task can’t be reassigned; archive it and create a new one.'],
 
  // ---- dates
  ['dates',['member','lead','head'],'Ask for more time',['Open the task › Request new date.','Pick the new date (chips: +2 days, +1 week, +2 weeks, or any date).','Tap a reason chip, e.g. Waiting for client input, and add detail.','Tap Send for approval.'],'The COO approves or declines. Your current date stays until then; the row shows Date request.','Ask the day you know you will be late, not on the due date. If the client or a consultant caused the delay, say so in the reason.'],
  ['dates',['lead','boss'],'Propose dates for a whole project',['Tasks › beside the project heading, tap Propose timeline (or Set timeline).','Enter a date for each task. You can leave some for later.','Tap Send for approval (or Set dates).'],'Pod leads’ dates go to the COO; the Principal’s and COO’s count at once.',null],
  ['dates','lead','Propose a date for a task that has none',['Open the task › Propose date.','Pick the date, add a note if useful.','Tap Send for approval.'],'It shows “Waiting for the COO’s approval” until decided.',null],
- ['dates','boss','Approve dates and requests',['Approvals (the tab beside Home; Home shows how many are waiting).','Approve together: first timelines, support, phase dates and standard tasks start ticked; revised dates and people moves start unticked so you read each one.','Tap Approve N selected (tap twice). Anything that didn’t save stays ticked with the reason.','To add a note, decline or return, use the cards below: a project’s first timeline is one card; revised dates are approved or declined one by one.'],'Approved dates become the target; changes become R1, R2… and the original R0 stays on record.','Fast-track projects are listed first and marked “decide today”. A tapped notification about a request opens Approvals or the task itself.'],
+ ['dates','boss','Approve dates and requests',['Approvals (the tab beside Home; Home shows how many are waiting).','Approve together: first timelines, support, phase dates and standard tasks start ticked; revised dates and people moves start unticked so you read each one.','Tap Approve N selected (tap twice). Anything that didn’t save stays ticked with the reason.','To add a note, decline or return, use the cards below: a project’s first timeline is one card; revised dates are approved or declined one by one.'],'Approved dates become the target; changes become Date 2, Date 3… and Date 1 stays on record.','Fast-track projects are listed first and marked “decide today”. A tapped notification about a request opens Approvals or the task itself.'],
  ['dates','boss','Change a target date directly',['Open the task › Change target date (or Set target date).','Enter the new date and the reason.','Tap Save date.'],'It becomes the next revision; the original target stays on record.',null],
 
  // ---- projects
