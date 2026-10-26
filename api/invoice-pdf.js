@@ -44,11 +44,6 @@ function readBody(req) {
 
 module.exports = async (req, res) => {
   const fail = (code, msg) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: msg })); };
-  if (req.method === 'GET' && /[?&]check=1\b/.test(req.url || '')) {   // TEMP deploy check: prints a fixed test page, returns only its size
-    let pg; try { const b = await browser(); pg = await b.newPage(); await pg.setContent('<!doctype html><p style="font:20px sans-serif">SLATE print check</p>');
-      const pdf = await pg.pdf({ format: 'A4' }); res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify({ ok: true, bytes: pdf.length })); }
-    catch (e) { return fail(500, String(e && e.message)); } finally { if (pg) pg.close().catch(() => {}); }
-  }
   if (req.method !== 'POST') return fail(405, 'Use POST');
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (!token) return fail(401, 'Sign in to Finance first.');
