@@ -735,6 +735,11 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
   .cal-row{grid-template-columns:4px minmax(0,1fr)}
   .cal-row .pill{grid-column:2;justify-self:start}
 }
+.nb-card{gap:8px}.nb-card.unseen{box-shadow:inset 3px 0 0 var(--early)}.nb-card.imp{box-shadow:inset 3px 0 0 var(--overdue)}
+.nb-title{margin:0;font-size:16px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.nb-body{white-space:pre-line;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.nb-body.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.nb-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .rv-list{display:grid;gap:2px;background:var(--group);border-radius:var(--r);padding:6px}
 .rv-row{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;background:#fff}
 .rv-row .rv-n{flex:1;min-width:0;display:grid;gap:2px}.rv-row .rv-n b{font-weight:600;font-size:13.5px}
@@ -1732,7 +1737,7 @@ async function boot(){
   S.me=await user.me(); S.uid=S.me.id; S.isOwner=!!S.me.isOwner;
   if(!S.uid){ S.state='signedout'; render(true); return; }
   const cw=await user.can('data.write'); S.canWrite=cw!==false;
-  S.state='ready'; render(true);
+  S.state='ready'; render(true); noticesLive();
 
   settingsRef().onSnapshot(snap=>{
     if(snap.exists) S.settings=snap.data();
@@ -1818,8 +1823,8 @@ function renderHeader(){
   const reqs=amApprover()?queueCount():0;
   const full=fullView(), mp=myPod();
   const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
-  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['meet','Meetings'],['team','Team'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More']];
-  const TASKV=['all','board','gantt'], MOREV=cmem?[]:['more','activity','setup','std','help','far','reports','backup'];
+  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['meet','Meetings'],['team','Team'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',nUnseenCount()]];
+  const TASKV=['all','board','gantt'], MOREV=cmem?['notice']:['more','notice','activity','setup','std','help','far','reports','backup'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
@@ -1840,16 +1845,16 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,mine:viewMine,all:viewAll,projects:viewProjects,team:viewTeam,meet:viewMeetHub,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),setup:viewSetup,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,mine:viewMine,all:viewAll,projects:viewProjects,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),setup:viewSetup,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
-  if(['activity','setup','std','help','far','reports','backup'].includes(S.view)) out.push(h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{S.view='more';render(true)},text:'‹ More'}));
+  if(['activity','setup','std','help','far','reports','backup'].concat(amChalkMember()?[]:['notice']).includes(S.view)) out.push(h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{S.view='more';render(true)},text:'‹ More'}));
   return out.concat(v());
 }
 
 function viewMore(){
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
-    h('div',{class:'list'},item('help','How to use','Your routine, the phases and how scoring works, in pictures'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
+    h('div',{class:'list'},item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),item('help','How to use','Your routine, the phases and how scoring works, in pictures'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
       item('reports','Report log',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
       window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null,
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null,
@@ -2041,10 +2046,11 @@ function viewMine(){
   if(!amChalkMember()){ const up=upcomingSunday(); if(organiserFor(up)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{S.mhub='weekly';S.view='meet';render(true)},text:'All minutes'})),meetingCard(up,true))); }
   if(!pref.helpSeen&&!amChalkMember()) out.splice(1,0,h('div',{class:'banner'},h('span',{text:'New here? See how to use SLATE OS for your role.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Dismiss'}))));
   const mrq=meetReqHomeSec(); if(mrq){ const qi=out.findIndex(el=>el&&el.classList&&el.classList.contains('q-banner')); out.splice(qi>=0?qi+1:(pref.helpSeen||amChalkMember()?1:2),0,mrq); }
+  const nbq=noticeHomeSec(); if(nbq){ const at=mrq?out.indexOf(mrq)+1:(()=>{ const qi=out.findIndex(el=>el&&el.classList&&el.classList.contains('q-banner')); return qi>=0?qi+1:(pref.helpSeen||amChalkMember()?1:2); })(); out.splice(at,0,nbq); }
   const drq=amApprover()?null:delReqCards(); if(drq) out.push(drq);
   const pmq=pmHomeSec(); if(pmq) out.push(pmq);
   const mcl=myChecklist(); if(mcl.length) out.push(myChecklistSec(mcl));
-  if(!mine.length){ if(!qn&&!mcl.length&&!pmq&&!drq&&!mrq) out.push(onboarding()); return out; }
+  if(!mine.length){ if(!qn&&!mcl.length&&!pmq&&!drq&&!mrq&&!nbq) out.push(onboarding()); return out; }
   const r=range('month',0); const mm=mine.filter(t=>{const g=t.target;return g>=r.s&&g<=r.e});
   const c=count(mm,'approved');
   out.push(h('div',{class:'tiles'},
@@ -3389,7 +3395,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -4308,6 +4314,107 @@ function extraCard(id,m){ const key='xr:'+id, p=S.projects[m.projectId];
       h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>decideExtra(id,m,false),text:'Within scope'}))); }
 function extraReqCards(){ const xs=extraReqs(); if(!xs.length) return null;
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Extra revision rounds to approve'}),h('span',{class:'cnt',text:String(xs.length)})),h('div',{class:'list'},xs.map(x=>extraCard(x.id,x.m)))); }
+/* ---------- Notice board: company-wide announcements, apart from personal notifications and messages ----------
+   Table public.notices (the Principal and the COO post, edit, pin, archive); public.notice_reads records each "Got it".
+   An important notice also sends everyone one phone notification. A notice with a "show until" date drops off Home after it. */
+const NCATS=[['general','General'],['policy','Policy'],['hr','HR'],['holiday','Holiday'],['event','Event'],['office','Office']];
+const ncatName=k=>(NCATS.find(x=>x[0]===k)||['','Notice'])[1];
+async function noticesLoad(){ const sb=window.slateSupabase; if(!sb) return;
+  const [a,b]=await Promise.all([sb.from('notices').select('*').order('created_at',{ascending:false}).limit(400),sb.from('notice_reads').select('notice_id,user_id,seen_at').limit(20000)]);
+  if(a.error) return; S.notices=a.data||[]; S.nreads={};
+  (b.data||[]).forEach(r=>{ (S.nreads[r.notice_id]=S.nreads[r.notice_id]||{})[r.user_id]=r.seen_at; }); schedule(); }
+function noticesLive(){ const sb=window.slateSupabase; if(!sb||S.noticesOn) return; S.noticesOn=true; noticesLoad();
+  sb.channel('slate-notices').on('postgres_changes',{event:'*',schema:'public',table:'notices'},()=>noticesLoad())
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'notice_reads'},ev=>{ const r=ev.new; if(r){ (S.nreads[r.notice_id]=S.nreads[r.notice_id]||{})[r.user_id]=r.seen_at; schedule(); } }).subscribe();
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') noticesLoad(); }); }
+const nAll=()=>S.notices||[];
+const nLive=n=>!n.archived&&(!n.until||n.until>=today());
+const nSeen=(n,id=S.uid)=>n.created_by===id||!!(S.nreads&&S.nreads[n.id]&&S.nreads[n.id][id]);
+const nAudience=n=>people().filter(id=>id!==n.created_by);
+const nUnseenCount=()=>nAll().filter(n=>nLive(n)&&!nSeen(n)).length;
+function noticeGotIt(n){
+  return run(async()=>{ const {error}=await window.slateSupabase.from('notice_reads').insert({notice_id:n.id});
+    if(error&&!/duplicate/i.test(error.message)) throw new Error(error.message);
+    (S.nreads[n.id]=S.nreads[n.id]||{})[S.uid]=new Date().toISOString(); },'Marked as seen'); }
+function nTags(n){ return [h('span',{class:'tag',text:ncatName(n.category)}),n.important?h('span',{class:'tag tag-req',text:'Important'}):null,n.pinned?h('span',{class:'tag',text:'Pinned'}):null,
+  !n.archived&&n.until?h('span',{class:'tag',text:(n.until>=today()?'Until ':'Ended ')+fmtD(n.until)}):null,n.archived?h('span',{class:'tag',text:'Archived'}):null]; }
+function noticeCard(n,opt={}){
+  const seen=nSeen(n), mine=n.created_by===S.uid, edited=n.updated_at&&n.created_at&&Date.parse(n.updated_at)-Date.parse(n.created_at)>6e4;
+  const aud=nAudience(n), got=aud.filter(id=>nSeen(n,id)), miss=aud.filter(id=>!nSeen(n,id)), openK='nr'+n.id;
+  const bodyEl=n.body?h('div',{class:'nb-body'+(opt.clamp?' clamp':''),text:n.body}):null;
+  return h('article',{class:'card nb-card'+(n.important?' imp':'')+(!seen?' unseen':'')},
+    h('div',{style:'display:flex;flex-wrap:wrap;gap:6px;align-items:center'},nTags(n)),
+    h('h3',{class:'nb-title',text:n.title}),bodyEl,
+    opt.clamp&&n.body&&n.body.length>220?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px',onclick:()=>{ S.view='notice'; render(true); window.scrollTo(0,0); },text:'Read in full'}):null,
+    h('div',{class:'nb-foot'},h('span',{class:'f-hint',text:`${nameOf(n.created_by)} · ${fmtTs(n.created_at)}`+(edited?` · edited ${fmtTs(n.updated_at)}`:'')}),
+      !seen&&S.canWrite&&!n.archived?h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>noticeGotIt(n),text:'Got it'}):null,
+      seen&&!mine&&!opt.clamp?h('span',{class:'f-hint',text:'✓ Seen'}):null),
+    amApprover()&&!opt.clamp?h('div',{style:'display:grid;gap:8px'},
+      h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px',onclick:()=>{ S[openK]=!S[openK]; render(true); },text:`Seen by ${got.length} of ${aud.length}`+(miss.length?` · ${S[openK]?'hide':'show'} who hasn’t`:'')}),
+      S[openK]&&miss.length?h('div',{class:'chips'},miss.map(id=>h('span',{class:'chip who',style:'padding-right:12px'},avaEl(id,false,'sm'),nameOf(id).split(' ')[0]))):null,
+      S.canWrite?h('div',{class:'actions'},
+        h('button',{class:'btn btn-sm',type:'button',onclick:()=>openNoticeEditor(n),text:'Edit'}),
+        h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>noticePatch(n,{pinned:!n.pinned},n.pinned?'Unpinned':'Pinned to the top'),text:n.pinned?'Unpin':'Pin'}),
+        h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>noticePatch(n,{archived:!n.archived},n.archived?'Back on the board':'Archived'),text:n.archived?'Restore':'Archive'})):null):null);
+}
+function noticePatch(n,patch,ok){ return run(async()=>{ const {error}=await window.slateSupabase.from('notices').update(patch).eq('id',n.id); if(error) throw new Error(error.message); Object.assign(n,patch); },ok); }
+/* Home: notices not yet seen, then pinned ones (one line each) */
+function noticeHomeSec(){
+  const live=nAll().filter(nLive), unseen=live.filter(n=>!nSeen(n)).sort((a,b)=>(b.important-a.important)||(b.pinned-a.pinned)||b.created_at.localeCompare(a.created_at));
+  const pinned=live.filter(n=>n.pinned&&nSeen(n));
+  if(!unseen.length&&!pinned.length) return null;
+  const go=()=>{ S.view='notice'; render(true); window.scrollTo(0,0); };
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notice board'}),unseen.length?h('span',{class:'cnt',text:String(unseen.length)}):null,
+      h('button',{class:'linkish',type:'button',style:'font-size:12.5px;margin-left:auto',onclick:go,text:'All notices'})),
+    unseen.length?h('div',{style:'display:grid;gap:10px'},unseen.slice(0,3).map(n=>noticeCard(n,{clamp:true}))):null,
+    unseen.length>3?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px',onclick:go,text:`${unseen.length-3} more on the notice board`}):null,
+    pinned.length?h('div',{class:'list'},pinned.map(n=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:go,onkeydown:e=>{ if(e.key==='Enter') go(); }},
+      h('div',{style:'min-width:0'},h('div',{class:'row-title'},h('span',{text:n.title}),h('span',{class:'tag',text:'Pinned'})),h('div',{class:'row-meta'},h('span',{text:`${ncatName(n.category)} · ${nameOf(n.created_by)} · ${fmtD(n.created_at.slice(0,10))}`}))),
+      h('span',{class:'mi-a',text:'›'})))):null); }
+function viewNotices(){
+  const all=nAll(), live=all.filter(nLive), past=all.filter(n=>!nLive(n)), f=S.nbf||(S.nbf={cat:'',past:false});
+  const pick=xs=>f.cat?xs.filter(n=>n.category===f.cat):xs;
+  const pin=pick(live.filter(n=>n.pinned)), rest=pick(live.filter(n=>!n.pinned)), old=pick(past);
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Studio · company-wide'}),h('h1',{class:'h1',text:'Notice board'}),
+      h('p',{class:'lead',text:'Announcements for everyone at SLATE: policies, holidays, events and office news. Posted by the Principal and the COO; tap Got it once you’ve read each one.'})),
+    amApprover()&&S.canWrite?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNoticeEditor(null),text:'+ New notice'}):null)];
+  out.push(h('div',{class:'chips',style:'margin:0'},[['','All'],...NCATS].filter(([k])=>!k||all.some(n=>n.category===k)).map(([k,l])=>h('button',{type:'button',class:'chip'+(f.cat===k?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ f.cat=k; render(true); },text:l}))));
+  if(!all.length) out.push(h('p',{class:'muted',style:'margin:0 4px',text:amApprover()?'No notices yet. Use + New notice to post the first one.':'No notices yet.'}));
+  if(pin.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Pinned'})),h('div',{style:'display:grid;gap:10px'},pin.map(n=>noticeCard(n)))));
+  if(rest.length||all.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notices'}),h('span',{class:'cnt',text:String(rest.length)})),
+    rest.length?h('div',{style:'display:grid;gap:10px'},rest.map(n=>noticeCard(n))):h('p',{class:'muted',style:'margin:0 4px',text:'Nothing current.'})));
+  if(old.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Past notices'}),h('span',{class:'cnt',text:String(old.length)}),
+      h('button',{class:'linkish',type:'button',style:'font-size:12.5px;margin-left:auto',onclick:()=>{ f.past=!f.past; render(true); },text:f.past?'Hide':'Show'})),
+    f.past?h('div',{style:'display:grid;gap:10px'},old.map(n=>noticeCard(n))):null));
+  return out; }
+function openNoticeEditor(n){
+  S.sheet={type:'noticeEdit',id:n?n.id:null,err:'',d:n?{title:n.title,body:n.body,category:n.category,pinned:n.pinned,important:n.important,until:n.until||'',wasImp:n.important}:{title:'',body:'',category:'general',pinned:false,important:false,until:'',wasImp:false}};
+  renderSheet(); }
+function sheetNoticeEdit(){
+  const sh=S.sheet, d=sh.d;
+  const cat=h('select',{id:'sh-category',onchange:e=>{d.category=e.target.value}},NCATS.map(([k,l])=>h('option',{value:k,text:l}))); cat.value=d.category;
+  const tick=(k,label,hint)=>h('label',{style:'display:flex;gap:10px;align-items:flex-start;font-size:14px'},h('input',{type:'checkbox',id:'sh-'+k,checked:!!d[k],onchange:e=>{d[k]=e.target.checked; renderSheet();}}),h('span',{},h('b',{style:'font-weight:600',text:label}),hint?h('div',{class:'f-hint',text:hint}):null));
+  return [head('Notice board',sh.id?'Edit notice':'New notice'),
+    h('form',{class:'form',onsubmit:e=>{e.preventDefault();saveNotice()}},
+      field('Title *',inp('title',{maxlength:120,placeholder:'e.g. Office closed on 16 December'})),
+      field('Notice',ta('body',{rows:6,maxlength:4000,placeholder:'The details everyone needs: what, when, what to do.'})),
+      h('div',{class:'form-row'},field('Category',cat),field('Show until',inp('until',{type:'date',min:today()}),'Optional. After this date it moves to past notices.')),
+      tick('pinned','Pin to the top','Stays at the top of the board and on everyone’s Home.'),
+      tick('important','Important: also notify everyone’s phone',d.wasImp?'Already sent once; editing doesn’t send it again.':'One phone notification each. Leave off for routine notices.'),
+      sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:sh.id?'Save changes':'Post to everyone'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}),
+        sh.id&&S.isOwner?h('button',{class:'btn',type:'button',style:'margin-left:auto;color:var(--overdue)',disabled:S.busy,onclick:deleteNotice,text:'Delete'}):null))]; }
+function saveNotice(){
+  const sh=S.sheet, d=sh.d, title=(d.title||'').trim();
+  if(title.length<3) return fail('Give the notice a title.');
+  if(d.until&&d.until<today()) return fail('“Show until” must be today or later.');
+  const row={title,body:(d.body||'').trim(),category:d.category,pinned:!!d.pinned,important:!!d.important,until:d.until||null};
+  run(async()=>{ const sb=window.slateSupabase;
+    const {error}=sh.id?await sb.from('notices').update(row).eq('id',sh.id):await sb.from('notices').insert({...row,created_by:S.uid});
+    if(error) throw new Error(/row-level security/.test(error.message)?'Only the Principal and the COO post notices.':error.message);
+    await noticesLoad(); },sh.id?'Notice updated':(d.important?'Posted. Everyone is notified':'Posted to the notice board')).then(ok=>{ if(ok){ closeSheet(); S.view='notice'; render(true); } }); }
+function deleteNotice(){ const sh=S.sheet; if(!confirm('Delete this notice for everyone? Archive keeps it in past notices instead.')) return;
+  run(async()=>{ const {error}=await window.slateSupabase.from('notices').delete().eq('id',sh.id); if(error) throw new Error(error.message); await noticesLoad(); },'Notice deleted').then(ok=>{ if(ok) closeSheet(); }); }
 /* Home: meeting requests. Invites waiting for my reply (Accept here, or Tentative / Decline with a reason),
    then meetings I set up that still have people who haven't replied. */
 function meetReqHomeSec(){
