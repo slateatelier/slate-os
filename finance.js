@@ -523,7 +523,7 @@ function invoiceForm(i, preset = {}) {
     <div class="sec-t">Payment</div>
     <div class="seg" role="group" aria-label="Payment">${segBtn('mode', 'bank', 'Bank')}${segBtn('mode', 'cash', 'Cash')}</div>
     <p class="hint" id="iModeHint" style="margin:-6px 0 0"></p>
-    <label class="f" for="i_acct" id="iAcctWrap">Pays into<select id="i_acct" name="payAcctId"></select></label>
+    <label class="f" for="i_acct" id="iAcctWrap">Bank account for payment<select id="i_acct" name="payAcctId"></select></label>
     <p class="hint" id="iEnt" style="margin:-6px 0 0"></p>
     <div style="display:flex;gap:16px;flex-wrap:wrap">
       <label class="check" for="i_vat"><input id="i_vat" type="checkbox"> VAT <span class="num">${esc(T.vatRate)}%</span></label>
@@ -546,7 +546,6 @@ function invoiceForm(i, preset = {}) {
       T.vatOn = f.querySelector('#i_vat').checked; T.aitOn = f.querySelector('#i_ait').checked;
       const anyTax = T.vatOn || T.aitOn, c = calc();
       $('#iTaxModeWrap', root).hidden = !anyTax;
-      $('#iAcctWrap', root).hidden = T.mode !== 'bank';
       $('#iModeHint', root).textContent = T.mode === 'bank' ? 'Paid into a bank account. VAT and AIT apply as per government rules.' : 'Paid in cash. VAT and AIT are optional; tick them only if this client needs them.';
       $('#iTaxHint', root).textContent = T.taxMode === 'inclusive' ? 'The amount you enter is the whole invoice. VAT and AIT come out of it, so SLATE keeps less.' : 'The amount you enter is what SLATE keeps. The invoice is grossed up so the fee stays whole after the client deducts AIT.';
       $('#iAmtLbl', root).textContent = !anyTax ? 'Amount (BDT)' : T.taxMode === 'inclusive' ? 'Invoice total incl. taxes (BDT)' : 'Fee SLATE keeps (BDT)';
@@ -580,7 +579,7 @@ function invoiceForm(i, preset = {}) {
       if (!(c.base > 0)) { toast('Enter the invoice amount.'); return; }
       if (f.due.value < f.date.value) { toast('The due date is before the invoice date.'); return; }
       const anyTax = T.vatOn || T.aitOn;
-      const data = { projectId: f.projectId.value, entity: entOf(prj(f.projectId.value)), payAcctId: T.mode === 'bank' ? f.payAcctId.value : '', milestoneId: f.milestoneId.value, desc: f.desc.value.trim(), no, date: f.date.value, due: f.due.value, status,
+      const data = { projectId: f.projectId.value, entity: entOf(prj(f.projectId.value)), payAcctId: f.payAcctId.value, milestoneId: f.milestoneId.value, desc: f.desc.value.trim(), no, date: f.date.value, due: f.due.value, status,
         mode: T.mode, vatOn: T.vatOn, aitOn: T.aitOn, vatRate: T.vatRate, aitRate: T.aitRate, taxMode: anyTax ? T.taxMode : 'added',
         entered: +f.entered.value || 0, amount: c.base, vatPct: T.vatOn ? T.vatRate : 0, ait: c.ait, net: c.net };
       const msg = status === 'draft' ? 'Draft saved' : 'Invoice issued';
@@ -749,7 +748,7 @@ function billingToDate(i, p) {
 }
 function invoiceDoc(i) {
   const p = prj(i.projectId) || {}, vat = (+i.amount || 0) * (+i.vatPct || 0) / 100, st = S.settings, draft = invStatus(i) === 'draft';
-  const bankMode = i.mode ? i.mode === 'bank' : true, ent = entOf(i.entity ? i : p), a = bankMode ? acct(i.payAcctId) : null;
+  const ent = entOf(i.entity ? i : p), a = acct(i.payAcctId);
   const payee = a ? entOf({ entity: a.title }) : ent;
   const bankLines = a ? [`Account title: ${payee}`, a.number ? `Account no: ${a.number}` : '', a.bank ? `Bank: ${a.bank}` : '', a.routing ? `Routing no: ${a.routing}` : ''].filter(Boolean).join('\n') : st.bank;
   const btd = billingToDate(i, p);
@@ -767,8 +766,8 @@ function invoiceDoc(i) {
   <p class="words">In words: ${esc(takaWords(btd.payNow))}.${btd ? ' Paid includes tax deducted at source (AIT/VDS) once the challan or certificate is received.' : ''}</p>`
     : `<p class="words">In words: ${esc(takaWords(invTotal(i)))}${btd ? '. Paid includes tax deducted at source (AIT/VDS) once the challan or certificate is received.' : ''}</p>`}
   ${!btd && (invAit(i) || +i.vatPct) ? `<p class="note">Where VAT or AIT is deducted at source, please share the treasury challan or certificate with SLATE.</p>` : ''}
-  <h2>Payment</h2><p style="margin:0">${bankMode ? `By bank transfer or account-payee cheque in favour of <b>${esc(payee)}</b>.` : `In cash. An official ${esc(ent)} money receipt is issued for every payment.`}</p>
-  ${bankMode && bankLines ? `<pre style="margin-top:2mm">${esc(bankLines)}</pre>` : ''}
+  <h2>Payment</h2><p style="margin:0">By bank transfer or account-payee cheque in favour of <b>${esc(payee)}</b>, or in cash at the SLATE studio against an official money receipt.</p>
+  ${bankLines ? `<pre style="margin-top:2mm">${esc(bankLines)}</pre>` : ''}
   ${!btd && st.invNote ? `<p class="note">${esc(st.invNote)}</p>` : ''}
   ${sigBlock(st, ent)}`;
   return docShell(`Invoice ${i.no}`, `Invoice ${i.no}`, body);
