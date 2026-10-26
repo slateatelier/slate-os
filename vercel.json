@@ -76,5 +76,14 @@
       "source": "/i/:token",
       "destination": "/invoice-view"
     }
+  ],
+  "functions": {
+    "api/invoice-pdf.js": {
+      "memory": 2048,
+      "maxDuration": 60
+    }
+  },
+  "regions": [
+    "bom1"
   ]
 }

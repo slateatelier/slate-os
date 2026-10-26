@@ -839,31 +839,16 @@ function waBlock(i, st) {
     ${waReady(i) && !p.clientWa ? `<p class="hint" style="margin:8px 0 0">No billing WhatsApp number on this project yet. Add it with Edit on the project to use Send to client.</p>` : ''}
     ${ls.length ? `<div class="mini-list rows" style="margin-top:10px">${ls.map(row).join('')}</div>` : `<p class="hint" style="margin:8px 0 0">Not sent by WhatsApp yet.</p>`}`;
 }
-/* the letterhead invoice as an A4 PDF: rendered off-screen at full size, captured, placed on one page */
-let pdfLibs;
-const loadScript = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('Couldn’t load the PDF maker. Check your connection and try again.')); document.head.append(s); });
+/* the letterhead invoice as an A4 PDF, printed on SLATE's server by the same Chrome print engine as
+   "Print or save as PDF", so it is identical from a PC or an iPhone. Only Finance sign-ins can use it. */
 async function invoicePdf(i) {
-  pdfLibs = pdfLibs || Promise.all([window.html2canvas || loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
-    window.jspdf || loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')]).catch(e => { pdfLibs = null; throw e; });
-  await pdfLibs;
-  /* The capture draws text on a canvas that belongs to this page, not to the invoice frame. The letterhead
-     fonts must be loaded here too, or the phone draws them in a fallback face and words run together. */
-  try { await Promise.race([Promise.all(['400 16px "Didact Gothic"', '400 16px Jost', '500 16px Jost', '600 16px Jost'].map(f => document.fonts.load(f))), new Promise(r => setTimeout(r, 5000))]); } catch (_) {}
-  const fr = document.createElement('iframe');
-  fr.setAttribute('aria-hidden', 'true'); fr.tabIndex = -1;
-  fr.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:1300px;border:0;opacity:0;pointer-events:none';
-  document.body.append(fr);
-  try {
-    await new Promise(ok => { fr.onload = ok; fr.srcdoc = invoiceDoc(i).replace(/<div class="bar">[\s\S]*?<\/div>/, ''); });
-    const d = fr.contentDocument; try { await Promise.race([d.fonts.ready, new Promise(r => setTimeout(r, 4000))]); } catch (_) {}
-    await new Promise(r => setTimeout(r, 150));
-    const page = d.querySelector('.page'); page.style.margin = '0'; page.style.boxShadow = 'none'; page.style.zoom = '1';
-    const canvas = await window.html2canvas(page, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 900 });
-    const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 210, 297);
-    pdf.setProperties({ title: `Invoice ${i.no}`, author: entOf(i.entity ? i : prj(i.projectId)) });
-    return new File([pdf.output('blob')], `${fileSafe(i.no)}.pdf`, { type: 'application/pdf' });
-  } finally { fr.remove(); }
+  const { data } = await sb.auth.getSession(); const tok = data && data.session && data.session.access_token;
+  if (!tok) throw new Error('Your sign-in has expired. Reload Finance and try again.');
+  let r;
+  try { r = await fetch('/api/invoice-pdf', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'text/plain;charset=utf-8' }, body: invoiceDoc(i) }); }
+  catch (_) { throw new Error('Couldn’t reach the PDF printer. Check your connection and try again.'); }
+  if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (_) {} throw new Error(m || 'Couldn’t make the PDF. Try again in a moment.'); }
+  return new File([await r.blob()], `${fileSafe(i.no)}.pdf`, { type: 'application/pdf' });
 }
 /* Phones only share when the share call comes straight from a tap, so the PDF is made first and the
    person taps once more to send it. */

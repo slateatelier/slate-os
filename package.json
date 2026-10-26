@@ -1,0 +1,10 @@
+{
+  "name": "slate-os",
+  "private": true,
+  "description": "SLATE OS. Static app; the only server code is api/invoice-pdf.js, which prints Finance invoices to PDF.",
+  "engines": { "node": "22.x" },
+  "dependencies": {
+    "@sparticuz/chromium": "131.0.1",
+    "puppeteer-core": "23.10.4"
+  }
+}
