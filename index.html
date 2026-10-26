@@ -1708,6 +1708,7 @@ function taskNear(n){ const t0=Date.parse(n.created_at)||0, body=n.body||''; let
 async function openNotice(id,kind){
   if(GO_INBOX.includes(kind)) return openNotifs();
   if(kind==='backup') return goView(amApprover()?'backup':'mine');
+  if(kind==='accounts'){ S.pf={...(S.pf||{q:'',pod:''}),st:'acct'}; acctLoad(true); return goView('projects'); }
   if(kind==='nudge') return goView('mine');
   if(kind==='issue_report') return goView('reports');
   if(/^minutes_/.test(kind)){ S.mhub='weekly'; return goView('meet'); }
@@ -5301,7 +5302,7 @@ const canSeeProjectDetail=p=>fullView()||inMyPodProject(p)||(!!myPod()&&p.pod===
 const canViewProjectDetail=p=>!!p&&(canSeeProjectDetail(p)||(!!myHeadTeam()&&!isChalkProj(p)&&!p.closed&&isLive(p)));
 const podText=p=>{ const ps=podsOfProject(p); return ps.length?ps.map(podLabel).join(' + '):isInternalP(p)?'Studio work':'Studio / internal'; };
 function viewProjects(){
-  const f=S.pf||(S.pf={q:'',pod:'',st:'active'}), q=f.q.trim().toLowerCase(), ap=amApprover();
+  const f=S.pf||(S.pf={q:'',pod:'',st:'active'}), q=f.q.trim().toLowerCase(), ap=amApprover(); acctLoad();
   const all=projects(), act=all.filter(p=>!p.closed&&p.pod!=='Studio'), stats=new Map(all.map(p=>[p.id,projStats(p)]));
   const hc=k=>act.filter(p=>stats.get(p.id).health===k).length;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Studio list'}),h('h1',{class:'h1',text:'Projects'}),h('p',{class:'lead',text:'Every project, its agreement and its progress. New projects are approved by the COO before they join the list.'})),
@@ -5313,7 +5314,7 @@ function viewProjects(){
   const phr=ap?phaseReqCards():null; if(phr) out.push(phr);
   const mr=myProjReqs(); if(mr) out.push(mr);
   const podSel=h('select',{id:'pf-pod','aria-label':'Pod',onchange:e=>{f.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),pods().map(x=>h('option',{value:x,text:podLabel(x)})),h('option',{value:'Studio',text:'Studio / internal'})); podSel.value=f.pod;
-  const stSel=h('select',{id:'pf-st','aria-label':'Status',onchange:e=>{f.st=e.target.value;render(true)}},[['active','Active'],['risk','At risk or off track'],['onhold','On hold'],['archive','Archive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); if(f.st==='closed') f.st='archive'; stSel.value=f.st;
+  const stSel=h('select',{id:'pf-st','aria-label':'Status',onchange:e=>{f.st=e.target.value;render(true)}},[['active','Active'],['risk','At risk or off track'],['onhold','On hold'],...(finOn()?[['acct','Account open']]:[]),['archive','Archive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); if(f.st==='closed') f.st='archive'; stSel.value=f.st;
   const arch=all.filter(isArchivedP), yrs=[...new Set(arch.map(p=>closedOn(p).slice(0,4)).filter(Boolean))].sort().reverse();
   const aSel=f.st==='archive'?[
     (()=>{ const x=h('select',{id:'pf-ao','aria-label':'Outcome',onchange:e=>{f.ao=e.target.value;render(true)}},[['','Every outcome'],['completed','Completed'],['partial','Closed after phase'],['cancelled','Cancelled'],['closed','Closed (not recorded)']].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ao||''; return x; })(),
@@ -5321,7 +5322,7 @@ function viewProjects(){
     (()=>{ const x=h('select',{id:'pf-ar','aria-label':'Reason',onchange:e=>{f.ar=e.target.value;render(true)}},[['','Any reason'],...CLOSE_REASONS].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ar||''; return x; })()]:[];
   out.push(h('div',{class:'bar'},h('input',{id:'pf-q',type:'search',placeholder:'Search code, name or client',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),podSel,stSel,...aSel));
   const list=all.filter(p=>{ const st=stats.get(p.id);
-    if(f.st==='active'&&p.closed) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
+    if(f.st==='active'&&p.closed) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='acct'&&!acctOf(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
     if(f.st==='archive'){ if(!isArchivedP(p)) return false; if(f.ao&&outcomeOf(p)!==f.ao) return false; if(f.ay&&closedOn(p).slice(0,4)!==f.ay) return false; if(f.ar&&((p.closure||{}).reason||'')!==f.ar) return false; }
     if(f.pod&&!(f.pod==='Studio'?p.pod==='Studio':[p.pod,p.pod2].includes(f.pod))) return false;
     if(q&&!`${p.code} ${p.name} ${p.client||''}`.toLowerCase().includes(q)) return false; return true; });
@@ -5331,10 +5332,18 @@ function viewProjects(){
         h('div',{class:'row-title'},h('span',{class:'mono',text:p.code||''}),h('span',{text:p.name})),
         h('div',{class:'row-meta'},h('span',{text:`On hold since ${fmtD(closedOn(p))}`}),c.reason?h('span',{text:'· '+reasonLabel(c.reason)}):null),
         h('div',{},h('span',{class:'pill '+(due?'s-overdue':'s-late'),text:c.reviewOn?(due?`Review due ${fmtD(c.reviewOn)}`:'Review '+fmtD(c.reviewOn)):'No review date'}))); }))):null;
-  if(!list.length){ out.push(h('p',{class:'muted',text:all.length?(f.st==='archive'?'Nothing in the archive matches these filters.':f.st==='active'&&!f.q&&!f.pod?'No active projects.':'No projects match these filters.'):'No projects yet.'})); if(holdSec) out.push(holdSec); return out; }
+  const openA=f.st==='active'?all.filter(p=>acctOf(p)&&(!f.pod||[p.pod,p.pod2].includes(f.pod))):[];
+  const acctSec=openA.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Open accounts'}),h('span',{class:'cnt',text:String(openA.length)})),
+    h('p',{class:'f-hint',style:'margin:0 0 6px',text:'Completed or closed, with money still to bill or collect. Only you and the COO see this. It clears when Finance shows the fee collected, or when the Finance project is marked Closed.'}),
+    h('div',{class:'list'},openA.map(p=>{ const a=acctOf(p), nx=(a.unbilledMs||[])[0];
+      return h('div',{class:'card',role:'button',tabindex:'0',style:'border-radius:0;border-bottom:1px solid var(--line);cursor:pointer;gap:6px',onclick:()=>openProjectView(p.id),onkeydown:e=>{ if(e.key==='Enter') openProjectView(p.id); }},
+        h('div',{class:'row-title'},h('span',{class:'mono',text:p.code||''}),h('span',{text:p.name})),
+        h('div',{class:'row-meta'},h('span',{text:outcomeLabel(p)+(closedOn(p)?' '+fmtD(closedOn(p)):'')}),nx?h('span',{text:`· next to bill: ${nx.label} (${+nx.pct}%)`}):null),
+        h('div',{},h('span',{class:'pill '+(+a.overdue?'s-overdue':'s-late'),text:acctLine(a)+(+a.overdue?` · ${a.overdue} overdue`:'')}))); }))):null;
+  if(!list.length){ out.push(h('p',{class:'muted',text:all.length?(f.st==='archive'?'Nothing in the archive matches these filters.':f.st==='acct'?(S.acct?'No open accounts. Every closed project is fully billed and collected.':'Checking Finance…'):f.st==='active'&&!f.q&&!f.pod?'No active projects.':'No projects match these filters.'):'No projects yet.'})); if(holdSec) out.push(holdSec); if(acctSec) out.push(acctSec); return out; }
   out.push(h('div',{class:'pgrid'},list.map(p=>{ const st=stats.get(p.id), [hl,hk]=HEALTH[st.health];
     return h('button',{class:'pcard',type:'button',onclick:()=>openProjectView(p.id)},
-      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl})),
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
       h('div',{class:'pc-name',text:p.name}),
       h('div',{class:'pc-meta',text:[p.client,podText(p),p.katha?p.katha+' katha':'',p.units?p.units+' units'+(p.type==='jv'&&p.loCount!=null?` (LO ${p.loCount} · Dev ${p.devCount})`:''):'',p.farApplies==='yes'&&p.farCalc?Math.round(p.farCalc.saleable/1000)+'k sft saleable':''].filter(Boolean).join(' · ')}),
       ...(()=>{ const pk=p.closed?projParkedTasks(p.id).length:0, dn=st.ts.filter(t=>t.doneAt).length, pc=pk?Math.round(dn/(dn+pk)*100):st.pct;
@@ -5346,6 +5355,7 @@ function viewProjects(){
       h('div',{class:'pc-row muted'},h('span',{text:st.nextDel?`Next: ${st.nextDel.title.length>34?st.nextDel.title.slice(0,32)+'…':st.nextDel.title}`:'No upcoming deliverable'}),h('span',{class:'mono',style:st.nextDel&&st.nextDel.target<today()?'color:var(--overdue)':'',text:st.nextDel?fmtD(st.nextDel.target):''})),
       st.over?h('div',{class:'pc-row',style:'color:var(--overdue)'},h('span',{text:`${st.over} overdue`+(st.overDel?` · ${st.overDel} deliverable${st.overDel>1?'s':''}`:'')}),h('span',{})):null); })));
   if(holdSec) out.push(holdSec);
+  if(acctSec) out.push(acctSec);
   return out;
 }
 function openProjectView(id){ if(isChalkProj(S.projects[id])) return openChalkProjView(id); S.sheet={type:'projView',id}; renderSheet(); }
@@ -5407,6 +5417,14 @@ const isOnHold=p=>outcomeOf(p)==='onhold';
 const isArchivedP=p=>!!p&&!!p.closed&&!isOnHold(p);
 const closedOn=p=>(p&&p.closure&&p.closure.on)||(p&&p.completedOn)||'';
 const taka=n=>'৳'+Math.round(+n||0).toLocaleString('en-IN');
+/* open accounts: completed (or closed) projects whose Finance account still has money to bill or collect.
+   A project never waits on its account, or on as-built drawings, to be completed. Principal and COO only. */
+const finOn=()=>!!(window.slateFinanceRole&&window.slateSupabase);
+function acctLoad(force){ if(!finOn()) return; const now=Date.now();
+  if(!force&&(S.acctBusy||(S.acctAt&&now-S.acctAt<120000))) return; S.acctBusy=true;
+  window.slateSupabase.rpc('open_accounts').then(({data,error})=>{ S.acctBusy=false; S.acctAt=Date.now(); if(error) return; S.acct=data||{}; render(true); },()=>{ S.acctBusy=false; S.acctAt=Date.now(); }); }
+const acctOf=p=>finOn()&&p&&p.closed&&S.acct?S.acct[p.id]||null:null;
+const acctLine=a=>[+a.unbilled>1?taka(a.unbilled)+' to bill':'',+a.due>1?taka(a.due)+' unpaid':''].filter(Boolean).join(' · ');
 const projOpenTasks=pid=>Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t&&t.projectId===pid&&!t.archived&&!t.doneAt);
 const projParkedTasks=pid=>Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t&&t.projectId===pid&&t.archived&&!t.doneAt&&(t.held||t.dropped));
 function phaseChoices(p){
@@ -5460,17 +5478,19 @@ function sheetProjClose(){
   const du=S.sheet.dues;
   if(window.slateFinanceRole&&!internal){
     if(du===undefined) f.push(h('p',{class:'f-hint',style:'margin:0',text:'Checking Finance for unpaid bills…'}));
-    else if(du&&du.open>0) f.push(h('div',{class:'callout'},h('b',{text:`${taka(du.due)} still owed on ${du.open} invoice${du.open===1?'':'s'}`+(du.overdue?` · ${du.overdue} overdue`:'')}),
-      h('span',{class:'f-hint',style:'margin:0',text:o==='onhold'?'Chase these before the project goes quiet. The amount is recorded with the hold.':'Settle or write these off in Finance. The amount is recorded with the closure so it isn’t forgotten.'}),
+    else if(du&&(+du.due>1||+du.unbilled>1)) f.push(h('div',{class:'callout'},h('b',{text:'Account open · '+acctLine(du)}),
+      (du.unbilledMs||[]).length?h('span',{class:'f-hint',style:'margin:0',text:'Not yet billed: '+du.unbilledMs.map(m=>`${m.label} ${+m.pct}% (${taka(m.amount)})`).join(', ')}):null,
+      +du.due>1?h('span',{class:'f-hint',style:'margin:0',text:`${du.open} invoice${+du.open===1?'':'s'} unpaid`+(+du.overdue?` · ${du.overdue} overdue`:'')}):null,
+      h('span',{class:'f-hint',style:'margin:0',text:o==='onhold'?'Chase these before the project goes quiet. The amount is recorded with the hold.':'You can still '+OUTCOMES[o].btn.toLowerCase()+' now: nothing here waits on as-built drawings or the last payment. The project shows Account open to you and the COO until Finance has it all, and you are both reminded on the 1st of each month.'}),
       h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'})));
     else if(du&&!du.linked) f.push(h('p',{class:'f-hint',style:'margin:0',text:'This project isn’t linked to a Finance project, so unpaid bills can’t be checked.'}));
-    else if(du) f.push(h('p',{class:'f-hint',style:'margin:0',text:'Finance: no unpaid invoices.'}));
+    else if(du) f.push(h('p',{class:'f-hint',style:'margin:0',text:'Finance: fully billed and collected.'}));
   }
   out.push(h('form',{class:'form',onsubmit:e=>{ e.preventDefault();
       if(!d.reason) return fail('Choose a reason.'); if(!d.on) return fail('Give the date.');
       if(o==='onhold'&&(!d.reviewOn||d.reviewOn<td)) return fail('Give a review date from today on.');
       if(o==='partial'&&!internal&&!d.lastPhase) return fail('Choose the last phase reached.');
-      run(()=>doCloseProject(p.id,d,du),o==='onhold'?'Project on hold':`Project ${OUTCOMES[o].l.toLowerCase()}`).then(ok=>{ if(ok) back(); }); }},
+      run(()=>doCloseProject(p.id,d,du),o==='onhold'?'Project on hold':`Project ${OUTCOMES[o].l.toLowerCase()}`).then(ok=>{ if(ok){ acctLoad(true); back(); } }); }},
     f,S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
     h('div',{class:'actions'},h('button',{class:'btn '+(o==='cancelled'?'btn-accent':'btn-primary'),type:'submit',disabled:S.busy,text:OUTCOMES[o].btn}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'}))));
   return out;
@@ -5481,7 +5501,7 @@ async function doCloseProject(pid,d,du){
   const note=(d.note||'').trim(), why=note||reasonLabel(d.reason);
   const closure={outcome:o,reason:d.reason,note,on:d.on,lastPhase:(o==='partial'||o==='cancelled')?(d.lastPhase||''):'',
     delivered,dropped:delivered?scope.filter(x=>!delivered.includes(x)):null,reviewOn:o==='onhold'?d.reviewOn:null,
-    dues:du&&du.open>0?{open:du.open,due:du.due,overdue:du.overdue||0}:null,reqBy:p.closeReq?p.closeReq.by:null,by:S.uid,at:now};
+    dues:du&&(+du.due>1||+du.unbilled>1)?{open:du.open,due:du.due,overdue:du.overdue||0,unbilled:du.unbilled||0,unbilledMs:du.unbilledMs||[]}:null,reqBy:p.closeReq?p.closeReq.by:null,by:S.uid,at:now};
   // the tasks first: if a save fails half way, the project is still open and the rest can be retried
   if(o==='onhold'){ for(const t of projOpenTasks(pid)) await taskUpdate(t.id,{archived:true,held:true},[{type:'held',note:why}]); }
   else for(const t of [...projOpenTasks(pid),...projParkedTasks(pid).filter(t=>t.held)]){
@@ -5567,11 +5587,20 @@ function closureSection(p){
       fact('Last phase reached',c.lastPhase||(o==='cancelled'&&c.reason?'Before any phase':'')),o==='onhold'?fact('Review on',rv?fmtD(rv):''):null,
       fact('Decided by',c.by?nameOf(c.by):'',c.reqBy?`Asked by ${nameOf(c.reqBy)}`:null),
       fact(o==='onhold'?'Frozen tasks':'Dropped tasks',parked?String(parked):'',parked?(o==='onhold'?'Back on resume':'Not scored'):null),
-      ap&&c.dues?fact('Owed at closing',taka(c.dues.due),`${c.dues.open} invoice${c.dues.open===1?'':'s'}`+(c.dues.overdue?` · ${c.dues.overdue} overdue`:'')):null,
+      ap&&c.dues&&(+c.dues.due>1||+c.dues.unbilled>1)?fact('Open at closing',acctLine(c.dues),c.dues.open?`${c.dues.open} invoice${c.dues.open===1?'':'s'} unpaid`+(c.dues.overdue?` · ${c.dues.overdue} overdue`:''):null):null,
       ap&&(c.delivered||[]).length?h('div',{style:'grid-column:1/-1'},h('div',{class:'lbl',text:'Scope delivered'}),h('div',{class:'chips',style:'margin-top:4px'},c.delivered.map(x=>h('span',{class:'chip',style:'padding-right:12px;background:#fff',text:x})))):null,
       ap&&(c.dropped||[]).length?h('div',{style:'grid-column:1/-1'},h('div',{class:'lbl',text:'Scope dropped'}),h('div',{class:'chips',style:'margin-top:4px'},c.dropped.map(x=>h('span',{class:'chip',style:'padding-right:12px;background:#fff;text-decoration:line-through;color:var(--muted)',text:x})))):null),
-    (ap||canSeeProjectDetail(p))&&c.note?h('p',{class:'quote',text:c.note}):null);
+    (ap||canSeeProjectDetail(p))&&c.note?h('p',{class:'quote',text:c.note}):null,
+    o!=='onhold'?acctBox(p):null);
 }
+/* a closed project's live account (Principal and COO): what is left to bill and to collect */
+function acctBox(p){ if(!finOn()) return null; acctLoad(); if(!S.acct) return null; const a=acctOf(p);
+  if(!a) return h('p',{class:'f-hint',style:'margin:8px 0 0',text:'Account settled in Finance.'});
+  return h('div',{class:'callout',style:'margin-top:10px'},h('b',{text:'Account open · '+acctLine(a)}),
+    (a.unbilledMs||[]).length?h('div',{class:'f-hint',style:'margin:0',text:'Still to bill: '+a.unbilledMs.map(m=>`${m.label} ${+m.pct}% (${taka(m.amount)})`).join(', ')}):null,
+    +a.due>1?h('div',{class:'f-hint',style:'margin:0',text:`${a.open} invoice${+a.open===1?'':'s'} unpaid`+(+a.overdue?` · ${a.overdue} overdue`:'')}):null,
+    h('span',{class:'f-hint',style:'margin:0',text:'The project stays completed. Bill and collect in Finance; mark the Finance project Closed to write off anything that won’t be billed.'}),
+    h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'})); }
 /* the project page's lifecycle buttons */
 function lifecycleActs(p){ const acts=[]; if(!S.canWrite) return acts;
   if(amApprover()){
