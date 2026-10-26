@@ -765,7 +765,7 @@ function invoiceDoc(i) {
   ${btd && btd.prevDue > 0 ? `<div class="amtbox"><span>Total payable now <span style="font-size:8.5pt;color:#545454">(this invoice + ${nf.format(Math.round(btd.prevDue))} due on earlier phases)</span></span><b>BDT ${nf.format(Math.round(btd.payNow))}</b></div>
   <p class="words">In words: ${esc(takaWords(btd.payNow))}.${btd ? ' Paid includes tax deducted at source (AIT/VDS) once the challan or certificate is received.' : ''}</p>`
     : `<p class="words">In words: ${esc(takaWords(invTotal(i)))}${btd ? '. Paid includes tax deducted at source (AIT/VDS) once the challan or certificate is received.' : ''}</p>`}
-  ${!btd && (invAit(i) || +i.vatPct) ? `<p class="note">Where VAT or AIT is deducted at source, please share the treasury challan or certificate with SLATE.</p>` : ''}
+  ${!btd && (invAit(i) || +i.vatPct) ? `<p class="note">Where VAT or AIT is deducted at source, please share the treasury challan or certificate with ${esc(ent)}.</p>` : ''}
   <h2>Payment</h2><p style="margin:0">By bank transfer or account-payee cheque in favour of <b>${esc(payee)}</b>, or in cash at the SLATE studio against an official money receipt.</p>
   ${bankLines ? `<pre style="margin-top:2mm">${esc(bankLines)}</pre>` : ''}
   ${!btd && st.invNote ? `<p class="note">${esc(st.invNote)}</p>` : ''}
@@ -1096,7 +1096,7 @@ function woDoc(w) {
   ${woSchedule(w).map(i => { const v = (+w.amount || 0) * (+i.pct || 0) / 100; return `<tr><td>${esc(i.label)}</td><td>${i.month ? monthName(i.month) : ''}</td><td class="n">${esc(i.pct)}</td><td class="n">${nf.format(Math.round(v))}</td><td class="n">${nf.format(Math.round(v * (1 - ((+w.aitPct || 0) + (+w.vdsPct || 0)) / 100)))}</td></tr>`; }).join('')}</tbody></table>
   ${w.payTerms ? `<p class="note">${esc(w.payTerms)}</p>` : ''}
   ${w.terms ? `<h2>Terms</h2><ol style="margin:0;padding-left:5mm;font-size:9pt">${w.terms.split('\n').filter(Boolean).map(l => `<li>${esc(l)}</li>`).join('')}</ol>` : ''}
-  <div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(STUDIO.name)}</div><div><b>Accepted by</b>${esc(w.vendor)}<br>Signature and date</div></div>`;
+  <div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(p ? entOf(p) : STUDIO.name)}</div><div><b>Accepted by</b>${esc(w.vendor)}<br>Signature and date</div></div>`;
   return docShell(`Work order ${w.no}`, `Work order ${w.no}`, body);
 }
 
