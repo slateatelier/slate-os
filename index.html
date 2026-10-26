@@ -613,6 +613,31 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .row.fx-leave{opacity:.45;transition:opacity .24s ease-out}
 @keyframes fxPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
 .badge.fx-pulse{animation:fxPulse .5s ease-out}
+/* Home */
+.home-h{border-bottom:0;padding-bottom:4px}
+.home-h .eyebrow{color:var(--muted)}
+.h-tip{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--muted);padding:0 4px}
+.h-tip span{flex:1}.h-x{border:0;background:none;font-size:20px;line-height:1;color:var(--faint);cursor:pointer;padding:0 4px}
+.h-list{display:grid;grid-template-columns:minmax(0,1fr);background:var(--group);border-radius:var(--r-lg);overflow:hidden}
+.h-row{display:flex;align-items:center;gap:12px;padding:12px 14px;min-height:52px;border-bottom:1px solid var(--line);font-size:14.5px}
+.h-row:last-child{border-bottom:0}
+.h-row.tap{cursor:pointer;transition:background-color .15s ease-out}.h-row.tap:hover{background:var(--fill)}
+.h-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.h-main{flex:1;min-width:0}
+.h-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h-t b{font-weight:600}
+.h-soon{margin-left:6px;color:#D7262B;font-weight:600}
+.h-m{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h-go{flex:none;color:var(--faint);font-size:20px;line-height:1}
+.h-btn{flex:none;background:#fff}
+.h-sel{max-width:120px;padding:4px 8px;font-size:13px;background:#fff}
+.h-all{font-size:12.5px}
+.h-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--group);border-radius:var(--r-lg)}
+.h-stat{display:grid;gap:2px;padding:12px 8px;text-align:center;border-right:1px solid var(--line)}
+.h-stat:last-child{border-right:0}
+.h-stat b{font-size:22px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.h-stat span{font-size:12px;color:var(--muted)}
+.h-more{border:0;background:none;padding:10px 16px;font:inherit;font-size:13.5px;color:var(--early);text-align:left;cursor:pointer}
 .meet-strip{display:flex;align-items:center;gap:8px;width:100%;min-width:0;border:0;border-radius:var(--r);background:var(--group);padding:10px 14px;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer;transition:background-color .15s ease-out}
 .meet-strip:hover{background:var(--fill)}
 .meet-strip .ms-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--muted)}
@@ -2062,41 +2087,91 @@ function meetStrip(){ const ms=nextMeets(); if(!ms.length) return null; const m=
     h('span',{class:'ms-txt'},h('b',{text:`${day}${m.time?' · '+fmtTime(m.time):''}`}),soon?h('span',{class:'ms-soon',text:soon}):null,` ${m.title}`+(m.where?` · ${m.where}`:'')),
     m.reply?h('span',{class:'tag tag-req',text:'Reply'}):null,
     more?h('span',{class:'ms-more',text:`+${more}`}):null,h('span',{class:'ms-go','aria-hidden':'true',text:'›'})); }
-function viewMine(){ const out=viewMineBody(); const ms=meetStrip(); if(ms) out.splice(1,0,ms); return out; }
+function viewMine(){ return viewMineBody(); }
+/* ---------- Home: minimal and in a fixed order ----------
+   1 greeting · 2 Today (one line per thing that needs you) · 3 Notice board · 4 My work · 5 My checklist.
+   New tasks come from the round + button, so the header stays clean. */
+function hRow(o){ const tap=o.onclick;
+  return h('div',{class:'h-row'+(tap?' tap':''),...(tap?{role:'button',tabindex:'0',onclick:e=>{ if(e.target.closest('button,select,a')) return; tap(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); tap(); } }}:{})},
+    h('span',{class:'h-dot',style:o.dot?`background:${o.dot}`:'','aria-hidden':'true'}),
+    h('div',{class:'h-main'},h('div',{class:'h-t'},o.strong?h('b',{text:o.strong}):null,o.soon?h('span',{class:'h-soon',text:o.soon}):null,o.title?h('span',{text:(o.strong?' ':'')+o.title}):null),o.meta?h('div',{class:'h-m',text:o.meta}):null),
+    o.right||null, tap?h('span',{class:'h-go','aria-hidden':'true',text:'›'}):null); }
+function hGroup(title,rows,extra){ rows=rows.filter(Boolean); if(!rows.length) return null;
+  return h('section',{class:'sec'},title?h('div',{class:'sec-h'},h('h2',{text:title}),extra||null):null,h('div',{class:'h-list'},rows)); }
+function hMore(key,list,n,render1){ const open=!!(S.homeMore&&S.homeMore[key]), shown=open?list:list.slice(0,n);
+  const more=list.length>n?h('button',{class:'h-more',type:'button',onclick:()=>{ S.homeMore={...(S.homeMore||{}),[key]:!open}; render(true); },text:open?'Show less':`Show all ${list.length}`}):null;
+  return [...shown.map(render1),more]; }
 function viewMineBody(){
-  const mine=activeTasks().filter(t=>t.assignee===S.uid);
-  const role=S.isOwner?'Owner':(isMgr(S.uid)?'Manager':'Member');
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${nameOf(S.uid)} · ${roleOf(S.uid)||role}`}),h('h1',{class:'h1',text:'Home'})),
-    canNewTask()&&h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewTask(),text:'New task'}))];
-  /* the Principal and the COO: one line for everything waiting on them; the items themselves live in Approvals */
-  const qn=amApprover()?queueCount():0;
-  if(qn){ const oldest=queueGroups().map(g=>g.oldest).filter(Boolean).sort()[0], days=ageOf(oldest);
-    out.push(h('div',{class:'banner q-banner'},h('span',{},h('b',{text:`${qn} waiting on you`}),` · oldest ${ageTxt(days)}`),
-      h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>goView('queue'),text:'Open Approvals'}))); }
-  if(amChalkLead()&&!S.isOwner){ const cr=chalkReqs().length, co=chalkTasks().filter(t=>!t.doneAt&&t.target&&t.target<today()).length; out.push(h('div',{class:'banner'},h('span',{text:`Chalk Create: ${co} overdue`+(cr?` · ${cr} date request${cr===1?'':'s'} with the Principal`:'')}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.view='chalk'; render(true); window.scrollTo(0,0); },text:'Open Chalk Create'}))); }
-  { const pl=pmLogCard(); if(pl) out.push(pl); }
-  if(!amChalkMember()){ const up=upcomingSunday(); if(organiserFor(up)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{S.mhub='weekly';S.view='meet';render(true)},text:'All minutes'})),meetingCard(up,true))); }
-  if(!pref.helpSeen&&!amChalkMember()) out.splice(1,0,h('div',{class:'banner'},h('span',{text:'New here? See how to use SLATE OS for your role.'}),h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Dismiss'}))));
-  const mrq=meetReqHomeSec(); if(mrq){ const qi=out.findIndex(el=>el&&el.classList&&el.classList.contains('q-banner')); out.splice(qi>=0?qi+1:(pref.helpSeen||amChalkMember()?1:2),0,mrq); }
-  const nbq=noticeHomeSec(); if(nbq){ const at=mrq?out.indexOf(mrq)+1:(()=>{ const qi=out.findIndex(el=>el&&el.classList&&el.classList.contains('q-banner')); return qi>=0?qi+1:(pref.helpSeen||amChalkMember()?1:2); })(); out.splice(at,0,nbq); }
-  const drq=amApprover()?null:delReqCards(); if(drq) out.push(drq);
-  const pmq=pmHomeSec(); if(pmq) out.push(pmq);
-  const mcl=myChecklist(); if(mcl.length) out.push(myChecklistSec(mcl));
-  if(!mine.length){ if(!qn&&!mcl.length&&!pmq&&!drq&&!mrq&&!nbq) out.push(onboarding()); return out; }
-  const r=range('month',0); const mm=mine.filter(t=>{const g=t.target;return g>=r.s&&g<=r.e});
-  const c=count(mm,'approved');
-  out.push(h('div',{class:'tiles'},
-    tile('Open',mine.filter(t=>!t.doneAt).length),tile(ST.overdue,mine.filter(t=>status(t)==='overdue').length,'overdue'),
-    tile('On time or early',c.early+c.ontime,'ontime'),tile(ST.late,c.late,'late')));
-  out.push(h('div',{class:'f-hint',style:'margin-top:-14px;padding:0 4px',text:'Completed counts are for tasks due this month.'}));
-  const attn=mine.filter(t=>!t.doneAt&&['overdue','soon'].includes(status(t))).sort(byTarget);
-  const prog=mine.filter(t=>!t.doneAt&&t.target&&status(t)==='open').sort(byTarget);
-  const nodate=mine.filter(t=>!t.doneAt&&!t.target).sort(byTarget);
-  const done=mine.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,15);
-  if(attn.length) out.push(sec('Needs attention',attn.map(t=>row(t,{person:false}))));
-  if(nodate.length) out.push(sec('Waiting for an approved date',nodate.map(t=>row(t,{person:false}))));
-  out.push(sec('In progress',prog.length?prog.map(t=>row(t,{person:false})):[h('p',{class:'muted',style:'margin:0',text:'Nothing else open.'})]));
-  if(done.length) out.push(sec('Recently completed',done.map(t=>row(t,{person:false}))));
+  const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
+  const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+  const first=(nameOf(S.uid)||'').split(' ')[0];
+  const out=[h('div',{class:'page-h home-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)}`}),
+    h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),h('div',{class:'f-hint',style:'margin-top:4px',text:roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')})))];
+  if(!pref.helpSeen&&!amChalkMember()) out.push(h('div',{class:'h-tip'},h('span',{text:'New here? See how SLATE OS works for your role.'}),
+    h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),
+    h('button',{class:'h-x',type:'button','aria-label':'Dismiss',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'×'})));
+
+  /* 2 · Today: one line each */
+  const today_=[]; let nextId=null;
+  { const ms=nextMeets(); if(ms.length){ nextId=ms[0].id||null; const m=ms[0], wk=addDays(td,7), more=ms.slice(1).filter(x=>x.date<=wk).length;
+      let soon=''; if(m.date===td&&m.time){ const [H,M]=m.time.split(':').map(Number), mins=Math.round((new Date().setHours(H,M,0,0)-Date.now())/60000); if(mins>=0&&mins<120) soon=mins<1?'now':`in ${mins} min`; }
+      const day=m.date===td?'Today':m.date===addDays(td,1)?'Tomorrow':`${wd(m.date)} ${fmtD(m.date)}`;
+      today_.push(hRow({dot:m.date===td?'#D7262B':'var(--early)',strong:`${day}${m.time?' · '+fmtTime(m.time):''}`,soon,title:m.title+(m.where?' · '+m.where:''),
+        meta:(m.reply?'Reply needed · ':'')+(more?`Next meeting · ${more} more this week`:'Next meeting'),onclick:()=>{ if(m.id) return openPMeet(m.id); S.mhub='weekly'; goView('meet'); },
+        right:m.reply&&S.canWrite?h('button',{class:'btn btn-sm h-btn',type:'button',disabled:S.busy,onclick:()=>meetRespond(m.id,'yes',''),text:'Accept'}):null})); } }
+  const qn=ap?queueCount():0;
+  if(qn){ const oldest=queueGroups().map(g=>g.oldest).filter(Boolean).sort()[0];
+    today_.push(hRow({dot:'var(--overdue)',strong:`${qn} waiting on you`,meta:`Approvals · oldest ${ageTxt(ageOf(oldest))}`,onclick:()=>goView('queue')})); }
+  { const inv=allMeets().filter(m=>mNeedsReply(m)&&m.id!==nextId).sort((a,b)=>(a.date+(a.time||'99')).localeCompare(b.date+(b.time||'99')));
+    inv.forEach(m=>{ const p=mProj(m), where=mCat(m)==='project'&&p?(p.code||p.name):mCatName(mCat(m)), moved=m.rsvp&&m.rsvp[S.uid];
+      today_.push(hRow({dot:'var(--overdue)',strong:moved?'Moved · reply again':'Reply needed',title:mTitle(m),meta:`${mWhen(m)} · ${where} · from ${nameOf(m.createdBy)}`,onclick:()=>openPMeet(m.id),
+        right:S.canWrite?h('button',{class:'btn btn-sm h-btn',type:'button',disabled:S.busy,onclick:()=>meetRespond(m.id,'yes',''),text:'Accept'}):null})); });
+    const wait=allMeets().filter(m=>mOpenForReply(m)&&m.createdBy===S.uid&&mAwaiting(m).length);
+    if(wait.length){ const n=wait.reduce((a,m)=>a+mAwaiting(m).length,0);
+      today_.push(hRow({dot:'var(--late)',strong:`${n} ${n===1?'person hasn’t':'people haven’t'} replied`,meta:`To ${wait.length} meeting${wait.length===1?'':'s'} you set up`,onclick:()=>{ if(wait.length===1) return openPMeet(wait[0].id); S.mhub='up'; goView('meet'); }})); } }
+  { const xs=allMeets().filter(m=>{ const p=mProj(m); if(m.projectId&&(!p||!workable(p))) return false; if(['scheduled','cancelled'].includes(m.status)) return false;
+      const proj=mCat(m)==='project', own=m.createdBy===S.uid||(proj&&!!p&&isProjLead(p)); const due=m.status!=='final'||(proj&&pmOut(m)&&!m.sentAt&&!!p&&canLeadPM(p));
+      if(!due) return false; if(own&&S.canWrite) return true; return ap&&diff(m.date,td)>=1; }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    xs.forEach(m=>{ const p=mProj(m), late=diff(m.date,td)>=1;
+      today_.push(hRow({dot:m.status!=='final'&&late?'var(--overdue)':'var(--late)',strong:m.status!=='final'?(late?'Minutes overdue':'Finish the minutes'):'Minutes not sent',title:mTitle(m),
+        meta:`${fmtD(m.date)} · ${p&&mCat(m)==='project'?(p.code||p.name):mCatName(mCat(m))} · logged by ${nameOf(m.createdBy)}`,onclick:()=>openPMeet(m.id)})); }); }
+  if(!amChalkMember()){ const up=upcomingSunday(), org=organiserFor(up), mm=S.meetings[up];
+    if(org===S.uid&&!['submitted','published'].includes(mm&&mm.status)) today_.push(hRow({dot:'var(--late)',strong:'Your turn to organise',title:meetTitle(up),
+      meta:`${up===td?'Today':wd(up)+' '+fmtD(up)} · ${fmtHM(meetTime())} · ${carriedActions(up).filter(t=>!t.doneAt).length} open actions to review`,onclick:()=>openMeeting(up)}));
+    else if(ap){ const sub=minutesToApprove().length; if(sub) today_.push(hRow({dot:'var(--late)',strong:`${sub} weekly minutes`,title:'to approve',onclick:()=>{ S.mhub='weekly'; goView('meet'); }})); } }
+  if(amChalkLead()&&!S.isOwner){ const cr=chalkReqs().length, co=chalkTasks().filter(t=>!t.doneAt&&t.target&&t.target<td).length;
+    today_.push(hRow({dot:co?'var(--overdue)':'var(--ontime)',strong:'Chalk Create',title:`${co} overdue`+(cr?` · ${cr} date request${cr===1?'':'s'} with the Principal`:''),onclick:()=>{ S.view='chalk'; render(true); window.scrollTo(0,0); }})); }
+  if(S.isOwner){ const xs=Object.entries(S.projects).filter(([k,p])=>p&&p.delReq&&p.delReq.by!==S.uid);
+    xs.forEach(([k,p])=>today_.push(hRow({dot:'var(--overdue)',strong:'Delete project?',title:projLabel(p),meta:`${nameOf(p.delReq.by)} · ${p.delReq.reason||'No reason given'}`,onclick:()=>openProjectView(k)}))); }
+  { const pl=(()=>{ if(!S.canWrite||fullView()||myPod()) return null; const ps=projects().filter(p=>workable(p)&&p.pod!=='Studio'&&workOn(p)); return ps.length?ps:null; })();
+    if(pl){ const sel=h('select',{id:'pm-pick','aria-label':'Project',class:'h-sel'},pl.map(p=>h('option',{value:p.id,text:p.code||p.name}))); if(S.pmPick&&pl.some(p=>p.id===S.pmPick)) sel.value=S.pmPick;
+      today_.push(hRow({dot:'var(--faint)',strong:'Log a project meeting',meta:'Within 24 hours of any client, consultant, authority or site meeting',right:h('div',{style:'display:flex;gap:6px;align-items:center'},sel,h('button',{class:'btn btn-sm h-btn',type:'button',onclick:()=>{ S.pmPick=sel.value; openPMeet(null,sel.value); },text:'+ Log'}))})); } }
+  const tg=hGroup('Today',today_); if(tg) out.push(tg);
+
+  /* 3 · Notice board: the top unread one in full (it needs “Got it”), the rest as lines */
+  { const live=nAll().filter(nLive), unseen=live.filter(n=>!nSeen(n)).sort((a,b)=>(b.important-a.important)||(b.pinned-a.pinned)||b.created_at.localeCompare(a.created_at)), pinned=live.filter(n=>n.pinned&&nSeen(n));
+    if(unseen.length||pinned.length){ const go=()=>{ S.view='notice'; render(true); window.scrollTo(0,0); };
+      const rows=[...unseen.slice(1),...pinned].slice(0,4).map(n=>hRow({dot:!nSeen(n)?(n.important?'#D7262B':'var(--early)'):'var(--faint)',strong:n.title,meta:`${nSeen(n)?'Pinned':'Unread'} · ${nameOf(n.created_by)} · ${fmtD(n.created_at.slice(0,10))}`,onclick:go}));
+      out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notice board'}),h('button',{class:'linkish h-all',type:'button',onclick:go,text:'All'})),
+        unseen.length?noticeCard(unseen[0],{clamp:true}):null,rows.length?h('div',{class:'h-list'},rows):null)); } }
+
+  /* 4 · My work */
+  if(mine.length){
+    const r=range('month',0), c=count(mine.filter(t=>t.target>=r.s&&t.target<=r.e),'approved'), nOpen=mine.filter(t=>!t.doneAt).length, nOver=mine.filter(t=>status(t)==='overdue').length;
+    const stat=(n,l,col)=>h('div',{class:'h-stat'},h('b',{style:col&&n?`color:${col}`:'',text:String(n)}),h('span',{text:l}));
+    const attn=mine.filter(t=>!t.doneAt&&['overdue','soon'].includes(status(t))).sort(byTarget), nodate=mine.filter(t=>!t.doneAt&&!t.target).sort(byTarget);
+    const prog=mine.filter(t=>!t.doneAt&&t.target&&status(t)==='open').sort(byTarget), done=mine.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,15);
+    const list=(key,title,xs,n)=>xs.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:title}),h('span',{class:'cnt',text:String(xs.length)})),h('div',{class:'list'},hMore(key,xs,n,t=>row(t,{person:false})))):null;
+    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My work'})),
+      h('div',{class:'h-stats'},stat(nOpen,'Open'),stat(nOver,'Overdue','var(--overdue)'),stat(c.early+c.ontime,'On time','var(--ontime)'),stat(c.late,'Late','var(--late)')),h('div',{class:'f-hint',style:'margin:0 4px',text:'On time and late count tasks due this month.'})));
+    [list('attn','Needs attention',attn,5),list('nodate','Waiting for a date',nodate,3),prog.length||attn.length||nodate.length?list('prog','In progress',prog,5):null,list('done','Recently completed',done,3)].forEach(x=>{ if(x) out.push(x); });
+    if(!attn.length&&!prog.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:'Nothing open. Enjoy the clear desk.'}));
+  }
+  /* 5 · My checklist */
+  const mcl=myChecklist(); if(mcl.length){ const el=myChecklistSec(mcl); const lst=el.querySelector('.list'); if(lst&&mcl.length>5&&!(S.homeMore&&S.homeMore.cl)){ [...lst.children].slice(5).forEach(x=>x.remove()); }
+    if(mcl.length>5){ el.querySelectorAll('.f-hint').forEach(x=>x.remove()); el.append(h('button',{class:'h-more',type:'button',style:'justify-self:start',onclick:()=>{ S.homeMore={...(S.homeMore||{}),cl:!(S.homeMore&&S.homeMore.cl)}; render(true); },text:S.homeMore&&S.homeMore.cl?'Show less':`Show all ${mcl.length}`})); }
+    out.push(el); }
+  if(!mine.length&&!mcl.length&&!tg) out.push(onboarding());
   return out;
 }
 
