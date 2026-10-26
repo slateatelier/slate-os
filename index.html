@@ -735,6 +735,15 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
   .cal-row{grid-template-columns:4px minmax(0,1fr)}
   .cal-row .pill{grid-column:2;justify-self:start}
 }
+.rv-list{display:grid;gap:2px;background:var(--group);border-radius:var(--r);padding:6px}
+.rv-row{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;background:#fff}
+.rv-row .rv-n{flex:1;min-width:0;display:grid;gap:2px}.rv-row .rv-n b{font-weight:600;font-size:13.5px}
+.rv-row .rv-q{font-size:12.5px;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere}
+.rv-tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;color:#fff;background:var(--c,var(--faint));align-self:center}
+.rv-tag.wait{background:var(--fill);color:var(--muted)}
+.rv-sum{font-size:12.5px;color:var(--muted)}
+.rv-btns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.rv-btns .btn{justify-content:center;padding-left:6px;padding-right:6px}.rv-btns .btn.on{background:var(--c);border-color:var(--c);color:#fff}
 </style>
 
 <div class="chrome">
@@ -3076,7 +3085,11 @@ function buildNotifs(){
   for(const m of allMeets()){ const inv=(m.attendees||[]).includes(me)&&m.createdBy!==me;
     if(m.status==='cancelled'&&inv&&m.cancelledAt&&m.cancelledBy!==me) add({id:`mc:${m.id}`,cat:'update',at:m.cancelledAt,title:`${nameOf(m.cancelledBy)} called off: ${mTitle(m)}`,body:mWhen(m)+(m.cancelNote?`\n“${m.cancelNote}”`:''),meetId:m.id});
     if(m.status!=='scheduled') continue;
-    if(inv) add({id:`mi:${m.id}:${m.date}${m.time||''}`,cat:'update',at:m.updatedAt||m.schedAt||m.createdAt||now,title:`${nameOf(m.createdBy)} invited you: ${mTitle(m)}`,body:mWhen(m)+(m.venue?' · '+m.venue:''),meetId:m.id});
+    if(inv){ const need=mNeedsReply(m);
+      add({id:`mi:${m.id}:${m.date}${m.time||''}`,cat:need?'action':'update',pending:need,at:m.updatedAt||m.schedAt||m.createdAt||now,title:need?`Reply needed: ${nameOf(m.createdBy)} invited you to ${mTitle(m)}`:`${nameOf(m.createdBy)} invited you: ${mTitle(m)}`,body:mWhen(m)+(m.venue?' · '+m.venue:'')+(need?'\nAccept, Tentative or Decline.':''),meetId:m.id}); }
+    if(m.createdBy===me&&mOpenForReply(m)){ const w=mAwaiting(m); if(w.length){ const st=mStartMs(m), sent=Date.parse(m.updatedAt||m.schedAt||m.createdAt||now)||Date.now();
+      const due=new Date(Math.min(sent+864e5,(st||Infinity)-108e5)).toISOString();
+      add({id:`ma:${m.id}:${mVer(m)}`,cat:'action',pending:true,at:due,title:`No reply yet: ${mTitle(m)}`,body:`${mWhen(m)}\nWaiting on ${w.map(id=>nameOf(id).split(' ')[0]).join(', ')}`,meetId:m.id}); } }
     if((inv||m.createdBy===me)&&m.date===td) add({id:`mt:${m.id}:${m.date}`,cat:'deadline',at:atLocal(td,8),title:`Meeting today${m.time?' at '+fmtTime(m.time):''}: ${mTitle(m)}`,body:[m.venue,(m.attendees||[]).length+' attending'].filter(Boolean).join(' · '),meetId:m.id});
     if(mHeld(m)&&canEditM(m)) add({id:`mw:${m.id}`,cat:'action',pending:true,at:atLocal(m.date,m.time&&+m.time.slice(0,2)<22?+m.time.slice(0,2)+1:20),title:`Write the minutes: ${mTitle(m)}`,body:mWhen(m)+' · within 24 hours',meetId:m.id}); }
   // 3. deadlines
@@ -4240,7 +4253,7 @@ function sheetPMeet(){
   const pick=!m?[seg('Mode',[['sched','Schedule ahead'],['log','Log minutes']],sched?'sched':'log',v=>{ sh.mode=v; sh.err=''; if(v==='log'&&(!d.date||d.date>today())) d.date=today(); if(v==='sched'&&d.date&&d.date<today()) d.date=''; renderSheet(); }),
     h('div',{class:'form-row'},field('Kind',(()=>{ const x=h('select',{id:'pm-cat',onchange:e=>{ d.cat=e.target.value; d.phase=''; renderSheet(); }},mCatsFor().map(([k,l])=>h('option',{value:k,text:k==='project'?'Project meeting':k==='other'?'Other meeting':l+' (studio)'}))); x.value=d.cat; return x; })()),
       isProj?field('Project',(()=>{ const x=h('select',{id:'pm-proj',onchange:e=>{ d.projectId=e.target.value; const q=S.projects[d.projectId]; d.phase=q&&q.std?(curPhase({...q,id:d.projectId})||''):''; renderSheet(); }},h('option',{value:'',text:'Select project…'}),projects().filter(q=>!q.closed&&!isInternalP(q)&&q.pod!=='Studio'&&canPM(q)).map(q=>h('option',{value:q.id,text:projLabel(q)}))); x.value=d.projectId||''; return x; })()):null)]:null;
-  const invite=field(sched?'Invite':'SLATE attendees',h('div',{class:'chips'},team.map(id=>h('button',{type:'button',class:'chip who'+(set.has(id)?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ set.has(id)?set.delete(id):set.add(id); d.attendees=[...set]; renderSheet(); }},avaEl(id,false,'sm'),nameOf(id).split(' ')[0]))));
+  const invite=field(sched?'Invite':'SLATE attendees',h('div',{class:'chips'},team.map(id=>h('button',{type:'button',class:'chip who'+(set.has(id)?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ set.has(id)?set.delete(id):set.add(id); d.attendees=[...set]; renderSheet(); }},avaEl(id,false,'sm'),nameOf(id).split(' ')[0]))),sched?'Everyone you invite must Accept, Tentative or Decline. Moving the date or time asks them to reply again.':undefined);
   const titleF=field(isProj?'Title (optional)':'Title *',h('input',{id:'pm-title',maxlength:120,value:d.title||'',placeholder:isProj?`e.g. ${PMT[d.type]||'Client'} meeting: layout sign-off`:'e.g. Monthly HR review',oninput:e=>{d.title=e.target.value}}));
   if(sched) return [head(eye,m?'Reschedule or edit':'Schedule a meeting'),back,
     h('form',{class:'form',onsubmit:e=>{e.preventDefault();saveSchedule()}},pick,titleF,
@@ -4320,20 +4333,43 @@ const mTitle=m=>(m.title||'').trim()||(mCat(m)==='project'?`${PMT[m.type]||'Proj
 const mProj=m=>m&&m.projectId&&S.projects[m.projectId]?{...S.projects[m.projectId],id:m.projectId}:null;
 const mWhen=m=>`${wd(m.date)} ${fmtD(m.date)}`+(m.time?' · '+fmtTime(m.time):'');
 const mHeld=m=>m.status==='scheduled'&&(m.date<today()||(m.date===today()&&(!m.time||m.time<=new Date().toTimeString().slice(0,5))));
+/* Replies to a scheduled meeting: everyone invited (except whoever set it up) must Accept, Tentative or Decline.
+   m.rsvp[id] = {r:'yes'|'maybe'|'no', note, at, for:'<date> <time>'}; a reply counts only for the date and time it was given for.
+   Replies are written only through the meeting_respond database function. */
+const RSVP={yes:['Accepted','var(--ontime)'],maybe:['Tentative','var(--late)'],no:['Declined','var(--overdue)']};
+const mVer=m=>(m.date||'')+' '+(m.time||'');
+const mReply=(m,id)=>{ const r=m&&m.rsvp&&m.rsvp[id]; return r&&RSVP[r.r]&&r.for===mVer(m)?r:null; };
+const mInvitees=m=>(m.attendees||[]).filter(id=>id!==m.createdBy);
+const mOpenForReply=m=>m.status==='scheduled'&&!mHeld(m);
+const mNeedsReply=m=>mOpenForReply(m)&&mInvitees(m).includes(S.uid)&&!mReply(m,S.uid);
+const mAwaiting=m=>mInvitees(m).filter(id=>!mReply(m,id));
+const mStartMs=m=>Date.parse(`${m.date}T${m.time||'00:00'}:00+06:00`);
+function rvTag(r){ return r?h('span',{class:'rv-tag',style:'--c:'+RSVP[r.r][1],text:RSVP[r.r][0]}):h('span',{class:'rv-tag wait',text:'Awaiting reply'}); }
+function meetRespond(id,choice,note){
+  return run(async()=>{ const sb=window.slateSupabase; if(!sb) throw new Error('Not connected. Try again in a moment.');
+    const {error}=await sb.rpc('meeting_respond',{p_id:id,p_choice:choice,p_note:(note||'').trim()||null});
+    if(error) throw new Error(error.message);
+    const m=S.pmeet[id]; if(m) m.rsvp={...(m.rsvp||{}),[S.uid]:{r:choice,note:(note||'').trim(),at:new Date().toISOString(),for:mVer(m)}};
+  },choice==='yes'?'Accepted. The organiser can see it':choice==='maybe'?'Marked tentative. The organiser is told':'Declined. The organiser is told')
+  .then(ok=>{ if(ok&&S.sheet&&S.sheet.id===id){ S.sheet.reply=null; renderSheet(); } }); }
 const allMeets=()=>Object.entries(S.pmeet||{}).map(([id,m])=>({...m,id})).filter(m=>m&&m.date);
 /* studio categories a person can file a meeting under: the area's project must be one they can see */
 const mCatsFor=()=>MCATS.filter(([k])=>k==='project'||k==='other'||amApprover()||!!areaProject(k));
 const canEditM=m=>{ const p=mProj(m); return S.canWrite&&(m.createdBy===S.uid||amApprover()||(!!p&&mCat(m)==='project'&&isProjLead(p))); };
+function mRvTag(m){ if(!mOpenForReply(m)) return null;
+  if(mInvitees(m).includes(S.uid)){ const r=mReply(m,S.uid); return r?rvTag(r):h('span',{class:'tag tag-req',text:'Reply needed'}); }
+  if(m.createdBy===S.uid){ const w=mAwaiting(m).length; return w?h('span',{class:'tag',text:`${w} awaiting reply`}):h('span',{class:'tag',style:'color:var(--ontime)',text:'All replied'}); }
+  return null; }
 function mRow(m,opt={}){ const p=mProj(m), c=mCat(m);
   const where=c==='project'?(p?(p.code||p.name):''):mCatName(c);
   return h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openPMeet(m.id),onkeydown:e=>{ if(e.key==='Enter') openPMeet(m.id); }},
-    h('div',{style:'min-width:0'},h('div',{class:'row-title'},h('span',{text:mTitle(m)}),pmStateTag(m)),
-      h('div',{class:'row-meta'},h('span',{text:[mWhen(m),opt.noWhere?'':where,m.venue||'',(m.attendees||[]).length?`${m.attendees.length} attending`:''].filter(Boolean).join(' · ')}))),
+    h('div',{style:'min-width:0'},h('div',{class:'row-title'},h('span',{text:mTitle(m)}),pmStateTag(m),mRvTag(m)),
+      h('div',{class:'row-meta'},h('span',{text:[mWhen(m),opt.noWhere?'':where,m.venue||'',(m.attendees||[]).length?`${m.attendees.length} invited`:''].filter(Boolean).join(' · ')}))),
     h('span',{class:'mi-a',text:'›'})); }
 function viewMeetHub(){
   const tab=S.mhub||'up', td=today(), ms=allMeets();
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Weekly · projects · studio'}),h('h1',{class:'h1',text:'Meetings'}),
-      h('p',{class:'lead',text:'Every meeting in one place. Schedule one ahead and the people you invite are told at once and reminded 30 minutes before; after it, write the minutes and the action items become tasks.'})),
+      h('p',{class:'lead',text:'Every meeting in one place. Schedule one ahead and the people you invite are told at once; each must Accept, Tentative or Decline, and everyone is reminded 30 minutes before. After it, write the minutes and the action items become tasks.'})),
     S.canWrite&&!amChalkMember()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openNewMeeting(),text:'+ New meeting'}):null)];
   const held=ms.filter(m=>mHeld(m)&&canEditM(m));
   out.push(seg('Meetings',[['up','Upcoming'],['weekly','Weekly'],['project','Projects'],['studio','Studio & other']],tab,v=>{ S.mhub=v; render(true); }));
@@ -4400,6 +4436,38 @@ function saveSchedule(){
 }
 function cancelMeeting(){ const sh=S.sheet, m=S.pmeet[sh.id], note=(sh.d.cancelNote||'').trim(); if(!note) return fail('Say why it’s called off; attendees see it.');
   run(()=>S.db.doc('pmeetings/'+sh.id).update({status:'cancelled',cancelNote:note,cancelledBy:S.uid,cancelledAt:new Date().toISOString(),history:[...(m.history||[]),{at:new Date().toISOString(),by:S.uid,type:'cancelled',note}].slice(-20)}),'Meeting called off. Attendees are told').then(ok=>{ if(ok){ sh.mode=null; renderSheet(); } }); }
+/* who is invited and how each has replied */
+function mRepliesSec(m){
+  const inv=mInvitees(m), c={yes:0,maybe:0,no:0}; inv.forEach(id=>{ const r=mReply(m,id); if(r) c[r.r]++; });
+  const wait=inv.length-c.yes-c.maybe-c.no, live=m.status==='scheduled';
+  const sum=[c.yes&&`${c.yes} accepted`,c.maybe&&`${c.maybe} tentative`,c.no&&`${c.no} declined`,live&&wait&&`${wait} awaiting`].filter(Boolean).join(' · ');
+  const row=(id,tag,note)=>h('div',{class:'rv-row'},avaEl(id,false,'sm'),h('div',{class:'rv-n'},h('b',{text:nameOf(id)}),note?h('span',{class:'rv-q',text:'“'+note+'”'}):null),tag);
+  const order={no:0,maybe:1,undefined:2,yes:3}, sorted=[...inv].sort((a,b)=>(order[(mReply(m,a)||{}).r]??2)-(order[(mReply(m,b)||{}).r]??2));
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Invited'}),h('span',{class:'cnt',text:String((m.attendees||[]).length)})),
+    sum?h('div',{class:'rv-sum',text:sum}):null,
+    h('div',{class:'rv-list'},(m.attendees||[]).includes(m.createdBy)?row(m.createdBy,h('span',{class:'rv-tag wait',text:'Organiser'})):null,
+      sorted.map(id=>{ const r=mReply(m,id); return row(id,live||r?rvTag(r):h('span',{class:'rv-tag wait',text:'No reply'}),r&&r.note); })),
+    m.external?h('div',{class:'chips'},h('span',{class:'chip',style:'padding-right:12px',text:m.external})):null); }
+/* the invitee's own reply: required while the meeting is ahead */
+function mReplyCard(sh,m){
+  if(!mOpenForReply(m)||!mInvitees(m).includes(S.uid)||!S.canWrite) return null;
+  const mine=mReply(m,S.uid), R=sh.reply||(sh.reply={edit:false,c:null,note:''}), org=nameOf(m.createdBy).split(' ')[0];
+  if(mine&&!R.edit) return h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 '+RSVP[mine.r][1]},
+    h('div',{style:'display:flex;align-items:center;gap:8px;flex-wrap:wrap'},h('b',{text:'Your reply'}),rvTag(mine),h('span',{class:'rv-sum',text:fmtTs(mine.at)})),
+    mine.note?h('p',{class:'quote',text:mine.note}):null,
+    h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px',onclick:()=>{ sh.reply={edit:true,c:mine.r,note:mine.note||''}; renderSheet(); },text:'Change reply'}));
+  const moved=m.rsvp&&m.rsvp[S.uid]&&!mine;
+  const pick=c=>{ if(c==='yes') return meetRespond(sh.id,'yes',''); R.c=c; sh.err=''; renderSheet(); setTimeout(()=>{ const t=document.getElementById('rv-note'); if(t) t.focus(); },30); };
+  const b=(c,l)=>h('button',{class:'btn'+(R.c===c?' on':''),type:'button',style:'--c:'+RSVP[c][1],disabled:S.busy,onclick:()=>pick(c),text:l});
+  return h('div',{class:'callout'},
+    h('div',{},h('b',{text:moved?'The meeting moved: reply again':'Reply to this invite'}),h('div',{class:'rv-sum',text:`Required. ${org} is waiting to know if you’ll attend.`})),
+    h('div',{class:'rv-btns'},b('yes','Accept'),b('maybe','Tentative'),b('no','Decline')),
+    R.c&&R.c!=='yes'?h('form',{class:'form',style:'gap:10px',onsubmit:e=>{ e.preventDefault(); if((R.note||'').trim().length<3){ sh.err='Add a short reason so '+org+' knows.'; return renderSheet(); } meetRespond(sh.id,R.c,R.note); }},
+      field(R.c==='no'?'Why you can’t attend *':'What’s uncertain *',(()=>{ const t=h('textarea',{id:'rv-note',rows:2,maxlength:300,placeholder:R.c==='no'?'e.g. Site visit at that time; free after 3 pm':'e.g. May join late, client call till 11:30',oninput:e=>{ R.note=e.target.value; }}); t.value=R.note||''; return t; })(),`${org} sees this. Suggest another time if it helps.`),
+      sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:R.c==='no'?'Send decline':'Send tentative'}),
+        R.edit?h('button',{class:'btn',type:'button',onclick:()=>{ sh.reply=null; sh.err=''; renderSheet(); },text:'Keep my reply'}):null)):
+    R.edit?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px',onclick:()=>{ sh.reply=null; renderSheet(); },text:'Keep my reply'}):null); }
 /* a scheduled meeting's page */
 function sheetSchedView(sh,m){
   const p=mProj(m), c=mCat(m), can=canEditM(m), held=mHeld(m), back=sh.back?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:backToProject,text:'‹ Back to the project'}):null;
@@ -4407,7 +4475,8 @@ function sheetSchedView(sh,m){
   const out=[head(c==='project'?(p?projLabel(p):'Project meeting'):mCatName(c)+' meeting',mTitle(m)),back,
     h('div',{class:'sh-status'},pmStateTag(m),c==='project'&&m.type?h('span',{class:'tag',text:PMT[m.type]}):null),
     h('div',{class:'facts'},fact('When',mWhen(m)),fact('Where',m.venue),fact('Set up by',nameOf(m.createdBy)),m.status==='cancelled'?fact('Called off by',nameOf(m.cancelledBy)):null),
-    h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Invited'}),h('span',{class:'cnt',text:String((m.attendees||[]).length)})),h('div',{class:'chips'},(m.attendees||[]).map(id=>h('span',{class:'chip who',style:'padding-right:12px'},avaEl(id,false,'sm'),nameOf(id))),m.external?h('span',{class:'chip',style:'padding-right:12px',text:m.external}):null)),
+    mReplyCard(sh,m),
+    mRepliesSec(m),
     m.agenda?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Agenda'})),h('div',{class:'card',style:'white-space:pre-line',text:m.agenda})):null,
     m.status==='cancelled'&&m.cancelNote?h('p',{class:'quote',text:m.cancelNote}):null];
   if(m.status==='scheduled'&&can){
@@ -4418,7 +4487,7 @@ function sheetSchedView(sh,m){
       h('button',{class:'btn'+(held?'':' btn-primary'),type:'button',onclick:()=>{ sh.edit=true; sh.mode='sched'; renderSheet(); },text:held?'Move it':'Reschedule or edit'}),
       h('button',{class:'btn',type:'button',onclick:()=>{ sh.mode='cancel'; sh.err=''; renderSheet(); },text:'Call off'})));
     if(held) out.push(h('div',{class:'f-hint',text:'Write the minutes within 24 hours. Decisions and action items go in them; actions become tasks when you finalise.'}));
-  } else if(m.status==='scheduled') out.push(h('div',{class:'f-hint',text:`${nameOf(m.createdBy)} set this up and can change it. You get a reminder 30 minutes before.`}));
+  } else if(m.status==='scheduled') out.push(h('div',{class:'f-hint',text:`${nameOf(m.createdBy)} set this up and can change it. You get a reminder 30 minutes before; if you haven’t replied, a nudge comes 24 hours after the invite or 3 hours before the start.`}));
   out.push(h('div',{class:'f-hint',text:`Set up by ${nameOf(m.createdBy)} · last updated by ${nameOf(m.updatedBy)} · ${fmtTs(m.updatedAt)}`}));
   return out;
 }
