@@ -56,10 +56,14 @@ const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(20)), x => 
 const METHODS = ['Bank transfer', 'Cheque', 'Cash', 'bKash / MFS'];
 const EXP_CATS = ['Office rent', 'Utilities', 'Internet & software', 'Printing & plotting', 'Transport & site visits', 'Authority & approval fees', 'Client meetings & entertainment', 'Office supplies', 'Repairs & maintenance', 'Bank charges', 'Marketing', 'Staff welfare', 'Tax deposited (AIT/VDS withheld)', 'Other'];
 const WO_TYPES = ['Structural consultant', 'MEP consultant', 'Survey & soil test', '3D visualisation', 'Model making', 'Printing & plotting', 'Specialist consultant', 'Other vendor'];
-const DEFAULT_WO_TERMS = 'Deliverables to be submitted in the agreed format and reviewed by the project lead before acceptance.\nPayment is released against accepted deliverables, less applicable AIT and VDS deducted at source.\nAll drawings, data and information shared remain confidential and the property of SLATE Architecture & Design.';
+const DEFAULT_WO_TERMS = 'Deliverables to be submitted in the agreed format and reviewed by the project lead before acceptance.\nPayment is released against accepted deliverables, less applicable AIT and VDS deducted at source.\nAll drawings, data and information shared remain confidential and the property of SLATE.';
 const PTYPES = ['Residential', 'Commercial', 'Mixed use', 'Interior', 'Master planning', 'Real estate consultancy', 'Other'];
 const DEFAULT_MS = [['Signing advance', 25], ['Final architectural design', 25], ['Authority (RAJUK) drawings', 25], ['Working drawings', 25]];
-const STUDIO = { name: 'SLATE Architecture & Design', addr: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212', phone: '01749-390284', email: 'info@slate-atelier.com', web: 'slate-atelier.com', tag: 'Design with purpose' };
+const STUDIO = { name: 'SLATE', addr: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212', phone: '01749-390284', email: 'info@slate-atelier.com', web: 'slate-atelier.com', tag: 'Design with purpose' };
+/* One company, two trading names, each with its own bank account. Each project bills as one of them;
+   an invoice keeps the name and account it was issued with, so changing a project later affects new invoices only. */
+const ENTITIES = ['SLATE', 'SLATE ATELIER'];
+const entOf = x => ENTITIES.includes(x?.entity) ? x.entity : 'SLATE';
 const INTERNAL_TYPES = ['studioops', 'studiodev', 'studiomgmt', 'studiobd', 'studiohr', 'studiofin'];
 
 /* ---------- state ---------- */
@@ -88,6 +92,8 @@ const invNet = i => i.net != null ? +i.net : +i.amount || 0;          // fee SLA
 const invAit = i => +i.ait || 0;                                          // AIT the client is expected to deduct
 const MODE_LABEL = { cash: 'Cash', bank: 'Bank' };
 const acct = id => S.accounts.find(a => a.id === id);
+const bankAccts = ent => S.accounts.filter(a => a.kind === 'bank' && a.active !== false && entOf({ entity: a.title }) === ent);
+const acctLabel = a => `${a.name}${a.number ? ' · ' + a.number.slice(-4) : ''}`;
 const ACCT_KIND = { cash: 'Office vault (cash)', petty: 'Petty cash box', bank: 'Bank account', mfs: 'Mobile wallet' };
 const KIND_ORDER = { cash: 0, petty: 1, bank: 2, mfs: 3 };
 const isCashLike = a => a && (a.kind === 'cash' || a.kind === 'petty');
@@ -408,6 +414,11 @@ function projectForm(p) {
       <label class="f" for="p_client">Client (bill to)<input id="p_client" name="client" required value="${esc(src.client)}"></label>
       <label class="f" for="p_loc">Site<input id="p_loc" name="location" value="${esc(src.location)}"></label>
     </div>
+    <div class="fg">
+      <label class="f" for="p_ent">Bills as<select id="p_ent" name="entity">${ENTITIES.map(e => opt(e, e, entOf(src) === e)).join('')}</select></label>
+      <label class="f" for="p_acct">Pays into (bank invoices)<select id="p_acct" name="payAcctId"></select></label>
+    </div>
+    <p class="hint" id="pEntHint" style="margin:-6px 0 0">${p ? 'Changing this applies to new invoices. Issued invoices keep the name and account they went out with.' : 'The name on this project’s invoices and the account clients pay into. You can change it later.'}</p>
     <label class="f" for="p_caddr">Client billing address<textarea id="p_caddr" name="clientAddress" rows="2" placeholder="Printed under Bill to on invoices">${esc(src.clientAddress)}</textarea></label>
     <div class="fg">
       <label class="f" for="p_area">Construction area (sft)<input id="p_area" name="areaSft" type="number" min="0" step="1" value="${esc(src.areaSft)}"></label>
@@ -423,6 +434,9 @@ function projectForm(p) {
   </form>`, root => {
     const f = $('#pf', root);
     bindMl(root, f.fee);
+    const fillAcct = () => { const list = bankAccts(f.entity.value), keep = f.payAcctId.value || src.payAcctId;
+      f.payAcctId.innerHTML = list.length ? list.map(a => opt(a.id, acctLabel(a), a.id === keep)).join('') : opt('', `No ${f.entity.value} bank account yet (add it in Cash & bank)`, true); };
+    fillAcct(); f.entity.addEventListener('change', () => { f.payAcctId.value = ''; fillAcct(); });
     f.osId.addEventListener('change', () => { const o = S.os.find(x => x.id === f.osId.value); if (!o) return;
       f.code.value = o.code || ''; f.name.value = o.name || ''; if (o.client) f.client.value = o.client; if (o.location) f.location.value = o.location; });
     const autoFee = () => { if (+f.areaSft.value && +f.rate.value) { f.fee.value = Math.round(f.areaSft.value * f.rate.value); f.fee.dispatchEvent(new Event('input', { bubbles: true })); } };
@@ -431,7 +445,7 @@ function projectForm(p) {
       const milestones = readMl(root);
       if (Math.round(milestones.reduce((a, m) => a + m.pct, 0)) !== 100) { toast('Milestones need to add up to 100%.'); return; }
       const data = { osId: f.osId.value, code: f.code.value.trim().toUpperCase(), name: f.name.value.trim(), client: f.client.value.trim(), location: f.location.value.trim(), clientAddress: f.clientAddress.value.trim(),
-        type: f.type.value, areaSft: +f.areaSft.value || 0, rate: +f.rate.value || 0, fee: +f.fee.value || 0, milestones, note: f.note.value.trim(), status: f.status ? f.status.value : (p?.status || 'active') };
+        entity: f.entity.value, payAcctId: f.payAcctId.value, type: f.type.value, areaSft: +f.areaSft.value || 0, rate: +f.rate.value || 0, fee: +f.fee.value || 0, milestones, note: f.note.value.trim(), status: f.status ? f.status.value : (p?.status || 'active') };
       if (S.projects.some(x => x.code === data.code && x.id !== p?.id)) { toast('Another project already uses that code.'); return; }
       const ok = p ? await run(() => putDoc('projects', p.id, { ...strip(p), ...data }), 'Project saved') : await run(() => addDoc('projects', data), 'Project fee added');
       if (ok) closeSheet(); });
@@ -447,6 +461,7 @@ function projectSheet(p) {
   const os = p.osId ? S.os.find(o => o.id === p.osId) : null;
   openSheet(`${sheetHead(p.name, `<span class="mono">${esc(p.code)}</span> · ${esc(p.client || '—')} · ${esc(p.type)}`)}
     <dl class="kv" style="margin-bottom:12px"><dt>SLATE OS</dt><dd class="txt">${os ? `Linked · ${esc(os.code)}` : p.osId ? 'Linked project no longer in SLATE OS' : '<span class="warnt">Not linked</span>'}</dd>
+      <dt>Bills as</dt><dd class="txt">${esc(entOf(p))}${acct(p.payAcctId) ? ' · pays into ' + esc(acctLabel(acct(p.payAcctId))) : ''}</dd>
       ${p.location ? `<dt>Site</dt><dd class="txt">${esc(p.location)}</dd>` : ''}${p.clientAddress ? `<dt>Billing address</dt><dd class="txt">${esc(p.clientAddress)}</dd>` : ''}
       ${p.areaSft ? `<dt>Area</dt><dd>${nfUS.format(p.areaSft)} sft${p.rate ? ` · BDT ${p.rate}/sft` : ''}</dd>` : ''}</dl>
     ${(() => { const ex = S.expenses.filter(x => x.projectId === p.id && x.status !== 'rejected').reduce((t, x) => t + (+x.amount || 0), 0), wo = S.workorders.filter(w => w.projectId === p.id && !['rejected'].includes(w.status || 'pending')).reduce((t, w) => t + (+w.amount || 0), 0);
@@ -508,6 +523,8 @@ function invoiceForm(i, preset = {}) {
     <div class="sec-t">Payment</div>
     <div class="seg" role="group" aria-label="Payment">${segBtn('mode', 'bank', 'Bank')}${segBtn('mode', 'cash', 'Cash')}</div>
     <p class="hint" id="iModeHint" style="margin:-6px 0 0"></p>
+    <label class="f" for="i_acct" id="iAcctWrap">Bank account for payment<select id="i_acct" name="payAcctId"></select></label>
+    <p class="hint" id="iEnt" style="margin:-6px 0 0"></p>
     <div style="display:flex;gap:16px;flex-wrap:wrap">
       <label class="check" for="i_vat"><input id="i_vat" type="checkbox"> VAT <span class="num">${esc(T.vatRate)}%</span></label>
       <label class="check" for="i_ait"><input id="i_ait" type="checkbox"> AIT <span class="num">${esc(T.aitRate)}%</span></label>
@@ -545,8 +562,13 @@ function invoiceForm(i, preset = {}) {
       if (!keep && keep !== '' && !preset.ms) { const first = ms.find(m => !msInvoiced(p, m, i?.id)); if (first) f.milestoneId.value = first.id; } };
     const fillAmt = () => { const p = prj(f.projectId.value), m = p?.milestones?.find(x => x.id === f.milestoneId.value);
       if (m) { f.entered.value = Math.round((+p.fee || 0) * m.pct / 100); f.desc.value = `${m.label} (${m.pct}% of design fee) · ${p.name}`; } tot(); };
+    const fillAcct = keep => { const p = prj(f.projectId.value), ent = entOf(p), list = bankAccts(ent);
+      keep = keep || p?.payAcctId;
+      f.payAcctId.innerHTML = list.length ? list.map(a => opt(a.id, acctLabel(a), a.id === keep)).join('') : opt('', `No ${ent} bank account yet`, true);
+      $('#iEnt', root).textContent = `Bills as ${ent}, set on the project.${list.length ? '' : ' Add the account in Cash & bank so its details print on the invoice.'}`; };
+    fillAcct(i?.payAcctId);
     fillMs(i ? (i.milestoneId || '') : null); if (!i) fillAmt(); else tot();
-    f.projectId.addEventListener('change', () => { preset = {}; fillMs(null); fillAmt(); });
+    f.projectId.addEventListener('change', () => { preset = {}; fillAcct(); fillMs(null); fillAmt(); });
     f.milestoneId.addEventListener('change', fillAmt);
     f.addEventListener('input', e => { if (e.target === f.entered) tot(); });
     f.addEventListener('change', e => { if (e.target.type === 'checkbox') tot(); });
@@ -557,7 +579,7 @@ function invoiceForm(i, preset = {}) {
       if (!(c.base > 0)) { toast('Enter the invoice amount.'); return; }
       if (f.due.value < f.date.value) { toast('The due date is before the invoice date.'); return; }
       const anyTax = T.vatOn || T.aitOn;
-      const data = { projectId: f.projectId.value, milestoneId: f.milestoneId.value, desc: f.desc.value.trim(), no, date: f.date.value, due: f.due.value, status,
+      const data = { projectId: f.projectId.value, entity: entOf(prj(f.projectId.value)), payAcctId: f.payAcctId.value, milestoneId: f.milestoneId.value, desc: f.desc.value.trim(), no, date: f.date.value, due: f.due.value, status,
         mode: T.mode, vatOn: T.vatOn, aitOn: T.aitOn, vatRate: T.vatRate, aitRate: T.aitRate, taxMode: anyTax ? T.taxMode : 'added',
         entered: +f.entered.value || 0, amount: c.base, vatPct: T.vatOn ? T.vatRate : 0, ait: c.ait, net: c.net };
       const msg = status === 'draft' ? 'Draft saved' : 'Invoice issued';
@@ -701,24 +723,53 @@ ${[body, ...more].map(b => `<div class="page">${letterhead()}${b}<div class="doc
 <script>(function(){function fit(){var px=210*96/25.4,w=document.documentElement.clientWidth,z=Math.min(1,(w-16)/px);document.querySelectorAll('.page').forEach(function(p){p.style.zoom=z;});}addEventListener('resize',fit);fit();})();<\/script>
 </body></html>`;
 }
-const sigBlock = st => `<div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(STUDIO.name)}</div></div>`;
+const sigBlock = (st, ent) => `<div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(ent || STUDIO.name)}</div></div>`;
+/* Earlier invoices on the same project, this one, and phases still to bill: what the client has been billed,
+   what's been settled (payments plus tax deducted at source) and what's still due. */
+function billingToDate(i, p) {
+  const ms = p.milestones || [], phaseNo = x => { const k = ms.findIndex(m => m.id === x.milestoneId); return k >= 0 ? k + 1 : null; };
+  const label = x => { const m = ms.find(m => m.id === x.milestoneId); return m ? m.label : x.desc; };
+  const earlier = S.invoices.filter(x => x.projectId === i.projectId && x.id !== i.id && !['void', 'draft'].includes(invStatus(x)) && (x.date || '') <= (i.date || ''))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || ''));
+  if (!earlier.length) return null;
+  const rowOf = (x, cur) => { const billed = invTotal(x), paid = Math.min(billed, invSettled(x)); return { n: phaseNo(x), label: label(x), ref: (x.no || '').split('/').pop(), date: x.date, billed, paid, due: Math.max(0, billed - paid), cur }; };
+  const rows = [...earlier.map(x => rowOf(x, false)), rowOf(i, true)];
+  const billedIds = new Set(S.invoices.filter(x => x.projectId === i.projectId && invStatus(x) !== 'void').map(x => x.milestoneId).concat(i.milestoneId));
+  const later = ms.map((m, k) => ({ n: k + 1, label: m.label })).filter((m, k) => !billedIds.has(ms[k].id));
+  const prevDue = rows.filter(r => !r.cur).reduce((t, r) => t + r.due, 0);
+  const sum = k => rows.reduce((t, r) => t + r[k], 0);
+  const cell = 'style="font-size:8.5pt;color:#545454"';
+  const html = `<h2>Billing to date</h2>
+  <table><thead><tr><th>Phase</th><th>Invoice</th><th class="n">Billed</th><th class="n">Paid</th><th class="n">Due</th></tr></thead><tbody>
+  ${rows.map(r => `<tr><td>${r.cur ? '<b>' : ''}${r.n ? r.n + ' · ' : ''}${esc(r.label)}${r.cur ? '</b>' : ''}</td><td ${cell}>${esc(r.ref)} · ${r.cur ? 'this invoice' : fmtDate(r.date)}</td><td class="n">${nf.format(Math.round(r.billed))}</td><td class="n">${nf.format(Math.round(r.paid))}</td><td class="n">${r.due ? nf.format(Math.round(r.due)) : 'Paid'}</td></tr>`).join('')}
+  ${later.map(m => `<tr class="sub"><td>${m.n} · ${esc(m.label)}</td><td ${cell}>not yet billed</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>`).join('')}
+  <tr class="tot"><td colspan="2">Total</td><td class="n">${nf.format(Math.round(sum('billed')))}</td><td class="n">${nf.format(Math.round(sum('paid')))}</td><td class="n">${nf.format(Math.round(sum('due')))}</td></tr></tbody></table>`;
+  return { html, prevDue, payNow: sum('due') };
+}
 function invoiceDoc(i) {
   const p = prj(i.projectId) || {}, vat = (+i.amount || 0) * (+i.vatPct || 0) / 100, st = S.settings, draft = invStatus(i) === 'draft';
-  const bankMode = i.mode ? i.mode === 'bank' : true;
-  const body = `<h1>Invoice${draft ? ' <span class="dr">Draft</span>' : ''}</h1>
+  const ent = entOf(i.entity ? i : p), a = acct(i.payAcctId);
+  const payee = a ? entOf({ entity: a.title }) : ent;
+  const bankLines = a ? [`Account title: ${payee}`, a.number ? `Account no: ${a.number}` : '', a.bank ? `Bank: ${a.bank}` : '', a.routing ? `Routing no: ${a.routing}` : ''].filter(Boolean).join('\n') : st.bank;
+  const btd = billingToDate(i, p);
+  const body = `<style>.page td,.page th{padding-top:1.6mm;padding-bottom:1.6mm}.page h2{margin:5mm 0 1.5mm}.page .ref{margin-bottom:5mm}.page .to{margin-bottom:4mm}.page .amtbox{margin:4mm 0 1.5mm;padding:3mm 5mm}.page .sig{margin-top:${btd ? 8 : 16}mm}</style>
+  <h1>Invoice${draft ? ' <span class="dr">Draft</span>' : ''}</h1>
   <div class="ref"><span>No <b>${esc(i.no)}</b></span><span>Date <b>${fmtDate(i.date)}</b></span><span>Due <b>${fmtDate(i.due)}</b></span>${st.bin && +i.vatPct ? `<span>BIN <b>${esc(st.bin)}</b></span>` : ''}</div>
   <div class="to">Bill to<b>${esc(p.client || '')}</b>${p.clientAddress ? `<span class="pre">${esc(p.clientAddress)}</span><br>` : ''}Project: ${esc(p.name || '')} (${esc(p.code || '')})${p.location ? `<br>Site: ${esc(p.location)}` : ''}</div>
   <table><thead><tr><th>Description</th><th class="n">Amount (BDT)</th></tr></thead><tbody>
   <tr><td>${esc(i.desc)}</td><td class="n">${nf.format(Math.round(+i.amount || 0))}</td></tr>
   ${+i.vatPct ? `<tr><td>VAT ${i.vatPct}%</td><td class="n">${nf.format(Math.round(vat))}</td></tr>` : ''}
-  <tr class="tot"><td>Total payable</td><td class="n">${nf.format(Math.round(invTotal(i)))}</td></tr>
+  <tr class="tot"><td>${btd ? 'This invoice' : 'Total payable'}</td><td class="n">${nf.format(Math.round(invTotal(i)))}</td></tr>
   ${invAit(i) ? `<tr class="sub"><td>AIT ${i.aitRate}% deductible at source by the client</td><td class="n">${nf.format(invAit(i))}</td></tr>` : ''}</tbody></table>
-  <p class="words">In words: ${esc(takaWords(invTotal(i)))}</p>
-  ${invAit(i) || +i.vatPct ? `<p class="note">Where VAT or AIT is deducted at source, please share the treasury challan or certificate with SLATE.</p>` : ''}
-  <h2>Payment</h2><p style="margin:0">${bankMode ? 'By bank transfer or account-payee cheque in favour of SLATE Architecture &amp; Design.' : 'In cash. An official SLATE money receipt is issued for every payment.'}</p>
-  ${bankMode && st.bank ? `<pre style="margin-top:2mm">${esc(st.bank)}</pre>` : ''}
-  ${st.invNote ? `<p class="note">${esc(st.invNote)}</p>` : ''}
-  ${sigBlock(st)}`;
+  ${btd ? btd.html : ''}
+  ${btd && btd.prevDue > 0 ? `<div class="amtbox"><span>Total payable now <span style="font-size:8.5pt;color:#545454">(this invoice + ${nf.format(Math.round(btd.prevDue))} due on earlier phases)</span></span><b>BDT ${nf.format(Math.round(btd.payNow))}</b></div>
+  <p class="words">In words: ${esc(takaWords(btd.payNow))}.${btd ? ' Paid includes tax deducted at source (AIT/VDS) once the challan or certificate is received.' : ''}</p>`
+    : `<p class="words">In words: ${esc(takaWords(invTotal(i)))}${btd ? '. Paid includes tax deducted at source (AIT/VDS) once the challan or certificate is received.' : ''}</p>`}
+  ${!btd && (invAit(i) || +i.vatPct) ? `<p class="note">Where VAT or AIT is deducted at source, please share the treasury challan or certificate with ${esc(ent)}.</p>` : ''}
+  <h2>Payment</h2><p style="margin:0">By bank transfer or account-payee cheque in favour of <b>${esc(payee)}</b>, or in cash at the SLATE studio against an official money receipt.</p>
+  ${bankLines ? `<pre style="margin-top:2mm">${esc(bankLines)}</pre>` : ''}
+  ${!btd && st.invNote ? `<p class="note">${esc(st.invNote)}</p>` : ''}
+  ${sigBlock(st, ent)}`;
   return docShell(`Invoice ${i.no}`, `Invoice ${i.no}`, body);
 }
 function receiptDoc(r) {
@@ -735,7 +786,7 @@ function receiptDoc(r) {
     ${+r.vds ? `<tr><td>VAT deducted at source by client (VDS)</td><td class="n">${nf.format(Math.round(+r.vds))}</td></tr>` : ''}
     <tr class="tot"><td>Settled against the invoice</td><td class="n">${nf.format(Math.round((+r.received || 0) + (+r.ait || 0) + (+r.vds || 0)))}</td></tr>
   </tbody></table>
-  ${sigBlock(st)}`;
+  ${sigBlock(st, entOf(i.entity ? i : p))}`;
   return docShell(`Money receipt ${r.mrNo}`, `Receipt ${r.mrNo}`, body);
 }
 function takaWords(n) {
@@ -1045,7 +1096,7 @@ function woDoc(w) {
   ${woSchedule(w).map(i => { const v = (+w.amount || 0) * (+i.pct || 0) / 100; return `<tr><td>${esc(i.label)}</td><td>${i.month ? monthName(i.month) : ''}</td><td class="n">${esc(i.pct)}</td><td class="n">${nf.format(Math.round(v))}</td><td class="n">${nf.format(Math.round(v * (1 - ((+w.aitPct || 0) + (+w.vdsPct || 0)) / 100)))}</td></tr>`; }).join('')}</tbody></table>
   ${w.payTerms ? `<p class="note">${esc(w.payTerms)}</p>` : ''}
   ${w.terms ? `<h2>Terms</h2><ol style="margin:0;padding-left:5mm;font-size:9pt">${w.terms.split('\n').filter(Boolean).map(l => `<li>${esc(l)}</li>`).join('')}</ol>` : ''}
-  <div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(STUDIO.name)}</div><div><b>Accepted by</b>${esc(w.vendor)}<br>Signature and date</div></div>`;
+  <div class="sig"><div><b>${esc(st.signName || '')}</b>${esc(st.signTitle || '')}<br>${esc(p ? entOf(p) : STUDIO.name)}</div><div><b>Accepted by</b>${esc(w.vendor)}<br>Signature and date</div></div>`;
   return docShell(`Work order ${w.no}`, `Work order ${w.no}`, body);
 }
 
@@ -1486,9 +1537,16 @@ function accountForm(a, kind) {
       <label class="f" for="a_kind">Type<select id="a_kind" name="kind">${Object.entries(ACCT_KIND).map(([k, l]) => opt(k, l, src.kind === k)).join('')}</select></label>
       <label class="f" for="a_name">Name<input id="a_name" name="name" required value="${esc(src.name || (src.kind === 'cash' ? 'Office vault' : src.kind === 'petty' ? 'Petty cash' : ''))}" placeholder="e.g. City Bank current"></label>
     </div>
-    <div class="fg" id="aBank">
-      <label class="f" for="a_bank">Bank / provider<input id="a_bank" name="bank" value="${esc(src.bank)}" placeholder="e.g. City Bank, Gulshan branch"></label>
-      <label class="f" for="a_no">Account number (last 4 is enough)<input id="a_no" name="number" value="${esc(src.number)}" class="mono" maxlength="20"></label>
+    <div id="aBank" style="display:flex;flex-direction:column;gap:14px">
+      <div class="fg">
+        <label class="f" for="a_title">Account title (cheques payable to)<select id="a_title" name="title">${ENTITIES.map(e => opt(e, e, entOf({ entity: src.title }) === e)).join('')}</select></label>
+        <label class="f" for="a_bank">Bank and branch<input id="a_bank" name="bank" value="${esc(src.bank)}" placeholder="e.g. City Bank, Gulshan branch"></label>
+      </div>
+      <div class="fg">
+        <label class="f" for="a_no">Account number<input id="a_no" name="number" value="${esc(src.number)}" class="mono" maxlength="24"></label>
+        <label class="f" for="a_rt">Routing number<input id="a_rt" name="routing" value="${esc(src.routing)}" class="mono" maxlength="12" inputmode="numeric"></label>
+      </div>
+      <p class="hint" style="margin:0">Bank accounts are printed on invoices exactly as entered here.</p>
     </div>
     <div class="fg">
       <label class="f" for="a_open">Opening balance (BDT)<input id="a_open" name="opening" type="number" step="1" required value="${esc(src.opening)}"></label>
@@ -1507,7 +1565,7 @@ function accountForm(a, kind) {
       const first = a && acctEntries(a)[0];
       if (first && f.openingDate.value > first.date) { toast(`This account already has an entry on ${fmtDate(first.date)}. The opening date must be on or before it.`); return; }
       const cashy = ['cash', 'petty'].includes(f.kind.value);
-      const data = { kind: f.kind.value, name: f.name.value.trim(), bank: cashy ? '' : f.bank.value.trim(), number: cashy ? '' : f.number.value.trim(), float: f.kind.value === 'petty' ? +f.float.value || 0 : 0,
+      const data = { kind: f.kind.value, name: f.name.value.trim(), bank: cashy ? '' : f.bank.value.trim(), number: cashy ? '' : f.number.value.trim(), routing: cashy ? '' : f.routing.value.trim(), title: cashy ? '' : f.title.value, float: f.kind.value === 'petty' ? +f.float.value || 0 : 0,
         opening: +f.opening.value || 0, openingDate: f.openingDate.value, active: a ? f.active.checked : true, note: f.note.value.trim() };
       const ok = a ? await run(() => putDoc('accounts', a.id, { ...strip(a), ...data }), 'Account saved') : await run(() => addDoc('accounts', data), 'Account added');
       if (ok) closeSheet(); });
