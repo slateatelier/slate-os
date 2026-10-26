@@ -2106,6 +2106,33 @@ function hGroup(title,rows,extra){ rows=rows.filter(Boolean); if(!rows.length) r
 function hMore(key,list,n,render1){ const open=!!(S.homeMore&&S.homeMore[key]), shown=open?list:list.slice(0,n);
   const more=list.length>n?h('button',{class:'h-more',type:'button',onclick:()=>{ S.homeMore={...(S.homeMore||{}),[key]:!open}; render(true); },text:open?'Show less':`Show all ${list.length}`}):null;
   return [...shown.map(render1),more]; }
+/* Weekend lines for Home (Fri and Sat): one per day, the same all day, different each weekend */
+const WEEKEND_LINES=[
+  'It’s the weekend. Your CAD file misses you, but it’ll survive.',
+  'Day off. The drawings aren’t going anywhere, and neither should you.',
+  'Weekend mode on. The only thing to align today is your nap.',
+  'No deadlines today. Just you, your tea and zero revision clouds.',
+  'Day off. Even the columns get a break from carrying loads.',
+  'It’s the weekend. Close the laptop slowly and back away.',
+  'The only setback today should be you, on the sofa.',
+  'No clients, no comments, no “one small last change”. Enjoy.',
+  'Your only deliverable today: one very good meal.',
+  'Day off. Let the render queue think about its life choices.',
+  'Weekend FAR: zero work, maximum rest.',
+  'Plot twist: nothing is due today.',
+  'Today’s site visit: your own bed.',
+  'Day off. Layers frozen, mind thawed.',
+  'The studio is closed. Sketch something just for fun.',
+  'Weekend. If anyone says “urgent”, they mean Sunday.',
+  'No markups today. Mark up your weekend plans instead.',
+  'Zoning rule for today: full ground coverage on the couch.',
+  'Weekend. Press Ctrl+S on your energy for Sunday.',
+  'Rest is part of the design process. Design some rest today.',
+  'Today’s gate review: did you rest? Approved.',
+  'Day off. Today’s scale is 1:1 with real life.',
+  'No setbacks, no side yards, no site plans. Just the weekend.',
+  'Your drawings are resting. You should too.'];
+function weekendLine(td){ let x=0; for(const c of td) x=(x*31+c.charCodeAt(0))>>>0; return WEEKEND_LINES[x%WEEKEND_LINES.length]; }
 /* Home: a personal sentence under the greeting — "You have 1 overdue task, 2 tasks due today and a meeting at 11:00." */
 function daySummary(mine,td,ap){
   const open=mine.filter(t=>!t.doneAt&&t.target), over=open.filter(t=>t.target<td).length, due=open.filter(t=>t.target===td).length;
@@ -2117,6 +2144,7 @@ function daySummary(mine,td,ap){
   if(ms.length) items.push(document.createTextNode(ms.length===1?`a meeting${at(ms[0])}`:`${ms.length} meetings, the first${at(ms[0])}`));
   if(qn) items.push(document.createTextNode(`${pl(qn,'approval')} waiting`));
   const line=h('p',{class:'day-sum'});
+  if(off){ line.append(weekendLine(td)); if(over){ line.append(' ('); line.append(items[0]); line.append(' will still be there on Sunday.)'); } return line; }
   if(items.length){ line.append('You have ');
     items.forEach((x,i)=>{ if(i) line.append(i===items.length-1?' and ':', '); line.append(x); }); line.append('.');
     if(!due&&!ms.length) line.append(off?' Enjoy your day off otherwise.':' Nothing new is due today.'); }
