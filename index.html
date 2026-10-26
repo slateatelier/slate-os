@@ -619,7 +619,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 /* Home */
 .home-h{border-bottom:0;padding-bottom:4px}
 .home-h .eyebrow{color:var(--muted)}
-.day-sum{margin-top:8px;font-size:14.5px;color:var(--ink);line-height:1.35}.day-sep{color:var(--faint)}
+.day-sum{margin:8px 0 0;font-size:16px;color:var(--ink);line-height:1.4;max-width:480px}
 .h-tip{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--muted);padding:0 4px}
 .h-tip span{flex:1}.h-x{border:0;background:none;font-size:20px;line-height:1;color:var(--faint);cursor:pointer;padding:0 4px}
 .h-list{display:grid;grid-template-columns:minmax(0,1fr);background:var(--group);border-radius:var(--r-lg);overflow:hidden}
@@ -2106,26 +2106,29 @@ function hGroup(title,rows,extra){ rows=rows.filter(Boolean); if(!rows.length) r
 function hMore(key,list,n,render1){ const open=!!(S.homeMore&&S.homeMore[key]), shown=open?list:list.slice(0,n);
   const more=list.length>n?h('button',{class:'h-more',type:'button',onclick:()=>{ S.homeMore={...(S.homeMore||{}),[key]:!open}; render(true); },text:open?'Show less':`Show all ${list.length}`}):null;
   return [...shown.map(render1),more]; }
-/* Home: one line under the greeting saying what the day holds — overdue, due today, meetings left today, approvals */
+/* Home: a personal sentence under the greeting — "You have 1 overdue task, 2 tasks due today and a meeting at 11:00." */
 function daySummary(mine,td,ap){
   const open=mine.filter(t=>!t.doneAt&&t.target), over=open.filter(t=>t.target<td).length, due=open.filter(t=>t.target===td).length;
   const ms=nextMeets().filter(m=>m.date===td), qn=ap?queueCount():0, off=[5,6].includes(new Date().getDay());
-  const bits=[];
-  if(over) bits.push(h('b',{style:'color:var(--overdue);font-weight:600',text:`${over} overdue`}));
-  if(due) bits.push(h('span',{text:`${due} ${due===1?'task':'tasks'} due today`}));
-  if(ms.length) bits.push(h('span',{text:ms.length===1?`1 meeting${ms[0].time?' at '+fmtTime(ms[0].time):' today'}`:`${ms.length} meetings, first${ms[0].time?' at '+fmtTime(ms[0].time):' today'}`}));
-  if(qn) bits.push(h('span',{text:`${qn} to approve`}));
-  if(bits.length&&!due&&!ms.length) bits.push(h('span',{text:off?'day off':'nothing due today'}));
-  if(!bits.length){ const wk=addDays(td,7), soon=open.filter(t=>t.target>td&&t.target<=wk).sort(byTarget);
-    bits.push(h('span',{text:off?'Day off. Nothing needs you today.':soon.length?`Nothing due today · ${soon.length} ${soon.length===1?'task':'tasks'} due by ${wd(soon[soon.length-1].target)}`:'Nothing due today. A clear day to get ahead.'})); }
-  const line=h('div',{class:'day-sum'}); bits.forEach((b,i)=>{ if(i) line.append(h('span',{class:'day-sep','aria-hidden':'true',text:' · '})); line.append(b); });
+  const pl=(n,w)=>`${n} ${w}${n===1?'':'s'}`, at=m=>m.time?' at '+fmtTime(m.time):' today';
+  const items=[];
+  if(over) items.push(h('b',{style:'color:var(--overdue);font-weight:600',text:pl(over,'overdue task')}));
+  if(due) items.push(document.createTextNode(`${pl(due,'task')} due today`));
+  if(ms.length) items.push(document.createTextNode(ms.length===1?`a meeting${at(ms[0])}`:`${ms.length} meetings, the first${at(ms[0])}`));
+  if(qn) items.push(document.createTextNode(`${pl(qn,'approval')} waiting`));
+  const line=h('p',{class:'day-sum'});
+  if(items.length){ line.append('You have ');
+    items.forEach((x,i)=>{ if(i) line.append(i===items.length-1?' and ':', '); line.append(x); }); line.append('.');
+    if(!due&&!ms.length) line.append(off?' Enjoy your day off otherwise.':' Nothing new is due today.'); }
+  else { const wk=addDays(td,7), soon=open.filter(t=>t.target>td&&t.target<=wk).sort(byTarget);
+    line.append(off?'It’s your day off. Nothing needs you today.':soon.length?`You have nothing due today. Next up: ${pl(soon.length,'task')} by ${wd(soon[soon.length-1].target)}.`:'You’re all clear today. A good day to get ahead.'); }
   return line; }
 function viewMineBody(){
   const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const first=(nameOf(S.uid)||'').split(' ')[0];
-  const out=[h('div',{class:'page-h home-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)}`}),
-    h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),h('div',{class:'f-hint',style:'margin-top:4px',text:roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}),daySummary(mine,td,ap)))];
+  const out=[h('div',{class:'page-h home-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
+    h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap)))];
   if(!pref.helpSeen&&!amChalkMember()) out.push(h('div',{class:'h-tip'},h('span',{text:'New here? See how SLATE OS works for your role.'}),
     h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),
     h('button',{class:'h-x',type:'button','aria-label':'Dismiss',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'×'})));
