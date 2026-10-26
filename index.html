@@ -613,24 +613,6 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .row.fx-leave{opacity:.45;transition:opacity .24s ease-out}
 @keyframes fxPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
 .badge.fx-pulse{animation:fxPulse .5s ease-out}
-/* scope of services: numbered, animated ticks (number = order ticked) */
-.sc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 24px}
-.sc-opt{position:relative;display:flex;gap:10px;align-items:center;font-size:14px;padding:6px 8px;margin:0 -8px;border-radius:8px;cursor:pointer;transition:background-color .2s ease-out,color .2s ease-out;-webkit-tap-highlight-color:transparent}
-.sc-opt:hover{background:var(--fill)}
-.sc-opt.on{background:rgba(215,38,43,.07)}
-.sc-opt input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
-.sc-box{position:relative;flex:none;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--faint);background:var(--bg);display:grid;place-items:center;font:600 12px/1 var(--font);font-variant-numeric:tabular-nums;color:#fff;transition:background-color .18s ease-out,border-color .18s ease-out,transform .12s ease-out}
-.sc-opt:active .sc-box{transform:scale(.9)}
-.sc-opt.on .sc-box{background:#D7262B;border-color:#D7262B}
-.sc-opt input:focus-visible+.sc-box{box-shadow:0 0 0 3px rgba(215,38,43,.3)}
-.sc-num{display:block}
-.sc-opt.fx-on .sc-box{animation:fxPop .34s cubic-bezier(.2,.8,.2,1) both}
-.sc-opt.fx-on .sc-box::after{content:'';position:absolute;inset:-2px;border-radius:7px;border:2px solid #D7262B;animation:fxRipple .52s ease-out both;pointer-events:none}
-.sc-opt.fx-on .sc-num{animation:scNum .3s .06s ease-out both}
-.sc-opt.fx-renum .sc-num{animation:scNum .24s ease-out both}
-.sc-opt.fx-off .sc-box{animation:scOff .22s ease-out both}
-@keyframes scNum{from{opacity:0;transform:translateY(5px) scale(.6)}to{opacity:1;transform:none}}
-@keyframes scOff{0%{transform:scale(1)}45%{transform:scale(.82)}100%{transform:scale(1)}}
 @keyframes shIn{from{transform:translateX(28px);opacity:0}}
 @keyframes shUp{from{transform:translateY(24px);opacity:0}}
 @keyframes bdIn{from{opacity:0}}
@@ -3717,17 +3699,7 @@ function sheetProject(){
   const d=S.sheet.d, id=S.sheet.id, ap=amApprover(), internal=isInternalT(d.type), isStudio=internal||d.pod==='Studio'||!!(d.type&&T()[d.type]&&T()[d.type].studio);
   if(!d.pods) d.pods=[]; if(!d.people) d.people=[];
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
-  // Scope ticks: each box shows the order it was ticked (1, 2, 3…); unticking renumbers the rest.
-  const scOpts=[];
-  const scPaint=(changed,turnedOn)=>{ scOpts.forEach(o=>{ const n=d.scope.indexOf(o.x)+1, was=o.num.textContent;
-    o.el.classList.toggle('on',n>0); o.num.textContent=n?String(n):'';
-    if(!motionOff()&&changed!=null){ const fx=o.x===changed?(turnedOn?'fx-on':'fx-off'):(n&&was&&String(n)!==was?'fx-renum':'');
-      if(fx){ o.el.classList.remove('fx-on','fx-off','fx-renum'); void o.el.offsetWidth; o.el.classList.add(fx); } } }); };
-  const scopeBox=h('div',{class:'sc-grid'},SCOPES.map((x,i)=>{ const num=h('span',{class:'sc-num'});
-    const el=h('label',{class:'sc-opt'},h('input',{type:'checkbox',id:'sc-'+i,checked:d.scope.includes(x),onchange:e=>{ e.target.checked?(d.scope.includes(x)||d.scope.push(x)):d.scope.splice(d.scope.indexOf(x),1); scPaint(x,e.target.checked); }}),h('span',{class:'sc-box','aria-hidden':'true'},num),h('span',{text:x}));
-    el.addEventListener('animationend',ev=>{ if(ev.target.classList.contains('sc-box')&&ev.animationName!=='fxRipple') el.classList.remove('fx-on','fx-off'); });
-    scOpts.push({x,el,num}); return el; }));
-  scPaint();
+  const scopeBox=h('div',{style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 12px'},SCOPES.map((x,i)=>h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sc-'+i,checked:d.scope.includes(x),onchange:e=>{ e.target.checked?d.scope.push(x):d.scope.splice(d.scope.indexOf(x),1); }}),x)));
   const submit=e=>{ e.preventDefault();
     const v={}; PFIELDS.forEach(k=>{v[k]=(d[k]||'').trim()}); v.scope=[...d.scope];
     if(internal){
