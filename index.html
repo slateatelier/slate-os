@@ -887,6 +887,8 @@ function nickCards(){
 function canSee(t){ if(fullView()) return true; if(t.assignee===S.uid) return true; const hd=myHeadTeam(); if(hd&&t.assignee&&teamOf(t.assignee)===hd) return true; if(isMemberOk(S.projects[t.projectId],S.uid)) return true; const mp=myPod(); return !!mp&&podsOf(t).includes(mp); }
 function allTasks(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>canSee(t)&&(!isChalkTask(t)||amChalkMember())); }
 function activeTasks(){ return allTasks().filter(t=>!t.archived); }
+/* optional time of day on a task, e.g. a meeting: stored as HH:MM, shown as 3:30 pm */
+const fmtTime=x=>{ if(!x||!/^\d{1,2}:\d{2}/.test(x)) return ''; let [H,M]=x.split(':').map(Number); const ap=H>=12?'pm':'am'; H=H%12||12; return `${H}:${String(M).padStart(2,'0')} ${ap}`; };
 const projLabel=p=>p?((p.code?p.code+' · ':'')+p.name):'No project';
 
 function tgt(t,basis){ return basis==='original'?(t.originalTarget||t.target):t.target; }
@@ -1092,7 +1094,7 @@ async function createTask(d){
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
-    repeat:d.repeat||'',start:d.start||null,stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
+    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
@@ -1864,7 +1866,7 @@ function row(t,o={}){
         t.revCount&&h('span',{class:'tag',text:`${t.revCount} revision${t.revCount>1?'s':''}`}),
         t.archived&&h('span',{class:'tag',text:'Archived'})),
       metaEls.length?h("div",{class:"row-meta"},metaEls):null),
-    h('div',{class:'row-date'},h('div',{class:'lbl',text:t.doneAt?'Completed':t.target?((t.revisions||0)?`Target · Date ${(t.revisions||0)+1}`:'Target'):'Target'}),h('div',{class:'mono',text:t.doneAt||t.target?fmtD(t.doneAt||t.target):'Pending'})),
+    h('div',{class:'row-date'},h('div',{class:'lbl',text:t.doneAt?'Completed':t.target?((t.revisions||0)?`Target · Date ${(t.revisions||0)+1}`:'Target'):'Target'}),h('div',{class:'mono',text:t.doneAt||t.target?fmtD(t.doneAt||t.target):'Pending'}),!t.doneAt&&t.time?h('div',{class:'mono',style:'font-size:12px;color:var(--muted)',text:fmtTime(t.time)}):null),
     pill(t));
 }
 /* labels are set in capitals, but project names keep the case they were typed in */
@@ -3130,6 +3132,7 @@ const histText=e=>{
     case 'archived': return `${by} archived it`;
     case 'category': return `${by} changed the category from ${e.from||'none'} to ${e.to||'none'}`;
     case 'stage': return `${by} moved it from ${STAGE_L[e.from]||e.from} to ${STAGE_L[e.to]||e.to}`;
+    case 'time': return e.to?`${by} set the time to ${fmtTime(e.to)}`+(e.from?` (was ${fmtTime(e.from)})`:''):`${by} cleared the time`;
     case 'start': return e.to?`${by} set the start date to ${fmtD(e.to)}`:`${by} cleared the start date`;
     case 'restored': return `${by} restored it from the archive`;
     default: return `${by} updated it`;
@@ -3349,7 +3352,7 @@ function sheetTask(){
   const fact=(l,v,s,mono)=>h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v'+(mono?' mono':''),text:v}),s&&h('div',{class:'s',text:s}));
   out.push(h('div',{class:'facts'},
     fact('Assigned to',t.assignee?nameOf(t.assignee):(t.assignReq?'Awaiting approval':'Unassigned'),t.assignee?[teamLabel(t.assignee),roleOf(t.assignee)].filter(Boolean).join(' · '):''),
-    fact(t.target?`Target · Date ${(t.revisions||0)+1}`:'Target',t.target?fmtD(t.target):'Not approved yet',null,true),
+    fact(t.target?`Target · Date ${(t.revisions||0)+1}`:'Target',t.target?fmtD(t.target):'Not approved yet',t.time?'at '+fmtTime(t.time):null,true),
     t.target&&(t.revisions||0)>0&&fact('Original · Date 1',fmtD(t.originalTarget||t.target),t.originalTarget&&t.originalTarget!==t.target?`${diff(t.originalTarget,t.target)>0?'+':''}${diff(t.originalTarget,t.target)}d from original`:null,true),
     fact('Completed',t.doneAt?fmtD(t.doneAt):'Not yet',t.doneAt&&t.doneBy?`Recorded by ${nameOf(t.doneBy)}`:null,true),
     t.repeat&&fact('Repeats',t.repeat==='weekly'?'Every week':'Every month','The next one is created when this is marked done, with its date already set.')));
@@ -3381,7 +3384,7 @@ function sheetTask(){
     if(mgr&&!t.archived){
       if(!t.doneAt&&ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('target',{date:t.target||(t.request&&t.request.date)||'',reason:''}),text:t.target?'Change target date':'Set target date'}));
       if(!t.doneAt||amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('rename',{title:t.title}),text:'Rename'}));
-      if(!t.doneAt||amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('edit',{title:t.title,phase:t.phase||'',kind:t.kind||'Task',projectId:t.projectId,assignee:t.assignee,repeat:t.repeat||'',start:t.start||''}),text:'Edit or reassign'}));
+      if(!t.doneAt||amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('edit',{title:t.title,phase:t.phase||'',kind:t.kind||'Task',projectId:t.projectId,assignee:t.assignee,repeat:t.repeat||'',start:t.start||'',time:t.time||''}),text:'Edit or reassign'}));
       // completed tasks are locked; only the Principal and the COO can reopen or correct them, with a reason
       if(t.doneAt&&amApprover()) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('reopen',{note:''}),text:'Reopen'}),h('button',{class:'btn',type:'button',onclick:()=>setMode('donedate',{date:t.doneAt,note:''}),text:'Correct completion date'}));
       btns.push(h('button',{class:'btn btn-danger',type:'button',onclick:()=>setMode('archive',{note:''}),text:'Archive'}));
@@ -3428,7 +3431,8 @@ function sheetTask(){
     titleField(d),
     h('div',{class:'form-row'},field('Type',sel('kind',[['Task','Task'],['Deliverable','Deliverable']])),field('Project',(()=>{ const el=sel('projectId',ck?chalkProjOpts(t.projectId):projectOpts(t.projectId)); el.addEventListener('change',()=>renderSheet()); return el; })())),
     field('Assigned to',ck?(()=>{ const el=sel('assignee',chalkAssignOpts(t.assignee)); if(!canChalkAssign()) el.disabled=true; return el; })():sel('assignee',memberOpts(t.assignee))),
-    h('div',{class:'form-row'},field('Start date (optional)',inp('start',{type:'date'}),'Used for the Timeline bar.'),field('Repeat',sel('repeat',Object.entries(REPEATS))))],'Save changes',()=>{
+    h('div',{class:'form-row'},field('Start date (optional)',inp('start',{type:'date'}),'Used for the Timeline bar.'),field('Repeat',sel('repeat',Object.entries(REPEATS)))),
+    field('Time (optional)',inp('time',{type:'time'}))],'Save changes',()=>{
       const title=(d.title||'').trim(); if(!title) return fail('The title can’t be empty.');
       if(!d.projectId) return fail('Choose a project.'); if(!d.assignee&&t.assignee) return fail('Choose who it’s assigned to.');
       const patch={},ev=[];
@@ -3437,6 +3441,7 @@ function sheetTask(){
       if(d.kind!==(t.kind||'Task')){patch.kind=d.kind;ev.push({type:'kind',from:t.kind||'Task',to:d.kind})}
       if((d.repeat||'')!==(t.repeat||'')){patch.repeat=d.repeat||'';ev.push({type:'repeat',from:t.repeat||'',to:d.repeat||''})}
       if((d.start||'')!==(t.start||'')){ if(d.start&&t.target&&d.start>t.target) return fail('The start date can’t be after the target date.'); patch.start=d.start||null;ev.push({type:'start',from:t.start||'',to:d.start||''})}
+      if((d.time||'')!==(t.time||'')){patch.time=d.time||'';ev.push({type:'time',from:t.time||'',to:d.time||''})}
       if(d.projectId!==t.projectId){patch.projectId=d.projectId;ev.push({type:'moved',from:t.projectId,to:d.projectId})}
       if(d.assignee!==t.assignee&&!(ck?canChalkAssign():canAssignTo(d.assignee))) return fail(ck?'Only the Principal and the Chalk Create lead assign Chalk work.':'Only the Principal and the COO can assign tasks to the Principal’s Office.');
       if(d.assignee!==t.assignee&&(isPriv(d.assignee)||isPriv(t.assignee))) return fail('Private tasks stay with their person. Archive this one and create a new task instead.');
@@ -3548,12 +3553,13 @@ function sheetNewTask(){
       if(d.start&&d.target&&d.start>d.target) return fail('The start date can’t be after the target date.');
       /* several people: each gets their own copy of the task, tracked and scored on its own */
       const who=[d.assignee,...(d.also||[]).filter(id=>id&&id!==d.assignee)];
-      const ap=amApprover(); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:ap?d.target:'',proposed:ap?'':d.target}); },who.length>1?`Task added for ${who.length} people`:'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
+      const ap=amApprover(); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:ap?d.target:'',proposed:ap?'':d.target}); },who.length>1?`Task added for ${who.length} people`:'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}${d.time?' '+fmtTime(d.time):''}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; d.time=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
     }},
       (()=>{ const tf=titleField(d); return tf[0]; })(),
       h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',(()=>{ const el=sel('assignee',newTaskPeople()); el.addEventListener('change',()=>renderSheet()); return el; })())),
       alsoPeople(d),
       field(amApprover()?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
+      field('Time (optional)',inp('time',{type:'time'}),'For meetings and visits: shows beside the date.'),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
       S.sheet.more?[
         (()=>{ const tf=titleField(d); return [tf[1],tf[2]]; })(),
