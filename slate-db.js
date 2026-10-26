@@ -1326,14 +1326,19 @@
     return /Android|iPhone|iPad|iPod|Mobi/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'mobile' : 'computer'; })();
   let dlToken = null, dlInput = Date.now();
   sb.auth.onAuthStateChange((_e, session) => { dlToken = session ? session.access_token : null; });
+  window.slateDevice = DEV;
+  // weekends: logged only once the person confirms (computer, press and hold) that they are working today
+  const dhakaDow = () => new Date(Date.now() + 6 * 3600e3).getUTCDay();
+  const working = () => { if (![5, 6].includes(dhakaDow())) return true;
+    try { return pref.weekendWork === today() + ':' + authUser.id; } catch (_) { return false; } };
   const canSeeLog = () => !!me && me.active !== false && ['principal', 'coo'].includes(me.designation);
   function dayIn() { try { sb.rpc('log_day_in', { p_device: DEV }).then(() => {}, () => {}); } catch (_) {} }
-  function dayOut(src) {
-    if (!dlToken) return;
+  function dayOut(src, at) {
+    if (!dlToken || !working()) return;
     try { // keepalive lets the call finish while the window is closing
       fetch(CFG.url + '/rest/v1/rpc/log_day_out', { method: 'POST', keepalive: true,
         headers: { apikey: CFG.key, Authorization: 'Bearer ' + dlToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_device: DEV, p_src: src }) }).catch(() => {});
+        body: JSON.stringify(at ? { p_device: DEV, p_src: src, p_at: new Date(at).toISOString() } : { p_device: DEV, p_src: src }) }).catch(() => {});
     } catch (_) {}
   }
   function setupDayLog() {
@@ -1346,6 +1351,46 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && DEV === 'mobile') dayOut('closed'); });
     // fallback when the close isn't caught (PC shut down): last activity, every 5 minutes while in use
     setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - dlInput < 10 * 60000) dayOut('active'); }, 5 * 60000);
+    if (DEV === 'computer') setupStillWorking();
+  }
+  /* Computer left open in the evening (overnight renders): at 9 pm Dhaka, and every hour after a "yes", ask
+     "Hey AKIB, are you still working?" on screen and as a notification. No answer in 5 minutes = not at the PC:
+     Out is logged as the time asked + 5 min. Answering later (or using SLATE OS again) puts them back as active. */
+  const SW = { next: 0, ask: null };
+  const dhakaNow = () => new Date(Date.now() + 6 * 3600e3);              // read with getUTC*
+  function nextNine() { const d = dhakaNow(), nine = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 21) - 6 * 3600e3;
+    return Date.now() < nine ? nine : Date.now() + 60 * 60000; }
+  function firstName() { let n = ''; try { n = nameOf(authUser.id); } catch (_) { n = displayName(me); } return (n || '').trim().split(/\s+/)[0] || ''; }
+  async function swReg() { try { return 'serviceWorker' in navigator ? await navigator.serviceWorker.ready : null; } catch (_) { return null; } }
+  async function closeAskNote() { const r = await swReg(); try { if (r) (await r.getNotifications({ tag: 'still-working' })).forEach(n => n.close()); } catch (_) {} }
+  function stillHere() {
+    const a = SW.ask; if (!a) return;
+    SW.ask = null; clearTimeout(a.timer); SW.next = Date.now() + 60 * 60000;
+    const box = document.getElementById('slate-still'); if (box) box.remove();
+    closeAskNote();
+    if (a.noreply) dayOut('active');                                       // came back: no longer counted as left
+  }
+  function askStillWorking() {
+    const name = firstName().toUpperCase(), at = Date.now();
+    const msg = `Hey ${name}, are you still working?`;
+    SW.ask = { at, noreply: false, timer: setTimeout(() => {
+      if (!SW.ask || SW.ask.at !== at) return;
+      SW.ask.noreply = true; dayOut('noreply', at + 5 * 60000);
+      const t = document.getElementById('slate-still-t'); if (t) t.textContent = `No reply, so your Out time was logged as ${hm(new Date(at + 5 * 60000).toISOString())}. Tap below if you’re back.`;
+    }, 5 * 60000) };
+    const yes = el('button', { class: 'btn btn-primary', type: 'button' }, 'Yes, still here');
+    yes.addEventListener('click', stillHere);
+    const box = el('div', { id: 'slate-still', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'slate-still-h' },
+      el('div', { class: 'slate-still-c' }, el('b', { id: 'slate-still-h' }, msg), el('p', { id: 'slate-still-t' }, 'If there’s no answer in 5 minutes, SLATE OS will log you out for the day. Your work and any render keep running.'), yes));
+    document.body.append(box);
+    swReg().then(r => { try { if (r && 'Notification' in window && Notification.permission === 'granted')
+      r.showNotification('SLATE OS', { body: msg, tag: 'still-working', renotify: true, requireInteraction: true, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', actions: [{ action: 'yes', title: 'Yes, still here' }] }); } catch (_) {} });
+  }
+  function setupStillWorking() {
+    SW.next = nextNine();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.type === 'slate-still-here') stillHere(); });
+    setInterval(() => { if (!SW.ask && Date.now() >= SW.next && working()) askStillWorking();
+      if (!SW.ask && Date.now() < SW.next - 4 * 3600e3) SW.next = nextNine(); }, 30000);
   }
   /* More › Entry log */
   const EL = { day: null, rows: null, loading: false, err: '' };
@@ -1378,7 +1423,7 @@
     const ppl = [...people.values()].filter(p => p.active !== false || by.has(p.id)).map(p => ({ p, c: (by.get(p.id) || {}).computer, m: (by.get(p.id) || {}).mobile }));
     ppl.sort((a, b) => ((a.c && a.c.in_at) || '9') .localeCompare((b.c && b.c.in_at) || '9') || nm(a.p.id).localeCompare(nm(b.p.id)));
     const live = r => r && r.out_src === 'active' && day === td && Date.now() - Date.parse(r.out_at) < 7 * 60000;
-    const outTxt = r => !r || !r.out_at ? '—' : live(r) ? 'Active now' : hm(r.out_at) + (r.out_src === 'active' ? ' *' : '');
+    const outTxt = r => !r || !r.out_at ? '—' : live(r) ? 'Active now' : hm(r.out_at) + (r.out_src === 'active' ? ' *' : r.out_src === 'noreply' ? ' †' : '');
     const inN = ppl.filter(x => x.c && x.c.in_at).length, outN = ppl.filter(x => x.c && x.c.out_at).length;
     const tile = (n, l) => el('div', { class: 'slate-ad-t' }, el('b', {}, String(n)), el('span', {}, l));
     const table = el('div', { class: 'tbl-wrap', style: 'overflow-x:auto' }, el('table', { class: 'tbl', style: 'width:100%;border-collapse:collapse' },
@@ -1388,9 +1433,9 @@
         ...[c && c.in_at ? hm(c.in_at) : '—', outTxt(c), m && m.in_at ? hm(m.in_at) : '—', outTxt(m)].map((t, i) =>
           el('td', { style: `padding:10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap;${i > 1 ? 'color:var(--muted)' : t === '—' ? 'color:var(--faint)' : 'font-weight:500'}` }, t)))))));
     return [head, bar,
-      weekend && !EL.rows.length ? el('p', { class: 'f-hint' }, 'Weekend: no greeting, so nothing is logged.') : el('div', { class: 'slate-ad-ts' }, tile(`${inN}/${ppl.length}`, 'Came in (computer)'), tile(outN, 'Out logged')),
+      weekend && !EL.rows.length ? el('p', { class: 'f-hint' }, 'Weekend: nobody confirmed working on a computer today.') : el('div', { class: 'slate-ad-ts' }, tile(`${inN}/${ppl.length}`, 'Came in (computer)'), tile(outN, 'Out logged')),
       table,
-      el('p', { class: 'f-hint', style: 'margin:0' }, 'If SLATE OS is closed and reopened, Out shows only the last close. * Last activity seen; the close itself wasn’t caught (for example, the computer was shut down). “Active now” means they are using it at the moment. Times are Dhaka time.')];
+      el('p', { class: 'f-hint', style: 'margin:0' }, 'If SLATE OS is closed and reopened, Out shows only the last close. * Last activity seen; the close itself wasn’t caught (for example, the computer was shut down). † Left the computer on: no reply to “Are you still working?” (asked from 9 pm), so Out is the time asked + 5 minutes. “Active now” means they are using it at the moment. Times are Dhaka time.')];
   }
 
   /* ---------------- sign-in gate ---------------- */
@@ -1430,6 +1475,9 @@
   .slate-my-ad-l{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;color:var(--muted,#636366)}.slate-my-ad-l b{font-size:15px;font-variant-numeric:tabular-nums}
   .slate-my-ad-bar{height:4px;border-radius:2px;background:var(--line,#E5E5EA);overflow:hidden}.slate-my-ad-bar i{display:block;height:100%;border-radius:2px}
   .slate-my-ad-n{font-size:12.5px;color:var(--muted,#636366)}
+  #slate-still{position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.28);display:grid;place-items:center;padding:16px}
+  .slate-still-c{background:#fff;border-radius:18px;padding:24px 22px 20px;width:min(380px,100%);display:grid;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .slate-still-c b{font-size:20px;line-height:1.25}.slate-still-c b::first-line{color:inherit}.slate-still-c p{margin:0 0 6px;font-size:14px;color:#636366}
   .slate-ad-c.ok{color:#1f7a35}.slate-ad-c.warn{color:#a35a00}.slate-ad-c.bad{color:#d70015;font-weight:600}
   .slate-pt{appearance:none;border:0;background:#fff;border-radius:10px;font:inherit;color:inherit;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) 22px;gap:10px;align-items:center;padding:8px 10px;text-align:left}
   .slate-pt:hover{background:#fafafa}

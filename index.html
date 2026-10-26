@@ -644,6 +644,17 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 @keyframes dsiRay{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:none}}@keyframes dsiGlow{0%,100%{opacity:1}50%{opacity:.45}}
 @keyframes dsiSpin{to{transform:rotate(360deg)}}@keyframes dsiPop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}
 @keyframes dsiSway{0%,100%{transform:rotate(0)}50%{transform:rotate(-8deg)}}@keyframes dsiTwinkle{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.15)}}
+#day-splash.wg{cursor:default}
+.wg-q{font-size:clamp(18px,2.2vw,30px);font-weight:400;color:#111;margin-top:clamp(10px,1.6vw,22px);animation:dsFade .7s .7s ease both}
+.wg-hold{justify-self:center;margin-top:clamp(22px,3vw,40px);display:grid;justify-items:center;gap:10px;background:none;border:0;padding:6px;cursor:pointer;font:inherit;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;animation:dsFade .7s .9s ease both}
+.wg-svg{width:84px;height:84px;transition:transform .2s cubic-bezier(.2,.7,.2,1)}
+.wg-hold.on .wg-svg{transform:scale(.94)}.wg-hold.ok .wg-svg{transform:scale(1.04)}
+.wg-hold.ok .wg-ring{stroke-dashoffset:0!important}.wg-hold.ok .wg-arrow{stroke:#D7262B}
+.wg-lab{font-size:12px;font-weight:500;letter-spacing:.24em;text-indent:.24em;text-transform:uppercase;color:#8E8E93}
+.wg-hold:focus-visible{outline:none}.wg-hold:focus-visible .wg-svg{outline:3px solid rgba(215,38,43,.3);outline-offset:4px;border-radius:50%}
+.wg-foot{animation-delay:1.2s}
+.wg-skip{background:none;border:0;font:inherit;font-size:12px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:#AEAEB2;cursor:pointer;padding:8px}
+.wg-skip:hover{color:#636366}
 @keyframes dsIn{from{opacity:0}to{opacity:1}}@keyframes dsOut{to{opacity:0}}
 @keyframes dsRise{from{opacity:0;transform:translateY(.35em)}to{opacity:1;transform:none}}@keyframes dsFade{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){#day-splash,#day-splash *{animation:none!important}.dsi-ray,.dsi-star{opacity:1}.dsi-hz{stroke-dashoffset:0}}
@@ -1867,9 +1878,42 @@ function dsIcon(hr){
     <g fill="#111"><circle class="dsi-star" cx="72" cy="14" r="1.8"/><circle class="dsi-star" cx="80" cy="32" r="1.3" style="animation-delay:.7s"/><circle class="dsi-star" cx="22" cy="18" r="1.5" style="animation-delay:1.3s"/></g></svg>`;
   const w=document.createElement('div'); w.className='ds-icon'; w.setAttribute('aria-hidden','true'); w.innerHTML=svg; return w;
 }
+/* Weekends on a computer: SLATE OS asks "Hey AKIB, are you working today?". Press and hold for 2 seconds to start
+   the day (this logs the entry); "Not working today" goes in without logging, e.g. when someone else is using the PC.
+   Asked on every open until a working day is confirmed. Phones are not asked and not logged at weekends. */
+function weekendGate(){
+  if(window.slateDevice!=='computer') return;
+  const td=today(), key=td+':'+S.uid; if(pref.weekendWork===key||window.slateWeekendSkip===key) return;
+  const first=(nameOf(S.uid)||'').trim().split(/\s+/)[0]; if(!first) return;
+  if(!document.getElementById('jost-font')){ const l=document.createElement('link'); l.id='jost-font'; l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap'; document.head.append(l); }
+  let raf=0, t0=0, done=false; const HOLD=2000;
+  const close=()=>{ el.classList.add('out'); document.removeEventListener('keydown',kd); document.removeEventListener('keyup',ku); document.documentElement.style.overflow=''; setTimeout(()=>el.remove(),420); };
+  const finish=()=>{ if(done) return; done=true; cancelAnimationFrame(raf); savePref('weekendWork',key); try{ window.slateDayIn&&window.slateDayIn(); }catch(_){} hold.classList.add('ok'); lab.textContent='Have a good day'; setTimeout(close,500); };
+  const tick=()=>{ const p=Math.min(1,(performance.now()-t0)/HOLD); ring.style.strokeDashoffset=String(176*(1-p)); if(p>=1) return finish(); raf=requestAnimationFrame(tick); };
+  const start=e=>{ if(done||t0) return; if(e){ e.preventDefault(); try{ hold.setPointerCapture(e.pointerId); }catch(_){} } t0=performance.now(); hold.classList.add('on'); lab.textContent='Keep holding…'; raf=requestAnimationFrame(tick); };
+  const stop=()=>{ if(done||!t0) return; t0=0; cancelAnimationFrame(raf); hold.classList.remove('on'); ring.style.strokeDashoffset='176'; lab.textContent='Hold to start'; };
+  const kd=e=>{ if((e.key===' '||e.key==='Enter')&&!e.repeat){ e.preventDefault(); start(); } };
+  const ku=e=>{ if(e.key===' '||e.key==='Enter') stop(); };
+  const svgNS='http://www.w3.org/2000/svg', sv=document.createElementNS(svgNS,'svg'); sv.setAttribute('viewBox','0 0 64 64'); sv.setAttribute('class','wg-svg');
+  sv.innerHTML='<circle cx="32" cy="32" r="28" fill="none" stroke="#E5E5EA" stroke-width="3"/><circle class="wg-ring" cx="32" cy="32" r="28" fill="none" stroke="#D7262B" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="176" stroke-dashoffset="176" transform="rotate(-90 32 32)"/><path class="wg-arrow" d="M25 32h14M33 26l6 6-6 6" fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>';
+  const ring=sv.querySelector('.wg-ring'), lab=h('span',{class:'wg-lab',text:'Hold to start'});
+  const hold=h('button',{class:'wg-hold',type:'button','aria-label':'Press and hold for 2 seconds to start your working day'},sv,lab);
+  ['pointerdown'].forEach(ev=>hold.addEventListener(ev,start)); ['pointerup','pointercancel','pointerleave'].forEach(ev=>hold.addEventListener(ev,stop));
+  hold.addEventListener('contextmenu',e=>e.preventDefault());
+  const skip=h('button',{class:'wg-skip',type:'button',onclick:()=>{ window.slateWeekendSkip=key; close(); },text:'Not working today'});
+  const el=h('div',{id:'day-splash',class:'wg',role:'dialog','aria-modal':'true','aria-label':`Hey ${first}, are you working today?`},
+    h('div',{class:'ds-mid'},h('div',{class:'ds-hello',text:'Hey,'}),h('div',{class:'ds-name'},...[...first.toUpperCase()].map((c,i)=>h('span',{style:`animation-delay:${.3+i*.05}s`,text:c}))),
+      h('div',{class:'wg-q',text:'Are you working today?'}),hold),
+    h('div',{class:'ds-hint wg-foot'},skip));
+  document.body.append(el); document.documentElement.style.overflow='hidden'; document.addEventListener('keydown',kd); document.addEventListener('keyup',ku);
+  const name=el.querySelector('.ds-name'), fit=()=>{ name.style.fontSize=''; let f=parseFloat(getComputedStyle(name).fontSize); for(let k=0;k<30&&name.scrollWidth>name.clientWidth+1&&f>40;k++){ f*=.94; name.style.fontSize=f+'px'; } };
+  fit(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit);
+}
 function daySplash(){
   if(S.state!=='ready'||!S.uid||document.getElementById('day-splash')) return;
-  const now=new Date(), td=today(); if([5,6].includes(now.getDay())) return;
+  const now=new Date(), td=today(), wkend=[5,6].includes(now.getDay());
+  if(wkend) return weekendGate();
   const key=td+':'+S.uid; if(pref.daySplash===key) return;
   const first=(nameOf(S.uid)||'').trim().split(/\s+/)[0]; if(!first) return;
   if(!document.getElementById('jost-font')){ const l=document.createElement('link'); l.id='jost-font'; l.rel='stylesheet';

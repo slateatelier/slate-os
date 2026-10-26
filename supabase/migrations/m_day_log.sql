@@ -50,3 +50,26 @@ revoke all on function public.log_day_in(text) from public, anon;
 revoke all on function public.log_day_out(text, text) from public, anon;
 grant execute on function public.log_day_in(text) to authenticated;
 grant execute on function public.log_day_out(text, text) to authenticated;
+
+-- 'noreply': the computer was left on in the evening and nobody answered "Are you still working?" (asked from 9 pm);
+-- Out = the time asked + 5 minutes (p_at, accepted only within the last 15 minutes).
+alter table public.day_log drop constraint if exists day_log_out_src_check;
+alter table public.day_log add constraint day_log_out_src_check check (out_src in ('closed','active','noreply'));
+drop function if exists public.log_day_out(text, text);
+create or replace function public.log_day_out(p_device text, p_src text, p_at timestamptz default null)
+returns void
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare d date := (now() at time zone 'Asia/Dhaka')::date; dev text := case when p_device = 'mobile' then 'mobile' else 'computer' end;
+        src text := case when p_src in ('closed','noreply') then p_src else 'active' end;
+        t timestamptz := now();
+begin
+  if (select auth.uid()) is null then return; end if;
+  if src = 'noreply' and p_at is not null and p_at between now() - interval '15 minutes' and now() then t := p_at; end if;
+  insert into public.day_log (user_id, day, device, out_at, out_src) values ((select auth.uid()), d, dev, t, src)
+  on conflict (user_id, day, device) do update set out_at = excluded.out_at, out_src = excluded.out_src;
+end $function$;
+revoke all on function public.log_day_out(text, text, timestamptz) from public, anon;
+grant execute on function public.log_day_out(text, text, timestamptz) to authenticated;

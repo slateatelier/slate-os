@@ -1,7 +1,7 @@
 /* SLATE OS service worker: lets the app open from the home screen.
    The page and its scripts are fetched fresh whenever online (so updates arrive at once);
    the saved copy is used only when the network is unavailable. Data calls are never cached. */
-const CACHE = 'slate-os-v37';
+const CACHE = 'slate-os-v38';
 const SHELL = ['/', '/slate-db.js', '/config.js', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
@@ -51,6 +51,13 @@ self.addEventListener('push', e => {
    notification up and opens the task, approval, meeting or message behind it. */
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  if (e.notification.tag === 'still-working') {                    // "Are you still working?": any tap means yes
+    e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      list.forEach(c => c.postMessage({ type: 'slate-still-here' }));
+      const home = list[0]; return home ? home.focus() : self.clients.openWindow('/');
+    }));
+    return;
+  }
   const m = /^([a-z_]+)-(\d+)$/.exec(e.notification.tag || '');
   const go = m ? `n:${m[2]}:${m[1]}` : '';
   const url = go ? '/?go=' + encodeURIComponent(go) : ((e.notification.data && e.notification.data.url) || '/');
