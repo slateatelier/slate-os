@@ -619,6 +619,38 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 /* Home */
 .home-h{border-bottom:0;padding-bottom:4px}
 .home-h .eyebrow{color:var(--muted)}
+/* My profile */
+.pf-top{display:grid;justify-items:center;gap:4px;padding-top:4px}
+.pf-ava{appearance:none;border:0;background:none;padding:0;cursor:pointer;border-radius:50%}.pf-ava .ava{width:76px;height:76px;font-size:26px}
+.pf-name{font-size:22px;font-weight:700;letter-spacing:-.01em;margin-top:8px;text-align:center}.pf-sub{font-size:14px;color:var(--muted)}
+.pf-share{display:flex;gap:8px;align-items:center;justify-content:center;background:var(--ink);color:#fff;border:0;border-radius:12px;padding:12px;font:600 15px var(--font);cursor:pointer}
+.pf-g{display:grid;gap:6px}.pf-gh{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:0 6px}
+.pf-gh .linkish{text-transform:none;letter-spacing:0;font-size:14px}
+.pf-list{background:var(--group);border-radius:12px;overflow:hidden}
+.pf-row{display:flex;align-items:center;gap:10px;padding:12px 14px;min-height:46px;border:0;border-bottom:1px solid var(--line);font:inherit;font-size:15px;width:100%;background:none;text-align:left;color:inherit}
+.pf-row:last-child{border-bottom:0}.pf-row.tap{cursor:pointer}.pf-row.tap:hover{background:rgba(0,0,0,.03)}
+.pf-l{flex:none;width:112px}.pf-v{flex:1;min-width:0;text-align:right;color:#6e6e73;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pf-v.empty{color:var(--faint)}
+.pf-go{color:#C7C7CC;font-size:20px;line-height:1}.pf-add{color:#D7262B;font-weight:500}.pf-out{color:#D7262B;justify-content:center}
+.pf-hint{font-size:12px;color:var(--muted);padding:0 6px}
+.pf-f{display:grid;gap:5px;font-size:13px;color:var(--muted)}.pf-f input{font-size:16px}
+/* Share contact card */
+#share-card{position:fixed;inset:0;z-index:9990;background:#fff;color:#111;display:grid;grid-template-rows:auto 1fr auto;justify-items:center;
+  padding:max(18px,env(safe-area-inset-top)) 24px max(24px,env(safe-area-inset-bottom));font-family:var(--font);animation:dsIn .25s ease both}
+.sc-top{width:100%;max-width:440px;display:flex;justify-content:space-between;align-items:center}
+.sc-sws{display:flex;gap:10px}.sc-sw{width:22px;height:22px;border-radius:5px;border:0;cursor:pointer;padding:0;box-shadow:0 0 0 2px #fff,0 0 0 3px transparent}
+.sc-sw.sc-black{background:#111}.sc-sw.sc-red{background:#D7262B}.sc-sw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #8E8E93}
+.sc-done{border:0;background:none;font:500 16px var(--font);color:var(--early);cursor:pointer;padding:6px 2px}
+.sc-mid{align-self:center;display:flex;flex-direction:column;align-items:center;margin-top:-16px;width:100%;max-width:440px}
+.sc-tile{width:84px;height:84px;border-radius:9px;display:block}
+.sc-name{font-size:28px;font-weight:700;letter-spacing:-.01em;line-height:1.1;margin-top:20px;text-align:center;overflow-wrap:anywhere}
+.sc-role{font-size:15px;color:#6e6e73;margin-top:4px;text-align:center}
+.sc-qr{margin-top:28px;width:min(280px,74vw);aspect-ratio:1;padding:14px;border-radius:22px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 12px 30px rgba(0,0,0,.08)}
+.sc-qr svg{width:100%;height:100%;display:block}
+.sc-hint{margin-top:16px;font-size:12px;font-weight:600;letter-spacing:.24em;text-indent:.24em;text-transform:uppercase;color:#8E8E93}
+.sc-btn{width:100%;max-width:440px;border:0;border-radius:12px;padding:13px;font:600 15px var(--font);background:var(--group);color:#111;cursor:pointer}
+@media (min-width:700px) and (min-height:760px){.sc-qr{width:340px}}
+@media (max-height:640px){.sc-tile{width:64px;height:64px;border-radius:7px}.sc-name{font-size:24px;margin-top:14px}.sc-qr{margin-top:18px;width:min(230px,64vw)}}
+
 /* Day greeting (full screen, once per working day): white, the name large in SLATE red, tap anywhere */
 #day-splash{position:fixed;inset:0;z-index:9999;background:#fff;cursor:pointer;overflow:hidden;display:grid;place-items:center;
   padding:max(24px,env(safe-area-inset-top)) clamp(20px,5vw,80px) max(24px,env(safe-area-inset-bottom));
@@ -1935,6 +1967,21 @@ function daySplash(){
     for(let k=0;k<30&&name.scrollWidth>name.clientWidth+1&&f>40;k++){ f*=.94; name.style.fontSize=f+'px'; } };
   fit(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit); window.addEventListener('resize',fit);
 }
+/* House style: POD is always written in capitals (POD 2, POD leads, PODs), wherever it appears on screen.
+   Done on the displayed text only, so stored team names ("Pod 2") and the rules that read them are unchanged. */
+const POD_RE=/\b[Pp]od(s?)\b/g;
+function capPods(root){
+  const w=document.createTreeWalker(root||document.body,NodeFilter.SHOW_TEXT,{acceptNode:n=>{ const p=n.parentNode; if(!p) return NodeFilter.FILTER_REJECT;
+    const t=p.nodeName; if(t==='SCRIPT'||t==='STYLE'||t==='TEXTAREA'||p.isContentEditable) return NodeFilter.FILTER_REJECT;
+    POD_RE.lastIndex=0; return POD_RE.test(n.nodeValue)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_SKIP; }});
+  const hits=[]; while(w.nextNode()) hits.push(w.currentNode);
+  hits.forEach(n=>{ const v=n.nodeValue.replace(POD_RE,(m,s)=>'POD'+s); if(v!==n.nodeValue) n.nodeValue=v; });
+  try{ (root||document).querySelectorAll&&(root||document).querySelectorAll('[aria-label],[title],[placeholder]').forEach(e=>{ ['aria-label','title','placeholder'].forEach(a=>{ const v=e.getAttribute(a); if(v&&/\b[Pp]od/.test(v)) e.setAttribute(a,v.replace(POD_RE,(m,s)=>'POD'+s)); }); }); }catch(_){}
+}
+(()=>{ let q=false; const run=()=>{ q=false; capPods(document.body); };
+  const mo=new MutationObserver(()=>{ if(!q){ q=true; requestAnimationFrame(run); } });
+  const go=()=>{ capPods(document.body); mo.observe(document.body,{childList:true,subtree:true,characterData:true}); };
+  if(document.body) go(); else document.addEventListener('DOMContentLoaded',go); })();
 function render(force){
   applyStd();
   const view=$('#view');
@@ -2855,13 +2902,77 @@ function iconSvg(ic){ return svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke
 function avaEl(id,dark,size){ const ic=iconOf(id), cls='ava'+(size?' ava-'+size:'');
   if(ic){ const el=h('span',{class:cls+' ic',title:nameOf(id),style:'--c:'+ic[2]}); el.append(iconSvg(ic)); return el; }
   return h('span',{class:cls+(dark?' lead':''),title:nameOf(id),text:initials(id)}); }
-function openProfile(){ S.sheet={type:'profile'}; renderSheet(); }
+function openProfile(){ S.sheet={type:'myprofile',mode:'view',d:{}}; renderSheet(); loadMyEmergency(); }
+function openIconPicker(){ S.sheet={type:'profile'}; renderSheet(); }
+/* ---------- My profile: name, short name, mobile; role (read-only); private emergency contact; share-contact QR ---------- */
+function loadMyEmergency(){ const api=window.slateProfileApi; if(!api) return; S.myEmerg={loading:true};
+  api.loadEmergency().then(e=>{ S.myEmerg={v:e}; if(S.sheet&&S.sheet.type==='myprofile') renderSheet(); },()=>{ S.myEmerg={v:null}; }); }
+function sheetMyProfile(){
+  const api=window.slateProfileApi; if(!api) return [head('Profile',nameOf(S.uid)),h('p',{class:'f-hint',text:'Loading…'})];
+  const p=api.get(), sh=S.sheet, ed=sh.mode==='edit', em=S.myEmerg||{}, ee=sh.mode==='emerg';
+  const lock=svgEl('svg',{viewBox:'0 0 24 24',width:'14',height:'14',fill:'none',stroke:'#AEAEB2','stroke-width':'2','stroke-linecap':'round','aria-label':'Locked'},svgEl('rect',{x:5,y:11,width:14,height:10,rx:2}),svgEl('path',{d:'M8 11V7a4 4 0 0 1 8 0v4'}));
+  const row=(l,v,ex,tap)=>h(tap?'button':'div',{class:'pf-row'+(tap?' tap':''),...(tap?{type:'button',onclick:tap}:{})},h('span',{class:'pf-l',text:l}),h('span',{class:'pf-v'+(v?'':' empty'),text:v||'Not added'}),ex||(tap?h('span',{class:'pf-go','aria-hidden':'true',text:'›'}):null));
+  const edit=()=>{ S.sheet={...sh,mode:'edit',err:'',d:{full:p.full,short:p.short,mobile:p.mobile}}; renderSheet(); setTimeout(()=>{ const f=$('#pf-full'); f&&f.focus(); },30); };
+  const field=(k,l,attrs)=>h('label',{class:'pf-f'},h('span',{text:l}),h('input',{id:'pf-'+k,value:sh.d[k]||'',...attrs,oninput:e=>{ sh.d[k]=e.target.value; }}));
+  const save=async()=>{ if(S.busy) return; S.busy=true; sh.err=''; renderSheet(); try{ await api.save(sh.d); S.busy=false; S.sheet={type:'myprofile',mode:'view',d:{}}; renderSheet(); toast('Profile saved'); render(true); }catch(e){ S.busy=false; sh.err=e.message; renderSheet(); } };
+  const out=[h('div',{class:'sh-head'},h('h2',{class:'sh-title',text:'Profile'}),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})),
+    h('div',{class:'pf-top'},h('button',{class:'pf-ava',type:'button','aria-label':'Change your icon',title:'Change your icon',onclick:openIconPicker},avaEl(S.uid,true,'lg')),
+      h('div',{class:'pf-name',text:p.full||nameOf(S.uid)}),h('div',{class:'pf-sub',text:[p.role,p.team].filter(Boolean).join(' · ')}),
+      h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:openIconPicker,text:'Change icon'})),
+    h('button',{class:'pf-share',type:'button',onclick:openShareCard},svgEl('svg',{viewBox:'0 0 24 24',width:'18',height:'18',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},
+      svgEl('rect',{x:3,y:3,width:7,height:7,rx:1}),svgEl('rect',{x:14,y:3,width:7,height:7,rx:1}),svgEl('rect',{x:3,y:14,width:7,height:7,rx:1}),svgEl('path',{d:'M14 14h3v3M21 14v.01M17 21h4v-4M14 18v3'})),h('span',{text:'Share contact'}))];
+  if(ed){ out.push(h('div',{class:'pf-g'},h('div',{class:'pf-gh',text:'Edit my details'}),
+      h('div',{class:'form',style:'gap:10px'},field('full','Full name',{maxlength:'60',autocomplete:'name'}),field('short','Short name · used in greetings and across SLATE OS',{maxlength:'20',autocomplete:'nickname'}),
+        field('mobile','Work mobile',{maxlength:'20',inputmode:'tel',autocomplete:'tel',placeholder:'01712-345678'})),
+      sh.err?h('div',{class:'err',text:sh.err}):null,
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:save,text:S.busy?'Saving…':'Save'}),h('button',{class:'btn',type:'button',onclick:()=>{ S.sheet={type:'myprofile',mode:'view',d:{}}; renderSheet(); },text:'Cancel'})))); }
+  else out.push(h('div',{class:'pf-g'},h('div',{class:'pf-gh'},h('span',{text:'My details'}),h('button',{class:'linkish',type:'button',onclick:edit,text:'Edit'})),
+      h('div',{class:'pf-list'},row('Full name',p.full,null,edit),row('Short name',p.short,null,edit),row('Mobile',p.mobile,null,edit),row('Office email',p.email,lock)),
+      h('div',{class:'pf-hint',text:'Short name is used in greetings. Office email is your sign-in; ask the COO to change it.'})));
+  out.push(h('div',{class:'pf-g'},h('div',{class:'pf-gh',text:'Role · set by the Principal or COO'}),h('div',{class:'pf-list'},row('Designation',p.role),row('Team',p.team))));
+  { const g=h('div',{class:'pf-g'},h('div',{class:'pf-gh',text:'Emergency contact · private'}));
+    if(ee){ const d=sh.d; const save2=async()=>{ if(S.busy) return; S.busy=true; sh.err=''; renderSheet(); try{ await api.saveEmergency(d.ename,d.ephone); S.busy=false; S.sheet={type:'myprofile',mode:'view',d:{}}; toast('Emergency contact saved'); loadMyEmergency(); renderSheet(); }catch(e){ S.busy=false; sh.err=e.message; renderSheet(); } };
+      g.append(h('div',{class:'form',style:'gap:10px'},h('label',{class:'pf-f'},h('span',{text:'Name and relation'}),h('input',{id:'pf-ename',value:d.ename||'',maxlength:'60',placeholder:'e.g. Rumana (sister)',oninput:e=>{ d.ename=e.target.value; }})),
+        h('label',{class:'pf-f'},h('span',{text:'Phone'}),h('input',{id:'pf-ephone',value:d.ephone||'',maxlength:'20',inputmode:'tel',oninput:e=>{ d.ephone=e.target.value; }}))),
+        sh.err?h('div',{class:'err',text:sh.err}):null,
+        h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:save2,text:S.busy?'Saving…':'Save'}),h('button',{class:'btn',type:'button',onclick:()=>{ S.sheet={type:'myprofile',mode:'view',d:{}}; renderSheet(); },text:'Cancel'}),
+          em.v?h('button',{class:'linkish',type:'button',style:'color:var(--overdue)',onclick:()=>{ d.ename=''; d.ephone=''; save2(); },text:'Remove'}):null)); }
+    else { const openE=()=>{ S.sheet={...sh,mode:'emerg',err:'',d:{ename:em.v?em.v.name:'',ephone:em.v?em.v.phone:''}}; renderSheet(); setTimeout(()=>{ const f=$('#pf-ename'); f&&f.focus(); },30); };
+      g.append(h('div',{class:'pf-list'},em.loading?h('div',{class:'pf-row'},h('span',{class:'pf-v',style:'text-align:left',text:'Loading…'})):em.v?row(em.v.name,em.v.phone,null,openE):h('button',{class:'pf-row tap',type:'button',onclick:openE},h('span',{class:'pf-add',text:'+ Add emergency contact'})))); }
+    g.append(h('div',{class:'pf-hint',text:'Only you, the Principal and the COO can see this. It is never shared in your contact card.'})); out.push(g); }
+  out.push(h('div',{class:'pf-list'},h('button',{class:'pf-row tap',type:'button',onclick:()=>{ closeSheet(); window.slateAccount&&window.slateAccount(); }},h('span',{class:'pf-l',style:'width:auto',text:'Password and notifications'}),h('span',{class:'pf-v'}),h('span',{class:'pf-go','aria-hidden':'true',text:'›'})),
+    h('button',{class:'pf-row tap pf-out',type:'button',onclick:()=>{ if(confirm('Sign out of SLATE OS on this device?')) api.signOut(); },text:'Sign out'})));
+  return out;
+}
+/* Share contact: a full screen card with the SLATE mark (black or red, the person's choice), their name and a QR of their
+   contact, built from their current details each time it opens. "Save as contact file" downloads or shares a .vcf. */
+function loadQr(){ return window.SlateQR?Promise.resolve():new Promise((ok,no)=>{ const sc=document.createElement('script'); sc.src='/qr.js'; sc.onload=ok; sc.onerror=no; document.head.append(sc); }); }
+function openShareCard(){
+  const api=window.slateProfileApi; if(!api||document.getElementById('share-card')) return;
+  loadQr().then(()=>{
+    const p=api.get(), vc=api.vcard(); let color=pref.cardColor==='red'?'red':'black';
+    const tile=h('img',{class:'sc-tile',alt:'SLATE',src:color==='red'?'/icons/icon-512.png':'/icons/tile-black.png'});
+    const sw=c=>h('button',{type:'button',class:'sc-sw sc-'+c+(c===color?' on':''),'aria-label':c==='red'?'Red logo':'Black logo','aria-pressed':String(c===color),onclick:()=>{ color=c; savePref('cardColor',c); tile.src=c==='red'?'/icons/icon-512.png':'/icons/tile-black.png'; el.querySelectorAll('.sc-sw').forEach(b=>{ const on=b.classList.contains('sc-'+c); b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on)); }); }});
+    const close=()=>{ document.removeEventListener('keydown',kd); el.remove(); };
+    const kd=e=>{ if(e.key==='Escape') close(); };
+    const qr=h('div',{class:'sc-qr'}); qr.innerHTML=window.SlateQR.svg(vc,'L');
+    const fileName=(p.full||'SLATE contact').replace(/[^\w\- ]+/g,'').trim()||'SLATE contact';
+    const saveFile=async()=>{ const blob=new Blob([vc],{type:'text/vcard'}), file=new File([blob],fileName+'.vcf',{type:'text/vcard'});
+      try{ if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:p.full}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fileName+'.vcf'; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); };
+    const el=h('div',{id:'share-card',role:'dialog','aria-modal':'true','aria-label':'Share my contact'},
+      h('div',{class:'sc-top'},h('div',{class:'sc-sws',role:'group','aria-label':'Logo colour'},sw('black'),sw('red')),h('button',{class:'sc-done',type:'button',onclick:close,text:'Done'})),
+      h('div',{class:'sc-mid'},tile,h('div',{class:'sc-name',text:(p.full||nameOf(S.uid)).toUpperCase()}),h('div',{class:'sc-role',text:[p.role,'SLATE'].filter(Boolean).join(' · ')}),qr,h('div',{class:'sc-hint',text:'Scan to save contact'})),
+      h('button',{class:'sc-btn',type:'button',onclick:saveFile,text:'Save as contact file'}));
+    document.body.append(el); document.addEventListener('keydown',kd);
+  },()=>toast('Couldn’t load the QR. Check your connection and try again.'));
+}
 function pickIcon(key){
   const holder=iconHolder(key); if(holder&&holder!==S.uid) return toast(`${nameOf(holder)} already has that icon.`);
   run(()=>S.db.doc('members/'+S.uid).update({icon:key,iconAt:new Date().toISOString()}),'Profile icon saved'); }
 function sheetProfile(){
   const mine=iconOf(S.uid), m=S.members[S.uid]||{}, lost=m.icon&&!mine;
-  const out=[head('My profile',nameOf(S.uid)),
+  const out=[head('My profile','Choose your icon'),h('button',{class:'linkish',type:'button',style:'justify-self:start',onclick:openProfile,text:'‹ Back to profile'}),
     h('div',{style:'display:flex;align-items:center;gap:14px'},avaEl(S.uid,false,'lg'),h('div',{},h('div',{style:'font-weight:600',text:mine?mine[1]:'Initials'}),h('div',{class:'f-hint',text:'Shown next to your name across the register.'}))),
     lost?h('div',{class:'err',text:'Someone picked that icon just before you. Choose another.'}):null,
     h('div',{class:'lbl',text:'Choose an icon. Each icon can be used by one person only.'}),
@@ -3716,7 +3827,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);

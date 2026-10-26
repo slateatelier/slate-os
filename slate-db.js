@@ -1618,6 +1618,53 @@
     }
     return box;
   }
+  /* ---------------- My profile + share-contact card ----------------
+     Full name, short name (shown across SLATE OS) and work mobile are edited by the person; the office email is
+     their sign-in. Emergency contact lives in profile_private (them, the Principal and the COO only).
+     The vCard is built from the current details every time, so the QR is always up to date. */
+  const STUDIO = { org: 'SLATE ATELIER', short: 'SLATE', tel: '+8801749390284',
+    street: 'House SW (I) 3/A, Road 2, Gulshan 1', city: 'Dhaka', zip: '1212', country: 'Bangladesh', url: 'https://slate-atelier.com' };
+  function myProfile() {
+    const p = (authUser && people.get(authUser.id)) || me || {};
+    return { full: p.full_name || '', short: p.label || '', mobile: p.mobile || '', email: p.email || (authUser && authUser.email) || '',
+      role: p.role_label || '', team: p.team || '' };
+  }
+  async function saveMyProfile(d) {
+    const clean = v => (v || '').replace(/\s+/g, ' ').trim();
+    const upd = { full_name: clean(d.full), label: clean(d.short) || null, mobile: clean(d.mobile) || null };
+    if (upd.full_name.length < 2) throw new Error('Enter your full name.');
+    if (upd.full_name.length > 60) throw new Error('Full name is too long.');
+    if (upd.label && upd.label.length > 20) throw new Error('Keep the short name under 20 letters.');
+    if (upd.mobile && !/^\+?[0-9][0-9 \-]{5,18}$/.test(upd.mobile)) throw new Error('Mobile: digits only, e.g. 01712-345678.');
+    const { error } = await sb.from('profiles').update(upd).eq('id', authUser.id);
+    if (error) throw new Error(friendly(error).message);
+    const p = people.get(authUser.id); if (p) Object.assign(p, upd); if (me && me.id === authUser.id) Object.assign(me, upd);
+    try { touchPeople(); } catch (_) {}
+  }
+  async function loadEmergency() {
+    const { data } = await sb.from('profile_private').select('emergency_name,emergency_phone').eq('user_id', authUser.id).maybeSingle();
+    return data && (data.emergency_name || data.emergency_phone) ? { name: data.emergency_name || '', phone: data.emergency_phone || '' } : null;
+  }
+  async function saveEmergency(name, phone) {
+    name = (name || '').trim(); phone = (phone || '').trim();
+    if (!name && !phone) { const { error } = await sb.from('profile_private').delete().eq('user_id', authUser.id); if (error) throw new Error(friendly(error).message); return; }
+    if (!name || !phone) throw new Error('Add both a name and a phone number.');
+    if (!/^\+?[0-9][0-9 \-]{5,18}$/.test(phone)) throw new Error('Phone: digits only.');
+    const { error } = await sb.from('profile_private').upsert({ user_id: authUser.id, emergency_name: name, emergency_phone: phone, updated_at: new Date().toISOString() });
+    if (error) throw new Error(friendly(error).message);
+  }
+  function vcard() {
+    const p = myProfile(), esc = v => String(v || '').replace(/\\/g, '\\\\').replace(/([,;])/g, '\\$1').replace(/\n/g, '\\n');
+    const parts = p.full.trim().split(/\s+/), family = parts.length > 1 ? parts.pop() : '', given = parts.join(' ');
+    const tel = v => v.replace(/[^\d+]/g, '');
+    return ['BEGIN:VCARD', 'VERSION:3.0', `N:${esc(family)};${esc(given)};;;`, `FN:${esc(p.full)}`, `ORG:${esc(STUDIO.org)}`,
+      p.role ? `TITLE:${esc(p.role.replace(/\b[Pp]od(s?)\b/g, (m, s) => 'POD' + s))}` : '', p.mobile ? `TEL;TYPE=CELL:${tel(p.mobile)}` : '', `TEL;TYPE=WORK,VOICE:${STUDIO.tel}`,
+      p.email ? `EMAIL;TYPE=WORK:${p.email}` : '', `ADR;TYPE=WORK:;;${esc(STUDIO.street)};${esc(STUDIO.city)};;${STUDIO.zip};${esc(STUDIO.country)}`,
+      `URL:${STUDIO.url}`, 'END:VCARD'].filter(Boolean).join('\r\n');
+  }
+  window.slateProfileApi = { get: myProfile, save: saveMyProfile, loadEmergency, saveEmergency, vcard, studio: STUDIO,
+    signOut: async () => { await sb.auth.signOut(); location.reload(); } };
+
   function accountPanel() {
     if (document.getElementById('slate-acct-panel')) return;
     const msg = el('div', { class: 'msg', role: 'status' });
