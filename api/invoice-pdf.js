@@ -3,6 +3,10 @@
    so the PDF a client receives is the same whether it was sent from a PC or an iPhone.
    Only the Principal and the COO can use it: the caller's own sign-in is checked against Finance access.
    The page is printed with scripts off and only the Google Fonts hosts reachable. */
+// Vercel runs on the same Amazon Linux 2023 base as AWS Lambda; tell the Chrome package so it unpacks
+// the system libraries Chrome needs (libnss3 and others) alongside the browser.
+process.env.AWS_LAMBDA_JS_RUNTIME = process.env.AWS_LAMBDA_JS_RUNTIME || 'nodejs22.x';
+process.env.AWS_EXECUTION_ENV = process.env.AWS_EXECUTION_ENV || 'AWS_Lambda_nodejs22.x';
 const chromium = require('@sparticuz/chromium');
 const puppeteer = require('puppeteer-core');
 
