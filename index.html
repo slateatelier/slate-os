@@ -1589,7 +1589,7 @@ function myProjReqs(){
 }
 function newProjectsCard(){
   if(!amMgr()||!S.canWrite) return null; const has=new Set(Object.values(S.tasks).map(t=>t.projectId));
-  const xs=projects().filter(p=>!p.closed&&!has.has(p.id)&&(fullView()||inMyPodProject(p)||p.requestedBy===S.uid)); if(!xs.length) return null;
+  const xs=projects().filter(p=>!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!has.has(p.id)&&(fullView()||inMyPodProject(p)||p.requestedBy===S.uid)); if(!xs.length) return null;
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Projects without tasks'}),h('span',{class:'cnt',text:String(xs.length)})),
     h('div',{class:'list'},xs.map(p=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;align-items:center'},
       h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:projLabel(p)}),h('div',{class:'f-hint',text:p.pod==='Studio'?'Studio / internal':[p.pod,p.pod2].filter(Boolean).map(podLabel).join(' + ')})),
