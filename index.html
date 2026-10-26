@@ -2412,7 +2412,7 @@ function moveStage(id,to){
   return run(()=>taskUpdate(id,{stage:to},[{type:'stage',from,to}]),'Moved to '+STAGE_L[to]);
 }
 function scopeFilters(st,idp){
-  const pSel=h('select',{id:idp+'-project','aria-label':'Project',onchange:e=>{st.project=e.target.value;render(true)}},h('option',{value:'',text:'All projects'}),projects().filter(p=>!p.closed&&(fullView()||inMyPodProject(p))).map(p=>h('option',{value:p.id,text:projLabel(p)}))); pSel.value=st.project;
+  const pSel=h('select',{id:idp+'-project','aria-label':'Project',onchange:e=>{st.project=e.target.value;render(true)}},h('option',{value:'',text:'All projects'}),projects().filter(p=>workable(p)&&(fullView()||inMyPodProject(p))).map(p=>h('option',{value:p.id,text:projLabel(p)}))); pSel.value=st.project;
   const uSel=h('select',{id:idp+'-person','aria-label':'Person',onchange:e=>{st.person=e.target.value;render(true)}},h('option',{value:'',text:'Everyone'}),h('option',{value:S.uid,text:'Only mine'}),visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>h('option',{value:id,text:nameOf(id)}))); uSel.value=st.person;
   return [pSel,uSel];
 }
@@ -2607,7 +2607,7 @@ function prevMeetDate(date){ return Object.keys(S.meetings).filter(d=>d<date&&S.
 function carriedActions(date){ const prev=prevMeetDate(date);
   return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&(t.meet?t.meet<date:t.phase==='Meeting actions'&&(t.createdAt||'').slice(0,10)<date)&&(!t.doneAt||t.doneAt>=prev))
     .sort((a,b)=>(!!a.doneAt-!!b.doneAt)||(a.target||'9999').localeCompare(b.target||'9999')); }
-const meetProjects=()=>projects().filter(p=>!p.closed&&!isInternalP(p)&&p.pod!=='Studio').sort((a,b)=>(a.pod||'').localeCompare(b.pod||'')||(a.code||'').localeCompare(b.code||''));
+const meetProjects=()=>projects().filter(p=>workable(p)&&!isInternalP(p)&&p.pod!=='Studio').sort((a,b)=>(a.pod||'').localeCompare(b.pod||'')||(a.code||'').localeCompare(b.code||''));
 /* studio rules: the standing guidelines, kept once */
 const meetRules=()=>((S.meetRules&&S.meetRules.items)||[]).filter(x=>x&&x.text);
 /* lateness this month, for the snacks rule */
@@ -2999,7 +2999,7 @@ function viewTeam(){
     out.push(h('div',{class:'tgrid'},cards,sup));
   }
   if(tv==='project'){
-    const td=today(), list=projects().filter(p=>!p.closed);
+    const td=today(), list=projects().filter(p=>workable(p));
     if(!list.length){ out.push(h('p',{class:'muted',text:'No active projects yet.'})); return out; }
     out.push(h('div',{class:'tgrid'},list.map(p=>{ const st=projStats(p), [hl,hk]=HEALTH[st.health], det=canViewProjectDetail(p);
       const leads=[p.pod,p.pod2].filter(x=>x&&x!=='Studio').flatMap(x=>ppl.filter(id=>isPodLead(id,x)));
@@ -3378,7 +3378,7 @@ function viewSetup(){
 
 /* ---------- sheet ---------- */
 function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
-function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&!S.projects[id].closed, okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
+function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&workable(S.projects[id]), okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
 const PFIELDS=['entry','completedOn','code','name','client','contact','phone','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
 const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
@@ -3401,7 +3401,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -3421,7 +3421,7 @@ function form(title,fields,submit,onSubmit,danger){
 }
 function head(eyebrow,title){ return h('div',{class:'sh-head'},h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:eyebrow,style:keepCase(eyebrow)}),h('h2',{class:'sh-title',text:title})),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})); }
 const memberOpts=keep=>[['','Select person…'],...people().filter(id=>(((!isCOO(id)||amApprover())&&canAssignTo(id))||id===keep)&&(!isPriv(id)||seePriv()||id===S.uid)).map(id=>[id,nameOf(id)])];
-const projectOpts=(incl)=>{ const ps=projects().filter(p=>!p.closed||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2,studiobd:3,studiohr:4,studiofin:5})[p.type];
+const projectOpts=(incl)=>{ const ps=projects().filter(p=>workable(p)||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2,studiobd:3,studiohr:4,studiofin:5})[p.type];
   const st=ps.filter(p=>isInternalP(p)).sort((a,b)=>rank(a)-rank(b)||(a.name||'').localeCompare(b.name||'')), rest=ps.filter(p=>!isInternalP(p));
   return [['','Select project…'],...st.map(p=>[p.id,'Studio work · '+(/^STUDIO (MANAGEMENT|OPERATION|DEVELOPMENT|BUSINESS DEVELOPMENT|HR|FINANCE)$/.test(p.name||'')?areaName(p.type):p.name)]),...rest.map(p=>[p.id,projLabel(p)])]; };
 /* everyone can add a task for themselves; managers assign to others */
@@ -3434,7 +3434,7 @@ function sheetTask(){
   const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((!ck&&leadsProj(t.projectId))||amApprover()||cctl)&&S.canWrite, ap=(ck?(S.isOwner||(canChalkAssign()&&!t.target&&!t.request)):amApprover())&&S.canWrite, boss=ck?'the Principal':'the COO', mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
   const canAct=S.canWrite&&!t.archived&&(mine||mgr);
   const out=[head(`${projLabel(p)} · ${t.kind||'Task'}`,t.title)];
-  out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:t.held?'Frozen · project on hold':t.dropped?'Dropped · project closed':'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',text:`Date revised ${t.revisions}×`})));
+  out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:t.held?'Frozen · project on hold':t.dropped==='asbuilt'?'Dropped · as-built work stopped':t.dropped?'Dropped · project closed':'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',text:`Date revised ${t.revisions}×`})));
   const fact=(l,v,s,mono)=>h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v'+(mono?' mono':''),text:v}),s&&h('div',{class:'s',text:s}));
   out.push(h('div',{class:'facts'},
     fact('Assigned to',t.assignee?nameOf(t.assignee):(t.assignReq?'Awaiting approval':'Unassigned'),t.assignee?[teamLabel(t.assignee),roleOf(t.assignee)].filter(Boolean).join(' · '):''),
@@ -3593,12 +3593,12 @@ function msgTaskPeople(){ if(amApprover()) return memberOpts().slice(1).map(x=>x
   if(mp&&amPodLead()) people().filter(id=>id!==me&&teamOf(id)===mp&&!isCOO(id)&&id!==ownerId()).forEach(id=>out.push(id));
   else if(hd) people().filter(id=>id!==me&&teamOf(id)===hd&&/draft|design associate/i.test(roleOf(id)||'')).forEach(id=>out.push(id));
   return out; }
-window.slateMsgTaskSheet=msg=>{ const ps=projects().filter(p=>!p.closed), def=(ps.find(p=>isInternalP(p)&&(canSeeProjectDetail(p)))||{}).id||'';
+window.slateMsgTaskSheet=msg=>{ const ps=projects().filter(p=>workable(p)), def=(ps.find(p=>isInternalP(p)&&(canSeeProjectDetail(p)))||{}).id||'';
   S.sheet={type:'msgTask',msg,d:{title:(msg.body||'').replace(/\s+/g,' ').trim().slice(0,140),projectId:def,assignee:S.uid,target:'',kind:'Task'},err:''}; renderSheet();
   setTimeout(()=>{ const e=document.getElementById('sh-title'); e&&e.focus(); },30); };
 function sheetMsgTask(){
   const sh=S.sheet, d=sh.d, ap=amApprover(), who=msgTaskPeople();
-  const pj=[['','No project (studio work)'],...projects().filter(p=>!p.closed&&(ap||canSeeProjectDetail(p))).map(p=>[p.id,projLabel(p)])];
+  const pj=[['','No project (studio work)'],...projects().filter(p=>workable(p)&&(ap||canSeeProjectDetail(p))).map(p=>[p.id,projLabel(p)])];
   return [head('From a message','Make it a task'),
     h('p',{class:'quote',style:'margin:0',text:sh.msg.body||''}),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault();
@@ -3627,7 +3627,7 @@ function alsoPeople(d){
 }
 function sheetNewTask(){
   const d=S.sheet.d;
-  if(!projects().filter(p=>!p.closed).length) return [head('New task','No projects in the list yet'),
+  if(!projects().filter(p=>workable(p)).length) return [head('New task','No projects in the list yet'),
     h('p',{class:'muted',style:'margin:0',text:amApprover()?'Every task sits under a project from the studio list. Add a client project, or use a studio project such as Studio development for non-project work.':canProjReq()?'Every task sits under a project from the studio list, and the list is empty. Request a project and the COO will approve it.':'Every task sits under a project from the studio list, and the list is empty. Ask your pod lead or the COO to add one.'}),
     h('div',{class:'actions'},canProjReq()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:amApprover()?'Add a project':'Request a project'}):null,h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Close'}))];
   return [head('Quick add','New task'),
@@ -4105,7 +4105,7 @@ function createStdPlan(){
   },`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(ok) openTimeline(pid); });
 }
 function myChecklist(){ const out=[];
-  for(const p of projects()){ if(!p.std||p.closed) continue; for(const k of activePhases(p)){
+  for(const p of projects()){ if(!p.std||!workable(p)) continue; for(const k of activePhases(p)){
     clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(x.who===S.uid&&!x.done&&!x.na) out.push({p,k,it}); }); } }
   return out; }
 function myChecklistSec(list){
@@ -4188,7 +4188,7 @@ const workOn=p=>!!p&&activeTasks().some(t=>t.projectId===p.id&&(t.assignee===S.u
 const canPM=p=>S.canWrite&&(canSeeProjectDetail(p)||workOn(p));
 function pmLogCard(){
   if(!S.canWrite||fullView()||myPod()) return null;
-  const ps=projects().filter(p=>!p.closed&&p.pod!=='Studio'&&workOn(p)); if(!ps.length) return null;
+  const ps=projects().filter(p=>workable(p)&&p.pod!=='Studio'&&workOn(p)); if(!ps.length) return null;
   const sel=h('select',{id:'pm-pick','aria-label':'Project',style:'background:#fff;flex:1 1 200px'},ps.map(p=>h('option',{value:p.id,text:projLabel(p)}))); if(S.pmPick&&ps.some(p=>p.id===S.pmPick)) sel.value=S.pmPick;
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project meetings'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{style:'font-size:14px',text:'Went to a client, consultant, authority or site meeting? Log the minutes within 24 hours. The pod lead sees them straight away.'}),
@@ -4467,7 +4467,7 @@ function meetReqHomeSec(){
   return h('section',{class:'sec'},out); }
 /* Home: minutes to finish or send (whoever logged them, the pod lead, the COO) */
 function pmHomeSec(){
-  const xs=allMeets().filter(m=>{ const p=mProj(m); if(m.projectId&&(!p||p.closed)) return false; if(['scheduled','cancelled'].includes(m.status)) return false;
+  const xs=allMeets().filter(m=>{ const p=mProj(m); if(m.projectId&&(!p||!workable(p))) return false; if(['scheduled','cancelled'].includes(m.status)) return false;
     const proj=mCat(m)==='project', mine=m.createdBy===S.uid||(proj&&!!p&&isProjLead(p)); const due=m.status!=='final'||(proj&&pmOut(m)&&!m.sentAt&&!!p&&canLeadPM(p));
     if(!due) return false; if(mine&&S.canWrite) return true; return amApprover()&&diff(m.date,today())>=1; }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   if(!xs.length) return null;
@@ -4949,7 +4949,7 @@ function lvTasks(uid){
   return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.doneAt&&(t.assignee===uid||(!t.assignee&&t.assignReq&&t.assignReq.to===uid)))
     .sort((a,b)=>(a.target||'9999').localeCompare(b.target||'9999')); }
 function lvChecklist(uid){ const out=[];
-  for(const [pid,p] of Object.entries(S.projects)){ if(!p||p.closed||!p.cl) continue;
+  for(const [pid,p] of Object.entries(S.projects)){ if(!p||!workable(p)||!p.cl) continue;
     for(const [k,items] of Object.entries(p.cl)) for(const [iid,x] of Object.entries(items||{})) if(x&&x.who===uid&&!x.done&&!x.na){
       const it=(clItems(k)||[]).find(i=>i.id===iid); out.push({pid,k,iid,title:it?it.t:'Checklist item',p:{...p,id:pid}}); } }
   return out; }
@@ -5097,7 +5097,7 @@ function calItems(from,to){
     const hm=at.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), late=!x.done&&d<today();
     out.push({d,k:'msg',t:(x.mine?'':nameOf(x.who)+': ')+(x.body||'Message').replace(/\s+/g,' ').slice(0,80),who:x.mine?x.who:x.who,st:x.done?(x.ok?'ontime':'late'):late?'overdue':'open',done:x.done,time:hm,msgLabel:x.done?(x.ok?'Done on time':'Done late')+' · '+hm:late?'Overdue':'Will do by this day',go:()=>window.slateMsgOpen&&window.slateMsgOpen(x)}); }
   for(const p of projects()){
-    if(!p.std||p.closed||!projOk(p.id)||!canSeeProjectDetail(p)) continue;
+    if(!p.std||!workable(p)||!projOk(p.id)||!canSeeProjectDetail(p)) continue;
     for(const [k,d] of Object.entries((p.std&&p.std.fb)||{})){ if(!inR(d)||C.who) continue;
       const got=((p.std.fbGot)||{})[k];
       out.push({d,k:'fb',t:`Client feedback due · phase ${PH[k]?PH[k].no:k}`,p,st:got?'ontime':'open',done:!!got,go:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); }}); }
@@ -5123,7 +5123,7 @@ function viewCal(){
   const go=n=>{ const d=new Date(y,mo-1+n,1); C.m=ymd(d).slice(0,7); C.sel=n===0?today():ymd(d); render(true); };
   const ppl=fullView()?people().filter(id=>!isCOO(id)&&(!isPriv(id)||seePriv())):visiblePeople();
   const who=ppl.length>1?(()=>{ const el=h('select',{id:'cal-who','aria-label':'Person',style:'flex:0 1 180px',onchange:e=>{C.who=e.target.value;render(true)}},h('option',{value:'',text:'Everyone I can see'}),h('option',{value:S.uid,text:'Only me'}),ppl.filter(id=>id!==S.uid).map(id=>h('option',{value:id,text:nameOf(id)}))); el.value=C.who||''; return el; })():null;
-  const pj=projects().filter(p=>!p.closed&&(canSeeProjectDetail(p)||workOn(p)||activeTasks().some(t=>t.projectId===p.id)));
+  const pj=projects().filter(p=>workable(p)&&(canSeeProjectDetail(p)||workOn(p)||activeTasks().some(t=>t.projectId===p.id)));
   const proj=(()=>{ const el=h('select',{id:'cal-proj','aria-label':'Project',style:'flex:0 1 220px',onchange:e=>{C.proj=e.target.value;render(true)}},h('option',{value:'',text:'All projects'}),pj.map(p=>h('option',{value:p.id,text:projLabel(p)}))); el.value=C.proj||''; return el; })();
   const td=today(), cells=[]; let d=gs;
   while(d<=ge){ const dd=d, list=byD.get(dd)||[], inM=dd.slice(0,7)===C.m, dow=new Date(dd+'T00:00').getDay();
@@ -5322,7 +5322,7 @@ function viewProjects(){
     (()=>{ const x=h('select',{id:'pf-ar','aria-label':'Reason',onchange:e=>{f.ar=e.target.value;render(true)}},[['','Any reason'],...CLOSE_REASONS].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ar||''; return x; })()]:[];
   out.push(h('div',{class:'bar'},h('input',{id:'pf-q',type:'search',placeholder:'Search code, name or client',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),podSel,stSel,...aSel));
   const list=all.filter(p=>{ const st=stats.get(p.id);
-    if(f.st==='active'&&p.closed) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='acct'&&!acctOf(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
+    if(f.st==='active'&&p.closed&&!abOn(p)) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='acct'&&!acctOf(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
     if(f.st==='archive'){ if(!isArchivedP(p)) return false; if(f.ao&&outcomeOf(p)!==f.ao) return false; if(f.ay&&closedOn(p).slice(0,4)!==f.ay) return false; if(f.ar&&((p.closure||{}).reason||'')!==f.ar) return false; }
     if(f.pod&&!(f.pod==='Studio'?p.pod==='Studio':[p.pod,p.pod2].includes(f.pod))) return false;
     if(q&&!`${p.code} ${p.name} ${p.client||''}`.toLowerCase().includes(q)) return false; return true; });
@@ -5343,7 +5343,7 @@ function viewProjects(){
   if(!list.length){ out.push(h('p',{class:'muted',text:all.length?(f.st==='archive'?'Nothing in the archive matches these filters.':f.st==='acct'?(S.acct?'No open accounts. Every closed project is fully billed and collected.':'Checking Finance…'):f.st==='active'&&!f.q&&!f.pod?'No active projects.':'No projects match these filters.'):'No projects yet.'})); if(holdSec) out.push(holdSec); if(acctSec) out.push(acctSec); return out; }
   out.push(h('div',{class:'pgrid'},list.map(p=>{ const st=stats.get(p.id), [hl,hk]=HEALTH[st.health];
     return h('button',{class:'pcard',type:'button',onclick:()=>openProjectView(p.id)},
-      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),abOn(p)?h('span',{class:'pill s-late',text:'As-built'}):null,acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
       h('div',{class:'pc-name',text:p.name}),
       h('div',{class:'pc-meta',text:[p.client,podText(p),p.katha?p.katha+' katha':'',p.units?p.units+' units'+(p.type==='jv'&&p.loCount!=null?` (LO ${p.loCount} · Dev ${p.devCount})`:''):'',p.farApplies==='yes'&&p.farCalc?Math.round(p.farCalc.saleable/1000)+'k sft saleable':''].filter(Boolean).join(' · ')}),
       ...(()=>{ const pk=p.closed?projParkedTasks(p.id).length:0, dn=st.ts.filter(t=>t.doneAt).length, pc=pk?Math.round(dn/(dn+pk)*100):st.pct;
@@ -5415,6 +5415,13 @@ const outcomeLabel=p=>{ const o=outcomeOf(p); return o==='active'?'Active':o==='
 const outcomePill=p=>{ const o=outcomeOf(p); return o==='active'||o==='closed'?'s-open':OUTCOMES[o].pill; };
 const isOnHold=p=>outcomeOf(p)==='onhold';
 const isArchivedP=p=>!!p&&!!p.closed&&!isOnHold(p);
+/* as-built work after completion: phase 9 (check print → final print) runs on a completed project
+   without reopening it. The project stays Completed; only the as-built tasks and checklist are live,
+   scored like any task once their dates are approved. It ends when the final print is done, or when stopped. */
+const abOn=p=>!!p&&!!p.closed&&!isOnHold(p)&&!!p.asbuilt&&p.asbuilt.status==='active'&&!stdState({...p,id:p.id||pidOf(p)},'9').done;
+const pidOf=p=>Object.keys(S.projects).find(k=>S.projects[k]===p)||'';
+const workable=p=>!!p&&(!p.closed||abOn(p));
+const abCan=p=>!!p&&amApprover()&&S.canWrite&&isArchivedP(p)&&['completed','closed'].includes(outcomeOf(p))&&!isInternalP(p)&&p.pod!=='Studio';
 const closedOn=p=>(p&&p.closure&&p.closure.on)||(p&&p.completedOn)||'';
 const taka=n=>'৳'+Math.round(+n||0).toLocaleString('en-IN');
 /* open accounts: completed (or closed) projects whose Finance account still has money to bill or collect.
@@ -5591,8 +5598,52 @@ function closureSection(p){
       ap&&(c.delivered||[]).length?h('div',{style:'grid-column:1/-1'},h('div',{class:'lbl',text:'Scope delivered'}),h('div',{class:'chips',style:'margin-top:4px'},c.delivered.map(x=>h('span',{class:'chip',style:'padding-right:12px;background:#fff',text:x})))):null,
       ap&&(c.dropped||[]).length?h('div',{style:'grid-column:1/-1'},h('div',{class:'lbl',text:'Scope dropped'}),h('div',{class:'chips',style:'margin-top:4px'},c.dropped.map(x=>h('span',{class:'chip',style:'padding-right:12px;background:#fff;text-decoration:line-through;color:var(--muted)',text:x})))):null),
     (ap||canSeeProjectDetail(p))&&c.note?h('p',{class:'quote',text:c.note}):null,
+    o!=='onhold'?abBox(p):null,
     o!=='onhold'?acctBox(p):null);
 }
+/* as-built status on a completed project's page */
+function abBox(p){ const a=p.asbuilt; if(!a) return null; const s=stdState(p,'9');
+  if(s.done) return h('div',{class:'callout',style:'margin-top:10px;box-shadow:inset 3px 0 0 var(--ontime)'},h('b',{text:`As-built final print issued ${fmtD(s.fin.doneAt)}`}),
+    h('span',{class:'f-hint',style:'margin:0',text:`Started ${fmtD(a.startedAt.slice(0,10))} by ${nameOf(a.by)}. The project stayed completed throughout.`+(finOn()&&acctOf(p)?' Bill the as-built milestone in Finance.':'')}));
+  if(a.status==='stopped') return h('p',{class:'f-hint',style:'margin:8px 0 0',text:`As-built work stopped ${fmtD((a.stoppedAt||'').slice(0,10))} by ${nameOf(a.stoppedBy)}.`+(a.stopNote?' '+a.stopNote:'')});
+  if(!abOn(p)) return null;
+  const open=gateTasks(p.id).filter(t=>t.gate.k==='9'&&!t.doneAt), c=clCount(p,'9'), undated=open.filter(t=>!t.target).length;
+  return h('div',{class:'callout',style:'margin-top:10px'},h('b',{text:'As-built work in progress'}),
+    h('span',{class:'f-hint',style:'margin:0',text:`Started ${fmtD(a.startedAt.slice(0,10))}`+(a.redlines?` · red-lines received ${fmtD(a.redlines)}`:'')+` · lead ${nameOf(a.lead)} · checklist ${c.done} of ${c.tot-c.na} · ${open.length} gate task${open.length===1?'':'s'} open`}),
+    undated?h('span',{class:'f-hint',style:'margin:0;color:var(--late)',text:`${undated} task${undated===1?' has':'s have'} no approved date yet.`}):null,
+    undated&&(amApprover()||isProjLead(p))?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>openTimeline(p.id),text:amApprover()?'Set the dates':'Propose the dates'}):null,
+    a.note?h('p',{class:'quote',style:'margin:0',text:a.note}):null); }
+function openAbStart(pid){ const p=S.projects[pid]; if(!p||!abCan(p)) return;
+  S.sheet={type:'abStart',id:pid,err:'',d:{lead:(p.std&&p.std.lead)||personFor('lead',p.pod)||'',redlines:today(),note:''}}; renderSheet(); }
+function sheetAbStart(){
+  const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
+  const d=S.sheet.d, back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
+  const ld=h('select',{id:'ab-lead','aria-label':'Pod lead',onchange:e=>{d.lead=e.target.value}},memberOpts(d.lead).map(([v,l])=>h('option',{value:v,text:l}))); ld.value=d.lead||'';
+  return [head(projLabel(p),'Start as-built work'),
+    h('p',{class:'lead',style:'margin:0',text:'Opens phase 9 (post-construction) on this project: the as-built check print, then the final print, with its checklist. The project stays Completed and nothing else reopens.'}),
+    h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); if(!d.lead) return fail('Choose who leads the as-built drawings.'); if(d.redlines&&d.redlines>today()) return fail('The red-lines date can’t be in the future.');
+        run(()=>doAbStart(p.id,d),'As-built work started').then(ok=>{ if(ok) openTimeline(p.id); }); }},
+      field('Lead (owns the check print and final print) *',ld),
+      h('div',{class:'form-row'},field('Red-lines received on',h('input',{id:'ab-red',type:'date',max:today(),value:d.redlines,oninput:e=>{d.redlines=e.target.value}}),'The check print is due within 14 days of the red-lines.')),
+      field('Note',h('textarea',{id:'ab-note',rows:2,placeholder:'e.g. Red-lines from the site engineer, 3 sheets of changes',value:d.note,oninput:e=>{d.note=e.target.value}})),
+      h('div',{class:'card',style:'gap:4px;background:var(--group)'},h('b',{text:'What happens'}),
+        h('span',{class:'f-hint',style:'margin:0',text:'Two gate tasks go to the lead, and the phase 9 checklist opens. Next you set (or the lead proposes) their dates; they count like any task once approved. It ends by itself when the final print is done. You can stop it at any time; open as-built tasks are then dropped and not scored.'})),
+      S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Start as-built work'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
+}
+async function doAbStart(pid,d){
+  const p=S.projects[pid], now=new Date().toISOString(), note=(d.note||'').trim(), jr=personFor('junior',p.pod);
+  for(const [step,txt] of stepsOf((p.std&&p.std.type)||p.type,'9')) await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:d.lead,phase:phLabel('9'),gate:{k:'9',step},asbuilt:true,note});
+  const m={}; clItems('9').forEach(it=>{ const x=clOf(p,'9',it.id); if(x.done||x.na) return; const who=it.r==='L'?d.lead:it.r==='J'?jr:''; m[it.id]=who&&!isPriv(who)&&!isCOO(who)?{who}:{}; });
+  const std=p.std?{std:{phases:stdPhases(p).includes('9')?stdPhases(p):[...stdPhases(p),'9']}}:{std:{v:1,type:p.type||'',phases:['9'],lead:d.lead,pace:'std'}};
+  const log=[...((p.asbuilt&&p.asbuilt.log)||[]),{type:'started',at:now,by:S.uid,lead:d.lead,redlines:d.redlines||'',note}].slice(-20);
+  await S.db.doc('projects/'+pid).update({...std,cl:{'9':m},asbuilt:{status:'active',startedAt:now,by:S.uid,lead:d.lead,redlines:d.redlines||'',note,stoppedAt:null,stoppedBy:null,stopNote:null,log}});
+}
+function stopAb(pid){ const p=S.projects[pid]; if(!p||!abOn({...p,id:pid})) return;
+  const open=gateTasks(pid).filter(t=>t.gate.k==='9'&&!t.doneAt), why=prompt(`Stop the as-built work on ${p.code||p.name}? ${open.length} open as-built task${open.length===1?'':'s'} will be dropped and not scored.\n\nReason (optional):`,'');
+  if(why===null) return; const now=new Date().toISOString(), note=why.trim();
+  run(async()=>{ for(const t of open) await taskUpdate(t.id,{archived:true,dropped:'asbuilt'},[{type:'dropped',to:'asbuilt',note:'As-built work stopped'+(note?': '+note:'')}]);
+    await S.db.doc('projects/'+pid).update({asbuilt:{status:'stopped',stoppedAt:now,stoppedBy:S.uid,stopNote:note,log:[...((p.asbuilt&&p.asbuilt.log)||[]),{type:'stopped',at:now,by:S.uid,note}].slice(-20)}}); },'As-built work stopped'); }
 /* a closed project's live account (Principal and COO): what is left to bill and to collect */
 function acctBox(p){ if(!finOn()) return null; acctLoad(); if(!S.acct) return null; const a=acctOf(p);
   if(!a) return h('p',{class:'f-hint',style:'margin:8px 0 0',text:'Account settled in Finance.'});
@@ -5606,7 +5657,9 @@ function lifecycleActs(p){ const acts=[]; if(!S.canWrite) return acts;
   if(amApprover()){
     if(!p.closed) acts.push(h('button',{class:'btn',type:'button',onclick:()=>openCloseProject(p.id),text:'Close project'}));
     else if(isOnHold(p)){ acts.push(h('button',{class:'btn btn-primary',type:'button',onclick:()=>openReopenProject(p.id),text:'Resume project'})); acts.push(h('button',{class:'btn',type:'button',onclick:()=>openCloseProject(p.id),text:'Close project'})); }
-    else if(S.isOwner) acts.push(h('button',{class:'btn',type:'button',onclick:()=>openReopenProject(p.id),text:'Reopen'}));
+    else { if(abCan(p)&&!abOn(p)&&!stdState(p,'9').done) acts.push(h('button',{class:'btn btn-primary',type:'button',onclick:()=>openAbStart(p.id),text:'Start as-built work'}));
+      if(abCan(p)&&abOn(p)) acts.push(h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>stopAb(p.id),text:'Stop as-built work'}));
+      if(S.isOwner) acts.push(h('button',{class:'btn',type:'button',onclick:()=>openReopenProject(p.id),text:'Reopen'})); }
   } else if(canAskClose(p)&&!p.closeReq) acts.push(h('button',{class:'btn',type:'button',onclick:()=>openCloseRequest(p.id),text:'Ask to close or pause'}));
   return acts; }
 /* ---------- deleting a project: the Principal deletes; the COO asks and the Principal approves ---------- */
