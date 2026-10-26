@@ -427,7 +427,10 @@
     const on = onlineIds.filter(id => id !== authUser.id && people.has(id) && people.get(id).active).sort((a, b) => name(a).localeCompare(name(b)));
     if (!home || !on.length) { if (old) old.remove(); return; }
     const head = document.querySelector('main .page-h'); if (!head) return;
-    if (old && !force && old.previousElementSibling === head) return;
+    // Already on this page: leave it where it is. (Checking that it sits right after the
+    // title looped forever once the Messages section was placed between them: each
+    // replace fired the DOM observer, which replaced it again, and the page froze.)
+    if (old && !force && head.parentNode && head.parentNode.contains(old)) return;
     const chip = id => { let a = null; try { a = avaEl(id, isLeadP(people.get(id))); } catch (_) {}
       return el('span', { class: 'chip', style: 'padding:4px 12px 4px 4px;background:#fff;gap:8px' },
         el('span', { style: 'position:relative;display:inline-grid' }, ...(a ? [a] : []),
