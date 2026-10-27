@@ -1,0 +1,78 @@
+# SLATE OS · weekly database backup
+# Every Thursday night (Dhaka time) the whole SLATE OS database is copied, encrypted with the
+# studio's backup passphrase and kept for 90 days under this repository's Actions tab.
+# Needs two repository secrets (Settings › Secrets and variables › Actions):
+#   SUPABASE_DB_URL     the Session pooler connection string from Supabase › Connect
+#   BACKUP_PASSPHRASE   a long passphrase, kept by the Principal and the COO; without it a backup can't be opened
+# Run it any time from Actions › Weekly database backup › Run workflow.
+name: Weekly database backup
+
+on:
+  schedule:
+    - cron: '23 17 * * 4'   # Thursday 17:23 UTC = 23:23 in Dhaka
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check the secrets are set
+        run: |
+          missing=0
+          [ -n "$SUPABASE_DB_URL" ]   || { echo "::error::Add the SUPABASE_DB_URL repository secret."; missing=1; }
+          [ -n "$BACKUP_PASSPHRASE" ] || { echo "::error::Add the BACKUP_PASSPHRASE repository secret."; missing=1; }
+          exit $missing
+
+      - name: Install the PostgreSQL 17 tools (same version as the database)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Copy and encrypt the database
+        run: |
+          set -euo pipefail
+          PG=/usr/lib/postgresql/17/bin
+          STAMP=$(TZ=Asia/Dhaka date +%Y-%m-%d)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          mkdir out
+
+          # All SLATE OS data: projects, tasks, meetings, Finance, logs, settings
+          $PG/pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges \
+            --schema=public --file=out/slate-os-data-$STAMP.dump
+
+          # Sign-in accounts. Best effort: the data copy above is what matters most.
+          $PG/pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges \
+            --schema=auth --file=out/slate-os-logins-$STAMP.dump \
+            || echo "::warning::Sign-in accounts weren't copied this week; the data copy is complete."
+
+          for f in out/*.dump; do
+            printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --quiet --pinentry-mode loopback \
+              --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "$f.gpg" "$f"
+            rm "$f"
+          done
+          ls -lh out
+          echo "### SLATE OS backup $STAMP" >> "$GITHUB_STEP_SUMMARY"
+          ls -lh out | tail -n +2 | awk '{print "- " $9 " (" $5 ")"}' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the encrypted backup for 90 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: slate-os-backup-${{ env.STAMP }}
+          path: out/*.gpg
+          retention-days: 90
+          if-no-files-found: error

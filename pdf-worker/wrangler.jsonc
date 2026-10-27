@@ -1,0 +1,18 @@
+// SLATE OS · invoice PDF printer Worker
+// No public address (workers_dev off, no routes): only the SLATE OS Pages app reaches it,
+// through its PDF service binding.
+{
+  "name": "slate-os-pdf",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "browser": { "binding": "BROWSER" },
+  // Public connection details (safe: every table is protected by row-level security)
+  "vars": {
+    "SB_URL": "https://fbktoepdfegtkazbytel.supabase.co",
+    "SB_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZia3RvZXBkZmVndGthemJ5dGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NTk0ODksImV4cCI6MjEwODMzNTQ4OX0.BZkYZLfjEQFylUmm1vQ3Wb0zsKHqp2Nk1Qt5GQvRPe0"
+  },
+  "observability": { "enabled": true }
+}

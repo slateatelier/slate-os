@@ -1,0 +1,8 @@
+# Cloudflare-only files: not published while Vercel is still serving the app
+functions
+pdf-worker
+scripts
+.github
+wrangler.toml
+_headers
+_redirects

@@ -1,0 +1,14 @@
+{
+  "name": "slate-os-pdf",
+  "private": true,
+  "description": "SLATE OS invoice PDF printer on Cloudflare Browser Rendering.",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

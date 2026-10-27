@@ -1,0 +1,10 @@
+# SLATE OS · Cloudflare Pages project
+# The app is static; the one server route, /api/invoice-pdf, is a Pages Function that hands
+# the print job to the slate-os-pdf Worker (pdf-worker/), which holds the headless browser.
+name = "slate-os"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-10-01"
+
+[[services]]
+binding = "PDF"
+service = "slate-os-pdf"

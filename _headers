@@ -1,0 +1,36 @@
+# SLATE OS · response headers on Cloudflare Pages (the same rules vercel.json sets on Vercel)
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  X-Robots-Tag: noindex, nofollow
+
+# The page and its scripts are always checked for a newer copy, so updates arrive at once
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/slate-db.js
+  Cache-Control: no-cache
+/config.js
+  Cache-Control: no-cache
+/finance
+  Cache-Control: no-cache
+/finance.html
+  Cache-Control: no-cache
+/finance.js
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+
+# Client invoice links: never stored, never leak the link to other sites
+/i/*
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer

@@ -1,0 +1,2 @@
+# SLATE OS · a client's private invoice link shows the invoice viewer (the address stays /i/<token>)
+/i/:token  /invoice-view  200
