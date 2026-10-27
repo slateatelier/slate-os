@@ -6309,8 +6309,9 @@ function sheetChalkProj(){
    3-button bar, Samsung or Xiaomi shortcuts. So do the mouse's back button and Alt+←. All of them arrive here as one
    history step, so SLATE OS follows every setting without needing to know which one is on.
    Each step deeper is one entry: a page under More, a sheet, a sheet opened from a sheet, a form inside a sheet, a popup.
-   Back undoes exactly one step. Tabs don't pile up: switching tabs replaces the entry, so back from any tab goes to Home,
-   and back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
+   Back undoes exactly one step, tabs included: back from a tab returns to the tab before it. Tapping a tab already
+   on the way back steps back to it rather than adding it again, so the trail never repeats itself.
+   Back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
    back and the buttons never disagree. */
 const NAV={i:0,stack:[],snap:[],ready:false,applying:false,pending:0,pendT:0,hintAt:0};
 const NAV_SUB=['notice','activity','setup','std','help','far','reports','backup','entries'];   /* pages reached from More */
@@ -6327,12 +6328,11 @@ const navSnapNow=()=>({sheet:S.sheet?{...S.sheet,d:S.sheet.d&&typeof S.sheet.d==
 const navStandalone=()=>{ try{ return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true; }catch(e){ return false; } };
 const navState=(i,L,extra)=>({slate:1,i,L,...(extra||{})});
 const navHomeL=()=>({v:'mine',s:'',o:0});
-/* a step that goes deeper gets its own entry; a sideways step (tab to tab, list to board, one form to the next) replaces it */
+/* every new screen gets its own entry; switching layout within a tab (list, board, timeline) or one form to the next replaces it */
 function navDecide(cur,L){
   if(!cur) return 'replace';
   if(L.v!==cur.v){
     if(navTab(L.v)===navTab(cur.v)) return 'replace';
-    if(navIsTab(L.v)&&navIsTab(cur.v)&&navTab(cur.v)!=='mine'&&!cur.s&&!cur.o) return 'replace';
     return 'push';
   }
   if(L.o>cur.o) return 'push';
