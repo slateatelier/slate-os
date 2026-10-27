@@ -241,11 +241,13 @@ let sheetT;
 function openSheet(html, bind) {
   const sh = $('#sheet'), opening = sh.hidden || sh.classList.contains('out'); clearTimeout(sheetT); sh.classList.remove('out');
   $('#sheetPanel').innerHTML = html; sh.hidden = false; document.body.style.overflow = 'hidden';
+  if (opening) finNavPush();
   if (opening && !motionOff()) { sh.classList.remove('in'); void sh.offsetWidth; sh.classList.add('in'); sheetT = setTimeout(() => sh.classList.remove('in'), 320); }
   bind && bind($('#sheetPanel'));
   const f = $('#sheetPanel input:not([type=hidden]), #sheetPanel select'); if (f && matchMedia('(min-width:700px)').matches) f.focus();
 }
-function closeSheet() { const sh = $('#sheet'); clearTimeout(sheetT); sh.classList.remove('in');
+function closeSheet(fromBack) { const sh = $('#sheet'); clearTimeout(sheetT); sh.classList.remove('in');
+  if (fromBack !== true) finNavPop();
   const done = () => { sh.classList.remove('out'); sh.hidden = true; $('#sheetPanel').innerHTML = ''; document.body.style.overflow = ''; };
   if (sh.hidden || motionOff()) return done(); sh.classList.add('out'); sheetT = setTimeout(done, 170); }
 const sheetHead = (t, sub) => `<div class="sheet-h"><div><h2>${esc(t)}</h2>${sub ? `<p>${sub}</p>` : ''}</div><button class="btn ghost sm" type="button" data-act="close">Close</button></div>`;
@@ -2527,4 +2529,38 @@ const watchdog = setTimeout(() => { if (!S.loaded && /Opening finance/.test($('#
   document.addEventListener('visibilitychange', refresh);
 })().catch(e => { clearTimeout(watchdog); notice('Couldn’t open finance', esc(friendly(e)), true); });
 window.slateFinanceTest = { S, render, invStatus, takaWords, nextInvNo };
+
+/* ----- Back -----
+   A phone's back (any gesture setting), the mouse's back button and Alt+← close an open sheet first;
+   with nothing open they return to SLATE OS. The ‹ SLATE OS button takes the same step back, so SLATE OS
+   reopens where it was left (More, usually) instead of starting again at Home. */
+const FIN_NAV = { pending: false, wantPush: false };
+function finNavPush() {
+  if (FIN_NAV.pending) { FIN_NAV.wantPush = true; return; }
+  if (history.state && history.state.fin === 'sheet') return;
+  try { history.pushState({ fin: 'sheet' }, ''); } catch (_) {}
+}
+function finNavPop() {
+  FIN_NAV.wantPush = false;
+  if (FIN_NAV.pending || !(history.state && history.state.fin === 'sheet')) return;
+  FIN_NAV.pending = true; history.back();
+}
+window.addEventListener('popstate', () => {
+  if (FIN_NAV.pending) {
+    FIN_NAV.pending = false;
+    if (FIN_NAV.wantPush && !$('#sheet').hidden) { FIN_NAV.wantPush = false; try { history.pushState({ fin: 'sheet' }, ''); } catch (_) {} }
+    return;
+  }
+  if (!$('#sheet').hidden) closeSheet(true);
+});
+(() => {
+  const b = document.getElementById('backOS'); if (!b) return;
+  b.addEventListener('click', e => {
+    let fromOS = false;
+    try { const r = new URL(document.referrer); fromOS = r.origin === location.origin && !/^\/(finance|i\/)/.test(r.pathname); } catch (_) {}
+    if (!fromOS || history.length < 2) return;
+    e.preventDefault();
+    if (history.state && history.state.fin === 'sheet') history.go(-2); else history.back();
+  });
+})();
 })();

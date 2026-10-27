@@ -866,6 +866,24 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .rv-sum{font-size:12.5px;color:var(--muted)}
 .rv-btns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .rv-btns .btn{justify-content:center;padding-left:6px;padding-right:6px}.rv-btns .btn.on{background:var(--c);border-color:var(--c);color:#fff}
+/* Back: one ‹ in the same top-left spot on every inner page, kept in view under the tab bar while the page scrolls */
+.nav-back{position:sticky;top:calc(var(--chrome-h,0px) + 8px);z-index:4;justify-self:start;align-self:start;display:inline-flex;align-items:center;gap:2px;
+  min-height:40px;margin:-4px 0 -6px -6px;padding:0 14px 0 6px;border:0;border-radius:999px;background:rgba(242,242,247,.92);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:var(--ink);font:600 15px var(--font);letter-spacing:-.01em;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:color .12s,background-color .12s}
+.nav-back svg{width:22px;height:22px;flex:none}
+.nav-back:active{color:#d7262b;background:var(--fill)}
+@media (hover:hover){.nav-back:hover{background:var(--fill)}}
+.nav-back:focus-visible,.sh-back:focus-visible{outline:2px solid #d7262b;outline-offset:2px}
+/* sheets: ‹ on the left when back leads to the sheet underneath, × on the right closes; both stay in view while the sheet scrolls */
+.sh-head .sh-ht{flex:1;min-width:0}
+.sh-head .icon-btn{width:36px;height:36px;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.sh-back{display:inline-grid;place-items:center;color:var(--ink)}
+.sh-back svg{width:20px;height:20px}
+.sh-head .icon-btn:active{color:#d7262b;background:var(--fill)}
+.panel>.sh-head:first-child{position:sticky;top:calc(-18px - env(safe-area-inset-top,0px));z-index:3;background:#fff;margin-top:calc(-18px - env(safe-area-inset-top,0px));padding-top:calc(18px + env(safe-area-inset-top,0px));padding-bottom:10px;margin-bottom:-10px}
+@media (max-width:640px){.panel>.sh-head:first-child{top:calc(-12px - env(safe-area-inset-top,0px));margin-top:calc(-12px - env(safe-area-inset-top,0px));padding-top:calc(12px + env(safe-area-inset-top,0px))}}
+@media (prefers-reduced-motion:reduce){.nav-back{transition:none}}
 </style>
 
 <div class="chrome">
@@ -2055,7 +2073,7 @@ function buildView(){
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
   const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,mine:viewMine,all:viewAll,projects:viewProjects,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
-  if(['activity','setup','std','help','far','reports','backup'].concat(amChalkMember()?[]:['notice']).includes(S.view)) out.push(h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{S.view='more';render(true)},text:'‹ More'}));
+  if(NAV_SUB.includes(S.view)) out.push(amChalkMember()?navBack('Home',()=>{ S.view='mine'; render(true); }):navBack('More',()=>{ S.view='more'; render(true); }));
   return out.concat(v());
 }
 
@@ -2923,7 +2941,7 @@ function sheetMyProfile(){
   const edit=()=>{ S.sheet={...sh,mode:'edit',err:'',d:{full:p.full,short:p.short,mobile:p.mobile}}; renderSheet(); setTimeout(()=>{ const f=$('#pf-full'); f&&f.focus(); },30); };
   const field=(k,l,attrs)=>h('label',{class:'pf-f'},h('span',{text:l}),h('input',{id:'pf-'+k,value:sh.d[k]||'',...attrs,oninput:e=>{ sh.d[k]=e.target.value; }}));
   const save=async()=>{ if(S.busy) return; S.busy=true; sh.err=''; renderSheet(); try{ await api.save(sh.d); S.busy=false; S.sheet={type:'myprofile',mode:'view',d:{}}; renderSheet(); toast('Profile saved'); render(true); }catch(e){ S.busy=false; sh.err=e.message; renderSheet(); } };
-  const out=[h('div',{class:'sh-head'},h('h2',{class:'sh-title',text:'Profile'}),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})),
+  const out=[h('div',{class:'sh-head'},sheetBack(),h('h2',{class:'sh-title sh-ht',text:'Profile'}),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})),
     h('div',{class:'pf-top'},h('button',{class:'pf-ava',type:'button','aria-label':'Change your icon',title:'Change your icon',onclick:openIconPicker},avaEl(S.uid,true,'lg')),
       h('div',{class:'pf-name',text:p.full||nameOf(S.uid)}),h('div',{class:'pf-sub',text:[p.role,p.team].filter(Boolean).join(' · ')}),
       h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:openIconPicker,text:'Change icon'})),
@@ -3867,7 +3885,7 @@ function form(title,fields,submit,onSubmit,danger){
     S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
     h('div',{class:'actions'},h('button',{class:'btn '+(danger?'btn-accent':'btn-primary'),type:'submit',disabled:S.busy,text:submit}),h('button',{class:'btn',type:'button',onclick:()=>setMode(null),text:'Cancel'})));
 }
-function head(eyebrow,title){ return h('div',{class:'sh-head'},h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:eyebrow,style:keepCase(eyebrow)}),h('h2',{class:'sh-title',text:title})),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})); }
+function head(eyebrow,title){ return h('div',{class:'sh-head'},sheetBack(),h('div',{class:'sh-ht'},h('div',{class:'eyebrow',text:eyebrow,style:keepCase(eyebrow)}),h('h2',{class:'sh-title',text:title})),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})); }
 const memberOpts=keep=>[['','Select person…'],...people().filter(id=>(((!isCOO(id)||amApprover())&&canAssignTo(id))||id===keep)&&(!isPriv(id)||seePriv()||id===S.uid)).map(id=>[id,nameOf(id)])];
 const projectOpts=(incl)=>{ const ps=projects().filter(p=>workable(p)||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2,studiobd:3,studiohr:4,studiofin:5})[p.type];
   const st=ps.filter(p=>isInternalP(p)).sort((a,b)=>rank(a)-rank(b)||(a.name||'').localeCompare(b.name||'')), rest=ps.filter(p=>!isInternalP(p));
@@ -6286,6 +6304,161 @@ function sheetChalkProj(){
   document.addEventListener('mousemove',show); document.addEventListener('mouseleave',()=>{tip.hidden=true});
   document.addEventListener('touchstart',e=>{ const t=e.touches[0]; show({target:e.target,clientX:t.clientX,clientY:t.clientY}); setTimeout(()=>{tip.hidden=true},2200); },{passive:true});
 })();
+/* ---------- back navigation ----------
+   Phones send one "back" whatever the person's gesture setting: a swipe in from either edge, the back key of the
+   3-button bar, Samsung or Xiaomi shortcuts. So do the mouse's back button and Alt+←. All of them arrive here as one
+   history step, so SLATE OS follows every setting without needing to know which one is on.
+   Each step deeper is one entry: a page under More, a sheet, a sheet opened from a sheet, a form inside a sheet, a popup.
+   Back undoes exactly one step. Tabs don't pile up: switching tabs replaces the entry, so back from any tab goes to Home,
+   and back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
+   back and the buttons never disagree. */
+const NAV={i:0,stack:[],snap:[],ready:false,applying:false,pending:0,pendT:0,hintAt:0};
+const NAV_SUB=['notice','activity','setup','std','help','far','reports','backup','entries'];   /* pages reached from More */
+const NAV_TASKV=['all','board','gantt'];                                                      /* one tab, three layouts */
+const NAV_VIEWER=['task','projView','notif','profile','myprofile','meeting','pmeet','timeline','chalkProj','rota'];  /* sheets that open other sheets */
+const NAV_OV='.slate-sheet:not(#slate-auth),#share-card';                                     /* popups laid over everything */
+const navTab=v=>NAV_TASKV.includes(v)?'all':v;
+const navIsTab=v=>!NAV_SUB.includes(v);
+const navSheetKey=sh=>sh?[sh.type,sh.id??sh.projectId??sh.key??sh.k??sh.date??sh.uid??'',sh.mode&&sh.mode!=='view'?sh.mode:''].join(':'):'';
+const navOvs=()=>[...document.querySelectorAll(NAV_OV)];
+const navLoc=()=>({v:S.view,s:navSheetKey(S.sheet),o:navOvs().length});
+const navSame=(a,b)=>!!a&&!!b&&a.v===b.v&&a.s===b.s&&a.o===b.o;
+const navSnapNow=()=>({sheet:S.sheet?{...S.sheet,d:S.sheet.d&&typeof S.sheet.d==='object'&&!Array.isArray(S.sheet.d)?{...S.sheet.d}:S.sheet.d}:null,y:window.scrollY});
+const navStandalone=()=>{ try{ return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true; }catch(e){ return false; } };
+const navState=(i,L,extra)=>({slate:1,i,L,...(extra||{})});
+const navHomeL=()=>({v:'mine',s:'',o:0});
+/* a step that goes deeper gets its own entry; a sideways step (tab to tab, list to board, one form to the next) replaces it */
+function navDecide(cur,L){
+  if(!cur) return 'replace';
+  if(L.v!==cur.v){
+    if(navTab(L.v)===navTab(cur.v)) return 'replace';
+    if(navIsTab(L.v)&&navIsTab(cur.v)&&navTab(cur.v)!=='mine'&&!cur.s&&!cur.o) return 'replace';
+    return 'push';
+  }
+  if(L.o>cur.o) return 'push';
+  if(!cur.s&&L.s) return 'push';
+  if(cur.s&&L.s){
+    const [ct,ci,cm]=cur.s.split(':'), [lt,li,lm]=L.s.split(':');
+    if(ct===lt&&ci===li) return !cm&&lm?'push':'replace';      /* a form opened inside the same sheet */
+    return NAV_VIEWER.includes(ct)&&!cm?'push':'replace';        /* a sheet opened from a sheet you were reading */
+  }
+  return 'replace';
+}
+/* what back would show right now; sheets use it to decide whether to offer ‹ */
+function navUnder(){
+  if(!NAV.ready||S.state!=='ready') return null;
+  const L=navLoc(), cur=NAV.stack[NAV.i];
+  if(navSame(L,cur)) return NAV.stack[NAV.i-1]||null;
+  for(let j=NAV.i-1;j>=1;j--) if(navSame(NAV.stack[j],L)) return NAV.stack[j-1]||null;
+  return navDecide(cur,L)==='push'?cur:(NAV.stack[NAV.i-1]||null);
+}
+function navInit(){
+  NAV.ready=true;
+  try{ history.scrollRestoration='manual'; }catch(e){}
+  const st=history.state;
+  if(st&&st.slate&&typeof st.i==='number'&&st.i>0){
+    /* back from Finance, or a reload: carry on where this entry was */
+    NAV.i=st.i;
+    if(st.L&&st.L.v&&st.L.v!==S.view){ S.view=st.L.v; _navRender(true); }
+    NAV.stack[NAV.i]=navLoc(); NAV.snap[NAV.i]=navSnapNow();
+    try{ history.replaceState(navState(NAV.i,NAV.stack[NAV.i]),''); }catch(e){}
+    return;
+  }
+  NAV.i=0; NAV.stack=[navLoc()]; NAV.snap=[navSnapNow()];
+  try{ history.replaceState(navState(0,NAV.stack[0],{exit:1}),''); }catch(e){}
+}
+/* the first entry is the way out. A guard copy sits on it as soon as the person touches the screen,
+   so a browser never sees a history step it didn't get a tap for */
+function navArm(){
+  if(!NAV.ready||NAV.pending||NAV.i!==0||!NAV.stack[0]) return;
+  const L={...NAV.stack[0]}; NAV.i=1; NAV.stack.length=1; NAV.stack[1]=L; NAV.snap[1]=NAV.snap[0]?{...NAV.snap[0]}:navSnapNow();
+  try{ history.pushState(navState(1,L),''); }catch(e){ NAV.i=0; }
+}
+function navGo(j){
+  NAV.pending=NAV.i-j; clearTimeout(NAV.pendT);
+  NAV.pendT=setTimeout(()=>{ if(!NAV.pending) return; NAV.pending=0; const st=history.state; if(st&&st.slate) NAV.i=st.i; navSync(); },900);
+  history.go(j-NAV.i);
+}
+function navSync(){
+  if(!NAV.ready||NAV.applying||NAV.pending||S.state!=='ready') return;
+  const L=navLoc(), cur=NAV.stack[NAV.i];
+  if(navSame(L,cur)){ NAV.snap[NAV.i]=navSnapNow(); return; }
+  /* closed by the app's own ‹, ×, Cancel or the Home tab: step history back to that same place */
+  for(let j=NAV.i-1;j>=1;j--) if(navSame(NAV.stack[j],L)){
+    if(L.v!==cur.v&&NAV.snap[j]) requestAnimationFrame(()=>window.scrollTo(0,NAV.snap[j].y||0));
+    return navGo(j);
+  }
+  if(navDecide(cur,L)==='push'){
+    if(NAV.i===0) navArm();
+    if(NAV.snap[NAV.i]) NAV.snap[NAV.i].y=window.scrollY;
+    NAV.i++; NAV.stack.length=NAV.i; NAV.snap.length=NAV.i;
+    NAV.stack[NAV.i]=L; NAV.snap[NAV.i]=navSnapNow();
+    try{ history.pushState(navState(NAV.i,L),''); }catch(e){}
+  } else {
+    NAV.stack[NAV.i]=L; NAV.snap[NAV.i]=navSnapNow();
+    try{ history.replaceState(navState(NAV.i,L,NAV.i===0?{exit:1}:null),''); }catch(e){}
+  }
+}
+function navCloseOv(el){
+  const done=el.querySelector('.sc-done');
+  if(done) done.click(); else el.remove();
+}
+/* put the screen back to what a history entry describes */
+function navApply(L,snap){
+  NAV.applying=true;
+  let scrollY=null;
+  try{
+    const ovs=navOvs(); for(let k=ovs.length-1;k>=(L.o||0);k--) navCloseOv(ovs[k]);
+    if(navSheetKey(S.sheet)!==(L.s||'')){
+      if(L.s&&snap&&snap.sheet&&navSheetKey(snap.sheet)===L.s){ S.sheet={...snap.sheet,err:'',d:snap.sheet.d&&typeof snap.sheet.d==='object'&&!Array.isArray(snap.sheet.d)?{...snap.sheet.d}:snap.sheet.d}; S.sheetAt=0; }
+      else S.sheet=null;
+      renderSheet();
+    }
+    if(L.v&&S.view!==L.v){ S.view=L.v; render(true); scrollY=snap?snap.y||0:0; }
+  }catch(e){ console.warn('SLATE OS back:',e); }
+  NAV.applying=false;
+  if(scrollY!==null) requestAnimationFrame(()=>window.scrollTo(0,scrollY));
+  /* whatever couldn't be rebuilt (a sheet from before a reload), the entry now says what's really on screen */
+  const real=navLoc(); NAV.stack[NAV.i]=real; NAV.snap[NAV.i]=navSnapNow();
+  if(!navSame(real,L)) try{ history.replaceState(navState(NAV.i,real,NAV.i===0?{exit:1}:null),''); }catch(e){}
+}
+window.addEventListener('popstate',e=>{
+  const st=e.state;
+  if(!st||!st.slate||typeof st.i!=='number'||!NAV.ready) return;
+  if(NAV.pending){ NAV.pending=0; clearTimeout(NAV.pendT); NAV.i=st.i; if(st.L) NAV.stack[st.i]=NAV.stack[st.i]||st.L; navSync(); return; }
+  const was=navLoc();
+  NAV.i=st.i;
+  navApply(st.L||navHomeL(),NAV.snap[st.i]);
+  if(st.exit){
+    /* back on Home: say so once; the next back closes SLATE OS. Any tap re-arms it. */
+    if(was.v==='mine'&&!was.s&&!was.o){ NAV.hintAt=Date.now(); try{ toast(navStandalone()?'Go back again to close SLATE OS':'Go back again to leave SLATE OS'); }catch(_){} }
+    else navArm();   /* landed on Home from somewhere else: keep Home guarded */
+  }
+});
+['pointerdown','keydown'].forEach(ev=>window.addEventListener(ev,()=>navArm(),{capture:true,passive:true}));
+/* popups from Account, Accounts, messages and reports live outside the sheet; history follows them too */
+(()=>{ const watch=()=>new MutationObserver(ms=>{ for(const m of ms) for(const n of [...m.addedNodes,...m.removedNodes]) if(n.nodeType===1&&n.matches&&n.matches(NAV_OV)){ navSync(); return; } }).observe(document.body,{childList:true});
+  if(document.body) watch(); else document.addEventListener('DOMContentLoaded',watch); })();
+/* every screen change already goes through render() and renderSheet(); history follows them from here */
+const _navRender=render, _navRenderSheet=renderSheet;
+render=function(force){ _navRender(force); if(S.state!=='ready') return; if(!NAV.ready) navInit(); navSync(); };
+renderSheet=function(fromData){ _navRenderSheet(fromData); if(NAV.ready) navSync(); };
+/* the ‹ that sits top-left on every inner page */
+function navBack(label,fn){
+  return h('button',{class:'nav-back',type:'button','aria-label':'Back to '+label,onclick:fn},
+    svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2.4','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M15 18l-6-6 6-6'})),
+    h('span',{text:label}));
+}
+/* ‹ in a sheet's head when back would land on another sheet (a task opened from a project, a form inside a task) */
+function sheetBack(){
+  const u=navUnder(); if(!u||!u.s||u.v!==S.view) return null;
+  return h('button',{class:'icon-btn sh-back',type:'button','aria-label':'Back',title:'Back',onclick:()=>history.back()},
+    svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2.4','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M15 18l-6-6 6-6'})));
+}
+/* keeps the sticky ‹ just under the tab bar, whatever height the bar is on this screen */
+(()=>{ const set=()=>{ const c=document.querySelector('.chrome'); if(c) document.documentElement.style.setProperty('--chrome-h',c.offsetHeight+'px'); };
+  try{ const c=document.querySelector('.chrome'); if(c&&window.ResizeObserver) new ResizeObserver(set).observe(c); }catch(e){}
+  set(); window.addEventListener('resize',set,{passive:true}); })();
 const NARROW=window.matchMedia('(max-width:640px)'); const narrow=()=>NARROW.matches; try{ NARROW.addEventListener('change',()=>render(true)); }catch(e){}
 boot();
 </script>
