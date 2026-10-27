@@ -52,8 +52,10 @@ export default {
       const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' } });
     } catch (e) {
-      console.error('invoice-pdf', e && e.message);
-      return fail(500, 'Couldn’t print the invoice. Try again in a moment.');
+      const why = String((e && e.message) || e || 'unknown error').slice(0, 300);
+      console.error('invoice-pdf', why);
+      // Only the Principal and the COO reach this point, so the reason is shown to help fix it
+      return fail(500, `Couldn’t print the invoice (${why}). Try again in a moment.`);
     } finally {
       if (browser) await browser.close().catch(() => {});
     }
