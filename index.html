@@ -2330,8 +2330,93 @@ function meetStrip(){ const ms=nextMeets(); if(!ms.length) return null; const m=
     m.reply?h('span',{class:'tag tag-req',text:'Reply'}):null,
     more?h('span',{class:'ms-more',text:`+${more}`}):null,h('span',{class:'ms-go','aria-hidden':'true',text:'›'})); }
 function viewMine(){ return viewMineBody(); }
+/* Home › Meetings: every meeting this person is in, one line each, from the invite until the minutes are published.
+   Ahead: when, where and the reply (Accept right here). After it starts: who is writing the minutes, how far they've got
+   (being written, with the COO), and for the writer a prompt that turns red after 24 hours. Published minutes show once,
+   then the meeting leaves Home. Weekly meetings follow the same path: organiser writes, COO approves and publishes. */
+function homeMeetRows(td,ap){
+  const me=S.uid, now=new Date(), hm=now.toTimeString().slice(0,5), wk=addDays(td,7), rows=[];
+  const dayOf=d=>d===td?'Today':d===addDays(td,1)?'Tomorrow':d===addDays(td,-1)?'Yesterday':`${wd(d)} ${fmtD(d)}`;
+  const soonOf=(d,t)=>{ if(d!==td||!t) return ''; const [H,M]=t.split(':').map(Number), mins=Math.round((new Date().setHours(H,M,0,0)-Date.now())/60000); return mins>=0&&mins<120?(mins<1?'now':`in ${mins} min`):''; };
+  const first=id=>(nameOf(id)||'').split(' ')[0]||'the organiser';
+  const items=[]; // {k: sort key, row}
+  const add=(d,t,o)=>items.push({k:d+(t||'99:99'),row:o});
+
+  /* project, studio and other meetings */
+  for(const m of allMeets()){
+    const p=mProj(m), c=mCat(m); if(m.projectId&&(!p||!workable(p))) continue;
+    if(m.status==='cancelled') continue;
+    const att=(m.attendees||[]).includes(me), org=m.createdBy===me, lead=c==='project'&&!!p&&isProjLead(p);
+    const where=c==='project'&&p?(p.code||p.name):mCatName(c), when=`${dayOf(m.date)}${m.time?' · '+fmtTime(m.time):''}`, open=()=>openPMeet(m.id);
+    if(m.status==='scheduled'&&!mHeld(m)){
+      if(!att&&!org) continue;
+      const need=mNeedsReply(m); if(!need&&m.date>wk) continue;
+      const r=mReply(m,me), w=org?mAwaiting(m):[];
+      const state=need?((m.rsvp&&m.rsvp[me])?'Moved · reply again':'Reply needed'):org?(w.length?`${w.length} awaiting reply`:'Everyone replied'):r?RSVP[r.r][0]:'';
+      add(m.date,m.time,{dot:need?'var(--overdue)':m.date===td?'#D7262B':'var(--early)',strong:when,soon:soonOf(m.date,m.time),title:mTitle(m),
+        meta:[state,where,m.venue||''].filter(Boolean).join(' · '),onclick:open,
+        right:need&&S.canWrite?h('button',{class:'btn btn-sm h-btn',type:'button',disabled:S.busy,onclick:()=>meetRespond(m.id,'yes',''),text:'Accept'}):null});
+      continue; }
+    const late=diff(m.date,td)>=1;
+    if(m.status==='final'){ // published; a client-facing set still to be sent stays with the pod lead
+      if(c==='project'&&pmOut(m)&&!m.sentAt&&!!p&&canLeadPM(p)) add(m.date,m.time,{dot:'var(--late)',strong:when,title:mTitle(m),meta:`Minutes published · not sent to attendees yet · ${where}`,onclick:open});
+      continue; }
+    // held and waiting for minutes ('scheduled' that has started, or 'draft')
+    const writer=S.canWrite&&(org||lead);
+    if(writer) add(m.date,m.time,{dot:late?'var(--overdue)':'var(--late)',strong:when,title:mTitle(m),
+      meta:`${m.status==='draft'?'Finish the minutes':'Write the minutes'} · ${late?'overdue':'within 24 hours'} · ${where}`,onclick:open});
+    else if(att) add(m.date,m.time,{dot:'var(--faint)',strong:when,title:mTitle(m),
+      meta:`${m.status==='draft'?`Minutes being written by ${first(m.createdBy)}`:`Held · minutes awaited from ${first(m.createdBy)}`} · ${where}`,onclick:open});
+    else if(ap&&late) add(m.date,m.time,{dot:'var(--overdue)',strong:when,title:mTitle(m),meta:`Minutes overdue · ${where} · ${nameOf(m.createdBy)}`,onclick:open});
+  }
+
+  /* weekly meeting */
+  if(!amChalkMember()){
+    const mt=()=>meetTime();
+    // next Sunday's, while it is still ahead
+    { let d=upcomingSunday(); if(d===td&&((S.meetings[d]&&S.meetings[d].time)||mt())<=hm) d=addDays(d,7);
+      { const m=S.meetings[d]||{}, org=organiserFor(d), t=m.time||mt();
+        if(m.status!=='cancelled'&&(ap||meetPeople(d,m.attendance).includes(me)))
+          add(d,t,{dot:d===td?'#D7262B':'var(--early)',strong:`${dayOf(d)} · ${fmtTime(t)}`,soon:soonOf(d,t),title:meetTitle(d),
+            meta:org===me&&!m.agenda?'You organise · write the agenda':`Weekly meeting · ${org===me?'you organise':org?'organised by '+first(org):'organiser not set'}`,
+            onclick:()=>org===me?openMeeting(d):(S.mhub='weekly',goView('meet'))}); } }
+    // held ones whose minutes aren't published yet: any saved but unpublished, plus the latest Sunday already held
+    const lastHeld=(()=>{ const ws=weekStart(td); if(ws<td||((S.meetings[ws]&&S.meetings[ws].time)||mt())<=hm) return ws; return addDays(ws,-7); })();
+    const dates=new Set(Object.keys(S.meetings).filter(d=>d<=lastHeld&&S.meetings[d]&&!['published','cancelled'].includes(S.meetings[d].status)));
+    if(organiserFor(lastHeld)&&!['published','cancelled'].includes((S.meetings[lastHeld]||{}).status)) dates.add(lastHeld);
+    for(const d of dates){ const m=S.meetings[d]||{}, org=organiserFor(d), t=m.time||mt(), late=diff(d,td)>=1;
+      const inIt=org===me||ap||(Object.keys(m.attendance||{}).length?presentIds(m.attendance):meetPeople(d,m.attendance)).includes(me);
+      if(!inIt) continue;
+      const strong=`${dayOf(d)} · ${fmtTime(t)}`, open=()=>openMeeting(d);
+      if(m.status==='submitted'){
+        if(ap) add(d,t,{dot:'var(--late)',strong,title:meetTitle(d),meta:`Approve and publish the minutes · from ${first(m.submittedBy||org)}`,onclick:open});
+        else add(d,t,{dot:'var(--faint)',strong,title:meetTitle(d),meta:'Minutes with the COO for approval',onclick:org===me?open:()=>{ S.mhub='weekly'; goView('meet'); }});
+      } else if(org===me&&S.canWrite){
+        add(d,t,{dot:m.status==='returned'||late?'var(--overdue)':'var(--late)',strong,title:meetTitle(d),
+          meta:m.status==='returned'?'Minutes returned by the COO · make the changes and resubmit':`Write the minutes and submit to the COO${late?' · overdue':''}`,onclick:open});
+      } else add(d,t,{dot:'var(--faint)',strong,title:meetTitle(d),meta:`Minutes being written by ${org?first(org):'the organiser'}`,onclick:ap?open:()=>{ S.mhub='weekly'; goView('meet'); }});
+    }
+  }
+
+  // ahead first (soonest at the top), then the ones waiting for minutes (oldest first)
+  const nowK=td+hm;
+  const ahead=items.filter(x=>x.k>=nowK).sort((a,b)=>a.k.localeCompare(b.k)), held=items.filter(x=>x.k<nowK).sort((a,b)=>a.k.localeCompare(b.k));
+  ahead.concat(held).forEach(x=>rows.push(hRow(x.row)));
+
+  /* minutes just published: once, until opened (same read state as the bell) */
+  { const st=nst(), fresh=S.nst?pubMinutes().filter(x=>!(st.read&&st.read[x.id])&&!(st.archived&&st.archived[x.id])&&x.at>(st.seenAt||'')&&diff(x.at.slice(0,10),td)<=7):[];
+    fresh.slice(0,3).forEach(x=>rows.push(hRow({dot:'var(--ontime)',strong:'Minutes published',title:x.title,meta:`${fmtD(x.date)} · ${x.where}`+actsForYou(x.mine),
+      onclick:()=>{ nSave({read:{...(nst().read||{}),[x.id]:1}}); x.open(); }})));
+    if(fresh.length>3) rows.push(hRow({dot:'var(--ontime)',strong:`${fresh.length-3} more minutes published`,meta:'In your notifications',onclick:openNotifs})); }
+
+  /* support staff on a project: log a client, consultant, authority or site meeting */
+  { const pl=(()=>{ if(!S.canWrite||fullView()||myPod()) return null; const ps=projects().filter(p=>workable(p)&&p.pod!=='Studio'&&workOn(p)); return ps.length?ps:null; })();
+    if(pl){ const sel=h('select',{id:'pm-pick','aria-label':'Project',class:'h-sel'},pl.map(p=>h('option',{value:p.id,text:p.code||p.name}))); if(S.pmPick&&pl.some(p=>p.id===S.pmPick)) sel.value=S.pmPick;
+      rows.push(hRow({dot:'var(--faint)',strong:'Log a project meeting',meta:'Within 24 hours of any client, consultant, authority or site meeting',right:h('div',{style:'display:flex;gap:6px;align-items:center'},sel,h('button',{class:'btn btn-sm h-btn',type:'button',onclick:()=>{ S.pmPick=sel.value; openPMeet(null,sel.value); },text:'+ Log'}))})); } }
+  return rows; }
 /* ---------- Home: minimal and in a fixed order ----------
-   1 greeting · 2 Today (one line per thing that needs you) · 3 Notice board · 4 My work · 5 My checklist.
+   1 greeting · 2 Today (one line per thing that needs you) · 3 Meetings (from the invite until the minutes are published)
+   4 Notice board · 5 My work · 6 My checklist.
    New tasks come from the round + button, so the header stays clean. */
 function hRow(o){ const tap=o.onclick;
   return h('div',{class:'h-row'+(tap?' tap':''),...(tap?{role:'button',tabindex:'0',onclick:e=>{ if(e.target.closest('button,select,a')) return; tap(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); tap(); } }}:{})},
@@ -2434,54 +2519,28 @@ function viewMineBody(){
     h('button',{class:'h-x',type:'button','aria-label':'Dismiss',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'×'})));
 
   /* 2 · Today: one line each */
-  const today_=[]; let nextId=null;
-  { const ms=nextMeets(); if(ms.length){ nextId=ms[0].id||null; const m=ms[0], wk=addDays(td,7), more=ms.slice(1).filter(x=>x.date<=wk).length;
-      let soon=''; if(m.date===td&&m.time){ const [H,M]=m.time.split(':').map(Number), mins=Math.round((new Date().setHours(H,M,0,0)-Date.now())/60000); if(mins>=0&&mins<120) soon=mins<1?'now':`in ${mins} min`; }
-      const day=m.date===td?'Today':m.date===addDays(td,1)?'Tomorrow':`${wd(m.date)} ${fmtD(m.date)}`;
-      today_.push(hRow({dot:m.date===td?'#D7262B':'var(--early)',strong:`${day}${m.time?' · '+fmtTime(m.time):''}`,soon,title:m.title+(m.where?' · '+m.where:''),
-        meta:(m.reply?'Reply needed · ':'')+(more?`Next meeting · ${more} more this week`:'Next meeting'),onclick:()=>{ if(m.id) return openPMeet(m.id); S.mhub='weekly'; goView('meet'); },
-        right:m.reply&&S.canWrite?h('button',{class:'btn btn-sm h-btn',type:'button',disabled:S.busy,onclick:()=>meetRespond(m.id,'yes',''),text:'Accept'}):null})); } }
+  const today_=[];
   const qn=ap?queueCount():0;
   if(qn){ const oldest=queueGroups().map(g=>g.oldest).filter(Boolean).sort()[0];
     today_.push(hRow({dot:'var(--overdue)',strong:`${qn} waiting on you`,meta:`Approvals · oldest ${ageTxt(ageOf(oldest))}`,onclick:()=>goView('queue')})); }
-  { const inv=allMeets().filter(m=>mNeedsReply(m)&&m.id!==nextId).sort((a,b)=>(a.date+(a.time||'99')).localeCompare(b.date+(b.time||'99')));
-    inv.forEach(m=>{ const p=mProj(m), where=mCat(m)==='project'&&p?(p.code||p.name):mCatName(mCat(m)), moved=m.rsvp&&m.rsvp[S.uid];
-      today_.push(hRow({dot:'var(--overdue)',strong:moved?'Moved · reply again':'Reply needed',title:mTitle(m),meta:`${mWhen(m)} · ${where} · from ${nameOf(m.createdBy)}`,onclick:()=>openPMeet(m.id),
-        right:S.canWrite?h('button',{class:'btn btn-sm h-btn',type:'button',disabled:S.busy,onclick:()=>meetRespond(m.id,'yes',''),text:'Accept'}):null})); });
-    const wait=allMeets().filter(m=>mOpenForReply(m)&&m.createdBy===S.uid&&mAwaiting(m).length);
-    if(wait.length){ const n=wait.reduce((a,m)=>a+mAwaiting(m).length,0);
-      today_.push(hRow({dot:'var(--late)',strong:`${n} ${n===1?'person hasn’t':'people haven’t'} replied`,meta:`To ${wait.length} meeting${wait.length===1?'':'s'} you set up`,onclick:()=>{ if(wait.length===1) return openPMeet(wait[0].id); S.mhub='up'; goView('meet'); }})); } }
-  { const xs=allMeets().filter(m=>{ const p=mProj(m); if(m.projectId&&(!p||!workable(p))) return false; if(['scheduled','cancelled'].includes(m.status)) return false;
-      const proj=mCat(m)==='project', own=m.createdBy===S.uid||(proj&&!!p&&isProjLead(p)); const due=m.status!=='final'||(proj&&pmOut(m)&&!m.sentAt&&!!p&&canLeadPM(p));
-      if(!due) return false; if(own&&S.canWrite) return true; return ap&&diff(m.date,td)>=1; }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    xs.forEach(m=>{ const p=mProj(m), late=diff(m.date,td)>=1;
-      today_.push(hRow({dot:m.status!=='final'&&late?'var(--overdue)':'var(--late)',strong:m.status!=='final'?(late?'Minutes overdue':'Finish the minutes'):'Minutes not sent',title:mTitle(m),
-        meta:`${fmtD(m.date)} · ${p&&mCat(m)==='project'?(p.code||p.name):mCatName(mCat(m))} · logged by ${nameOf(m.createdBy)}`,onclick:()=>openPMeet(m.id)})); }); }
-  { const st=nst(), fresh=S.nst?pubMinutes().filter(x=>!(st.read&&st.read[x.id])&&!(st.archived&&st.archived[x.id])&&x.at>(st.seenAt||'')&&diff(x.at.slice(0,10),td)<=7):[];
-    fresh.slice(0,3).forEach(x=>today_.push(hRow({dot:'var(--early)',strong:'Minutes published',title:x.title,meta:`${fmtD(x.date)} · ${x.where}`+actsForYou(x.mine),
-      onclick:()=>{ nSave({read:{...(nst().read||{}),[x.id]:1}}); x.open(); }})));
-    if(fresh.length>3) today_.push(hRow({dot:'var(--early)',strong:`${fresh.length-3} more minutes published`,meta:'In your notifications',onclick:openNotifs})); }
-  if(!amChalkMember()){ const up=upcomingSunday(), org=organiserFor(up), mm=S.meetings[up];
-    if(org===S.uid&&!['submitted','published'].includes(mm&&mm.status)) today_.push(hRow({dot:'var(--late)',strong:'Your turn to organise',title:meetTitle(up),
-      meta:`${up===td?'Today':wd(up)+' '+fmtD(up)} · ${fmtHM(meetTime())} · ${carriedActions(up).filter(t=>!t.doneAt).length} open actions to review`,onclick:()=>openMeeting(up)}));
-    else if(ap){ const sub=minutesToApprove().length; if(sub) today_.push(hRow({dot:'var(--late)',strong:`${sub} weekly minutes`,title:'to approve',onclick:()=>{ S.mhub='weekly'; goView('meet'); }})); } }
   if(amChalkLead()&&!S.isOwner){ const cr=chalkReqs().length, co=chalkTasks().filter(t=>!t.doneAt&&!t.verify&&t.target&&t.target<td).length;
     today_.push(hRow({dot:co?'var(--overdue)':'var(--ontime)',strong:'Chalk Create',title:`${co} overdue`+(cr?` · ${cr} date request${cr===1?'':'s'} with the Principal`:''),onclick:()=>{ S.view='chalk'; render(true); window.scrollTo(0,0); }})); }
   if(S.isOwner){ const xs=Object.entries(S.projects).filter(([k,p])=>p&&p.delReq&&p.delReq.by!==S.uid);
     xs.forEach(([k,p])=>today_.push(hRow({dot:'var(--overdue)',strong:'Delete project?',title:projLabel(p),meta:`${nameOf(p.delReq.by)} · ${p.delReq.reason||'No reason given'}`,onclick:()=>openProjectView(k)}))); }
-  { const pl=(()=>{ if(!S.canWrite||fullView()||myPod()) return null; const ps=projects().filter(p=>workable(p)&&p.pod!=='Studio'&&workOn(p)); return ps.length?ps:null; })();
-    if(pl){ const sel=h('select',{id:'pm-pick','aria-label':'Project',class:'h-sel'},pl.map(p=>h('option',{value:p.id,text:p.code||p.name}))); if(S.pmPick&&pl.some(p=>p.id===S.pmPick)) sel.value=S.pmPick;
-      today_.push(hRow({dot:'var(--faint)',strong:'Log a project meeting',meta:'Within 24 hours of any client, consultant, authority or site meeting',right:h('div',{style:'display:flex;gap:6px;align-items:center'},sel,h('button',{class:'btn btn-sm h-btn',type:'button',onclick:()=>{ S.pmPick=sel.value; openPMeet(null,sel.value); },text:'+ Log'}))})); } }
   const tg=hGroup('Today',today_); if(tg) out.push(tg);
 
-  /* 3 · Notice board: the top unread one in full (it needs “Got it”), the rest as lines */
+  /* 3 · Meetings: each one stays here from the invite until its minutes are published */
+  { const rows=homeMeetRows(td,ap);
+    if(rows.length) out.push(hGroup('Meetings',rows,h('button',{class:'linkish h-all',type:'button',onclick:()=>{ S.mhub='up'; goView('meet'); },text:'All'}))); }
+
+  /* 4 · Notice board: the top unread one in full (it needs “Got it”), the rest as lines */
   { const live=nAll().filter(nLive), unseen=live.filter(n=>!nSeen(n)).sort((a,b)=>(b.important-a.important)||(b.pinned-a.pinned)||b.created_at.localeCompare(a.created_at)), pinned=live.filter(n=>n.pinned&&nSeen(n));
     if(unseen.length||pinned.length){ const go=()=>{ S.view='notice'; render(true); window.scrollTo(0,0); };
       const rows=[...unseen.slice(1),...pinned].slice(0,4).map(n=>hRow({dot:!nSeen(n)?(n.important?'#D7262B':'var(--early)'):'var(--faint)',strong:n.title,meta:`${nSeen(n)?'Pinned':'Unread'} · ${nameOf(n.created_by)} · ${fmtD(n.created_at.slice(0,10))}`,onclick:go}));
       out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notice board'}),h('button',{class:'linkish h-all',type:'button',onclick:go,text:'All'})),
         unseen.length?noticeCard(unseen[0],{clamp:true}):null,rows.length?h('div',{class:'h-list'},rows):null)); } }
 
-  /* 4 · My work */
+  /* 5 · My work */
   if(mine.length){
     const r=range('month',0), c=count(mine.filter(t=>t.target>=r.s&&t.target<=r.e),'approved'), nOpen=mine.filter(t=>!t.doneAt).length, nOver=mine.filter(t=>status(t)==='overdue').length;
     const stat=(n,l,col)=>h('div',{class:'h-stat'},h('b',{style:col&&n?`color:${col}`:'',text:String(n)}),h('span',{text:l}));
@@ -2493,11 +2552,11 @@ function viewMineBody(){
     [list('attn','Needs attention',attn,5),list('vf','Waiting for verification',vfl,3),list('nodate','Waiting for a date',nodate,3),prog.length||attn.length||nodate.length?list('prog','In progress',prog,5):null,list('done','Recently completed',done,3)].forEach(x=>{ if(x) out.push(x); });
     if(!attn.length&&!prog.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:'Nothing open. Enjoy the clear desk.'}));
   }
-  /* 5 · My checklist */
+  /* 6 · My checklist */
   const mcl=myChecklist(); if(mcl.length){ const el=myChecklistSec(mcl); const lst=el.querySelector('.list'); if(lst&&mcl.length>5&&!(S.homeMore&&S.homeMore.cl)){ [...lst.children].slice(5).forEach(x=>x.remove()); }
     if(mcl.length>5){ el.querySelectorAll('.f-hint').forEach(x=>x.remove()); el.append(h('button',{class:'h-more',type:'button',style:'justify-self:start',onclick:()=>{ S.homeMore={...(S.homeMore||{}),cl:!(S.homeMore&&S.homeMore.cl)}; render(true); },text:S.homeMore&&S.homeMore.cl?'Show less':`Show all ${mcl.length}`})); }
     out.push(el); }
-  if(!mine.length&&!mcl.length&&!tg) out.push(onboarding());
+  if(!mine.length&&!mcl.length&&!tg&&!homeMeetRows(td,ap).length) out.push(onboarding());
   return out;
 }
 
