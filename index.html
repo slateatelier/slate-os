@@ -2383,6 +2383,10 @@ function viewMineBody(){
     xs.forEach(m=>{ const p=mProj(m), late=diff(m.date,td)>=1;
       today_.push(hRow({dot:m.status!=='final'&&late?'var(--overdue)':'var(--late)',strong:m.status!=='final'?(late?'Minutes overdue':'Finish the minutes'):'Minutes not sent',title:mTitle(m),
         meta:`${fmtD(m.date)} · ${p&&mCat(m)==='project'?(p.code||p.name):mCatName(mCat(m))} · logged by ${nameOf(m.createdBy)}`,onclick:()=>openPMeet(m.id)})); }); }
+  { const st=nst(), fresh=S.nst?pubMinutes().filter(x=>!(st.read&&st.read[x.id])&&!(st.archived&&st.archived[x.id])&&x.at>(st.seenAt||'')&&diff(x.at.slice(0,10),td)<=7):[];
+    fresh.slice(0,3).forEach(x=>today_.push(hRow({dot:'var(--early)',strong:'Minutes published',title:x.title,meta:`${fmtD(x.date)} · ${x.where}`+actsForYou(x.mine),
+      onclick:()=>{ nSave({read:{...(nst().read||{}),[x.id]:1}}); x.open(); }})));
+    if(fresh.length>3) today_.push(hRow({dot:'var(--early)',strong:`${fresh.length-3} more minutes published`,meta:'In your notifications',onclick:openNotifs})); }
   if(!amChalkMember()){ const up=upcomingSunday(), org=organiserFor(up), mm=S.meetings[up];
     if(org===S.uid&&!['submitted','published'].includes(mm&&mm.status)) today_.push(hRow({dot:'var(--late)',strong:'Your turn to organise',title:meetTitle(up),
       meta:`${up===td?'Today':wd(up)+' '+fmtD(up)} · ${fmtHM(meetTime())} · ${carriedActions(up).filter(t=>!t.doneAt).length} open actions to review`,onclick:()=>openMeeting(up)}));
@@ -3448,6 +3452,18 @@ function viewTeam(){
    Pod leads: their pod's activity, deadlines and requests. Members: their own work and deadlines.
    Everyone: upcoming submissions, a Sunday weekly update and a Thursday "next week's submissions" list. */
 const NCAT={action:'Needs action',deadline:'Deadlines',update:'Updates',weekly:'Weekly'};
+/* Minutes published, for the people who attended: weekly minutes once the COO publishes them, other meetings once finalised.
+   The ids match the bell's, so opening one from Home or the bell marks it read in both places. */
+function pubMinutes(){ const me=S.uid, out=[]; if(!me) return out;
+  for(const [d,m] of Object.entries(S.meetings||{})){ if(!m||m.status!=='published'||!m.publishedAt||m.publishedBy===me||!(m.attendees||[]).includes(me)) continue;
+    const mine=(m.actions||[]).filter(a=>a.owner===me||(a.owners||[]).includes(me)).length;
+    out.push({id:`mtp:${d}`,at:m.publishedAt,title:meetTitle(d),date:d,where:'Weekly meeting',by:m.publishedBy||'',mine,open:()=>openMeeting(d)}); }
+  for(const m of allMeets()){ if(m.status!=='final'||!m.finalAt||!(m.attendees||[]).includes(me)) continue;
+    const fin=((m.history||[]).find(x=>x.type==='final')||{}).by||m.updatedBy||m.createdBy; if(fin===me) continue;
+    const p=mProj(m), mine=(m.actions||[]).filter(a=>a.owner===me).length;
+    out.push({id:`mfp:${m.id}`,at:m.finalAt,title:mTitle(m),date:m.date,where:mCat(m)==='project'&&p?(p.code||p.name):mCatName(mCat(m)),by:fin,mine,open:()=>openPMeet(m.id)}); }
+  return out.sort((a,b)=>b.at.localeCompare(a.at)); }
+const actsForYou=n=>n?` · ${n} action${n===1?'':'s'} for you`:'';
 const NKEEP=14, NSPAN=60;
 const atLocal=(d,hh)=>{ const [y,m,dd]=d.split('-').map(Number); return new Date(y,m-1,dd,hh||8).toISOString(); };
 const weekStart=d=>{ const [y,m,dd]=d.split('-').map(Number); const x=new Date(y,m-1,dd); return addDays(d,-x.getDay()); };
@@ -3514,7 +3530,7 @@ function buildNotifs(){
     }
     { const last=today()===weekStart(today())?today():weekStart(today()), lm=S.meetings[last]||{}; if(organiserFor(last)===me&&!['submitted','published'].includes(lm.status)) add({id:`mtc:${last}`,cat:'action',at:atLocal(last,14),title:`Complete the minutes of today’s meeting (${fmtD(last)})`,body:'Add attendance, notes, decisions and action items, then submit to the COO.',view:'meet'}); }
     if(org) add({id:`mtd:${up}`,cat:'deadline',at:atLocal(up,9),title:`Weekly meeting today at ${fmtHM(meetTime())}`,body:`Organised by ${nameOf(org)}`+(mt.agenda?'\nAgenda: '+mt.agenda.split('\n').filter(Boolean).slice(0,4).join(' · '):''),view:'meet'});
-    for(const [d,m] of Object.entries(S.meetings)) if(m.status==='published'&&m.publishedAt&&m.publishedBy!==me) add({id:`mtp:${d}`,cat:'update',at:m.publishedAt,title:`Minutes published: meeting of ${fmtD(d)}`,body:`${(m.decisions||'').split('\n').filter(Boolean).length} decisions · ${(m.actions||[]).length} action items`+((m.actions||[]).some(a=>a.owner===me)?' · includes an action for you':''),view:'meet'}); }
+    for(const [d,m] of Object.entries(S.meetings)) if(m.status==='published'&&m.publishedAt&&m.publishedBy!==me) add({id:`mtp:${d}`,cat:'update',at:m.publishedAt,title:`Minutes published: meeting of ${fmtD(d)}`,body:`${(m.decisions||'').split('\n').filter(Boolean).length} decisions · ${(m.actions||[]).length} action items`+((m.actions||[]).some(a=>a.owner===me||(a.owners||[]).includes(me))?' · includes an action for you':''),view:'meet'}); }
   // meetings set up ahead: invites, today's meetings, call-offs and minutes still to write
   for(const m of allMeets()){ const inv=(m.attendees||[]).includes(me)&&m.createdBy!==me;
     if(m.status==='cancelled'&&inv&&m.cancelledAt&&m.cancelledBy!==me) add({id:`mc:${m.id}`,cat:'update',at:m.cancelledAt,title:`${nameOf(m.cancelledBy)} called off: ${mTitle(m)}`,body:mWhen(m)+(m.cancelNote?`\n“${m.cancelNote}”`:''),meetId:m.id});
@@ -3526,6 +3542,8 @@ function buildNotifs(){
       add({id:`ma:${m.id}:${mVer(m)}`,cat:'action',pending:true,at:due,title:`No reply yet: ${mTitle(m)}`,body:`${mWhen(m)}\nWaiting on ${w.map(id=>nameOf(id).split(' ')[0]).join(', ')}`,meetId:m.id}); } }
     if((inv||m.createdBy===me)&&m.date===td) add({id:`mt:${m.id}:${m.date}`,cat:'deadline',at:atLocal(td,8),title:`Meeting today${m.time?' at '+fmtTime(m.time):''}: ${mTitle(m)}`,body:[m.venue,(m.attendees||[]).length+' attending'].filter(Boolean).join(' · '),meetId:m.id});
     if(mHeld(m)&&canEditM(m)) add({id:`mw:${m.id}`,cat:'action',pending:true,at:atLocal(m.date,m.time&&+m.time.slice(0,2)<22?+m.time.slice(0,2)+1:20),title:`Write the minutes: ${mTitle(m)}`,body:mWhen(m)+' · within 24 hours',meetId:m.id}); }
+  // minutes finalised for meetings I attended (weekly minutes are announced above)
+  for(const x of pubMinutes()) if(x.id.startsWith('mfp:')) add({id:x.id,cat:'update',at:x.at,title:`Minutes published: ${x.title}`,body:`${wd(x.date)} ${fmtD(x.date)} · ${x.where} · by ${nameOf(x.by)}`+actsForYou(x.mine),meetId:x.id.slice(4)});
   // 3. deadlines
   const watch=boss?ts.filter(t=>t.kind==='Deliverable'):lead?ts.filter(t=>t.assignee===me||podsOf(t).includes(mp)):ts.filter(t=>t.assignee===me);
   for(const t of watch){ if(t.doneAt||!t.target) continue; const who=t.assignee===me?'':` · ${nameOf(t.assignee)}`, kind=t.kind==='Deliverable'?'Deliverable':'Task';
