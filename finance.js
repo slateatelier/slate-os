@@ -522,7 +522,7 @@ function invoiceForm(i, preset = {}) {
   const segBtn = (grp, v, l) => `<button type="button" data-pick="${grp}" data-v="${v}" aria-pressed="false">${l}</button>`;
   openSheet(`${sheetHead(i ? 'Edit draft invoice' : 'New invoice', i ? esc(i.no) : 'Pick the project and the milestone you’re billing.')}
   <form id="if">
-    <label class="f" for="i_proj">Project<select id="i_proj" name="projectId">${active.map(p => opt(p.id, `${p.code} · ${p.client || p.name}`, p.id === pid)).join('')}</select></label>
+    <label class="f" for="i_proj">Project<select id="i_proj" name="projectId">${active.map(p => opt(p.id, `${p.code} · ${p.name}${p.client && p.client !== p.name ? ' (' + p.client + ')' : ''}`, p.id === pid)).join('')}</select></label>
     <label class="f" for="i_ms">Milestone<select id="i_ms" name="milestoneId"></select></label>
     <label class="f" for="i_desc">Description on invoice<input id="i_desc" name="desc" required value="${esc(i?.desc)}"></label>
     <div class="fg">
@@ -928,7 +928,7 @@ function expensesView() {
 }
 function expRow(x) {
   const p = x.projectId ? prj(x.projectId) : null;
-  return `<button class="row r-exp" data-act="open-exp" data-id="${x.id}"><div style="min-width:0"><div class="t">${esc(x.desc)}</div><div class="sub">${esc(x.category)}${x.payee ? ' · ' + esc(x.payee) : ''}${p ? ' · <span class="mono">' + esc(p.code) + '</span>' : ''}</div></div>
+  return `<button class="row r-exp" data-act="open-exp" data-id="${x.id}"><div style="min-width:0"><div class="t">${esc(x.desc)}</div><div class="sub">${esc(x.category)}${x.payee ? ' · ' + esc(x.payee) : ''}${p ? ' · <span class="mono">' + esc(p.code) + '</span> · ' + esc(p.name) : ''}</div></div>
     <div class="c2 sub">${fmtDate(x.date)}</div>${expChip(x)}<div class="amt">${tk(x.amount)}</div></button>`;
 }
 function expenseForm(x) {
@@ -1054,7 +1054,7 @@ function workordersView() {
     <input type="search" id="q" placeholder="Search vendor, scope or number" value="${esc(S.f.q)}"></div>
   <div class="panel"><div class="ph"><h3>${list.length} work order${list.length === 1 ? '' : 's'}</h3></div>
   ${list.length ? `<div class="rows">${list.map(w => { const p = w.projectId ? prj(w.projectId) : null, set = woSettled(w);
-    return `<button class="row r-inv" data-act="open-wo" data-id="${w.id}"><div style="min-width:0"><div class="t">${esc(w.vendor)} · ${esc(w.scope ? w.scope.split('\n')[0] : w.type)}</div><div class="sub"><span class="mono">${esc(w.no)}</span> · ${esc(w.type)}${p ? ' · <span class="mono">' + esc(p.code) + '</span>' : ''}</div></div>
+    return `<button class="row r-inv" data-act="open-wo" data-id="${w.id}"><div style="min-width:0"><div class="t">${esc(w.vendor)} · ${esc(w.scope ? w.scope.split('\n')[0] : w.type)}</div><div class="sub"><span class="mono">${esc(w.no)}</span> · ${esc(w.type)}${p ? ' · <span class="mono">' + esc(p.code) + '</span> · ' + esc(p.name) : ''}</div></div>
       <div class="c2 sub">${fmtDate(w.date)}</div>${woChip(w)}<div class="amt">${tk(w.amount)}${set ? `<small>${tk(woLeft(w))} left</small>` : ''}</div></button>`; }).join('')}</div>`
     : `<div class="empty"><strong>No work orders here</strong>Engage a consultant or vendor with New work order.</div>`}</div>
   ${owed > 0 ? `<p class="hint">Tax withheld from vendors and salaries belongs to the government. Deposit it by treasury challan, then record that as an expense under “Tax deposited (AIT/VDS withheld)”.</p>` : ''}`;
@@ -1111,7 +1111,7 @@ function woForm(w) {
 function woSheet(w) {
   const st = w.status || 'pending', p = w.projectId ? prj(w.projectId) : null, pays = woPays(w), left = woLeft(w);
   const wh = pays.reduce((s, x) => s + (+x.ait || 0) + (+x.vds || 0), 0);
-  openSheet(`${sheetHead(w.vendor, `<span class="mono">${esc(w.no)}</span> · ${esc(w.type)}${p ? ' · <span class="mono">' + esc(p.code) + '</span>' : ''}`)}
+  openSheet(`${sheetHead(w.vendor, `<span class="mono">${esc(w.no)}</span> · ${esc(w.type)}${p ? ' · <span class="mono">' + esc(p.code) + '</span> · ' + esc(p.name) : ''}`)}
     <div style="display:flex;gap:8px;align-items:center;margin:-6px 0 14px;flex-wrap:wrap">${woChip(w)}<span class="hint">${fmtDate(w.date)}${w.deliverBy ? ' · deliver by ' + fmtDate(w.deliverBy) : ''}</span></div>
     ${w.scope ? `<p style="margin:0 0 12px;white-space:pre-line">${esc(w.scope)}</p>` : ''}
     <dl class="kv"><dt>Value</dt><dd>${tk(w.amount)}</dd><dt>Settled so far</dt><dd>${tk(woSettled(w))}</dd><dt>of which tax withheld</dt><dd>${tk(wh)}</dd><dt class="tot">Left to pay</dt><dd class="tot">${tk(left)}</dd>
@@ -1937,7 +1937,7 @@ function forecastView() {
       <tr><td style="padding-left:20px">Vendors</td>${R.map(r => `<td class="neg">${r.wo ? n(r.wo) : '–'}</td>`).join('')}</tr></tbody>
     <tfoot><tr><td>Closing</td>${R.map(r => `<td class="${r.close < 0 ? 'neg' : ''}">${n(r.close)}</td>`).join('')}</tr></tfoot></table></div></div>
   <div class="panel"><div class="ph"><h3>When will you bill these milestones?</h3><span class="meta">${unplanned.filter(x => x.m.expect).length} of ${unplanned.length} planned</span></div>
-    ${unplanned.length ? `<div class="rows">${unplanned.map(({ p, m }) => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${esc(m.label)}</div><div class="sub"><span class="mono">${esc(p.code)}</span> · ${esc(p.client || p.name)} · ${tk((+p.fee || 0) * m.pct / 100)}</div></div>
+    ${unplanned.length ? `<div class="rows">${unplanned.map(({ p, m }) => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${esc(m.label)}</div><div class="sub"><span class="mono">${esc(p.code)}</span> · ${esc(p.name)} · ${tk((+p.fee || 0) * m.pct / 100)}</div></div>
       <input type="month" class="msExpect" data-pid="${p.id}" data-mid="${m.id}" value="${esc(m.expect || '')}" min="${today().slice(0, 7)}" aria-label="Expected billing month" style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:5px 6px;font-size:13px;max-width:150px"><span></span></div>`).join('')}</div>`
       : `<div class="empty">Every active milestone has been invoiced.</div>`}</div>
   <p class="hint">A forecast is only as good as its inputs: set the expected month for each milestone above, keep salary sheets and work orders current, and set a budget for running costs.</p>`;

@@ -80,6 +80,7 @@ main{padding-block:24px 80px;display:grid;gap:24px}
 .row-main{min-width:0}
 .row-title{font-weight:500;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .row-meta{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 6px;margin-top:2px}
+.row-pn,.pn{font-size:12.5px;color:var(--muted);margin-top:1px;line-height:1.35;overflow-wrap:anywhere}
 .row-date{text-align:right;min-width:72px}
 .row-date .lbl{font-size:11px}
 .row-date .mono{font-size:13px}
@@ -240,7 +241,8 @@ main.wide{max-width:1160px}
 .wl button:first-child{border-top:0}
 .wl .t{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wl .m{font-size:12px;color:var(--muted);grid-column:1}
-.wl .d{grid-row:1/3;grid-column:2;align-self:center;font-size:12.5px;font-weight:600;font-family:var(--mono)}
+.wl .pn{grid-column:1;margin-top:0}
+.wl .d{grid-row:1/4;grid-column:2;align-self:center;font-size:12.5px;font-weight:600;font-family:var(--mono)}
 .w-empty{font-size:13px;color:var(--muted);padding:8px 0}
 /* ---- board (kanban) ---- */
 .board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:12px;overflow-x:auto;padding-bottom:6px;align-items:start}
@@ -1269,7 +1271,7 @@ function loadPanel(id,excl){
   return h('div',{class:'load',style:'display:grid;gap:8px;background:#fff;border-radius:8px;padding:10px 12px'},
     h('div',{style:'display:flex;justify-content:space-between;gap:8px;align-items:baseline'},h('span',{style:'font-weight:600;font-size:14px',text:`${nameOf(id)}’s current load`}),h('span',{class:'f-hint',text:teamLabel(id)})),
     h('div',{style:'display:flex;flex-wrap:wrap;gap:6px'},chip('Open',c.open),chip('Overdue',c.overdue,c.overdue?'tag-req':''),chip('Due in 7 days',c.week),chip('Later',c.later),chip('No date',c.nodate),c.pending?chip('Other pending requests',c.pending):null),
-    c.list.length?h('div',{style:'display:grid;gap:4px'},c.list.slice(0,5).map(t=>{const p=S.projects[t.projectId];return h('div',{style:'display:flex;justify-content:space-between;gap:10px;font-size:13px'},h('span',{style:'overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${t.title} · ${p?(p.code||p.name):''}`}),h('span',{class:'mono',style:'white-space:nowrap;'+(t.target&&t.target<today()?'color:var(--overdue)':''),text:t.target?fmtD(t.target):'—'}))}),c.list.length>5?h('div',{class:'f-hint',text:`and ${c.list.length-5} more`}):null):h('div',{class:'f-hint',text:'No open tasks right now.'}));
+    c.list.length?h('div',{style:'display:grid;gap:4px'},c.list.slice(0,5).map(t=>{const p=S.projects[t.projectId];return h('div',{style:'display:flex;justify-content:space-between;gap:10px;font-size:13px'},h('span',{style:'min-width:0'},h('span',{style:'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${t.title} · ${p?(p.code||p.name):''}`}),p&&p.code?h('span',{class:'pn',style:'display:block',text:p.name}):null),h('span',{class:'mono',style:'white-space:nowrap;'+(t.target&&t.target<today()?'color:var(--overdue)':''),text:t.target?fmtD(t.target):'—'}))}),c.list.length>5?h('div',{class:'f-hint',text:`and ${c.list.length-5} more`}):null):h('div',{class:'f-hint',text:'No open tasks right now.'}));
 }
 function assignCard(t,inSheet){
   const r=t.assignReq, p=S.projects[t.projectId], key='as:'+t.id;
@@ -2087,7 +2089,7 @@ function quickDone(t){
 function row(t,o={}){
   const p=S.projects[t.projectId];
   const meta=[];
-  if(o.project!==false&&p){ if(p.code) meta.push(h('span',{class:'mono',text:p.code})); meta.push(h('span',{text:p.name})); }
+  if(o.project!==false&&p) meta.push(p.code?h('span',{class:'mono',text:p.code}):h('span',{text:p.name}));
   if(noTech(p)) meta.push(h('span',{class:'tech-mark',title:TECH_TIP+(p.techNote?': '+p.techNote:''),'aria-label':TECH_TIP,text:'⚠ No client tech'}));
   if(t.phase) meta.push(h('span',{text:t.phase}));
   if(o.person!==false){ const pid=t.assignReq?t.assignReq.to:t.assignee; meta.push(h('span',{class:'who'},pid?avaEl(pid,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (awaiting approval)`:nameOf(t.assignee))); }
@@ -2104,7 +2106,8 @@ function row(t,o={}){
         t.parentId&&h('span',{class:'tag',style:'color:var(--early)',text:'Client revision'}),
         t.revCount&&h('span',{class:'tag',text:`${t.revCount} revision${t.revCount>1?'s':''}`}),
         t.archived&&h('span',{class:'tag',text:t.held?'Frozen':t.dropped?'Dropped':'Archived'})),
-      metaEls.length?h("div",{class:"row-meta"},metaEls):null),
+      metaEls.length?h("div",{class:"row-meta"},metaEls):null,
+      o.project!==false&&p&&p.code?h('div',{class:'row-pn',text:p.name}):null),
     h('div',{class:'row-date'},h('div',{class:'lbl',text:t.doneAt?'Completed':t.target?((t.revisions||0)?`Target · Date ${(t.revisions||0)+1}`:'Target'):'Target'}),h('div',{class:'mono',text:t.doneAt||t.target?fmtD(t.doneAt||t.target):'Pending'}),!t.doneAt&&t.time?h('div',{class:'mono',style:'font-size:12px;color:var(--muted)',text:fmtTime(t.time)}):null),
     pill(t));
 }
@@ -2740,7 +2743,7 @@ function viewDash(){
     h('div',{class:'track',style:'overflow:visible','data-tip':`${podLabel(x.p)}\n${x.rt==null?'Nothing due and past yet':Math.round(x.rt*100)+'% on time or early'}\n${x.c.total} due`},x.rt!=null&&h('span',{class:x.rt*100>=tg?'s-ontime':'s-overdue',style:`flex:0 0 ${x.rt*100}%`}),h('i',{class:'goal',style:`left:${tg}%`})),
     h('span',{class:'v',text:x.rt==null?'—':Math.round(x.rt*100)+'%'})))):h('div',{class:'w-empty',text:'No pod has tasks due in this period.'})));
   // lists
-  const listW=(title,sub,ts,dateFn,empty)=>widget(title,sub,ts.length?h('div',{class:'wl'},ts.slice(0,8).map(t=>{const p=S.projects[t.projectId];return h('button',{type:'button',onclick:()=>openTask(t.id)},h('span',{class:'t',text:t.title}),h('span',{class:'m',text:`${p?(p.code||p.name):'—'} · ${nameOf(t.assignee)}`}),dateFn(t));})):h('div',{class:'w-empty',text:empty}));
+  const listW=(title,sub,ts,dateFn,empty)=>widget(title,sub,ts.length?h('div',{class:'wl'},ts.slice(0,8).map(t=>{const p=S.projects[t.projectId];return h('button',{type:'button',onclick:()=>openTask(t.id)},h('span',{class:'t',text:t.title}),h('span',{class:'m',text:`${p?(p.code||p.name):'—'} · ${nameOf(t.assignee)}`}),p&&p.code?h('span',{class:'pn',text:p.name}):null,dateFn(t));})):h('div',{class:'w-empty',text:empty}));
   const td=today(), wk=addDays(td,7);
   const overdue=activeTasks().filter(t=>inPod(t)&&!t.doneAt&&t.target&&t.target<td).sort(byTarget);
   W.push(listW('Overdue',`${overdue.length} open past target`,overdue,t=>h('span',{class:'d',style:'color:var(--overdue)',text:`${diff(t.target,td)}d late`}),'Nothing overdue.'));
@@ -2788,6 +2791,7 @@ function viewBoard(){
       ondragend:()=>el.classList.remove('dragging')}),
       h('div',{class:'kt',text:t.title}),
       h('div',{class:'km'},p&&h('span',{class:'mono',text:p.code||p.name}),t.phase&&h('span',{text:'· '+t.phase})),
+      p&&p.code&&h('div',{class:'pn',style:'margin-top:-4px',text:p.name}),
       h('div',{class:'kf'},h('span',{class:'f-hint who'},(t.assignReq?t.assignReq.to:t.assignee)?avaEl(t.assignReq?t.assignReq.to:t.assignee,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (pending)`:nameOf(t.assignee)),pill(t)),
       (t.kind==='Deliverable'||t.request||t.assignReq)&&h('div',{class:'km'},t.kind==='Deliverable'&&h('span',{class:'tag',text:'Deliverable'}),t.request&&h('span',{class:'tag tag-req',text:'Date request'}),t.assignReq&&h('span',{class:'tag tag-req',text:'Assignment pending'})),
       mv&&!t.doneAt?(()=>{ const i=STAGES.findIndex(x=>x[0]===stageOf(t)), pv=STAGES[i-1], nx=STAGES[i+1];
@@ -3476,7 +3480,7 @@ function wkLine(label,ts,s,e){ const c=count(ts.filter(t=>t.target&&t.target>=s&
 function buildNotifs(){
   const me=S.uid, now=new Date().toISOString(), td=today(), from=addDays(td,-NSPAN), boss=isBoss(), lead=amPodLead(), mp=myPod(), out=[];
   const add=n=>{ if(n.at<=now&&(n.pending||n.at.slice(0,10)>=from)) out.push(n); };
-  const proj=t=>{ const p=S.projects[t.projectId]; return p?(p.code||p.name):''; };
+  const proj=t=>{ const p=S.projects[t.projectId]; return p?(p.code||p.name):''; }, pn=(t,ind='')=>{ const p=S.projects[t.projectId]; return p&&p.code?`\n${ind}${p.name}`:''; };
   const ts=scopeRaw();
   // 1. activity from task history
   for(const t of ts){ for(const e of (t.history||[])){ if(!e.at||e.by===me||e.at.slice(0,10)<from) continue;
@@ -3490,7 +3494,7 @@ function buildNotifs(){
       if(['stage'].includes(e.type)&&!boss&&!mineT) continue;
       const still=cat==='action'&&boss?((e.type==='request'||e.type==='proposed')?!!t.request:e.type==='assignRequested'?!!t.assignReq:false):true;
       const ttl=!boss&&cat==='action'&&toMe?`${nameOf(e.by)} assigned you a ${t.kind==='Deliverable'?'deliverable':'task'}`+(t.target?` due ${fmtD(t.target)}`:''):histText(e);
-      add({id:`h:${t.id}:${e.at}:${e.type}`,cat:boss&&cat==='action'&&!still?'update':cat,pending:boss&&cat==='action'&&still,at:e.at,title:ttl,body:`${t.title} · ${proj(t)}`+(e.note?`\n“${e.note}”`:''),taskId:t.id}); } }
+      add({id:`h:${t.id}:${e.at}:${e.type}`,cat:boss&&cat==='action'&&!still?'update':cat,pending:boss&&cat==='action'&&still,at:e.at,title:ttl,body:`${t.title} · ${proj(t)}`+pn(t)+(e.note?`\n“${e.note}”`:''),taskId:t.id}); } }
   // 2. requests waiting for the Principal / COO: they stay in the inbox until decided, and open Approvals
   if(boss){ const Q=(o)=>add({cat:'action',pending:true,view:'queue',...o}), nowIso='2026-10-01T00:00:00.000Z'; /* a fixed time for the rare request without one, so it isn't new on every look */
     podRequests().forEach(x=>Q({id:`pr:${x.pid}:${x.d.at}`,at:x.d.at,title:`${nameOf(x.author)} asks to add ${nameOf(x.pid)} to ${podLabel(x.d.pod)}`,body:'Pod team request'}));
@@ -3548,12 +3552,12 @@ function buildNotifs(){
   const watch=boss?ts.filter(t=>t.kind==='Deliverable'):lead?ts.filter(t=>t.assignee===me||podsOf(t).includes(mp)):ts.filter(t=>t.assignee===me);
   for(const t of watch){ if(t.doneAt||!t.target) continue; const who=t.assignee===me?'':` · ${nameOf(t.assignee)}`, kind=t.kind==='Deliverable'?'Deliverable':'Task';
     const left=diff(td,t.target);
-    if(left<0) add({id:`od:${t.id}:${t.target}`,cat:'deadline',at:atLocal(addDays(t.target,1),9),title:`${kind} overdue since ${fmtD(t.target)}: ${t.title}`,body:`${proj(t)}${who}`+(t.assignee===me?'\nMark it done or request a new date with a reason.':''),taskId:t.id});
-    else if(left<=3){ const w=Math.min(3,left); add({id:`due:${t.id}:${t.target}`,cat:'deadline',at:atLocal(addDays(t.target,-w),8),title:left===0?`Due today: ${t.title}`:left===1?`Due tomorrow: ${t.title}`:`Due ${wd(t.target)} ${fmtD(t.target)}: ${t.title}`,body:`${kind} · ${proj(t)}${who}`,taskId:t.id}); }
+    if(left<0) add({id:`od:${t.id}:${t.target}`,cat:'deadline',at:atLocal(addDays(t.target,1),9),title:`${kind} overdue since ${fmtD(t.target)}: ${t.title}`,body:`${proj(t)}${who}`+pn(t)+(t.assignee===me?'\nMark it done or request a new date with a reason.':''),taskId:t.id});
+    else if(left<=3){ const w=Math.min(3,left); add({id:`due:${t.id}:${t.target}`,cat:'deadline',at:atLocal(addDays(t.target,-w),8),title:left===0?`Due today: ${t.title}`:left===1?`Due tomorrow: ${t.title}`:`Due ${wd(t.target)} ${fmtD(t.target)}: ${t.title}`,body:`${kind} · ${proj(t)}${who}`+pn(t),taskId:t.id}); }
   }
   // tasks still without a date (weekly nudge)
   const nod=(boss?[]:lead?ts.filter(t=>podsOf(t).includes(mp)):ts.filter(t=>t.assignee===me)).filter(t=>!t.doneAt&&!t.target&&!t.request&&t.createdAt&&diff(t.createdAt.slice(0,10),td)>=3);
-  if(nod.length){ const ws=weekStart(td); add({id:`nod:${ws}`,cat:'action',at:atLocal(ws,9),title:`${nod.length} task${nod.length>1?'s have':' has'} no target date yet`,body:nod.slice(0,5).map(t=>`· ${t.title} (${proj(t)})`).join('\n')+(nod.length>5?`\n· and ${nod.length-5} more`:'')+(lead?'\nPropose the timeline so the COO can approve it.':'\nAsk your pod lead to propose a date.'),view:lead?'all':'mine'}); }
+  if(nod.length){ const ws=weekStart(td); add({id:`nod:${ws}`,cat:'action',at:atLocal(ws,9),title:`${nod.length} task${nod.length>1?'s have':' has'} no target date yet`,body:nod.slice(0,5).map(t=>`· ${t.title} (${proj(t)})`+pn(t,'   ')).join('\n')+(nod.length>5?`\n· and ${nod.length-5} more`:'')+(lead?'\nPropose the timeline so the COO can approve it.':'\nAsk your pod lead to propose a date.'),view:lead?'all':'mine'}); }
   // 4. weekly update (Sunday) and next week's submissions (Thursday), last 8 weeks
   const first=Object.values(S.tasks).map(t=>(t.createdAt||'').slice(0,10)).filter(Boolean).sort()[0]||td;
   for(let k=0;k<8;k++){ const ws=addDays(weekStart(td),-7*k), ps=addDays(ws,-7), pe=addDays(ws,-1); if(addDays(ws,6)<first) break;
@@ -3569,7 +3573,7 @@ function buildNotifs(){
     const due=(boss?ts.filter(t=>t.kind==='Deliverable'):lead?ts.filter(t=>podsOf(t).includes(mp)):ts.filter(t=>t.assignee===me)).filter(t=>t.target&&t.target>=ns&&t.target<=ne&&!t.doneAt).sort(byTarget);
     const tasksN=boss?ts.filter(t=>t.target&&t.target>=ns&&t.target<=ne&&!t.doneAt).length:0;
     add({id:`nx:${ns}`,cat:'weekly',at:atLocal(th,12),title:`Next week’s submissions · ${fmtD(ns)} – ${fmtD(addDays(ns,4))}`,
-      body:due.length?due.slice(0,10).map(t=>`${wd(t.target)} ${fmtD(t.target)} · ${t.title}${t.kind==='Deliverable'&&!boss?' (deliverable)':''} · ${proj(t)}${t.assignee!==me?' · '+nameOf(t.assignee):''}`).join('\n')+(due.length>10?`\nand ${due.length-10} more`:'')+(boss?`\n${tasksN} task${tasksN===1?'':'s'} due in all`:''):(boss?`No deliverables due. ${tasksN} task${tasksN===1?'':'s'} due in all.`:'Nothing due next week.'),view:'gantt'});
+      body:due.length?due.slice(0,10).map(t=>`${wd(t.target)} ${fmtD(t.target)} · ${t.title}${t.kind==='Deliverable'&&!boss?' (deliverable)':''} · ${proj(t)}${t.assignee!==me?' · '+nameOf(t.assignee):''}`+pn(t,'   ')).join('\n')+(due.length>10?`\nand ${due.length-10} more`:'')+(boss?`\n${tasksN} task${tasksN===1?'':'s'} due in all`:''):(boss?`No deliverables due. ${tasksN} task${tasksN===1?'':'s'} due in all.`:'Nothing due next week.'),view:'gantt'});
   }
   return out.sort((a,b)=>b.at.localeCompare(a.at));
 }
@@ -4559,7 +4563,7 @@ function myChecklistSec(list){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
     h('div',{class:'list'},list.slice(0,40).map(({p,k,it})=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
       h('button',{class:'chk',type:'button','aria-label':'Tick “'+it.t+'”',title:'Tick when done and checked',disabled:S.busy||!S.canWrite,onclick:e=>fxTick(e,()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'))}),
-      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k)}))),
+      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k)})),p.code?h('div',{class:'row-pn',text:p.name}):null),
       h('span'),h('span')))),
     list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
 }
@@ -5439,7 +5443,7 @@ function sheetLeave(){
   // checklist
   if(cl.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Checklist items'}),h('span',{class:'cnt',text:String(cl.length)})),
     h('div',{class:'card',style:'gap:8px'},cl.map(c=>{ const key=`${c.pid}|${c.k}|${c.iid}`;
-      return h('div',{class:'lv-row'},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:c.title}),h('div',{class:'row-meta',text:`${c.p.code||c.p.name} · phase ${phLabel(c.k)}`})),
+      return h('div',{class:'lv-row'},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:c.title}),h('div',{class:'row-meta',text:`${c.p.code||c.p.name} · phase ${phLabel(c.k)}`}),c.p.code?h('div',{class:'row-pn',text:c.p.name}):null),
         h('div',{class:'lv-pick'},pick(key,d.cl,[['-','Back to the role (owner by role)']]))); }))));
   // weekly meeting
   if(inRota||inJr||meets.length){ const ro=[['','Remove from the rotation'],...opts.slice(1).filter(([id])=>!(r.ids||[]).includes(id)&&!(r.juniors||[]).includes(id)).map(([id,l])=>[id,'Replace with '+l])];
@@ -5556,11 +5560,11 @@ function calItems(from,to){
 function calChip(x,full){
   const cls='ce ce-'+x.k+' s-'+(x.st==='soon'?'late':x.st)+(x.done?' done':'')+(x.prop?' prop':'');
   const code=x.p?(x.p.code||x.p.name):'';
-  if(!full) return h('button',{class:cls,type:'button',title:`${x.t}${code?' · '+code:''}`,onclick:e=>{ e.stopPropagation(); x.go(); }},h('span',{class:'ce-t',text:(x.k==='gate'?'◆ ':'')+x.t}));
+  if(!full) return h('button',{class:cls,type:'button',title:`${x.t}${code?' · '+code:''}${x.p&&x.p.code?'\n'+x.p.name:''}`,onclick:e=>{ e.stopPropagation(); x.go(); }},h('span',{class:'ce-t',text:(x.k==='gate'?'◆ ':'')+x.t}));
   return h('button',{class:'cal-row '+cls,type:'button',onclick:x.go},
     h('span',{class:'cr-bar'}),
     h('div',{class:'cr-main'},h('div',{class:'cr-t'},h('span',{text:x.t}),x.k==='gate'?h('span',{class:'tag',text:'Gate'}):null,x.prop?h('span',{class:'tag',text:'Proposed date'}):null),
-      h('div',{class:'cr-m'},h('span',{text:CALK[x.k]}),code?h('span',{text:'· '+code}):null,x.who?h('span',{text:'· '+nameOf(x.who)}):null)),
+      h('div',{class:'cr-m'},h('span',{text:CALK[x.k]}),code?h('span',{text:'· '+code}):null,x.who?h('span',{text:'· '+nameOf(x.who)}):null),x.p&&x.p.code?h('div',{class:'row-pn',text:x.p.name}):null),
     x.task?pill(x.task,'approved'):x.k==='msg'?h('span',{class:'pill s-'+x.st,text:x.msgLabel}):h('span',{class:'pill s-'+(x.done||x.st==='ontime'?'ontime':'open'),text:x.k==='remind'?(x.done?'Reminded':x.time):x.k==='fb'?(x.done?'Received':'Due'):(x.weekly?'Sunday':(x.st==='ontime'?'Minutes final':'Minutes to finish'))}));
 }
 function viewCal(){
