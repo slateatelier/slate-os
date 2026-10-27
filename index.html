@@ -3845,7 +3845,13 @@ function viewSetup(){
 /* ---------- sheet ---------- */
 function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
 function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&workable(S.projects[id]), okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
-const PFIELDS=['entry','completedOn','code','name','client','contact','phone','tech','techNote','location','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
+/* site address: plot, road and block or sector are kept apart from the area, and read as one line wherever the site is shown.
+   Plot and road are required, except for projects kept only as a record (completed before SLATE OS, or closed). */
+const siteReq=(id,d)=>{ const p=id&&S.projects[id]; return p?!(p.closed||p.legacy):(d.entry||'upcoming')!=='completed'; };
+/* typed as "C" or "4": a letter reads as a block (Bashundhara), a number as a sector (Uttara); anything named in full stays as typed */
+const siteBlock=b=>!b?'':/^[A-Z]{1,2}$/i.test(b)?'Block '+b:/^\d+[A-Z]?$/i.test(b)?'Sector '+b:b.replace(/^(BLOCK|SECTOR|SECTION)\b/i,m=>m[0].toUpperCase()+m.slice(1).toLowerCase());
+const siteAddr=p=>!p?'':[p.plotNo?'Plot '+p.plotNo:'',p.roadNo?'Road '+p.roadNo:'',siteBlock(p.blockSector),p.location||''].filter(Boolean).join(', ');
+const PFIELDS=['entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
 const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
 /* outsourced services: the consultant or vendor doing the work */
@@ -4200,12 +4206,17 @@ function sheetProject(){
     else if(isStudio){ v.pod='Studio'; v.pod2=''; v.katha=''; if(!v.agStatus) v.agStatus='internal'; }
     const k=parseFloat(v.katha)||0;
     /* project code is set by the database from area, plot, size and year */
-    v.name=v.name.toUpperCase(); ['client','contact','location','agRef'].forEach(f=>{ if(v[f]) v[f]=v[f].toUpperCase(); });
+    v.name=v.name.toUpperCase(); ['client','contact','location','agRef','plotNo','roadNo','blockSector'].forEach(f=>{ if(v[f]) v[f]=v[f].toUpperCase().replace(/\s+/g,' ').trim(); });
+    /* "Plot 24A" or "Road no. 7" typed in full keeps just the number */
+    if(v.plotNo) v.plotNo=v.plotNo.replace(/^(PLOT|HOUSE|HOLDING)\s*(NO\.?)?\s*[#:]?\s*/,'');
+    if(v.roadNo) v.roadNo=v.roadNo.replace(/^ROAD\s*(NO\.?)?\s*[#:]?\s*/,'');
     if(!v.name) return fail('Give the project a name.');
     if(!v.pod) return fail('Choose the pod that owns this project, or Studio / internal.');
     if(!isStudio){
       if(!v.client) return fail('Add the client.');
-      if(!v.location) return fail('Add the site location.');
+      if(!v.location) return fail('Add the area or locality, e.g. Bashundhara R/A.');
+      if(siteReq(id,d)&&!v.plotNo) return fail('Add the plot number.');
+      if(siteReq(id,d)&&!v.roadNo) return fail('Add the road number.');
       if(!k) return fail('Add the land size in katha.');
       if(!id&&!v.type) return fail('Choose the project type.');
       if(k>30&&!v.pod2) return fail('Projects above 30 katha need a second pod.');
@@ -4250,7 +4261,11 @@ function sheetProject(){
         farFormSection(d,sec),
         sec('Client and site'),
         h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:80,placeholder:'Company or owner',style:'text-transform:uppercase',autocapitalize:'characters'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
-        h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Site location *',inp('location',{maxlength:120,placeholder:'e.g. Road 71, Gulshan 2, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
+        h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Area / locality *',inp('location',{maxlength:120,placeholder:'e.g. Bashundhara R/A, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
+        h('div',{class:'form-row',style:'grid-template-columns:repeat(3,minmax(0,1fr))'},
+          field(siteReq(id,d)?'Plot no. *':'Plot no.',inp('plotNo',{maxlength:20,placeholder:'e.g. 24A',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
+          field(siteReq(id,d)?'Road no. *':'Road no.',inp('roadNo',{maxlength:20,placeholder:'e.g. 7',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
+          field('Block / Sector',inp('blockSector',{maxlength:30,placeholder:'e.g. C',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'}))),
         h('div',{class:'form-row'},field('Technical person at the client’s end',(()=>{ const el=sel('tech',[['','Not known yet'],['yes','Yes, available'],['no','No, not available']]); el.addEventListener('change',()=>renderSheet()); return el; })(),
             d.tech==='no'?'The project and its tasks show a caution mark, so the team expects to explain more and check more on site.':'An engineer or technical person who can read drawings and answer site questions.'),
           field(d.tech==='yes'?'Name and role (optional)':'Note (optional)',inp('techNote',{maxlength:80,placeholder:d.tech==='yes'?'e.g. Eng. Rahman, site engineer':d.tech==='no'?'e.g. Owner decides; no engineer on site':''}))),
@@ -5836,7 +5851,7 @@ function sheetProjView(){
     h('div',{class:'sh-status'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),tp&&h('span',{class:'tag',text:tp.name}),techTag(p),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.entry==='completed'&&h('span',{class:'tag',text:'Completed before SLATE OS'+(p.completedOn?' · '+MON[+p.completedOn.slice(5,7)-1]+' '+p.completedOn.slice(0,4):'')}),p.entry==='running'&&h('span',{class:'tag',text:'Running before SLATE OS'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:st.tot?`${st.pct}% complete`:'No tasks yet'}),h('span',{class:'muted',text:st.tot?`${st.ts.filter(t=>t.doneAt).length} of ${st.ts.length} done`:''})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${st.pct}%`})),
       h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%'],['Overdue',String(st.over)],['Open',String(st.open)],['No date',String(st.noDate)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
-    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),
+    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',siteAddr(p)),fact('Land',p.katha?p.katha+' katha':''),
       fact('Planned finish',st.end?fmtD(st.end):'',p.dueDate?`Contract: ${fmtD(p.dueDate)}`+(st.end&&st.end>p.dueDate?` · ${diff(p.dueDate,st.end)}d over`:''):null),fact('Current phase',st.phase),(()=>{ const n=st.ts.filter(x=>x.parentId).length; return n?fact('Client revisions',`${n} round${n>1?'s':''}`,`across ${new Set(st.ts.filter(x=>x.parentId).map(x=>x.parentId)).size} item(s)`):null; })())];
   { const cs=closureSection(p); if(cs) out.push(cs); }
   if(p.pod!=='Studio'&&p.farApplies){ const d={...p,upf:p.upf||'',floors:p.floors||''}; const x=p.farApplies==='yes'?(farCalc(d)||p.farCalc):null; const fs=farFacts(d,x,fact);

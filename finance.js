@@ -447,7 +447,8 @@ function projectForm(p) {
       f.payAcctId.innerHTML = list.length ? list.map(a => opt(a.id, acctLabel(a), a.id === keep)).join('') : opt('', `No ${f.entity.value} bank account yet (add it in Cash & bank)`, true); };
     fillAcct(); f.entity.addEventListener('change', () => { f.payAcctId.value = ''; fillAcct(); });
     f.osId.addEventListener('change', () => { const o = S.os.find(x => x.id === f.osId.value); if (!o) return;
-      f.code.value = o.code || ''; f.name.value = o.name || ''; if (o.client) f.client.value = o.client; if (o.location) f.location.value = o.location; });
+      f.code.value = o.code || ''; f.name.value = o.name || ''; if (o.client) f.client.value = o.client; const site = [o.plotNo ? 'Plot ' + o.plotNo : '', o.roadNo ? 'Road ' + o.roadNo : '', o.blockSector ? (/^[A-Z]{1,2}$/i.test(o.blockSector) ? 'Block ' + o.blockSector : /^\d+[A-Z]?$/i.test(o.blockSector) ? 'Sector ' + o.blockSector : o.blockSector) : '', o.location || ''].filter(Boolean).join(', ');
+      if (site) f.location.value = site; });
     const autoFee = () => { if (+f.areaSft.value && +f.rate.value) { f.fee.value = Math.round(f.areaSft.value * f.rate.value); f.fee.dispatchEvent(new Event('input', { bubbles: true })); } };
     f.areaSft.addEventListener('input', autoFee); f.rate.addEventListener('input', autoFee);
     f.addEventListener('submit', async ev => { ev.preventDefault();
