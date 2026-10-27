@@ -1165,7 +1165,7 @@ function celShow(c){
     const ring=svgEl('circle',{cx:26,cy:26,r:21,fill:'none',stroke:'#D7262B','stroke-width':5,'stroke-linecap':'round','stroke-dasharray':C,'stroke-dashoffset':c.still?0:C*.12,transform:'rotate(-90 26 26)'});
     const txt=svgEl('text',{x:26,y:c.still?33:31,'text-anchor':'middle','font-size':c.still?20:13,'font-weight':700,fill:c.still?'#D7262B':'currentColor'},document.createTextNode(c.still?'✓':'88%'));
     const svg=svgEl('svg',{width:52,height:52,viewBox:'0 0 52 52',class:'cel-ring'},svgEl('circle',{cx:26,cy:26,r:21,fill:'none',stroke:'var(--group)','stroke-width':5}),ring,txt);
-    node=card(h('div',{class:'cel-row'},svg,h('div',{},h('b',{text:`Phase ${phLabel(k)} checklist complete`}),h('span',{text:`${projShort(p.id)} · the gate is ready to close`}))));
+    node=card(h('div',{class:'cel-row'},svg,h('div',{},h('b',{text:`Phase ${phLabel(k,p)} checklist complete`}),h('span',{text:`${projShort(p.id)} · the gate is ready to close`}))));
     if(!c.still){ A(ring,[{strokeDashoffset:C*.12},{strokeDashoffset:0}],{duration:650,delay:150,easing:E,fill:'forwards'});
       const s0=performance.now()+150; const f=()=>{ const q=Math.max(0,Math.min(1,(performance.now()-s0)/650)); if(q<1){ txt.textContent=Math.round(88+12*(1-Math.pow(1-q,3)))+'%'; if(txt.isConnected) requestAnimationFrame(f); } else { txt.textContent='✓'; txt.setAttribute('font-size','20'); txt.setAttribute('y','33'); txt.setAttribute('fill','#D7262B'); } }; requestAnimationFrame(f);
       A(svg,[{transform:'scale(1)'},{transform:'scale(1.12)'},{transform:'scale(1)'}],{duration:300,delay:820,easing:E}); } }
@@ -1176,7 +1176,7 @@ function celShow(c){
     A(node,[{transform:'translateX(-50%)'},{transform:'translate(calc(-50% - 1px),1px)'},{transform:'translate(calc(-50% + 1px),0)'},{transform:'translateX(-50%)'}],{duration:140,delay:450}); }
   else if(c.kind==='seal'){ const {p,k,n,of}=c.d;
     const mark=h('div',{class:'cel-mark'},h('span',{text:'✓'}));
-    node=card(h('div',{class:'cel-row'},mark,h('div',{},h('b',{text:'Gate closed'}),h('span',{text:`${projShort(p.id)} · phase ${phLabel(k)} complete · ${n} of ${of}`}))));
+    node=card(h('div',{class:'cel-row'},mark,h('div',{},h('b',{text:'Gate closed'}),h('span',{text:`${projShort(p.id)} · phase ${phLabel(k,p)} complete · ${n} of ${of}`}))));
     A(mark,[{opacity:0,transform:'scale(1.6) rotate(-12deg)'},{opacity:1,transform:'scale(.92) rotate(-4deg)',offset:.7},{opacity:1,transform:'scale(1) rotate(-4deg)'}],{duration:420,delay:180,easing:E,fill:'both'});
     life=2800; }
   else if(c.kind==='project'){ const {p,of}=c.d;
@@ -1444,7 +1444,7 @@ const PH={
     ['Doors, windows and fittings set to standard market sizes','J',1],['Finishes from local materials, each with a stated alternate','J',1]]},
   '9':{no:'9',n:'Post-construction',gate:'As-built drawings, final print',steps:[['sub','As-built check print issued'],['final','As-built final print issued']],items:[
     ['Red-line changes received from the client’s site team','L'],['As-built check print within 14 days of the red-lines','D'],['Client feedback incorporated; final print issued','L'],['Project files archived and the final bill raised','C']]}};
-const phLabel=k=>PH[k]?`${PH[k].no} ${PH[k].n}`:k;
+const phLabel=(k,p)=>PH[k]?`${PH[k].no} ${phName(k,p)}`:k;
 /* items become objects with stable ids, so the COO can edit the list without moving anyone's ticks */
 Object.keys(PH).forEach(k=>{ PH[k]={...PH[k],items:PH[k].items.map((x,i)=>({id:k+'-'+i,t:x[0],r:x[1],c:x[2]?1:0,...(x[3]?{o:x[3]}:{})}))}; });
 const DEF_PH=JSON.parse(JSON.stringify(PH));
@@ -3860,7 +3860,9 @@ const scopeLabel=(p,x)=>{ const q=SCOPE_QTY[x], n=q&&p&&p.scopeQty&&+p.scopeQty[
 const SCOPES=['Real estate solutions','Feasibility study','Master planning','Architectural design','Structural design','MEP design','Structural and MEP coordination','Interior design','Common area interior design','Landscape design','3D visualization','Professional 3D visualization','Animation','Authority (RAJUK) drawings','Working drawings','Site supervision'];
 const AGS=[['','Select…'],['none','Not signed yet'],['loi','Letter of intent'],['signed','Signed agreement'],['internal','Internal (no agreement)']];
 function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.scope=[...(p.scope||[])]; d.scopeQty={...(p.scopeQty||{})}; d.scopeVendor={...(p.scopeVendor||{})}; if(!id&&!amApprover()&&myPod()) d.pod=myPod();
-  d.pods=id?podsOfProject(p):(myPod()&&!amApprover()?[myPod()]:[]); d.people=[]; S.sheet={type:'project',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{const el=document.getElementById('sh-code');el&&el.focus()},30); }
+  d.pods=id?podsOfProject(p):(myPod()&&!amApprover()?[myPod()]:[]); d.people=[];
+  { const pl=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null; d.ph=p.std?{sel:[...stdPhases(p)],ed:JSON.parse(JSON.stringify(p.std.ed||{})),open:null,type:p.std.type||p.type}:{sel:pl?[...pl.sel]:null,ed:JSON.parse(JSON.stringify((pl&&pl.ed)||{})),open:null,type:pl?p.type:''}; }
+  S.sheet={type:'project',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{const el=document.getElementById('sh-code');el&&el.focus()},30); }
 function closeSheet(){ S.sheet=null; renderSheet(); }
 function renderSheet(fromData){
   applyStd();
@@ -3873,7 +3875,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -3915,7 +3917,7 @@ function sheetTask(){
     fact('Completed',t.doneAt?fmtD(t.doneAt):'Not yet',t.doneAt&&t.doneBy?`Recorded by ${nameOf(t.doneBy)}`:null,true),
     t.repeat&&fact('Repeats',t.repeat==='weekly'?'Every week':'Every month','The next one is created when this is marked done, with its date already set.')));
   if(t.gate&&p&&p.std&&PH[t.gate.k]){ const k=t.gate.k, tot=clItems(k).length, left=clLeft(p,k);
-    out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--ink)'},h('div',{class:'lbl',text:`Gate deliverable · Phase ${phLabel(k)}`}),h('div',{style:'font-weight:500',text:PH[k].gate}),
+    out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--ink)'},h('div',{class:'lbl',text:`Gate deliverable · Phase ${phLabel(k,p)}`}),h('div',{style:'font-weight:500',text:phGate(k,p)}),
       h('div',{class:'f-hint',text:`Checklist ${tot-left} of ${tot} done`+(t.gate.step==='final'&&left?'. This gate closes once every item is ticked or marked N/A.':'')}),
       canSeeProjectDetail(p)&&h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:()=>{ S.sheet={type:'projView',id:t.projectId,openPh:k}; renderSheet(); },text:'Open the phase checklist'}))); }
 
@@ -4176,6 +4178,9 @@ function farFormSection(d,sec){
 function sheetProject(){
   const d=S.sheet.d, id=S.sheet.id, ap=amApprover(), internal=isInternalT(d.type), isStudio=internal||d.pod==='Studio'||!!(d.type&&T()[d.type]&&T()[d.type].studio);
   if(!d.pods) d.pods=[]; if(!d.people) d.people=[];
+  const pSet=id&&S.projects[id]&&S.projects[id].std?S.projects[id]:null, phType=pSet?(pSet.std.type||pSet.type):d.type;
+  const showPh=!!(d.ph&&!internal&&!isStudio&&phType&&T()[phType]&&T()[phType].std&&(id?!(S.projects[id]||{}).closed:(d.entry||'upcoming')!=='completed'));
+  if(showPh&&!pSet&&(d.ph.sel===null||d.ph.type!==d.type)){ d.ph.sel=typeDefSel(d.type); d.ph.type=d.type; }
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
   // standard services, plus any custom services typed in below (stored in scope like the rest)
   const scGrid=h('div',{style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 12px'});
@@ -4241,7 +4246,11 @@ function sheetProject(){
     if(dup) return fail(`“${dup[1].code||''} ${dup[1].name}” already exists${dup[1].status==='pending'?' and is waiting for approval':''}. Choose it from the list instead.`);
     const now=new Date().toISOString(), ref=id?S.db.doc('projects/'+id):S.db.collection('projects').doc();
     if(!id){ v.entry=internal?'':(d.entry||'upcoming'); if(v.entry!=='completed') v.completedOn=''; } else { delete v.entry; delete v.completedOn; }
-    const fn=id?()=>ref.update(v):()=>ref.set({...v,closed:v.entry==='completed',...(v.entry==='completed'?{legacy:true}:{}),createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
+    let phNow=false;
+    if(showPh){ if(!d.ph.sel.length) return fail('Keep at least one phase, or choose another project type.');
+      if(pSet){ const df=phaseDiff({...pSet,id},d.ph); phNow=!!(df.add.length||df.rem.length||df.ren||df.moved); }
+      else v.phasePlan={sel:phaseOrder(d.type,d.ph.sel),ed:edFull((id&&S.projects[id]&&S.projects[id].phasePlan&&S.projects[id].phasePlan.ed)||{},d.ph.ed,d.type)}; }
+    const fn=id?async()=>{ await ref.update(v); if(phNow) await applyPhaseChanges(id,d.ph); }:()=>ref.set({...v,closed:v.entry==='completed',...(v.entry==='completed'?{legacy:true}:{}),createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
     const plan=!id&&ap&&v.type&&!internal&&v.entry!=='completed'?{pid:ref.id,type:v.type,pod:v.pod}:null;
     run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
   };
@@ -4274,6 +4283,7 @@ function sheetProject(){
         field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40,style:'text-transform:uppercase',autocapitalize:'characters'})),
         field('Scope of services *',scopeBox),
         h('div',{class:'form-row'},field('Contractual completion (optional)',inp('dueDate',{type:'date'}),'Used to flag a project whose plan runs past it.'),field('Agreement document link (optional)',inp('docUrl',{type:'url',placeholder:'https://…'})))],
+      showPh?[sec('Phases'),h('div',{class:'f-hint',style:'margin-top:-4px',text:pSet?'Already set up. Changes here add or archive gate deliverables when you save.':'Set from the project type. The pod lead creates the gate deliverables and checklists when the phases are set up.'}),phaseEditor(d.ph,{type:phType,p:pSet?{...pSet,id}:null,idp:'pp',onGroup:true})]:null,
       field('Note (optional)',ta('note',{placeholder:!ap&&!id?'Anything the COO should know':''})),
       h('div',{class:'f-hint',text:'No fees or payment figures are kept here. Agreement status, date, reference and document link are stored separately and only the Principal and the COO can read them.'}),
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
@@ -4465,7 +4475,7 @@ function activePhases(p){ const ks=stdPhases(p), st=Object.fromEntries(ks.map(k=
   return ks.filter((k,i)=>{ if(!st[k].created||st[k].done) return false; const req=k==='4'?ks.filter(x=>x==='3'||x==='3r'):ks.slice(0,i).filter(x=>x!=='4'); return req.every(ok); }); }
 function curPhase(p){ return activePhases(p)[0]||null; }
 function gateBlock(t){ if(!t||!t.gate||t.gate.step!=='final') return ''; const p=S.projects[t.projectId]; if(!p||!p.std) return ''; const n=clLeft(p,t.gate.k); if(!n||amApprover()) return '';
-  return `${n} checklist item${n>1?'s are':' is'} still open in phase ${phLabel(t.gate.k)}. Tick them, or mark them N/A, in the project first.`; }
+  return `${n} checklist item${n>1?'s are':' is'} still open in phase ${phLabel(t.gate.k,p)}. Tick them, or mark them N/A, in the project first.`; }
 const isProjLead=p=>!!p&&podsOfProject(p).some(pd=>isPodLead(S.uid,pd));
 const canManageCl=p=>S.canWrite&&(amApprover()||S.isOwner||isProjLead(p)||(amMgr()&&fullView()));
 const canTickCl=(p,x)=>S.canWrite&&(canManageCl(p)||x.who===S.uid);
@@ -4498,7 +4508,7 @@ function paceRow(p){
 }
 const paceTag=p=>paceOf(p)==='fast'?h('span',{class:'tag tag-req',text:paceName(p)}):null;
 function stdDots(p){ const ks=stdPhases(p); if(!ks.length) return null; const act=activePhases(p), done=ks.filter(k=>stdState(p,k).done).length;
-  return h('div',{class:'pc-phases'},h('div',{class:'pc-dots'},ks.map(k=>h('i',{class:stdState(p,k).done?'on':act.includes(k)?'wait':'',title:phLabel(k)}))),h('span',{class:'muted',text:act.length?'Phase '+act.map(k=>PH[k].no).join(' + ')+(act.length===1?' '+PH[act[0]].n:''):done===ks.length?'All gates closed':`${done}/${ks.length} gates closed`}),paceTag(p)); }
+  return h('div',{class:'pc-phases'},h('div',{class:'pc-dots'},ks.map(k=>h('i',{class:stdState(p,k).done?'on':act.includes(k)?'wait':'',title:phLabel(k,p)}))),h('span',{class:'muted',text:act.length?'Phase '+act.map(k=>PH[k].no).join(' + ')+(act.length===1?' '+phName(act[0],p):''):done===ks.length?'All gates closed':`${done}/${ks.length} gates closed`}),paceTag(p)); }
 function stdSection(p){
   const tp=p.type&&T()[p.type], det=canViewProjectDetail(p), own=canSeeProjectDetail(p);
   if(!p.std){ if(!tp||!tp.std||p.pod==='Studio') return null;
@@ -4515,8 +4525,8 @@ function stdSection(p){
       const fbEl=fbEdit&&!s.done?h('input',{id:'fb-'+k,type:'date',value:fb,style:'background:var(--group);padding:4px 6px;font-size:13px','aria-label':'Client feedback due',onchange:e=>run(()=>S.db.doc('projects/'+p.id).update({std:{fb:{[k]:e.target.value||''}}}),'Client feedback date saved')}):h('b',{text:fb?fmtD(fb):'—'});
       const items=clItems(k), main=items.filter(i=>!i.cost), cost=items.filter(i=>i.cost);
       return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
-        h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k)}),stat),
-        h('div',{class:'f-hint',text:'Gate: '+PH[k].gate}),
+        h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),stat),
+        h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
         s.created?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>{ S.sheet.openPh=isOpen?null:k; renderSheet(); },text:isOpen?'Hide checklist':'Show checklist'}):null),
@@ -4524,7 +4534,7 @@ function stdSection(p){
         isOpen&&det?h('div',{class:'cl'},main.map(it=>clRow(p,k,it,manage)),cost.length?[h('div',{class:'cl-h',text:'Cost checks'}),cost.map(it=>clRow(p,k,it,manage))]:null):null,
         s.created&&!s.done&&manage&&today()<addDays(goLive(),60)?preBox(p,k):null); })),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Gate deliverables carry the dates and count on the dashboard. Checklist items are ticked, not dated. Client feedback dates are for planning and never count against the pod.'}),
-    own&&amMgr()&&S.canWrite&&!p.closed&&tp&&tp.std&&tp.phases.some(k=>!stdState(p,k).created)?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Add phases'}):null);
+    own&&amMgr()&&S.canWrite&&!p.closed?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>openPhEdit(p.id),text:'Edit phases'}):null);
 }
 /* a phase that was already set up but had finished before SLATE OS went live: close it as history */
 function preBox(p,k){
@@ -4543,50 +4553,139 @@ function preBox(p,k){
 }
 function openStdPlan(pid,type,pod){
   const p=S.projects[pid]||{}, tp=T()[type]; if(!tp||!tp.std) return;
-  const has=[...new Set(gateTasks(pid).map(t=>t.gate.k))];
-  S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pre:{},running:p.entry==='running',pace:paceOf(p),lead:(p.std&&p.std.lead)||personFor('lead',pod||p.pod)||'',has,on:Object.fromEntries(tp.phases.map(k=>[k,has.includes(k)||!(tp.off||[]).includes(k)]))};
+  if(p.std) return openPhEdit(pid);
+  const plan=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null;
+  const m={sel:plan?phaseOrder(type,plan.sel):typeDefSel(type),ed:JSON.parse(JSON.stringify((plan&&plan.ed)||{})),open:null};
+  S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pre:{},running:p.entry==='running',pace:paceOf(p),lead:personFor('lead',pod||p.pod)||'',m};
   renderSheet();
 }
 function sheetStdPlan(){
   const sh=S.sheet, p=S.projects[sh.projectId], tp=T()[sh.tpl];
   if(!p||!tp) return [head('Phases','Not found')];
   const ld=h('select',{id:'sp-lead','aria-label':'Pod lead',onchange:e=>{sh.lead=e.target.value}},memberOpts(sh.lead).map(([v,l])=>h('option',{value:v,text:l}))); ld.value=sh.lead||'';
-  const n=tp.phases.filter(k=>sh.on[k]&&!sh.has.includes(k)).length;
+  const n=sh.m.sel.length;
+  const pre=(k,on)=>on&&(sh.running||sh.pre[k])?(()=>{ const pr=sh.pre[k];
+    return h('div',{style:'display:grid;gap:6px;padding-left:30px'},h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pre-'+k,checked:!!pr,onchange:e=>{ if(e.target.checked) sh.pre[k]={}; else delete sh.pre[k]; renderSheet(); }}),'Finished before SLATE OS'),
+      pr?h('div',{class:'form-row'},stepsOf(sh.tpl,k).map(([st])=>h('label',{class:'field'},h('span',{class:'lbl',text:(st==='sub'?'Submitted on':st==='final'?'Final on':'Done on')+' (optional)'}),h('input',{id:`pre-${k}-${st}`,type:'date',max:preLive(),value:pr[st]||'',oninput:e=>{pr[st]=e.target.value}})))):null,
+      pr?h('div',{class:'f-hint',text:'Recorded as history: the gate shows as closed with these dates and the checklist is closed. It never counts in scores.'}):null); })():null;
   return [head(projLabel(p),tp.name+' · phases'),
     h('p',{class:'lead',style:'margin:0',text:tp.note+'. Each phase gets its gate deliverables (assigned to the pod lead) and its checklist. Next, the pod lead proposes the gate dates and the COO approves them.'}),
     field('Pod lead (owns the gate deliverables)',ld),
-    field('Pace',h('div',{style:'display:grid;gap:6px'},seg('Pace',Object.keys(PACE).filter(k=>k!=='fast'||canPace()||sh.pace==='fast').map(k=>[k,paceName({type:sh.tpl},k)]),sh.pace,v=>{ if(!sh.has.length&&sh.tpl==='proposal'&&(v==='fast')!==(sh.pace==='fast')) sh.on['0']=v!=='fast'; sh.pace=v; renderSheet(); }),
+    field('Pace',h('div',{style:'display:grid;gap:6px'},seg('Pace',Object.keys(PACE).filter(k=>k!=='fast'||canPace()||sh.pace==='fast').map(k=>[k,paceName({type:sh.tpl},k)]),sh.pace,v=>{ if(sh.tpl==='proposal'&&(v==='fast')!==(sh.pace==='fast')){ sh.m.sel=sh.m.sel.filter(x=>x!=='0'); if(v!=='fast') sh.m.sel=phaseOrder(sh.tpl,['0',...sh.m.sel]); } sh.pace=v; renderSheet(); }),
       h('div',{class:'f-hint',text:(sh.pace==='fast'&&sh.tpl==='proposal'?PACE_NOTE.sprint:PACE_NOTE[sh.pace])+(canPace()?'':' Fast track is set by the Principal or the COO.')}))),
-    tp.phases.map(k=>{ const done=sh.has.includes(k), on=done||sh.on[k];
-      return h('div',{class:'card',style:'gap:6px'+(on?'':';opacity:.5')},
-        h('label',{style:'display:flex;gap:10px;align-items:flex-start'},h('input',{type:'checkbox',id:'sp-'+k,checked:on,disabled:done,onchange:e=>{sh.on[k]=e.target.checked;renderSheet()}}),
-          h('div',{style:'min-width:0'},h('div',{style:'font-weight:600',text:'Phase '+phLabel(k)}),
-            h('div',{class:'f-hint',text:'Gate: '+stepsOf(sh.tpl,k).map(s=>s[1]).join(' → ')}),
-            h('div',{class:'f-hint',text:`${clItems(k).length} checklist items`+(done?' · already set up':(tp.off||[]).includes(k)&&!on?' · '+(tp.offNote||'Off by default'):'')}))),
-        !done&&on&&(sh.running||sh.pre[k])?(()=>{ const pr=sh.pre[k];
-          return h('div',{style:'display:grid;gap:6px;padding-left:30px'},h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pre-'+k,checked:!!pr,onchange:e=>{ if(e.target.checked) sh.pre[k]={}; else delete sh.pre[k]; renderSheet(); }}),'Finished before SLATE OS'),
-            pr?h('div',{class:'form-row'},stepsOf(sh.tpl,k).map(([st,txt])=>h('label',{class:'field'},h('span',{class:'lbl',text:(st==='sub'?'Submitted on':st==='final'?'Final on':'Done on')+' (optional)'}),h('input',{id:`pre-${k}-${st}`,type:'date',max:preLive(),value:pr[st]||'',oninput:e=>{pr[st]=e.target.value}})))):null,
-            pr?h('div',{class:'f-hint',text:'Recorded as history: the gate shows as closed with these dates and the checklist is closed. It never counts in scores.'}):null); })():null); }),
+    phaseEditor(sh.m,{type:sh.tpl,idp:'sp',extra:pre}),
     sh.running?h('p',{class:'f-hint',style:'margin:0',text:`This project was already running. Tick each phase finished before SLATE OS went live (${fmtD(goLive())}); set up the rest normally.`}):null,
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
-      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!n,onclick:createStdPlan,text:n?`Set up ${n} phase${n===1?'':'s'}`:'Nothing new to set up'}),
+      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!n,onclick:createStdPlan,text:n?`Set up ${n} phase${n===1?'':'s'}`:'Choose at least one phase'}),
       h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))];
 }
 function createStdPlan(){
-  const sh=S.sheet, tp=T()[sh.tpl], pid=sh.projectId, p=S.projects[pid]||{};
-  const ks=tp.phases.filter(k=>sh.on[k]&&!sh.has.includes(k));
+  const sh=S.sheet, pid=sh.projectId, p=S.projects[pid]||{}, ks=phaseOrder(sh.tpl,sh.m.sel);
   if(!sh.lead){ sh.err='Choose the pod lead who owns the gate deliverables.'; renderSheet(); return; }
   if(!ks.length){ sh.err='Choose at least one phase.'; renderSheet(); return; }
-  const keep=new Set([...stdPhases(p),...ks]), ordered=tp.phases.filter(k=>keep.has(k)), jr=personFor('junior',sh.pod);
-  let n=0;
+  const ed=edFull((p.phasePlan&&p.phasePlan.ed)||{},sh.m.ed,sh.tpl), np={...p,id:pid,std:{type:sh.tpl,ed}};
   run(async()=>{
-    for(const k of ks) for(const [step,txt] of stepsOf(sh.tpl,k)){ const pr=sh.pre[k];
-      if(pr){ const dt=pr[step]||(step==='sub'?pr.final:pr.sub)||''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:sh.lead,phase:phLabel(k),gate:{k,step},legacy:true,doneAt:dt||preLive(),legacyNoDate:!dt,target:dt||preLive()}); }
-      else await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:sh.lead,phase:phLabel(k),gate:{k,step}}); n++; }
-    const cl={}; ks.forEach(k=>{ const m={}, pr=sh.pre[k]; clItems(k).forEach(it=>{ if(it.only&&it.only!==sh.tpl){ m[it.id]={na:true}; return; } if(pr){ m[it.id]={done:pr.final||pr.sub||preLive(),legacy:true}; return; } if(sh.pace==='fast'&&sh.tpl==='proposal'&&SPRINT_NA.includes(it.id)){ m[it.id]={na:true,sp:true}; return; } const who=it.r==='L'?sh.lead:it.r==='J'?jr:''; if(who&&!isPriv(who)&&!isCOO(who)) m[it.id]={who}; }); cl[k]=m; });
-    await S.db.doc('projects/'+pid).update({type:sh.tpl,std:{v:1,type:sh.tpl,phases:ordered,lead:sh.lead,pace:sh.pace||'std'},cl});
+    const cl=await createGates(np,sh.tpl,ks,{lead:sh.lead,pod:sh.pod,pace:sh.pace,pre:sh.pre});
+    await S.db.doc('projects/'+pid).update({type:sh.tpl,std:{v:1,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed},cl});
   },`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(ok) openTimeline(pid); });
+}
+/* gate deliverables and checklist for the phases being added to a project */
+async function createGates(np,type,ks,o){
+  const pid=np.id, jr=personFor('junior',o.pod), pre=o.pre||{}, cl={};
+  for(const k of ks){
+    for(const [step,txt] of stepsFor(np,type,k)){ const pr=pre[k];
+      if(pr){ const dt=pr[step]||(step==='sub'?pr.final:pr.sub)||''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},legacy:true,doneAt:dt||preLive(),legacyNoDate:!dt,target:dt||preLive()}); }
+      else await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step}}); }
+    const m={}, pr=pre[k]; clItems(k).forEach(it=>{ if(it.only&&it.only!==type){ m[it.id]={na:true}; return; } if(pr){ m[it.id]={done:pr.final||pr.sub||preLive(),legacy:true}; return; } if(o.pace==='fast'&&type==='proposal'&&SPRINT_NA.includes(it.id)){ m[it.id]={na:true,sp:true}; return; } const who=it.r==='L'?o.lead:it.r==='J'?jr:''; if(who&&!isPriv(who)&&!isCOO(who)) m[it.id]={who}; });
+    cl[k]=m; }
+  return cl;
+}
+
+/* ---------- phases chosen for one project: add, remove or rename standard phases ----------
+   Before set-up the choice is kept in p.phasePlan {sel, ed}; once set up, p.std.phases and p.std.ed are the record.
+   ed holds this project's own names for a phase, its gate and its gate deliverables. The studio standard is never changed. */
+const PH_F=['n','gate','sub','final'];
+function phOv(p,k){ const ed=p&&(p.std?p.std.ed:(p.phasePlan&&p.phasePlan.ed)); return (ed&&ed[k])||{}; }
+function phName(k,p){ return phOv(p,k).n||(PH[k]?PH[k].n:k); }
+function phGate(k,p){ return phOv(p,k).gate||(PH[k]?PH[k].gate:''); }
+const phNo=k=>k==='3r'?'3R':(PH[k]?PH[k].no:k);
+function stepsFor(p,type,k){ const o=phOv(p,k); return stepsOf(type,k).map(([s,t])=>[s,o[s]||t]); }
+function typeDefSel(type){ const tp=T()[type]; return tp&&tp.std?tp.phases.filter(k=>!(tp.off||[]).includes(k)):[]; }
+/* the type's own order first; a phase from outside the type slots in by its standard number */
+function phaseOrder(type,keys){ const ks=[...new Set(keys||[])].filter(k=>PH[k]), tp=T()[type], out=(tp&&tp.std?tp.phases:[]).filter(k=>ks.includes(k));
+  STD_ORDER.filter(k=>ks.includes(k)&&!out.includes(k)).forEach(k=>{ const i=STD_ORDER.indexOf(k), at=out.findIndex(x=>STD_ORDER.indexOf(x)>i); out.splice(at<0?out.length:at,0,k); });
+  return out; }
+/* every field written (blank = the standard), so clearing a name really clears it */
+function edFull(prev,cur,type){ const out={};
+  new Set([...Object.keys(prev||{}),...Object.keys(cur||{})]).forEach(k=>{ if(!PH[k]) return; const c=(cur||{})[k]||{}, def={n:PH[k].n,gate:PH[k].gate,...Object.fromEntries(stepsOf(type,k))}, x={};
+    PH_F.forEach(f=>{ const v=String(c[f]||'').trim().replace(/\s+/g,' '); x[f]=v&&v!==def[f]?v:''; }); out[k]=x; });
+  return out; }
+const edSame=(a,b,type)=>{ const x=edFull({},a,type), y=edFull({},b,type), ks=new Set([...Object.keys(x),...Object.keys(y)]); return [...ks].every(k=>PH_F.every(f=>((x[k]||{})[f]||'')===((y[k]||{})[f]||''))); };
+const isRenamed=(ed,k)=>!!ed&&!!ed[k]&&PH_F.some(f=>ed[k][f]);
+/* the list itself: tick to keep, untick to remove, + to add any other standard phase, Edit to rename for this project */
+function phaseEditor(m,o){
+  const type=o.type, p=o.p||null, tp=T()[type]; if(!tp||!tp.std) return null;
+  const has=p&&p.std?stdPhases(p):[], made=has.filter(k=>stdState(p,k).created), shut=has.filter(k=>stdState(p,k).done);
+  const shown=phaseOrder(type,[...tp.phases,...m.sel,...has]), rest=STD_ORDER.filter(k=>!shown.includes(k)), idp=o.idp||'pe', cardBg=o.onGroup?'background:#fff;':'', fieldBg=o.onGroup?'var(--group)':'#fff';
+  const row=k=>{ const on=m.sel.includes(k)||shut.includes(k), lock=shut.includes(k), set=made.includes(k), inT=tp.phases.includes(k), open=m.open===k, x=m.ed[k]||{};
+    const nm=(x.n||'').trim()||PH[k].n, steps=stepsOf(type,k).map(([s,t])=>[s,(x[s]||'').trim()||t]);
+    const tags=[lock?'Gate closed · kept':set?'Set up':'',!inT?'Added to this project':(tp.off||[]).includes(k)&&!on?(tp.offNote||'Off by default'):'',isRenamed(m.ed,k)?'Renamed for this project':'',`${clItems(k).length} checklist items`].filter(Boolean);
+    const inp=(f,lbl,def,max)=>h('label',{class:'field'},h('span',{class:'lbl',text:lbl}),h('input',{id:`${idp}-${k}-${f}`,value:x[f]||'',placeholder:def,maxlength:max,style:'background:'+fieldBg,oninput:e=>{ (m.ed[k]=m.ed[k]||{})[f]=e.target.value; }}));
+    return h('div',{class:'card',style:cardBg+'gap:8px'+(on?'':';opacity:.6')},
+      h('div',{style:'display:flex;gap:10px;align-items:flex-start'},
+        h('input',{type:'checkbox',id:`${idp}-${k}`,checked:on,disabled:lock,'aria-label':'Phase '+phNo(k)+' '+nm,title:lock?'A closed gate stays on the project':'',style:'margin-top:3px',onchange:e=>{ m.sel=e.target.checked?phaseOrder(type,[...m.sel,k]):m.sel.filter(y=>y!==k); if(!e.target.checked&&m.open===k) m.open=null; renderSheet(); }}),
+        h('div',{style:'min-width:0;flex:1'},h('div',{style:'font-weight:600',text:'Phase '+phNo(k)+' '+nm}),
+          h('div',{class:'f-hint',text:'Gate: '+steps.map(s=>s[1]).join(' → ')}),
+          h('div',{class:'f-hint',text:tags.join(' · ')})),
+        on&&!lock?h('button',{class:'btn btn-sm',type:'button',style:'background:'+fieldBg+';flex:none',onclick:()=>{ m.open=open?null:k; renderSheet(); if(!open) setTimeout(()=>{ const el=document.getElementById(`${idp}-${k}-n`); el&&el.focus(); },30); },text:open?'Done':'Edit'}):null),
+      set&&!on&&!lock?h('div',{class:'callout',style:'font-size:13.5px',text:'Removing this phase archives its open gate deliverables and takes its checklist off Home. Ticks are kept: tick the phase again to bring it back.'}):null,
+      open&&on?h('div',{style:'display:grid;gap:8px;padding-left:28px'},
+        inp('n','Phase name',PH[k].n,60),inp('gate','Gate (what closes the phase)',PH[k].gate,120),
+        stepsOf(type,k).map(([s,t])=>inp(s,s==='sub'?'Gate deliverable · submission':'Gate deliverable · final',t,100)),
+        h('div',{class:'bar',style:'justify-content:space-between'},h('span',{class:'f-hint',style:'margin:0',text:'For this project only. Leave a box blank to keep the standard wording.'}),
+          isRenamed(m.ed,k)?h('button',{class:'btn btn-sm',type:'button',style:'background:'+fieldBg,onclick:()=>{ m.ed[k]={}; renderSheet(); },text:'Back to the standard'}):null)):null,
+      o.extra?o.extra(k,on&&!set):null); };
+  return h('div',{style:'display:grid;gap:8px'},
+    shown.map(row),
+    rest.length?h('div',{style:'display:grid;gap:6px'},h('span',{class:'lbl',text:'Add another standard phase'}),
+      h('div',{class:'chips'},rest.map(k=>h('button',{type:'button',class:'chip',id:`${idp}-add-${k}`,style:cardBg+'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ m.sel=phaseOrder(type,[...m.sel,k]); renderSheet(); },text:'+ '+phNo(k)+' '+PH[k].n})))):null,
+    h('p',{class:'f-hint',style:'margin:0',text:'Untick a phase this project doesn’t need; add any other standard phase it does. Names, gates and checklists come from the SLATE standard process unless you edit them here for this project.'}));
+}
+/* what saving would change on a project whose phases are already set up */
+function phaseDiff(p,m){ const type=p.std.type||p.type, cur=stdPhases(p), shut=cur.filter(k=>stdState(p,k).done), keep=phaseOrder(type,[...m.sel,...shut]);
+  return {type,keep,add:keep.filter(k=>!cur.includes(k)),rem:cur.filter(k=>!keep.includes(k)),ren:!edSame(p.std.ed||{},m.ed,type),moved:keep.join()!==cur.join()}; }
+async function applyPhaseChanges(pid,m){
+  const p=S.projects[pid]; if(!p||!p.std) return;
+  const {type,keep,add,rem}=phaseDiff({...p,id:pid},m), ed=edFull(p.std.ed||{},m.ed,type), op={...p,id:pid}, np={...p,id:pid,std:{...p.std,ed}};
+  for(const k of rem) for(const t of gateTasks(pid).filter(t=>t.gate.k===k&&!t.doneAt))
+    await taskUpdate(t.id,{archived:true},[{type:'archived',note:`Phase ${phLabel(k,op)} removed from the project`}]);
+  /* open gate deliverables follow a rename, unless someone already gave the task its own title */
+  for(const k of keep.filter(k=>!add.includes(k))) for(const t of gateTasks(pid).filter(t=>t.gate.k===k&&!t.doneAt)){
+    const was=(stepsFor(op,type,k).find(s=>s[0]===t.gate.step)||[])[1], now=(stepsFor(np,type,k).find(s=>s[0]===t.gate.step)||[])[1], ph=phLabel(k,np), patch={}, ev=[];
+    if(now&&t.title===was&&now!==was){ patch.title=now; ev.push({type:'renamed',from:t.title,to:now}); }
+    if((t.phase||'')!==ph){ patch.phase=ph; ev.push({type:'category',from:t.phase||'',to:ph}); }
+    if(ev.length) await taskUpdate(t.id,patch,ev); }
+  const lead=p.std.lead||personFor('lead',p.pod)||S.uid, cl=add.length?await createGates(np,type,add,{lead,pod:p.pod,pace:paceOf(p)}):{};
+  await S.db.doc('projects/'+pid).update({std:{phases:keep,ed},...(Object.keys(cl).length?{cl}:{})});
+}
+function openPhEdit(pid){ const p=S.projects[pid]; if(!p||!p.std) return;
+  S.sheet={type:'phEdit',projectId:pid,err:'',m:{sel:[...stdPhases(p)],ed:JSON.parse(JSON.stringify(p.std.ed||{})),open:null}}; renderSheet(); }
+function sheetPhEdit(){
+  const sh=S.sheet, p=S.projects[sh.projectId]; if(!p||!p.std) return [head('Phases','Not found')];
+  const df=phaseDiff({...p,id:sh.projectId},sh.m), what=[df.add.length?`add ${df.add.length}`:'',df.rem.length?`remove ${df.rem.length}`:'',df.ren?'rename':''].filter(Boolean), dirty=what.length>0||df.moved;
+  return [head(projLabel(p),'Edit phases'),
+    h('p',{class:'lead',style:'margin:0',text:'Add, remove or rename the standard phases on this project. Added phases get their gate deliverables (assigned to the pod lead) and checklist straight away. The SLATE standard process itself doesn’t change.'}),
+    phaseEditor(sh.m,{type:df.type,p:{...p,id:sh.projectId},idp:'pe'}),
+    sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
+    h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
+      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!dirty,onclick:savePhEdit,text:dirty?'Save: '+(what.join(', ')||'reorder'):'No changes yet'}),
+      h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))];
+}
+function savePhEdit(){
+  const sh=S.sheet, pid=sh.projectId, p=S.projects[pid]; if(!p||!p.std) return;
+  if(!phaseDiff({...p,id:pid},sh.m).keep.length) return fail('Keep at least one phase.');
+  run(()=>applyPhaseChanges(pid,sh.m),'Phases updated').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } });
 }
 function myChecklist(){ const out=[];
   for(const p of projects()){ if(!p.std||!workable(p)) continue; for(const k of activePhases(p)){
@@ -4596,7 +4695,7 @@ function myChecklistSec(list){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
     h('div',{class:'list'},list.slice(0,40).map(({p,k,it})=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
       h('button',{class:'chk',type:'button','aria-label':'Tick “'+it.t+'”',title:'Tick when done and checked',disabled:S.busy||!S.canWrite,onclick:e=>fxTick(e,()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'))}),
-      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k)})),p.code?h('div',{class:'row-pn',text:p.name}):null),
+      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k,p)})),p.code?h('div',{class:'row-pn',text:p.name}):null),
       h('span'),h('span')))),
     list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
 }
@@ -5923,10 +6022,10 @@ const acctLine=a=>[+a.unbilled>1?taka(a.unbilled)+' to bill':'',+a.due>1?taka(a.
 const projOpenTasks=pid=>Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t&&t.projectId===pid&&!t.archived&&!t.doneAt);
 const projParkedTasks=pid=>Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t&&t.projectId===pid&&t.archived&&!t.doneAt&&(t.held||t.dropped));
 function phaseChoices(p){
-  const xs=p.std?stdPhases(p).map(k=>phLabel(k)):phaseList(p).filter(n=>n!==FINISH);
+  const xs=p.std?stdPhases(p).map(k=>phLabel(k,p)):phaseList(p).filter(n=>n!==FINISH);
   return [...new Set([...xs,...projStats(p).phases.map(x=>x.name).filter(n=>n&&n!=='Other')])]; }
 function lastPhaseReached(p){
-  if(p.std){ const k=stdPhases(p).filter(k=>stdState(p,k).done).pop(); return k?phLabel(k):''; }
+  if(p.std){ const k=stdPhases(p).filter(k=>stdState(p,k).done).pop(); return k?phLabel(k,p):''; }
   const done=phaseList(p).filter(n=>n!==FINISH&&phaseOf(p,n).done).sort((a,b)=>phaseOf(p,a).done.localeCompare(phaseOf(p,b).done)).pop();
   return done||''; }
 const canAskClose=p=>!!p&&S.canWrite&&!amApprover()&&!p.closed&&leadsProj(p.id)&&!isInternalP(p)&&p.pod!=='Studio';
