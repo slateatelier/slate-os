@@ -25,7 +25,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      PGHOST: aws-0-ap-south-1.pooler.supabase.com
       PGPORT: '5432'
       PGUSER: postgres.fbktoepdfegtkazbytel
       PGDATABASE: postgres
@@ -60,10 +59,16 @@ jobs:
           # Report any failure as a short annotation (the connection string never appears in it)
           report() { tr '\n' ' ' < "$1" | sed -E 's#postgres(ql)?://[^ ]*#<connection string>#g; s#password=[^ ]*#password=<hidden>#g' | cut -c1-400; }
 
-          # Check the connection first, so a wrong secret gives a clear message
-          if ! $PG/psql -tAc 'select 1' > /dev/null 2> err.txt; then
-            echo "::error title=Couldn't connect to the database::$(report err.txt)"; exit 1
+          # Find the project's session pooler (Supabase uses either address in Mumbai) and check the password
+          : > tried.txt
+          for h in aws-1-ap-south-1.pooler.supabase.com aws-0-ap-south-1.pooler.supabase.com; do
+            if PGHOST=$h $PG/psql -tAc 'select 1' > /dev/null 2> err.txt; then export PGHOST=$h; break; fi
+            echo "[$h] $(report err.txt)" >> tried.txt
+          done
+          if [ -z "${PGHOST:-}" ]; then
+            echo "::error title=Couldn't connect to the database::$(report tried.txt)"; exit 1
           fi
+          echo "Connected through $PGHOST"
 
           # All SLATE OS data: projects, tasks, meetings, Finance, logs, settings
           if ! $PG/pg_dump --format=custom --no-owner --no-privileges \
