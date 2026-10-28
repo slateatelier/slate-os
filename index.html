@@ -39,6 +39,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .badge{background:var(--overdue);color:#fff;border-radius:9px;font-size:11px;padding:0 6px;line-height:17px;font-weight:600}
 
 main{padding-block:24px 80px;display:grid;gap:24px}
+body[data-view=far] main{padding-bottom:4px}#far-host{padding-bottom:80px}
 .page-h{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--border)}
 .h1{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin:0}
 .lead{color:var(--muted);margin:6px 0 0;font-size:14px;max-width:60ch}
@@ -982,6 +983,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
   <nav aria-label="Sections"><div class="wrap tabs-in" id="tabs"></div></nav>
 </div>
 <main class="wrap" id="view"></main>
+<div class="wrap" id="far-host" hidden><iframe id="far-frame" title="SLATE FAR Calculator" style="width:100%;border:0;display:block;height:1400px;background:transparent" loading="lazy"></iframe><div id="far-log"></div></div>
 <div id="sheet" hidden></div>
 <div id="toast" role="status" hidden></div>
 <button id="fab" type="button" aria-label="New task" hidden>+</button>
@@ -2222,7 +2224,7 @@ function renderHeader(){
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
   tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
-  try{ document.body.dataset.view=S.view; }catch(e){}
+  try{ document.body.dataset.view=S.view; const fh=document.getElementById('far-host'); if(fh) fh.hidden=S.view!=='far'||!!(S.state!=='ready'); }catch(e){}
   const fab=$('#fab'); fab.hidden=!(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view)); fab.onclick=()=>openNewTask();
 }
 
@@ -6562,7 +6564,7 @@ function printFarReport(rd,x){
   <div class="m"><div><small>FAR</small><strong>${x.zero?'0':x.far.toFixed(3)}</strong></div><div><small>FAR area</small><strong>${n(x.farArea)}</strong>sft</div><div><small>Saleable</small><strong>${n(x.saleable)}</strong>sft</div><div><small>Construction</small><strong>${n(x.construction)}</strong>sft</div></div>
   <div class="cols"><div>
     <div class="h">Site</div><table>${row('Land',`${k} katha · ${n(land)} sft`)}${row('Density block',esc(rd.block))}${row('Front road',esc(rd.road))}${row('Basements',+rd.basements?rd.basements:'None')}</table>
-    <div class="h">FAR</div><table>${row('Area FAR (DAP)',x.areaFar)}${row('Plot FAR (road)',(+x.plotFar).toFixed(3)+(x.plotExact?'':' · interpolated'))}${row('FAR used · '+x.farType,x.zero?'0':x.far.toFixed(3),1)}${row('FAR area',sf(x.farArea),1)}</table>
+    <div class="h">FAR</div><table>${row('Area FAR (DAP)',x.areaFar)}${row('Plot FAR (road)',(+x.plotFar).toFixed(3)+(x.plotExact||!x.plotLo?'':' · '+x.plotLo[0]+' ft band'))}${row('FAR used · '+x.farType,x.zero?'0':x.far.toFixed(3),1)}${row('FAR area',sf(x.farArea),1)}</table>
   </div><div>
     <div class="h">Ground coverage</div><table>${row('Min MGC',pc(x.mgcMinPct)+' · '+sf(x.mgcMin))}${row('Max MGC',pc(x.mgcMaxPct)+' · '+sf(x.mgcMax))}${row('Floors needed',minF&&maxF?(minF===maxF?minF:minF+' to '+maxF):minF||'—',1)}</table>
     <div class="h">Units</div><table>${row('Maximum units (DAP)',n(x.maxUnits),1)}${units?row('Proposed units',units+(units>x.maxUnits?' <span class="warn">over the maximum</span>':'')):''}${units?row('Building',esc(floorText(rd))):''}${units&&x.saleable?row('Average unit size',sf(x.saleable/units)):''}</table>
@@ -6572,45 +6574,56 @@ function printFarReport(rd,x){
   <div class="foot"><div><b>SLATE Architecture &amp; Design</b>House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212</div><div style="text-align:right">+88 01749 390 284<br>info@slate-atelier.com · slate-atelier.com</div></div>
   </div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`;
   const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to make the report.'); w.document.open(); w.document.write(html); w.document.close(); }
+/* The FAR calculator inside SLATE OS is the SLATE FAR Calculator itself (far-tool/, the same engine, cost analysis,
+   scenarios, Dhaka and Chittagong, and A4 report as slate-atelier.com/FAR). It runs in a frame that is kept between
+   redraws; each calculation is saved to the SLATE OS FAR log, and a project's inputs can be filled in from here. */
+const farFrame=()=>document.getElementById('far-frame');
+const farPost=msg=>{ const f=farFrame(); try{ f&&f.contentWindow&&f.contentWindow.postMessage({src:'slate-os',...msg},location.origin); }catch(e){} };
+function farFillFrom(p){ if(!p) return; const fu=Object.values(p.floorUnits||{}).map(Number), same=fu.length&&fu.every(n=>n===fu[0]);
+  farPost({type:'fill',projName:p.name||'',blockNo:((p.block||'').match(/^Block (\w+)/)||[])[1]||'',katha:p.katha||'',roadFt:parseFloat(p.road)||'',upf:p.upf||'',floors:p.floors||'',basements:p.basements||'0',
+    jv:p.type==='jv',loShare:p.type==='jv'?p.loShare||'':'',loUnits:p.type==='jv'&&p.loCount!=null?p.loCount:'',diffFloors:same?fu.length:'',diffUnits:same?fu[0]:''}); }
+(function farBridge(){ if(window.__farBridge) return; window.__farBridge=1;
+  window.addEventListener('message',e=>{ if(e.origin!==location.origin||!e.data||e.data.src!=='slate-far') return; const m=e.data, F=farState();
+    if(m.type==='height'){ const f=farFrame(); if(f) f.style.height=Math.max(600,m.h+8)+'px'; return; }
+    if(m.type==='ready'){ if(F.pendingFill){ farFillFrom(S.projects[F.pendingFill]); F.pendingFill=''; } return; }
+    if(m.type==='print'){ const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups for SLATE OS to make the report.'); return; }
+      w.document.open(); w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${String(m.title||'SLATE FAR report').replace(/</g,'')}</title><style>${m.css||''}</style><style>body{background:#fff!important;margin:0}#printReport{display:block!important}</style></head><body><div id="printReport">${m.html||''}</div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`); w.document.close(); return; }
+    if(m.type==='calc'&&m.result&&S.canWrite&&S.db){ const x=m.result, p=F.d.projectId?S.projects[F.d.projectId]:null, uc=x.unitConfig;
+      S.db.collection(`farlog/${S.uid}/items`).doc().set({at:new Date().toISOString(),by:S.uid,site:x.projName&&x.projName!=='Unnamed Project'?x.projName:'',projectId:F.d.projectId||'',project:p?projLabel(p):'',city:x.city||'dhaka',
+        input:{katha:x.landKatha,block:x.blockName||(x.city==='ctg'?'Chittagong (CDA 2008)':''),road:x.roadLabel||'',basements:x.basements||0,upf:x.unitsPerFloor||'',floors:x.floors||'',diffFloors:uc&&uc.used?uc.dF:'',diffUnits:uc&&uc.used?uc.dU:'',jv:!!x.isJV,loUnits:x.loUnits!=null?x.loUnits:''},
+        result:{far:+x.far||0,farType:x.farType||'',farArea:Math.round(x.farArea||0),saleable:Math.round(x.saleable||0),construction:Math.round(x.construction||0),maxUnits:x.maxUnits,totalUnits:x.totalUnits||0,zero:!(+x.far>0),
+          totalCost:x.totalCost||null,pricePerSqft:x.pricePerSqft||null}}).catch(()=>{}); }
+  }); })();
 function viewFar(){
   syncFarLog();
   const F=farState(), d=F.d, all=farLogAll(), mine=fullView()?all:all.filter(x=>x.by===S.uid);
-  const sel=(key,opts,ph)=>{ const el=h('select',{id:'far-'+key,onchange:e=>{d[key]=e.target.value}},ph?h('option',{value:'',text:ph}):null,opts.map(o=>Array.isArray(o)?h('option',{value:o[0],text:o[1]}):h('option',{value:o,text:o}))); el.value=d[key]||''; return el; };
-  const inp=(key,attrs)=>h('input',{id:'far-'+key,value:d[key]||'',oninput:e=>{d[key]=e.target.value},...attrs});
   const pj=projects().filter(p=>!p.closed&&(canSeeProjectDetail(p)||workOn(p)));
-  const fact=(l,v,s)=>v==null||v===''?null:h('div',{},h('div',{class:'s',text:l}),h('div',{class:'v',text:v}),s?h('div',{class:'s',text:s}):null);
-  const res=F.res?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Result'}),h('span',{class:'cnt',text:F.res.d.site||(F.res.d.projectId&&S.projects[F.res.d.projectId]?projLabel(S.projects[F.res.d.projectId]):'')})),
-      h('div',{class:'facts'},farFacts({...F.res.d,farApplies:'yes'},F.res.x,fact)),
-      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>printFarReport(F.res.d,F.res.x),text:'Generate A4 report (PDF)'}))):null;
+  const fr=farFrame(); if(fr&&!fr.getAttribute('src')) fr.setAttribute('src','/far-tool/?os=1');
+  const psel=h('select',{id:'far-projectId','aria-label':'Project',onchange:e=>{ d.projectId=e.target.value; const p=S.projects[d.projectId]; if(p) farFillFrom(p); render(true); }},h('option',{value:'',text:'Not linked to a project'}),pj.map(p=>h('option',{value:p.id,text:projLabel(p)}))); psel.value=d.projectId||'';
+  /* the log, below the calculator */
   const q=(F.q||'').toLowerCase(), list=mine.filter(x=>(!F.who||x.by===F.who)&&(!q||[x.site,x.project,x.input&&x.input.block,nameOf(x.by)].join(' ').toLowerCase().includes(q)));
   const whoSel=fullView()?(()=>{ const ids=[...new Set(all.map(x=>x.by))]; const el=h('select',{id:'far-who','aria-label':'Person',style:'flex:0 1 180px',onchange:e=>{F.who=e.target.value;render(true)}},h('option',{value:'',text:'Everyone'}),ids.map(id=>h('option',{value:id,text:nameOf(id)}))); el.value=F.who||''; return el; })():null;
-  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Tools'}),h('h1',{class:'h1',text:'FAR calculator'}),h('p',{class:'lead',text:'RAJUK FAR under DAP 2022–2035: block and non-block FAR, ground coverage, maximum units and areas. Every calculation is saved to the log with the date, time and who ran it.'}))),
-    h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); farRun(); }},
-      h('div',{class:'form-row'},field('Site or client (optional)',inp('site',{maxlength:80,placeholder:'e.g. Plot 24A, Gulshan 2'})),field('Project (optional)',sel('projectId',pj.map(p=>[p.id,projLabel(p)]),'Not linked to a project'))),
-      h('div',{class:'form-row'},field('Land size (katha) *',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal',placeholder:'e.g. 5.99'})),field('Basements',sel('basements',[['0','None'],['1','1 basement'],['2','2 basements']]))),
-      h('div',{class:'form-row'},field('Density block *',sel('block',FAR_BLOCKS.map(b=>b[0]),'Select block…')),field('Front road *',roadPicker(d,'far-',focusW=>{ render(true); if(focusW) setTimeout(()=>{ const el=document.getElementById('far-roadw'); if(el) el.focus(); },0); },false))),
-      h('div',{class:'form-row'},field('Units per floor (optional)',inp('upf',{type:'number',min:0,step:1,inputmode:'numeric'})),field('Floors with units (optional)',inp('floors',{type:'number',min:0,step:1,inputmode:'numeric'}))),
-      F.err?h('div',{class:'err',role:'alert',text:F.err}):null,
-      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Calculate'}),h('button',{class:'btn',type:'button',onclick:()=>{ S.far=null; render(true); },text:'Clear'}))),
-    ...(res?[res]:[]),
-    h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:fullView()?'FAR log · everyone':'My FAR log'}),h('span',{class:'cnt',text:`${list.length} entr${list.length===1?'y':'ies'}`})),
+  const load=x=>{ const i=x.input||{}; if(x.projectId&&S.projects[x.projectId]) d.projectId=x.projectId;
+    farPost({type:'fill',projName:x.site||(x.projectId&&S.projects[x.projectId]?S.projects[x.projectId].name:''),blockNo:((i.block||'').match(/^Block (\w+)/)||[])[1]||'',katha:i.katha||'',roadFt:parseFloat(i.road)||'',upf:i.upf||'',floors:i.floors||'',basements:i.basements||'0',jv:!!i.jv,loUnits:i.loUnits,diffFloors:i.diffFloors||'',diffUnits:i.diffUnits}); window.scrollTo({top:0,behavior:'smooth'}); render(true); };
+  const logEl=document.getElementById('far-log');
+  if(logEl) logEl.replaceChildren(h('section',{class:'sec',style:'margin-top:24px'},h('div',{class:'sec-h'},h('h2',{text:fullView()?'FAR log · everyone':'My FAR log'}),h('span',{class:'cnt',text:`${list.length} entr${list.length===1?'y':'ies'}`})),
       h('div',{class:'bar'},h('input',{id:'far-q',placeholder:'Search site, project, block or person',value:F.q||'',oninput:e=>{F.q=e.target.value;render(true);setTimeout(()=>{const el=document.getElementById('far-q');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}},0)}}),whoSel),
       list.length?h('div',{class:'tbl-wrap'},h('table',{},
         h('thead',{},h('tr',{},h('th',{text:'Date and time'}),h('th',{text:'By'}),h('th',{text:'Site / project'}),h('th',{class:'n',text:'Katha'}),h('th',{text:'Block · road'}),h('th',{class:'n',text:'FAR'}),h('th',{class:'n',text:'FAR area'}),h('th',{class:'n',text:'Saleable'}))),
-        h('tbody',{},list.slice(0,300).map(x=>h('tr',{style:'cursor:pointer',title:'Load these inputs',onclick:()=>{ const i=x.input||{}; S.far={d:{site:x.site||'',projectId:x.projectId||'',katha:String(i.katha||''),block:i.block||'',road:i.road||'',basements:String(i.basements||0),upf:i.upf||'',floors:i.floors||'',mezz:i.mezz||'no'},res:null,err:'',q:F.q,who:F.who}; const r=farCalc({...S.far.d,katha:+i.katha}); if(r) S.far.res={d:{...S.far.d},x:r}; render(true); window.scrollTo(0,0); }},
+        h('tbody',{},list.slice(0,300).map(x=>h('tr',{style:'cursor:pointer',title:'Load these inputs into the calculator',onclick:()=>load(x)},
           h('td',{class:'n',style:'text-align:left',text:fmtTs(x.at)}),h('td',{text:nameOf(x.by)}),h('td',{},h('div',{text:x.site||x.project||'—'}),x.site&&x.project?h('div',{class:'sub2',text:x.project}):null),
-          h('td',{class:'n',text:x.input?String(x.input.katha):'—'}),h('td',{},h('div',{text:x.input?(x.input.block||'').replace(/^Block \d+ - /,''):'—'}),h('div',{class:'sub2',text:x.input?x.input.road+' road':''})),
-          h('td',{class:'n',text:x.result?(x.result.zero?'0':x.result.far.toFixed(3)):'—'}),h('td',{class:'n',text:x.result?sqft(x.result.farArea):'—'}),h('td',{class:'n',text:x.result?sqft(x.result.saleable):'—'})))))):
-        h('div',{class:'card'},h('span',{class:'muted',text:mine.length?'No entries match.':'No calculations yet. Each one you run is saved here.'}))),
-    h('p',{class:'f-hint',style:'padding:0 4px',text:fullView()?'You see everyone’s calculations. Team members see only their own. Tap a row to load its inputs again.':'You see your own calculations; the Principal and the COO see everyone’s. Tap a row to load its inputs again.'})];
+          h('td',{class:'n',text:x.input?String(x.input.katha):'—'}),h('td',{},h('div',{text:x.input?(x.input.block||'').replace(/^Block \w+ - /,''):'—'}),h('div',{class:'sub2',text:x.input&&x.input.road?x.input.road+' road':''})),
+          h('td',{class:'n',text:x.result?(x.result.zero?'0':(+x.result.far).toFixed(3)):'—'}),h('td',{class:'n',text:x.result?sqft(x.result.farArea):'—'}),h('td',{class:'n',text:x.result?sqft(x.result.saleable):'—'})))))):
+        h('div',{class:'card'},h('span',{class:'muted',text:mine.length?'No entries match.':'No calculations yet. Each one you run is saved here.'})),
+      h('p',{class:'f-hint',style:'padding:0 4px',text:(fullView()?'You see everyone’s calculations. Team members see only their own.':'You see your own calculations; the Principal and the COO see everyone’s.')+' Tap a row to load its inputs into the calculator.'})));
+  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Tools'}),h('h1',{class:'h1',text:'FAR calculator'}),h('p',{class:'lead',text:'The SLATE FAR Calculator: Dhaka (DAP 2022–2035) and Chittagong (CDA 2008), cost analysis, scenario comparison and the A4 report. Every calculation is saved to the log below.'}))),
+    h('div',{class:'bar'},field('Fill from a project (optional)',psel))];
 }
 
 const FAR_BLOCKS=[["Block 1 - Biman Bondar (Restricted)",0,0],["Block 2 - Zinzira-Kalindi-Aganagar",2.3,3.0],["Block 3 - Bashundhara Residential",2.0,4.1],["Block 4 - Dakshinkhahn",1.9,3.1],["Block 5 - Faridabad",2.2,3.1],["Block 6 - Kawla",2.0,3.2],["Block 7 - Uttara Phase 1 & 2",2.0,4.5],["Block 8 - Kamarpara",2.3,3.1],["Block 9 - Mirpur",1.9,3.4],["Block 10 - Keraniganj-Taranagar-Vakurta",2.1,2.5],["Block 11 - Anandanagar Beribadh",2.0,2.6],["Block 12 - Shewrapara",1.9,3.0],["Block 13 - Ibrahimpur East Shewrapara",1.9,3.0],["Block 14 - Bawnia",2.1,3.5],["Block 15 - Khilkhet Vatara",1.9,3.1],["Block 16 - Baridhara",1.8,4.7],["Block 17 - Gulshan Banani",1.9,5.5],["Block 18 - Ashulia-Dhamsona-Hazarpur",2.1,2.7],["Block 19 - Korail",1.8,2.0],["Block 20 - Mohakhali DOHS",2.0,4.4],["Block 21 - Niketon",1.8,3.8],["Block 22 - Mohakhali",2.5,3.3],["Block 23 - Rampura",2.2,3.6],["Block 24 - Tejgaon IA",2.3,3.3],["Block 25 - Mohammadpur",2.2,3.4],["Block 26 - Bonogram",1.6,2.1],["Block 27 - Baitul Aman",2.1,3.2],["Block 28 - Mogbazar",2.2,3.2],["Block 29a - Puran Dhaka (29a)",2.8,3.3],["Block 29b - Dhania-Muradpur",2.4,3.3],["Block 30 - Green Model Town",2.1,3.9],["Block 31 - Shatarkul-Nasirabad",1.3,1.9],["Block 32 - Basabo-Milgaw",2.1,3.4],["Block 33 - Bondar-Mograpara-Kachpur",2.1,2.5],["Block 34 - Ramna-Dhaka University",2.3,3.3],["Block 35 - Panthapath",2.2,3.4],["Block 36 - Dhanmondi Residential",1.8,5.0],["Block 37 - Narayanganj Center",2.8,3.5],["Block 38 - Tongi",2.3,3.2],["Block 39 - Birulia",1.8,2.4],["Block 40 - Gogonagar NCC-27",2.1,2.7],["Block 41 - Dasherkandi-Kayetpara",1.8,2.4],["Block 42a - Matuail-Sarulia (42a)",1.9,3.4],["Block 42b - Kutubpur-fatullah (42b)",1.9,3.4],["Block 43 - Pathalia",2.1,2.7],["Block 44 - Rupganj-Isapur",2.1,2.7],["Block 45 - Bhulta-Golakandail",2.1,2.7],["Block 46 - Savar Municipality",2.3,3.4],["Block 47 - Jhilmil Residential",1.9,4.3],["Block 48 - Hemayetpur-Tetulzhora",2.3,2.8],["Block 49 - Tarabo Paurashava",2.3,3.0],["Block 50 - Jolshiri",2.1,4.1],["Block 51 - Badda",2.1,3.4],["Block 52 - Aftabnagar-Banasree",1.9,3.7],["Block 53 - United-Sundiali",1.9,3.7],["Block 54 - Purbachal Residential",1.9,4.5],["Block 55 - Uttara Phase 3",1.9,4.7],["Block 56 - POHS-Shornali Residential",1.9,4.1],["Block 57 - Naldobhag",2.0,2.6],["Block 58 - Kalyanpur-Retention (FAR=0)",0,0],["Block 59 - Bisila-Chandrima",2.3,3.1],["Block 60 - Khilkhet Residential",1.9,4.4],["Block 61 - Mirpur DOHS",1.9,4.8],["Block 62 - Paikpara-Tailarbag",1.9,3.3],["Block 63 - Kawdia-Aminbazar",1.3,2.0],["Block 64 - Kachkura Moinartek",2.1,2.6],["Block 65 - Pallabi 2",1.9,3.3],["Block 66 - Ghatarchar",2.0,3.2],["Block 67 - Demra-Konapara",1.8,3.2],["Block 68 - Subacha-Arakul-Beyara",2.1,2.7]];
 const FAR_ROADS=[["20 ft",3.258],["25 ft",3.385],["30 ft",3.524],["35 ft",3.778],["40 ft",4.008],["50 ft",4.135],["60 ft",4.274],["75 ft",4.631],["80 ft",4.75],["100 ft",4.75]];
-/* Plot FAR for any front-road width. A listed width uses the DAP figure as is; a width between two listed
-   widths is taken pro rata (straight-line ratio) between them; 100 ft and over stays at the 100 ft figure.
-   Under 20 ft is outside the table, so no figure is given. `band` is the lower listed width's figure,
-   shown alongside so the conservative reading is never hidden. */
+/* Plot FAR for any front-road width, as the SLATE FAR Calculator: a width between two listed widths uses the
+   lower listed width's figure (its band); 100 ft and over stays at the 100 ft figure. Under 20 ft is outside the table. */
 const ROAD_MIN=+parseFloat(FAR_ROADS[0][0]), ROAD_MAX_INPUT=300;
 function plotFarOf(road){
   const w=parseFloat(road); if(!(w>0)) return null;
@@ -6619,7 +6632,7 @@ function plotFarOf(road){
   if(w>=last[0]) return {w,far:last[1],exact:true};
   for(let i=0;i<t.length-1;i++){ const [a,fa]=t[i], [b,fb]=t[i+1];
     if(w===a) return {w,far:fa,exact:true};
-    if(w>a&&w<b) return {w,far:+(fa+(fb-fa)*(w-a)/(b-a)).toFixed(3),exact:false,lo:[a,fa],hi:[b,fb],band:fa}; }
+    if(w>a&&w<b) return {w,far:fa,exact:false,lo:[a,fa],hi:[b,fb],band:fa}; } /* a road between two widths uses the lower band, as the SLATE FAR Calculator does */
   return null;
 }
 const isStdRoad=road=>FAR_ROADS.some(r=>r[0]===road);
@@ -6636,7 +6649,7 @@ function roadPicker(d,idp,redraw,inline){
   if(!custom) return s;
   const noteOf=()=>{ const p=plotFarOf(d.road);
     return !d.road||!p?`Type the measured road width in feet (up to ${ROAD_MAX_INPUT}).`:p.under?`Under ${ROAD_MIN} ft is outside the DAP plot FAR table: check this site manually.`:
-      p.exact?`Plot FAR ${p.far.toFixed(3)}`:`Plot FAR ${p.far.toFixed(3)}, pro rata between ${p.lo[0]} ft (${p.lo[1].toFixed(3)}) and ${p.hi[0]} ft (${p.hi[1].toFixed(3)})`; };
+      p.exact?`Plot FAR ${p.far.toFixed(3)}`:`Plot FAR ${p.far.toFixed(3)}: uses the ${p.lo[0]} ft band`; };
   const note=h('span',{class:'f-hint',id:idp+'roadnote',text:noteOf()});
   const n=h('input',{id:idp+'roadw',type:'number',min:1,max:ROAD_MAX_INPUT,step:'any',inputmode:'decimal',placeholder:'Width in feet, e.g. 28','aria-label':'Custom front road width in feet',
     value:d.roadRaw!=null?d.roadRaw:(d.road?parseFloat(d.road):''),oninput:e=>{ d.roadRaw=e.target.value; const w=parseFloat(e.target.value); d.road=w>0&&w<=ROAD_MAX_INPUT?roadLabel(w):''; note.textContent=noteOf(); if(inline) redraw(false); }});
@@ -6675,7 +6688,7 @@ function farFacts(d,x,fact){
   out.push(fact('Building',floorText(d),[d.upf?d.upf+' units per regular floor'+(fuT?' ('+fuT+')':''):'',units?units+' units in all':'',d.basements&&+d.basements?d.basements+' basement'+(+d.basements>1?'s':''):''].filter(Boolean).join(' · ')));
   if(d.farApplies==='yes'&&x){
     out.push(fact('FAR used',x.zero?'0 (no building permitted)':`${x.far.toFixed(3)} · ${x.farType}`,`${d.block} · ${d.road} road`));
-    if(x.plotExact===false&&x.plotLo) out.push(fact('Plot FAR (custom road)',`${x.plotFar.toFixed(3)} · ${d.road}`,`Pro rata between ${x.plotLo[0]} ft (${x.plotLo[1].toFixed(3)}) and ${x.plotHi[0]} ft (${x.plotHi[1].toFixed(3)})`));
+    if(x.plotExact===false&&x.plotLo) out.push(fact('Plot FAR (custom road)',`${x.plotFar.toFixed(3)} · ${d.road}`,`Uses the ${x.plotLo[0]} ft band, as the SLATE FAR Calculator does`));
     out.push(fact('Ground coverage',`Max ${pctTxt(x.mgcMaxPct)} · ${sqft(x.mgcMax)}`,x.mgcMin!=null?`Min ${pctTxt(x.mgcMinPct)} · ${sqft(x.mgcMin)}`:'No minimum for this land size'));
     out.push(fact('Units',`${units||'—'} proposed · ${x.maxUnits} max`,units>x.maxUnits?`${units-x.maxUnits} over the maximum`:null));
     out.push(fact('Total FAR area',sqft(x.farArea)));

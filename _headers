@@ -23,6 +23,12 @@
 /finance.js
   Cache-Control: no-cache
 
+# The SLATE FAR Calculator runs inside SLATE OS in a frame, so only this folder may be framed, and only by SLATE OS itself
+/far-tool/*
+  ! X-Frame-Options
+  Content-Security-Policy: frame-ancestors 'self'
+  Cache-Control: no-cache
+
 /sw.js
   Cache-Control: no-cache
   Service-Worker-Allowed: /
