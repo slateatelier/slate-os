@@ -2890,7 +2890,9 @@ function weightOf(t){ const p=t._p||S.projects[t.projectId], base=t.kind==='Deli
   return base*scaleOf(p)*scopeW(p)*(paceOf(p)==='fast'?1.25:1)*PRIO[prioOf(p)].w; }
 function creditOf(t){ const s=status(t); if(s==='early') return paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
-function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!isChalkP(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
+/* team performance leaves out the Principal, the COO and Chalk Create */
+const notTeamPerf=id=>!!id&&(id===ownerId()||isCOO(id)||isChalkP(id));
+function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!notTeamPerf(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id))).filter(t=>!notTeamPerf(t.assignee))); }
 /* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
 S.dashAnon={}; S.anonInfo={};
 function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
@@ -3150,7 +3152,7 @@ function viewDash(){
   if(!D.scope) D.scope='detail';
   if(D.scope==='clients'&&!canClients()) D.scope='detail';
   const ov=D.scope==='overall', cv=D.scope==='clients', mp=myPod();
-  const inPod=t=>(!D.pod||(/^pod\b/i.test(D.pod)?podsOf(t).includes(D.pod):teamOf(t.assignee)===D.pod))&&(!D.person||t.assignee===D.person||(t.assignReq&&t.assignReq.to===D.person&&false));
+  const inPod=t=>!notTeamPerf(t.assignee)&&!isChalkTask(t)&&(!D.pod||(/^pod\b/i.test(D.pod)?podsOf(t).includes(D.pod):teamOf(t.assignee)===D.pod))&&(!D.person||t.assignee===D.person||(t.assignReq&&t.assignReq.to===D.person&&false));
   const items=inPeriod(r,'approved').filter(inPod), c=count(items,'approved'), rt=rate(c), tg=target();
   const podSel=h('select',{id:'d-pod','aria-label':'Pod',style:'flex:0 1 160px',onchange:e=>{D.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),h('optgroup',{label:'Pods'},pods().map(p=>h('option',{value:p,text:podLabel(p)}))),h('optgroup',{label:'Support teams'},teams().filter(t=>!/^pod\b/i.test(t)).map(p=>h('option',{value:p,text:p})))); podSel.value=D.pod||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:r.label}),h('h1',{class:'h1',text:'Dashboard'})),
