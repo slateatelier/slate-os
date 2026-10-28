@@ -71,7 +71,7 @@ const DEFAULT_WA_MSG = 'Dear {client},\n\nPlease find invoice {no} for {project}
 const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, woTerms: DEFAULT_WO_TERMS, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [], waOn: false, waMsg: DEFAULT_WA_MSG };
 const S = {
   role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], links: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
-  os: [], people: {}, audit: null, loaded: false, fy: fyOf(today()), tab: 'overview',
+  os: [], people: {}, audit: null, pick: { accounts: [], projects: [] }, loaded: false, fy: fyOf(today()), tab: 'overview',
   f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open', rep: 'pl', basis: 'billed', bm: '', guide: '' }
 };
 const isPrincipal = () => S.role === 'principal';
@@ -274,15 +274,16 @@ function renderChrome() {
   const fys = new Set([fyOf(today()), S.fy]);
   [...S.invoices.map(i => i.date), ...S.receipts.map(r => r.date), ...S.moves.map(m => m.date), ...S.expenses.map(x => x.date), ...S.wopays.map(x => x.date), ...S.payruns.map(r => (r.month || '') + '-01')].forEach(d => d && fys.add(fyOf(d)));
   $('#fySel').innerHTML = [...fys].sort((a, b) => b - a).map(y => opt(y, 'FY ' + fyLabel(y), y === S.fy)).join('');
-  $('#fyWrap').hidden = !S.loaded;
+  $('#fyWrap').hidden = !S.loaded || isAcc();
   const overdueCt = S.invoices.filter(i => invStatus(i) === 'overdue').length;
   const badge = { invoices: overdueCt, expenses: pendingExp().length, workorders: S.workorders.filter(w => (w.status || 'pending') === 'pending').length, payroll: submittedRuns().length + pendingAdv().length };
-  $('#tabs').innerHTML = S.loaded ? TABS.map(([k, l]) => `<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}${badge[k] ? `<span class="ct">${badge[k]}</span>` : ''}</button>`).join('') : '';
-  $('#who').textContent = S.role ? (S.people[S.uid] || 'You') + ' · ' + (isPrincipal() ? 'Principal' : 'COO') : '';
+  $('#tabs').innerHTML = S.loaded && isAcc() ? '<button class="tab" role="tab" aria-selected="true">My entries</button>' : S.loaded ? TABS.map(([k, l]) => `<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}${badge[k] ? `<span class="ct">${badge[k]}</span>` : ''}</button>`).join('') : '';
+  $('#who').textContent = S.role ? (S.people[S.uid] || 'You') + ' · ' + (isPrincipal() ? 'Principal' : isAcc() ? 'Accountant' : 'COO') : '';
 }
 function render() {
   renderChrome();
   if (!S.loaded) return;
+  if (isAcc()) { $('#app').innerHTML = accView(); return; }
   const v = { overview, dash: dashboard, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, petty: pettyView, cash: cashbook, reports, activity, settings, guide: guideView }[S.tab] || overview;
   $('#app').innerHTML = v();
 }
@@ -2509,6 +2510,108 @@ document.addEventListener('submit', async ev => {
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
 
+/* ---------- Accountant: input only ----------
+   The Accountant enters expenses and petty cash bills for the Principal to approve. They see only their own
+   entries, and only the names of cash points and projects to pick from: never balances, fees, invoices,
+   salaries or reports. The database enforces the same (fin_acc_* policies); this screen just matches it. */
+const isAcc = () => S.role === 'accountant';
+async function loadPick() {
+  const { data, error } = await sb.rpc('fin_pick_lists');
+  if (error) throw error;
+  S.pick = { accounts: (data && data.accounts) || [], projects: (data && data.projects) || [] };
+}
+const pickAcct = id => (S.pick.accounts.find(a => a.id === id) || {}).name || '';
+const pickPrj = id => S.pick.projects.find(p => p.id === id);
+const pettyPick = () => S.pick.accounts.find(a => a.kind === 'petty');
+const accSt = x => (x.status || 'pending');
+function accView() {
+  const mine = S.expenses.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const pend = mine.filter(x => accSt(x) === 'pending');
+  const row = x => { const p = x.projectId ? pickPrj(x.projectId) : null, st = accSt(x);
+    return `<button class="row r-exp" data-act="acc-open" data-id="${x.id}"><div style="min-width:0"><div class="t">${esc(x.desc)}</div><div class="sub">${esc(x.category)}${x.payee ? ' · ' + esc(x.payee) : ''}${p ? ' · <span class="mono">' + esc(p.code) + '</span>' : ''}${x.accountId ? ' · paid from ' + esc(pickAcct(x.accountId)) : ''}</div></div>
+      <div class="c2 sub">${fmtDate(x.date)}</div>${st === 'pending' ? chip('pending', 'Awaiting approval') : st === 'rejected' ? chip('rejected', 'Rejected') : chip('paid', 'Approved')}<div class="amt">${tk(x.amount)}</div></button>`; };
+  return `
+  <div class="head"><div><h2>My entries</h2><p>Expenses and petty cash bills you enter go to the Principal for approval. You can correct or remove an entry until it has been decided.</p></div>
+    <div class="actions">${pettyPick() ? '<button class="btn" data-act="acc-petty">Petty cash bills</button>' : ''}<button class="btn pri" data-act="acc-new">New expense</button></div></div>
+  <div class="kpis"><div class="kpi"><div class="lb">Awaiting approval</div><div class="v">${pend.length}</div><div class="s">${tk(pend.reduce((u, x) => u + (+x.amount || 0), 0))}</div></div>
+    <div class="kpi"><div class="lb">Entered by you</div><div class="v">${mine.length}</div><div class="s">all time</div></div></div>
+  <div class="panel"><div class="ph"><h3>${mine.length} entr${mine.length === 1 ? 'y' : 'ies'}</h3></div>
+  ${mine.length ? `<div class="rows">${mine.map(row).join('')}</div>` : '<div class="empty"><strong>Nothing entered yet</strong>Use New expense for a bill or payment, or Petty cash bills for small bills paid from the box.</div>'}</div>`;
+}
+function accExpForm(x) {
+  const src = x || { date: today(), category: EXP_CATS[0] }, paid = !!(x && x.accountId), accts = S.pick.accounts;
+  openSheet(`${sheetHead(x ? 'Correct entry' : 'New expense', 'Goes to the Principal for approval')}
+  <form id="acf"><div class="fg">
+    <label class="f" for="a_date">Date<input id="a_date" name="date" type="date" required value="${esc(src.date)}"></label>
+    <label class="f" for="a_cat">Head of account<select id="a_cat" name="category">${EXP_CATS.map(c => opt(c, c, src.category === c)).join('')}</select></label></div>
+    <label class="f" for="a_desc">What for<input id="a_desc" name="desc" required value="${esc(src.desc)}" placeholder="e.g. Structural design fee, first part"></label>
+    <div class="fg"><label class="f" for="a_payee">Paid to<input id="a_payee" name="payee" value="${esc(src.payee)}" placeholder="Shop, person or company"></label>
+      <label class="f" for="a_amt">Amount (BDT)<input id="a_amt" name="amount" type="number" min="1" step="1" required value="${esc(src.amount)}"></label></div>
+    <label class="f" for="a_prj">Cost centre<select id="a_prj" name="projectId"><option value="">Studio overhead, not a project</option>${S.pick.projects.map(p => opt(p.id, `${p.code} · ${p.name}`, p.id === src.projectId)).join('')}</select></label>
+    <label class="check" for="a_paid"><input id="a_paid" type="checkbox" ${paid ? 'checked' : ''} ${accts.length ? '' : 'disabled'}> Already paid</label>
+    <div class="fg" id="aPay">
+      <label class="f" for="a_acct">Paid from<select id="a_acct" name="accountId">${accts.map(a => opt(a.id, a.name, a.id === src.accountId)).join('')}</select></label>
+      <label class="f" for="a_pd">Paid on<input id="a_pd" name="paidOn" type="date" value="${esc(src.paidOn || src.date)}"></label>
+      <label class="f" for="a_ref">Voucher / cheque / txn no.<input id="a_ref" name="ref" value="${esc(src.ref)}"></label></div>
+    <label class="f" for="a_note">Note<input id="a_note" name="note" value="${esc(src.note)}"></label>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${x ? 'Save' : 'Send for approval'}</button></div>
+  </form>`, root => {
+    const f = $('#acf', root), cb = $('#a_paid', root), sync = () => { $('#aPay', root).hidden = !cb.checked; };
+    cb.addEventListener('change', sync); sync();
+    f.addEventListener('submit', async ev => { ev.preventDefault();
+      const data = { date: f.date.value, category: f.category.value, desc: f.desc.value.trim(), payee: f.payee.value.trim(), amount: +f.amount.value || 0, projectId: f.projectId.value,
+        note: f.note.value.trim(), accountId: cb.checked ? f.accountId.value : '', paidOn: cb.checked ? f.paidOn.value : '', ref: cb.checked ? f.ref.value.trim() : '', status: 'pending' };
+      if (!data.desc || !(data.amount > 0)) { toast('Enter what it was for and an amount.'); return; }
+      const ok = x ? await run(() => putDoc('expenses', x.id, { ...strip(x), ...data }), 'Saved') : await run(() => addDoc('expenses', data), 'Sent to the Principal for approval');
+      if (ok) closeSheet(); });
+  });
+}
+function accPettyForm() {
+  const box = pettyPick(); if (!box) { toast('The petty cash box isn’t set up yet.'); return; }
+  const row = () => `<div class="pb-row" style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.6fr) minmax(0,.9fr) 28px;gap:6px;align-items:center">
+    <input type="date" name="d" value="${today()}" aria-label="Date"><select name="c" aria-label="Head of account">${PETTY_CATS.map(c => opt(c, c)).join('')}</select>
+    <input name="w" placeholder="What for" aria-label="What for"><input name="a" type="number" min="1" step="1" placeholder="Taka" aria-label="Amount"><button class="btn ghost sm" type="button" data-pb="del" aria-label="Remove">×</button></div>`;
+  openSheet(`${sheetHead('Petty cash bills', esc(box.name))}
+  <form id="apb"><style>#apb .pb-row input,#apb .pb-row select{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px;min-width:0;width:100%;font-size:13px}@media (max-width:560px){#apb .pb-row{grid-template-columns:1fr 1fr!important}}</style>
+    <div id="apRows" style="display:flex;flex-direction:column;gap:10px">${row()}${row()}${row()}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" type="button" data-pb="add">Add a line</button><span class="hint" id="apTot"></span></div>
+    <p class="hint">Each bill goes to the Principal for approval. Keep the paper bill with the box. Empty lines are skipped.</p>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Send for approval</button></div></form>`, root => {
+    const f = $('#apb', root), rows = $('#apRows', root);
+    const read = () => [...rows.querySelectorAll('.pb-row')].map(r => ({ d: r.querySelector('[name=d]').value, c: r.querySelector('[name=c]').value, w: r.querySelector('[name=w]').value.trim(), a: +r.querySelector('[name=a]').value || 0 })).filter(x => x.w || x.a);
+    const upd = () => { const L = read(), t = L.reduce((u, x) => u + x.a, 0); $('#apTot', root).textContent = L.length ? `${L.length} bill${L.length === 1 ? '' : 's'} · ${tk(t)}` : ''; };
+    f.addEventListener('input', upd);
+    f.addEventListener('click', e => { const b = e.target.closest('[data-pb]'); if (!b) return; if (b.dataset.pb === 'add') rows.insertAdjacentHTML('beforeend', row()); else b.closest('.pb-row').remove(); upd(); });
+    f.addEventListener('submit', async ev => { ev.preventDefault(); const L = read();
+      if (!L.length) { toast('Enter at least one bill.'); return; }
+      if (L.find(x => !x.w || !(x.a > 0) || !x.d)) { toast('Each bill needs a date, what it was for and an amount.'); return; }
+      if (await run(async () => { for (const x of L) await addDoc('expenses', { date: x.d, category: x.c, desc: x.w, payee: '', amount: x.a, projectId: '', note: 'Petty cash', accountId: box.id, paidOn: x.d, ref: '', status: 'pending' }); },
+        `${L.length} bill${L.length === 1 ? '' : 's'} sent for approval`)) closeSheet(); });
+  });
+}
+function accOpen(x) {
+  const p = x.projectId ? pickPrj(x.projectId) : null, st = accSt(x);
+  openSheet(`${sheetHead(x.desc, `${esc(x.category)}${x.payee ? ' · ' + esc(x.payee) : ''}`)}
+    <dl class="kv"><dt>Date</dt><dd class="txt">${fmtDate(x.date)}</dd><dt class="tot">Amount</dt><dd class="tot">${tk(x.amount)}</dd>
+      <dt>Cost centre</dt><dd class="txt">${p ? `<span class="mono">${esc(p.code)}</span> · ${esc(p.name)}` : 'Studio overhead'}</dd>
+      <dt>Paid</dt><dd class="txt">${x.accountId ? `${fmtDate(x.paidOn)} from ${esc(pickAcct(x.accountId))}${x.ref ? ' · ' + esc(x.ref) : ''}` : 'Not yet'}</dd>
+      <dt>Status</dt><dd class="txt">${st === 'pending' ? 'Awaiting the Principal' : st === 'rejected' ? 'Rejected' + (x.rejectReason ? ' · ' + esc(x.rejectReason) : '') : 'Approved'}</dd></dl>
+    ${x.note ? `<p class="hint" style="margin-top:10px">${esc(x.note)}</p>` : ''}
+    <div class="foot">${st === 'pending' ? `<button class="btn danger" data-act="acc-del" data-id="${x.id}">Remove</button><button class="btn pri" data-act="acc-edit" data-id="${x.id}">Correct</button>` : '<button class="btn ghost" type="button" data-act="close">Close</button>'}</div>`);
+}
+document.addEventListener('click', async ev => {
+  if (!isAcc()) return;
+  const b = ev.target.closest('[data-act^="acc-"]'); if (!b) return;
+  const x = S.expenses.find(e => e.id === b.dataset.id);
+  switch (b.dataset.act) {
+    case 'acc-new': accExpForm(); break;
+    case 'acc-petty': accPettyForm(); break;
+    case 'acc-open': if (x) accOpen(x); break;
+    case 'acc-edit': if (x) accExpForm(x); break;
+    case 'acc-del': if (x && confirm('Remove this entry?')) { const ok = await run(async () => { const { error } = await sb.from('fin_docs').delete().eq('path', 'expenses/' + x.id); if (error) throw error; }, 'Removed'); if (ok) closeSheet(); } break;
+  }
+});
+
 /* ---------- boot ---------- */
 try { const t = localStorage.getItem('slate-fin-tab'); if (t && TABS.some(x => x[0] === t)) S.tab = t; } catch (_) {}
 renderChrome();
@@ -2519,9 +2622,10 @@ const watchdog = setTimeout(() => { if (!S.loaded && /Opening finance/.test($('#
   S.uid = session.user.id;
   const { data: role, error: re } = await sb.rpc('fin_role');
   if (re) { notice('Finance isn’t available yet', esc(friendly(re)), true); return; }
-  if (!['principal', 'coo'].includes(role)) { notice('Finance is limited to the Principal and the COO', 'Your account doesn’t have access to studio finances.', true); return; }
+  if (!['principal', 'coo', 'accountant'].includes(role)) { notice('Finance is limited to the Principal and the COO', 'Your account doesn’t have access to studio finances.', true); return; }
   S.role = role;
-  try { await Promise.all([load(), loadAux()]); }
+  if (role === 'accountant') { S.tab = 'mine'; const bk = $('#backOS'); if (bk) bk.hidden = true; }
+  try { await Promise.all(role === 'accountant' ? [load(), loadPick(), loadAux()] : [load(), loadAux()]); }
   catch (e) { notice('Couldn’t open finance', esc(friendly(e)), true); return; }
   clearTimeout(watchdog);
   render();

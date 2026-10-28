@@ -1723,7 +1723,10 @@
     setupBackup();
     setupDayLog();
     // Finance is a separate page; only ask whether to show its link. Anyone else gets null and sees nothing.
-    sb.rpc('fin_role').then(({ data }) => { window.slateFinanceRole = ['principal', 'coo'].includes(data) ? data : null;
+    sb.rpc('fin_role').then(({ data }) => {
+      // The Accountant's login is Finance input only: send them straight there.
+      if (data === 'accountant') { location.replace('/finance'); return; }
+      window.slateFinanceRole = ['principal', 'coo'].includes(data) ? data : null;
       try { if (window.slateFinanceRole && S.view === 'more') render(true); } catch (_) {} }, () => {});
     // Dashboard averages: anonymous score inputs for tasks this person can't see.
     window.slateDashRows = async (from, to) => {
