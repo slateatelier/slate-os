@@ -7044,7 +7044,15 @@ function sheetSal(){
       rs.length?h('div',{},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px',text:'Salary history'}),
         h('div',{class:'list'},rs.map((x,i)=>{ const p=rs[i+1]; return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},
           h('div',{},h('b',{text:'From '+ymLabel(x.from)}),h('div',{class:'f-hint',style:'margin:0',text:[x.why||'',p?`${salGross(x)>=salGross(p)?'+':'−'}${taka(Math.abs(salGross(x)-salGross(p)))}`:'Starting salary'].filter(Boolean).join(' · ')})),h('span',{class:'mono',text:taka(salGross(x))})); }))):null,
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}),st?h('button',{class:'btn',type:'button',style:'margin-left:auto;color:var(--overdue)',disabled:S.busy,onclick:()=>delSal(st),text:'Delete'}):null))]; }
+/* delete a salary record entered by mistake: only while no salary sheet or advance uses it (otherwise mark it inactive) */
+async function delSal(st){ if(!canBiz()) return fail('Only the Principal or the COO can do this.'); const sb=window.slateSupabase;
+  const {data:used,error:e1}=await sb.from('fin_docs').select('coll,data').in('coll',['payruns','advances']); if(e1) return fail(e1.message);
+  const inUse=(used||[]).some(r=>r.coll==='advances'?r.data&&r.data.staffId===st.id:((r.data&&r.data.lines)||[]).some(l=>l.staffId===st.id));
+  if(inUse) return fail('This salary is already on a salary sheet or an advance, so it can’t be deleted. Untick Active instead.');
+  if(!confirm(`Delete the salary record for ${st.name}? Use this only for a record made by mistake.`)) return;
+  const ok=await run(async()=>{ const {data:o,error}=await sb.from('fin_docs').delete().eq('path','staff/'+st.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Not deleted'); await loadFeeFin(true); },'Salary record deleted');
+  if(ok) closeSheet(); }
 /* ---------- Business › Admin: the studio's monthly running costs ----------
    Kept in Finance as recurring/<id>; payments are Finance expenses tagged with the cost and month, and Finance's cash forecast
    uses these amounts. Office rent can carry an advance adjusted each month and a security deposit (held, not a cost). */
