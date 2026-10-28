@@ -544,6 +544,13 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .kpis.kpis5{grid-template-columns:repeat(5,minmax(0,1fr))}.kpis.kpis4{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width:640px){.kpis.kpis5{grid-template-columns:repeat(3,minmax(0,1fr))}.kpis.kpis4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .pj-kind .seg button{white-space:nowrap}
+.biz-bar{flex-wrap:nowrap;margin-top:-4px}.biz-seg{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.biz-seg::-webkit-scrollbar{display:none}.biz-seg .seg{width:max-content}
+.biz-h{align-items:flex-end;flex-wrap:nowrap}.biz-h>.biz-act .actions{width:auto}.biz-act{flex:none;margin-left:auto}.biz-act .actions{margin:0}.biz-act .btn{white-space:nowrap}.biz-lead{margin:-2px 2px 14px;max-width:720px}
+.biz-sec{margin:20px 0 8px}.biz-sec .linkbtn{margin-left:auto;background:none;border:0;padding:0;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.biz-needs{display:grid;gap:8px}.biz-need{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font:inherit;color:inherit;cursor:pointer}
+.biz-need:hover{border-color:#C7C7CC}.biz-need .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--late)}.biz-need .dot.s-overdue{background:var(--overdue)}.biz-need .bn-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.biz-need .bn-t .muted{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.biz-more{margin:10px 0 4px}.biz-more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 2px;list-style:none}.biz-more summary::-webkit-details-marker{display:none}.biz-more summary::before{content:'＋ '}.biz-more[open] summary::before{content:'− '}.biz-more .kpis{margin-top:8px}
+@media (max-width:640px){.biz-act .btn{padding-left:12px;padding-right:12px}.kpis.kpis5 .kpi .num{font-size:21px;letter-spacing:-.01em}}
 .tl-card{gap:10px}
 .tl-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
 .tl-sum div{display:grid;gap:2px}.tl-sum span{font-size:11.5px;color:var(--muted)}.tl-sum b{font-size:15px}
@@ -6907,9 +6914,7 @@ function viewLeads(){
   const moved=withLead.filter(p=>!isLead(p)), won=withLead.filter(p=>p.status==='won');
   const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
   const avg=xs=>xs.length?Math.round(xs.reduce((a,b)=>a+b,0)/xs.length)+' days':'—';
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'Leads, before a proposal. When you are ready to quote, make it a proposal; it keeps its log.'})),
-    S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openLead(),text:'New lead'})):null),
-    bizSeg(),
+  const out=[...bizHead('Leads, before a proposal. When you are ready to quote, make it a proposal; it keeps its log.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openLead(),text:'New lead'})):null),
     h('div',{class:'kpis kpis5'},kpi('Open leads',openL.length),kpi('Hot',openL.filter(p=>p.heat==='hot').length,'overdue'),kpi('Follow-up due',openL.filter(propDue).length,openL.filter(propDue).length?'overdue':''),kpi('No contact 14+ days',openL.filter(leadStale).length,openL.filter(leadStale).length?'late':''),kpi('Lead → project',pct(won.length,withLead.length),'early'))];
   // conversion by source
   const srcs=[...new Set(withLead.map(p=>p.src||''))].sort((a,b)=>withLead.filter(p=>(p.src||'')===b).length-withLead.filter(p=>(p.src||'')===a).length);
@@ -6949,8 +6954,7 @@ function hrRows(){ const F=S.feeFin, staff=(F&&F.staff)||[];
   const extra=staff.filter(x=>(!x.userId||!os.some(o=>o.uid===x.userId))&&!(x.userId&&chalk(x.userId))).map(x=>({uid:'',name:x.name,role:x.designation||'',team:x.userId?'Left SLATE OS':'Not in SLATE OS',st:x}));
   return [...os,...extra].map(r=>({...r,rate:salRate(r.st),gross:salGross(salRate(r.st)),active:!r.st||r.st.active!==false})); }
 function viewHR(){
-  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'Salaries and HR details, set here. Finance payroll uses these numbers; edit them here, not in Finance. Chalk Create is kept separate.'})),
-    S.canWrite?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openSal(null,''),text:'Add someone not in SLATE OS'})):null),bizSeg()];
+  const B=S.biz, out=[...bizHead('Salaries and HR details, set here. Finance payroll uses these numbers; edit them here, not in Finance. Chalk Create is kept separate. Add person is for someone who isn’t in SLATE OS.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openSal(null,''),text:'Add person',title:'Add someone who is not in SLATE OS'})):null)];
   if(!finOn()){ out.push(h('p',{class:'muted',text:'Salaries need Finance access. Sign in again if you have just been given it.'})); return out; }
   loadFeeFin(); const F=S.feeFin;
   if(!F||F.state==='loading'||F.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading salaries…'})); return out; }
@@ -7038,8 +7042,7 @@ const recPaid=(x,ym)=>(((S.feeFin||{}).exp)||[]).filter(e=>e.recurringId===x.id&
 function recHist(x){ return (((S.feeFin||{}).exp)||[]).filter(e=>e.recurringId===x.id&&e.status!=='rejected').sort((a,b)=>(b.month||'').localeCompare(a.month||'')); }
 function recExpect(x,ym){ if(x.kind==='rent') return rentPlan(x,ym).cash; if(x.kind==='variable'){ const h=recHist(x).filter(e=>e.month<ym).slice(0,3); return h.length?Math.round(h.reduce((a,e)=>a+(+e.amount||0),0)/h.length):+x.amount||0; } return +x.amount||0; }
 function viewAdmin(){
-  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'The studio’s monthly running costs, set here. Payments go into Finance as expenses, and Finance’s cash forecast uses these amounts.'})),
-    S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openRec(null),text:'Add running cost'})):null),bizSeg()];
+  const B=S.biz, out=[...bizHead('The studio’s monthly running costs, set here. Payments go into Finance as expenses, and Finance’s cash forecast uses these amounts.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openRec(null),text:'Add running cost'})):null)];
   if(!finOn()){ out.push(h('p',{class:'muted',text:'Admin costs need Finance access.'})); return out; }
   loadFeeFin(); const F=S.feeFin;
   if(!F||F.state==='loading'||F.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading…'})); return out; }
@@ -7131,9 +7134,7 @@ function viewProposals(f){
   const all=propList().filter(p=>!isLead(p)), q=(f.q||'').trim().toLowerCase(), ps=f.ps||'open', td=today();
   const openL=all.filter(propOpen), due=openL.filter(propDue), won=all.filter(p=>p.status==='won'), lost=all.filter(p=>['lost','dropped'].includes(p.status));
   const rate=won.length+lost.length?Math.round(won.length/(won.length+lost.length)*100)+'%':'—';
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'Proposed projects. Confirmed ones become client projects for the team.'})),
-    S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(),text:'New proposal'})):null),
-    bizSeg(),
+  const out=[...bizHead('Proposed projects. Confirmed ones become client projects for the team.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(),text:'New proposal'})):null),
     h('div',{class:'kpis kpis5'},kpi('Open',openL.length),kpi('Follow-up due',due.length,due.length?'overdue':''),kpi('Confirmed',won.length,'early'),kpi('Lost or dropped',lost.length,'late'),kpi('Win rate',rate))];
   const stSel=h('select',{'aria-label':'Status',onchange:e=>{f.ps=e.target.value;render(true)}},[['open','Open'],['won','Confirmed'],['lost','Lost or dropped'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); stSel.value=ps;
   out.push(h('div',{class:'bar'},h('input',{type:'search',placeholder:'Search name, client or site',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),stSel));
@@ -7188,34 +7189,78 @@ function feeStats(fr){ const F=S.feeFin, fee=+((fr||{}).fee)||0; if(!fr||!F||F.s
     billed+=net; col+=Math.min(paid,t)*net/t; }
   return {fee,billed,col,due:Math.max(0,billed-col),unb:Math.max(0,fee-billed)}; }
 const msLocked=(fr,m)=>!!fr&&!!S.feeFin&&S.feeFin.inv.some(i=>i.projectId===fr.id&&i.milestoneId===m.id&&i.status!=='void');
-function bizSeg(){ const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
-  return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Business',[['leads','Leads'+(nl?' · '+nl+' due':'')],['proposed','Proposed'+(np?' · '+np+' due':'')],['fees','Fees'],['hr','HR'],['admin','Admin']],S.biz.tab,v=>{ S.biz.tab=v; render(true); })); }
+function bizHead(lead,action){ const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl, ph=window.innerWidth<=640, d=n=>n?' · '+n+(ph?'':' due'):'';
+  const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'})),action?h('div',{class:'biz-act'},action):null),
+    h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['fees','Fees'],['hr','HR'],['admin','Admin']],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
+  if(lead) out.push(h('p',{class:'f-hint biz-lead',text:lead}));
+  return out; }
+/* totals behind Fees and the Overview */
+function feeRows(){ const F=S.feeFin;
+  const rows=projects().filter(p=>p.pod!=='Studio'&&!isInternalP(p)&&p.status!=='pending').map(p=>{ const fr=feeRecOf(p); return {p,fr,s:feeStats(fr),pb:p.proBono==='yes'}; });
+  const linked=new Set(rows.filter(r=>r.fr).map(r=>r.fr.id)), orphan=Object.values(F.fp).filter(x=>!linked.has(x.id));
+  const live=rows.filter(r=>!r.p.closed||outcomeOf(r.p)==='completed'), sum=k=>live.reduce((a,r)=>a+r.s[k],0)+orphan.reduce((a,x)=>a+feeStats(x)[k],0);
+  const noFee=rows.filter(r=>!r.p.closed&&!r.pb&&!(r.s.fee>0));
+  return {rows,orphan,live,sum,noFee}; }
+function viewBizOver(){
+  const B=S.biz, out=[...bizHead('',null)], ym=today().slice(0,7), td=today();
+  const all=propList(), leads=all.filter(p=>isLead(p)&&propOpen(p)), props=all.filter(p=>!isLead(p)&&propOpen(p));
+  const dueL=leads.filter(propDue), dueP=props.filter(propDue), won=all.filter(p=>!isLead(p)&&p.status==='won'), lost=all.filter(p=>!isLead(p)&&['lost','dropped'].includes(p.status));
+  const propV=props.reduce((a,p)=>a+(p.feeBasis==='sft'?0:+p.fee||0),0);
+  const go=(tab,set)=>()=>{ if(set) set(); S.biz.tab=tab; render(true); window.scrollTo(0,0); };
+  const sec=(t,sub,go1)=>h('div',{class:'sec-h biz-sec'},h('h2',{text:t+(sub?' · '+sub:'')}),go1?h('button',{class:'linkbtn',type:'button',onclick:go1,text:'Open ›'}):null);
+  const needs=[];
+  if(dueL.length) needs.push(['overdue',dueL.length+' lead'+(dueL.length>1?'s':'')+' to follow up',dueL.slice(0,3).map(p=>p.client||p.name).join(', '),go('leads')]);
+  if(dueP.length) needs.push(['overdue',dueP.length+' proposal'+(dueP.length>1?'s':'')+' to follow up',dueP.slice(0,3).map(p=>p.name||p.client).join(', '),go('proposed')]);
+  let money=null;
+  if(finOn()){ loadFeeFin(); const F=S.feeFin;
+    if(F&&F.state==='ok'){
+      const {rows,sum,noFee}=feeRows(), col=F.rec.filter(r=>(r.date||'').slice(0,7)===ym).reduce((a,r)=>a+(+r.received||0)+(+r.ait||0)+(+r.vds||0),0);
+      const toCol=rows.filter(r=>r.s.due>1);
+      const hr=hrRows(), act=hr.filter(r=>r.st&&r.active&&r.gross), pay=act.reduce((a,r)=>a+r.gross,0), noSal=hr.filter(r=>r.uid&&r.uid!==ownerId()&&!r.gross&&!r.hid);
+      const in30=addDays(td,30), hrDue=hr.filter(r=>r.st&&r.active&&((r.st.incrementDue&&r.st.incrementDue<=ym)||(r.st.probationEnd&&r.st.probationEnd<=in30&&!r.st.confirmedOn)));
+      const on=(F.rec2||[]).filter(x=>recOn(x,ym)), run=on.reduce((a,x)=>a+(x.kind==='rent'?rentPlan(x,ym).rent:recExpect(x,ym)),0);
+      const cash=on.reduce((a,x)=>a+recExpect(x,ym),0), paid=on.reduce((a,x)=>a+recPaid(x,ym).reduce((u,e)=>u+(+e.amount||0),0),0);
+      const lateBills=on.filter(x=>!recPaid(x,ym).length&&x.dueDay&&+td.slice(8,10)>+x.dueDay);
+      money=[sec('Coming in','fees',go('fees')),h('div',{class:'kpis kpis4'},kpi('Collected in '+ymLabel(ym).split(' ')[0],bdt(col),'early'),kpi('Unpaid',bdt(sum('due')),sum('due')>1?'overdue':''),kpi('Not yet billed',bdt(sum('unb')),'late'),kpi('Total fees',bdt(sum('fee')))),
+        sec('Going out','every month',null),h('div',{class:'kpis kpis4'},kpi('Payroll',bdt(pay)),kpi('Running costs',bdt(run)),kpi('Monthly spend',bdt(pay+run)),kpi('Bills still to pay',bdt(Math.max(0,cash-paid)),cash-paid>1?'late':''))];
+      if(toCol.length) needs.push(['overdue',toCol.length+' project'+(toCol.length>1?'s':'')+' with fees to collect',bdt(sum('due'))+' unpaid',go('fees',()=>{B.st='due';})]);
+      if(lateBills.length) needs.push(['overdue',lateBills.length+' bill'+(lateBills.length>1?'s':'')+' past the due day',lateBills.map(x=>x.name).join(', '),go('admin',()=>{B.am=ym;})]);
+      if(noFee.length) needs.push(['late',noFee.length+' project'+(noFee.length>1?'s':'')+' with no fee set',noFee.slice(0,3).map(r=>r.p.name).join(', '),go('fees',()=>{B.st='nofee';})]);
+      if(noSal.length) needs.push(['late',noSal.length+' '+(noSal.length>1?'people':'person')+' with no salary set',noSal.slice(0,3).map(r=>r.name).join(', '),go('hr',()=>{B.hs='nosal';})]);
+      if(hrDue.length) needs.push(['late',hrDue.length+' increment or probation due',hrDue.slice(0,3).map(r=>r.name).join(', '),go('hr',()=>{B.hs='due';})]);
+    } else if(F&&F.state==='err') money=[h('p',{class:'err',text:'Couldn’t load Finance: '+F.err})];
+    else money=[h('p',{class:'muted',text:'Loading money from Finance…'})];
+  }
+  out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Needs you'}),needs.length?h('span',{class:'cnt',text:String(needs.length)}):null),
+    needs.length?h('div',{class:'biz-needs'},needs.map(([s,t,sub,fn])=>h('button',{type:'button',class:'biz-need',onclick:fn},h('span',{class:'dot s-'+s}),h('span',{class:'bn-t'},h('b',{text:t}),sub?h('span',{class:'muted',text:sub}):null),h('span',{class:'muted',text:'›'})))):h('p',{class:'muted',style:'margin:0 2px 8px',text:'Nothing needs you right now.'}));
+  if(money) out.push(...money);
+  out.push(sec('Pipeline','open now',go('leads')),h('div',{class:'kpis kpis4'},kpi('Open leads',leads.length),kpi('Open proposals',props.length),kpi('Proposed value',propV?bdt(propV):'—',null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'lump-sum proposals'})),kpi('Win rate',won.length+lost.length?Math.round(won.length/(won.length+lost.length)*100)+'%':'—')));
+  return out; }
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
-  S.biz=S.biz||{tab:'leads',q:'',st:'active'};
+  S.biz=S.biz||{tab:'over',q:'',st:'active'};
+  if(S.biz.tab==='over') return viewBizOver();
   if(S.biz.tab==='leads') return viewLeads();
   if(S.biz.tab==='hr') return viewHR();
   if(S.biz.tab==='admin') return viewAdmin();
   if(S.biz.tab==='proposed') return viewProposals(S.pf2||(S.pf2={q:'',ps:'open'}));
   return viewFees(); }
 function viewFees(){
-  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'Fees, cost budgets and site visit terms for every project, set here. Finance uses the same numbers; edit them here, not in Finance.'})),
-    h('div',{class:'actions'},h('a',{class:'btn',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none',text:'Open Finance ↗'}))),bizSeg()];
+  const B=S.biz, out=[...bizHead('Fees, cost budgets and site visit terms for every project, set here. Finance uses the same numbers; edit them here, not in Finance.',h('div',{class:'actions'},h('a',{class:'btn',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none',text:'Open Finance ↗'})))];
   if(!finOn()){ out.push(h('p',{class:'muted',text:'Fees need Finance access. Sign in again if you have just been given it.'})); return out; }
   loadFeeFin(); const F=S.feeFin;
   if(!F||F.state==='loading'||F.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading fees from Finance…'})); return out; }
   if(F.state==='err'){ out.push(h('p',{class:'err',text:'Couldn’t load Finance: '+F.err}),h('button',{class:'btn',type:'button',onclick:()=>loadFeeFin(true),text:'Try again'})); return out; }
   const q=(B.q||'').trim().toLowerCase();
-  const rows=projects().filter(p=>p.pod!=='Studio'&&!isInternalP(p)&&p.status!=='pending').map(p=>{ const fr=feeRecOf(p); return {p,fr,s:feeStats(fr),pb:p.proBono==='yes'}; });
-  const linked=new Set(rows.filter(r=>r.fr).map(r=>r.fr.id)), orphan=Object.values(F.fp).filter(x=>!linked.has(x.id));
-  const live=rows.filter(r=>!r.p.closed||outcomeOf(r.p)==='completed'), sum=k=>live.reduce((a,r)=>a+r.s[k],0)+orphan.reduce((a,x)=>a+feeStats(x)[k],0);
-  const noFee=rows.filter(r=>!r.p.closed&&!r.pb&&!(r.s.fee>0));
+  const {rows,orphan,live,sum,noFee}=feeRows();
   const propV=propList().filter(p=>propOpen(p)&&!isLead(p)).reduce((a,p)=>a+(p.feeBasis==='sft'?0:+p.fee||0),0);
   const cv=rows.reduce((a,r)=>a+((r.fr&&r.fr.costs)||[]).reduce((x,c)=>{ const v=costVar(r.fr,c); return x+(v||0); },0),0);
   const vis=rows.reduce((a,r)=>{ const v=r.fr&&r.fr.visits; if(!v||v.free==null||!+v.fee) return a; return a+Math.max(0,visitsUsed(r.p.id)-v.free)*(+v.fee); },0);
-  out.push(h('div',{class:'kpis kpis5'},kpi('Total fees',bdt(sum('fee'))),kpi('Billed',bdt(sum('billed'))),kpi('Collected',bdt(sum('col')),'early'),kpi('Unpaid',bdt(sum('due')),sum('due')>1?'overdue':''),kpi('Not yet billed',bdt(sum('unb')),'late')),
-    h('div',{class:'kpis kpis4'},kpi('Projects with a fee',rows.filter(r=>r.s.fee>0).length),kpi('No fee set',noFee.length,noFee.length?'late':''),kpi('Pro bono',rows.filter(r=>r.pb).length),kpi('Proposed (open, lump sum)',propV?bdt(propV):'—')),
-    h('div',{class:'kpis kpis4'},kpi('Cost budget',bdt(rows.reduce((a,r)=>a+((r.fr&&r.fr.costs)||[]).reduce((x,c)=>x+(+c.budget||0),0),0))),kpi('Budget variation',cv?(cv>0?'+':'−')+bdt(Math.abs(cv)):'—',cv>0?'early':cv<0?'overdue':''),kpi('Extra site visits to bill',vis?bdt(vis):'—',vis?'late':'')));
+  const cb=rows.reduce((a,r)=>a+((r.fr&&r.fr.costs)||[]).reduce((x,c)=>x+(+c.budget||0),0),0);
+  out.push(h('div',{class:'kpis kpis5'},kpi('Total fees',bdt(sum('fee'))),kpi('Collected',bdt(sum('col')),'early'),kpi('Unpaid',bdt(sum('due')),sum('due')>1?'overdue':''),kpi('Not yet billed',bdt(sum('unb')),'late'),kpi('Budget variation',cv?(cv>0?'+':'−')+'\u2060'+(Math.abs(cv)<1e5&&Math.abs(cv)>=1e3?'৳'+Math.round(Math.abs(cv)/1e3)+'k':bdt(Math.abs(cv))):'—',cv>0?'early':cv<0?'overdue':'')),
+    h('details',{class:'biz-more',open:!!B.more,ontoggle:e=>{B.more=e.target.open;}},h('summary',{text:'More numbers'}),
+      h('div',{class:'kpis kpis4'},kpi('Billed',bdt(sum('billed'))),kpi('Projects with a fee',rows.filter(r=>r.s.fee>0).length),kpi('No fee set',noFee.length,noFee.length?'late':''),kpi('Pro bono',rows.filter(r=>r.pb).length),
+        kpi('Cost budget',bdt(cb)),kpi('Extra site visits to bill',vis?bdt(vis):'—',vis?'late':''),kpi('Proposed (open, lump sum)',propV?bdt(propV):'—'))));
   const stSel=h('select',{'aria-label':'Show',onchange:e=>{B.st=e.target.value;render(true)}},[['active','Active projects'],['nofee','No fee set'],['due','Money to collect'],['done','Completed'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); stSel.value=B.st;
   out.push(h('div',{class:'bar'},h('input',{type:'search',placeholder:'Search code, name or client',value:B.q,oninput:e=>{B.q=e.target.value;render(true)}}),stSel));
   const list=rows.filter(r=>{ const p=r.p;
