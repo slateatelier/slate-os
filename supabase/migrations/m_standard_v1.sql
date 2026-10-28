@@ -28,7 +28,7 @@ from g where t.coll in ('tasks', 'lead') and t.data->'gate'->>'k' = g.k and t.da
 -- they existed). On open phases they stay open as work to do.
 do $mig$
 declare
-  nw jsonb := '{"0":["0-n1","0-n2","0-n3","0-n4","0-n5"],"1":["1-n1","1-n2","1-n3"],"2":["2-n1","2-n2","2-n3"],"3":["3-n1"],"3r":["3r-n1"],
+  nw jsonb := '{"0":["0-n1","0-n2","0-n3","0-n4","0-n5"],"1":["1-n1","1-n2","1-n3"],"2":["2-n1","2-n2","2-n3"],"3":["3-n1"],"3r":["3r-n1","3r-n2"],
                "4":["4-n1","4-n2","4-n3","4-n4","4-n5"],"5":["5-n1","5-n2"],"6":["6-n1","6-n2"],"7":["7-n1","7-n2","7-n3","7-n4","7-n5","7-n6"],"8":["8-n1","8-n2","8-n3","8-n4"]}';
   p record; k text; id text; cl jsonb; ph jsonb; n int := 0;
 begin
@@ -50,3 +50,9 @@ begin
   end loop;
   raise notice 'v1 items marked not applicable on closed phases: %', n;
 end $mig$;
+
+-- Land share: STR/MEP coordination is not done at launch (phase 2); it is done at 3R when the project goes live again.
+update public.docs p set data = jsonb_set(data, '{cl}', coalesce(data->'cl','{}'::jsonb) ||
+    jsonb_build_object('2', coalesce(data->'cl'->'2','{}'::jsonb) || '{"2-n1":{"na":true,"v1":true}}'::jsonb))
+ where coll = 'projects' and data->'std'->>'type' = 'share' and data->'std'->'phases' ? '2'
+   and not (coalesce(data->'cl'->'2','{}'::jsonb) ? '2-n1');
