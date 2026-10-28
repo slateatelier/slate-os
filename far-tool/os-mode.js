@@ -35,6 +35,9 @@
   }
 
   // tidy the page for SLATE OS: no install button, no call buttons, no proposal request
+  if (inOS) { const st = document.createElement('style');
+    st.textContent = '.calc-note,.legend,#emptyState,.foot-links{display:none!important}.vertical-layout{padding-bottom:8px!important}body{min-height:0!important}';
+    (document.head || document.documentElement).appendChild(st); }
   const tidy = () => {
     if (!inOS) return;
     document.querySelectorAll('.call-fab,.btn-call-details,.btn-proposal,#btnInstall,#installOverlay,#leadOverlay').forEach(el => { el.style.display = 'none'; });
@@ -63,8 +66,8 @@
 
   // tell SLATE OS how tall the page is, so it shows without an inner scrollbar
   if (inOS && window.ResizeObserver) {
-    let last = 0; const send = () => { const h = Math.ceil(document.documentElement.scrollHeight); if (Math.abs(h - last) > 4) { last = h; post({ type: 'height', h }); } };
-    new ResizeObserver(send).observe(document.body); window.addEventListener('load', send); setTimeout(send, 300);
+    let last = 0; const send = () => { const v = document.querySelector('.vertical-layout'); const h = Math.ceil(v ? v.getBoundingClientRect().bottom + window.scrollY : document.documentElement.scrollHeight); if (Math.abs(h - last) > 4) { last = h; post({ type: 'height', h }); } };
+    const ro = new ResizeObserver(send); ro.observe(document.body); const vl = document.querySelector('.vertical-layout'); if (vl) ro.observe(vl); window.addEventListener('load', send); setTimeout(send, 300);
   }
   post({ type: 'ready' });
 })();

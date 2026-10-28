@@ -2216,8 +2216,8 @@ function renderHeader(){
   const reqs=amApprover()?queueCount():0;
   const full=fullView(), mp=myPod();
   const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
-  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],...(canProps()&&S.canWrite?[['biz','Business',propList().filter(propDue).length]]:[]),['cal','Calendar'],['meet','Meetings'],['team','Team'],['dash','Dashboard'],...ck,...(amApprover()&&S.canWrite?[['people','People']]:[]),['more','More',nUnseenCount()]];
-  const TASKV=['all','board','gantt'], MOREV=cmem?['notice']:['more','notice','activity','setup','std','help','far','reports','backup','entries'];
+  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['meet','Meetings'],['team','Team'],['dash','Dashboard'],...(canProps()&&S.canWrite?[['biz','Business',propList().filter(propDue).length]]:[]),...ck,['more','More',nUnseenCount()]]; /* daily work first, then reviews, then Business and Chalk; People lives in More */
+  const TASKV=['all','board','gantt'], MOREV=cmem?['notice']:['more','notice','activity','setup','std','help','far','reports','backup','entries','people'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
@@ -2249,6 +2249,7 @@ function viewMore(){
       window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null,
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null,
+      amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
@@ -6080,14 +6081,14 @@ const HOWTO=[
   rules:[['score','You are scored on your own tasks, against other drafting leads, or on timeliness if you are the only one.'],['score','Drafters are compared only with other drafters.'],['score','Interns in the pool are not scored.'],'Check every set against its checklist before it leaves the pool.']},
  {key:'boss',title:'Principal and COO',who:'Approve, steer and keep the standard',steps:[
    ['check','Clear Approvals','Everything waiting on you is in Approvals, oldest first: dates, support, projects, phases, team, history, minutes. Tick the routine ones and approve them together.',['Approve 5 selected','p']],
-   ['chat','Message the team','People › tap people, write and tap Notify. Replies (Done, Already done, Will do it by…, Need help) come back under Sent and replies; tap Follow up for anyone not done.',['Notify 3 people','p']],
+   ['chat','Message the team','More › People › tap people, write and tap Notify. Replies (Done, Already done, Will do it by…, Need help) come back under Sent and replies; tap Follow up for anyone not done.',['Notify 3 people','p']],
    ['sliders','Set the pace','On the project: Fast track or Proposal sprint for urgent jobs, Relaxed for jobs with time.','Pace'],
    ['chart','Track delivery','On-time delivery against the studio target, by pod. Phase dots on Projects.','Dashboard','score'],
    ['meet','Approve the minutes','Meetings › Weekly. Check the organiser’s minutes, then approve and publish. Each action becomes a task for each person on it; saving again later never duplicates them.',['Approve and publish','p']],
    ['shield','Keep your work private','Tasks for the Principal or the COO are stored apart: only the two of you see them.','Private tasks'],
    ['down','Download the backup','More › Backup every Thursday: all data as Excel or JSON. The COO is reminded on Home.','Backup'],
    ['chart','Money in Finance','More › Finance: invoices, receipts, costs, payroll and reports. Only the two of you can open it; it has its own guide.','Finance'],
-   ['key','Look after accounts','People › Accounts and passwords: reset a forgotten password or add a new person.','Accounts and passwords'],
+   ['key','Look after accounts','More › People › Accounts and passwords: reset a forgotten password or add a new person.','Accounts and passwords'],
    ['shield','Check the record','More › Log shows every change, notification and message. Nothing in it can be edited.','Log']],
   rules:['Only approved dates count on the dashboard.',`Work finished before ${fmtD(goLive())} is history: you approve it, and it is never scored.`,'Standing guidelines go in Weekly meeting › Studio rules once, not in every set of minutes.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
 /* scoring is explained only to the Principal and the COO */
@@ -6251,7 +6252,7 @@ const HOWDO=[
  ['msg','all','Finish something I said I would do',['Home › Messages you said you’d do (or the item on your Calendar).','Tap ✓ Done when it is finished.'],'The sender sees it done, on time or late.',null],
  ['msg','all','Turn a message into a task',['On the message, tap Make it a task….','Check the task text, project, person and date.','Tap Create task.'],'The task is created and the sender is told who has it.',null],
  ['msg','boss','Message the team',['Open People.','Type the message (up to 300 characters).','Tap people, a team’s heading, or Select everyone.','Tap Notify N people.'],'Replies come back under Sent and replies.',null],
- ['msg','boss','Follow up people who haven’t answered',['People › Sent and replies.','On the message, tap Follow up the N not done (or Follow up for one person).','Add a note if useful and tap Send follow-up.'],'They get a new card; their reply counts on the original message.',null],
+ ['msg','boss','Follow up people who haven’t answered',['More › People › Sent and replies.','On the message, tap Follow up the N not done (or Follow up for one person).','Add a note if useful and tap Send follow-up.'],'They get a new card; their reply counts on the original message.',null],
 
  // ---- notifications and calendar
  ['notif','all','Read my notifications',['Tap the bell.','Use Needs action, Deadlines, Updates and Weekly to filter.','Tap an item to open it; Archive to clear it.'],'Old items archive themselves after 14 days.','Sound settings are at the bottom of the bell.'],
@@ -6265,9 +6266,9 @@ const HOWDO=[
  ['team','head','Balance the drafting pool',['Dashboard › choose your team (whole team).','Read Support team load: overdue, due in 7 days, later, no date.','Tell the COO who should take the next job, and why.'],null,'The COO approves who works on which pod.'],
 
  // ---- admin
- ['admin','boss','Add a new person',['People › Accounts and passwords › Add a person.','Enter name, studio email, designation and team, then Create account.','Copy or share the temporary password. It is shown only once.'],'They choose their own password at first sign-in.','Only the Principal can create a COO account.'],
- ['admin','boss','Someone is leaving SLATE',['People › Accounts and passwords › find them › Leaving SLATE….','Enter their last working day.','Choose who takes their work: everything to one person, all of one project, or item by item (tasks, checklist items, rotation slot, upcoming meetings).','For overdue work or work due within 3 days, set a new date, or leave it empty for the new person to propose.','Tap Hand over and close the account, then tap again.'],'Their work moves with a note in each task’s history. Fresh dates count from the new person’s date, so they aren’t marked late. The account closes: no sign-in, no notifications, out of the people lists and rankings. Past work shows as “Name (left)”.','The account can’t close while any task is still with them. If they led a pod, make the new lead a Manager in Settings. Changed your mind? Deactivated accounts › Reactivate.'],
- ['admin','boss','Reset someone’s password',['People › Accounts and passwords › Reset a password.','Find the person, tap Reset password, then tap again.','Give them the new temporary password.'],'They are told by notification and must choose a new password.','The COO can’t reset the Principal’s or COO’s password.'],
+ ['admin','boss','Add a new person',['More › People › Accounts and passwords › Add a person.','Enter name, studio email, designation and team, then Create account.','Copy or share the temporary password. It is shown only once.'],'They choose their own password at first sign-in.','Only the Principal can create a COO account.'],
+ ['admin','boss','Someone is leaving SLATE',['More › People › Accounts and passwords › find them › Leaving SLATE….','Enter their last working day.','Choose who takes their work: everything to one person, all of one project, or item by item (tasks, checklist items, rotation slot, upcoming meetings).','For overdue work or work due within 3 days, set a new date, or leave it empty for the new person to propose.','Tap Hand over and close the account, then tap again.'],'Their work moves with a note in each task’s history. Fresh dates count from the new person’s date, so they aren’t marked late. The account closes: no sign-in, no notifications, out of the people lists and rankings. Past work shows as “Name (left)”.','The account can’t close while any task is still with them. If they led a pod, make the new lead a Manager in Settings. Changed your mind? Deactivated accounts › Reactivate.'],
+ ['admin','boss','Reset someone’s password',['More › People › Accounts and passwords › Reset a password.','Find the person, tap Reset password, then tap again.','Give them the new temporary password.'],'They are told by notification and must choose a new password.','The COO can’t reset the Principal’s or COO’s password.'],
  ['admin','boss','Change someone’s team, designation or rights',['More › Settings › People.','Change the team, designation, Manager, Approver, Private tasks or Chalk lead.'],'The Principal’s changes apply at once. The COO’s go to the Principal: Role changes to approve.',null],
  ['admin','boss','Download the weekly backup',['More › Backup.','Download as Excel, or Download full backup (JSON).'],'Each download is logged. The COO is reminded every Thursday.','Keep the file somewhere safe outside the office computer.'],
  ['admin','boss','Check what changed and who did it',['More › Log.','Full audit trail, or Task history; filter by type, project or person.'],'Nothing in the log can be edited or removed.',null],
@@ -6584,7 +6585,7 @@ function farFillFrom(p){ if(!p) return; const fu=Object.values(p.floorUnits||{})
     jv:p.type==='jv',loShare:p.type==='jv'?p.loShare||'':'',loUnits:p.type==='jv'&&p.loCount!=null?p.loCount:'',diffFloors:same?fu.length:'',diffUnits:same?fu[0]:''}); }
 (function farBridge(){ if(window.__farBridge) return; window.__farBridge=1;
   window.addEventListener('message',e=>{ if(e.origin!==location.origin||!e.data||e.data.src!=='slate-far') return; const m=e.data, F=farState();
-    if(m.type==='height'){ const f=farFrame(); if(f) f.style.height=Math.max(600,m.h+8)+'px'; return; }
+    if(m.type==='height'){ const f=farFrame(); if(f) f.style.height=Math.max(300,m.h+8)+'px'; return; }
     if(m.type==='ready'){ if(F.pendingFill){ farFillFrom(S.projects[F.pendingFill]); F.pendingFill=''; } return; }
     if(m.type==='print'){ const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups for SLATE OS to make the report.'); return; }
       w.document.open(); w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${String(m.title||'SLATE FAR report').replace(/</g,'')}</title><style>${m.css||''}</style><style>body{background:#fff!important;margin:0}#printReport{display:block!important}</style></head><body><div id="printReport">${m.html||''}</div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`); w.document.close(); return; }
