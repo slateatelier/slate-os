@@ -51,9 +51,19 @@ jobs:
           echo "STAMP=$STAMP" >> "$GITHUB_ENV"
           mkdir out
 
+          # Report any failure as a short annotation (the connection string never appears in it)
+          report() { tr '\n' ' ' < "$1" | sed -E 's#postgres(ql)?://[^ ]*#<connection string>#g; s#password=[^ ]*#password=<hidden>#g' | cut -c1-400; }
+
+          # Check the connection first, so a wrong secret gives a clear message
+          if ! $PG/psql "$SUPABASE_DB_URL" -tAc 'select 1' > /dev/null 2> err.txt; then
+            echo "::error title=Couldn't connect to the database::$(report err.txt)"; exit 1
+          fi
+
           # All SLATE OS data: projects, tasks, meetings, Finance, logs, settings
-          $PG/pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges \
-            --schema=public --file=out/slate-os-data-$STAMP.dump
+          if ! $PG/pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges \
+            --schema=public --file=out/slate-os-data-$STAMP.dump 2> err.txt; then
+            echo "::error title=Data copy failed::$(report err.txt)"; exit 1
+          fi
 
           # Sign-in accounts. Best effort: the data copy above is what matters most.
           $PG/pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges \
