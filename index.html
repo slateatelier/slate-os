@@ -2734,7 +2734,19 @@ function buckets(kind,r){
 }
 /* ---------- performance index ---------- */
 function scaleOf(p){ if(!p||p.pod==='Studio') return 1; const k=parseFloat(p.katha)||0; if(k<=5) return 1; if(k<=10) return 1.25; if(k<=20) return 1.5; if(k<=30) return 1.75; return 2; }
-function weightOf(t){ const p=t._p||S.projects[t.projectId]; return (t.kind==='Deliverable'?3:1)*scaleOf(p)*(paceOf(p)==='fast'?1.25:1); }
+/* task weight. From 1 Nov 2026: base (deliverable 3, task 1) × land size × scope breadth × pace × project priority;
+   studio work weighs less than project work: studio development ×0.6, other studio work ×0.3. Work due earlier keeps the old weights. */
+const W2_FROM='2026-11-01';
+const PRIO={high:{l:'High',w:1.15},normal:{l:'Normal',w:1},low:{l:'Low',w:0.9}};
+const prioOf=p=>(p&&PRIO[p.priority])?p.priority:'normal';
+const scopeN=p=>!p?0:Array.isArray(p.scope)?p.scope.filter(Boolean).length:(+p._nscope||0);
+const scopeW=p=>{ const n=scopeN(p); return n>=4?1.2:n>=2?1.1:1; };
+const studioW=p=>(p&&p.type==='studiodev')?0.6:0.3;
+const isStudioWP=p=>!p||!p.pod||p.pod==='Studio'||isInternalP(p);
+function weightOf(t){ const p=t._p||S.projects[t.projectId], base=t.kind==='Deliverable'?3:1;
+  if((t.target||'')<W2_FROM) return base*scaleOf(p)*(paceOf(p)==='fast'?1.25:1);
+  if(isStudioWP(p)) return base*studioW(p);
+  return base*scaleOf(p)*scopeW(p)*(paceOf(p)==='fast'?1.25:1)*PRIO[prioOf(p)].w; }
 function creditOf(t){ const s=status(t); if(s==='early') return paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
 function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!isChalkP(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
@@ -2744,7 +2756,7 @@ function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
   if((!c||Date.now()-c.at>60000)&&!(c&&c.busy)&&window.slateDashRows){ S.dashAnon[k]={rows:c?c.rows:[],at:c?c.at:0,busy:true};
     window.slateDashRows(r.s,r.e).then(rows=>{ S.dashAnon[k]={rows:rows||[],at:Date.now()}; (rows||[]).forEach(x=>{ if(x.assignee) S.anonInfo[x.assignee]={team:x.team,rg:x.rg}; }); schedule(); })
       .catch(()=>{ S.dashAnon[k]={rows:c?c.rows:[],at:Date.now()}; }); }
-  return ((S.dashAnon[k]&&S.dashAnon[k].rows)||[]).filter(x=>!seen.has(x.id)).map(x=>({id:x.id,target:x.target,originalTarget:x.originalTarget,doneAt:x.doneAt,kind:x.kind,assignee:x.assignee,_anon:true,_team:x.team,_p:{pod:x.studio?'Studio':x.pod,pod2:x.pod2,katha:x.katha,std:x.pace?{pace:x.pace}:null}})); }
+  return ((S.dashAnon[k]&&S.dashAnon[k].rows)||[]).filter(x=>!seen.has(x.id)).map(x=>({id:x.id,target:x.target,originalTarget:x.originalTarget,doneAt:x.doneAt,kind:x.kind,assignee:x.assignee,_anon:true,_team:x.team,_p:{pod:x.studio?'Studio':x.pod,pod2:x.pod2,katha:x.katha,std:x.pace?{pace:x.pace}:null,type:x.ptype||'',_nscope:x.nscope||0,priority:x.prio||''}})); }
 const rgK=k=>(S.anonInfo[k]&&S.anonInfo[k].rg)||roleGroup(k), teamK=k=>(S.anonInfo[k]&&S.anonInfo[k].team)||teamOf(k);
 function perfTable(r){
   const raw=periodRaw(r), byP=new Map(), byPod=new Map();
@@ -2897,7 +2909,7 @@ function clientsDash(){
   const W=[];
   W.push(widget('Client priority matrix','dot size = land area · colour = priority',rows.length?h('div',{},clientMatrix(rows),
     h('div',{class:'legend',style:'justify-content:flex-start'},CL_PRI.map(([k,l])=>h('span',{style:`--c:${PRI_C[k]}`,text:l+' priority'}))),
-    h('p',{class:'f-hint',style:'margin:6px 0 0',text:(hasFee?'Value = 45% total fee + 25% land + 15% rate per sft + 15% fee per month of work.':'Value = land area (no fees linked in Finance yet).')+' Score = 60% value + 40% relationship (repeat projects, work running now), less up to 15 for projects cancelled or closed early. High ≥ 55, Medium ≥ 30. Set a client’s priority by hand in the table and it overrides the score.'})):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
+    h('p',{class:'f-hint',style:'margin:6px 0 0',text:(hasFee?'Value = 45% total fee + 25% land + 15% rate per sft + 15% fee per month of work.':'Value = land area (no fees linked in Finance yet).')+' Score = 60% value + 40% relationship (repeat projects, work running now), less up to 15 for projects cancelled or closed early. High ≥ 55, Medium ≥ 30. Set a client’s priority by hand in the table and it overrides the score; it also sets the priority of that client’s running projects (High, Normal or Low), which weighs their tasks.'})):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
   const types={}; rows.forEach(r=>{ const t=types[r.type]||(types[r.type]={c:0,n:0,k:0,f:0}); t.c++; t.n+=r.n; t.k+=r.katha; t.f+=r.fee; });
   const tl=Object.entries(types).sort((a,b)=>b[1].n-a[1].n), mx=Math.max(1,...tl.map(x=>x[1].n));
   W.push(widget('Clients by type','projects, land and fees',tl.length?h('div',{class:'hbars'},tl.map(([k,t])=>h('div',{class:'hb'},h('span',{class:'nm',text:clType(k)}),
@@ -2905,7 +2917,10 @@ function clientsDash(){
     h('span',{class:'v',text:`${t.c} · ${t.n}p`})))):h('div',{class:'w-empty',text:'No clients yet.'})));
   const basis=r=>!r.feeN?'—':r.perSft&&!r.lump?`৳${Math.round(r.rateFee/Math.max(1,r.sft))}/sft`:r.lump&&!r.perSft?'Lump sum':`Mixed (${r.perSft} per sft, ${r.lump} lump)`;
   const pick=(r,f,opts)=>{ const v=f==='type'?(r.type):(r.pri), x=h('select',{'aria-label':(f==='type'?'Type for ':'Priority for ')+r.name,style:'min-width:0;padding:4px 6px;font-size:13px'+(f==='priority'?`;color:${PRI_C[r.pri]};font-weight:600`:''),
-      onchange:e=>{ const val=e.target.value; run(()=>saveClient(r.k,{name:r.name,[f]:val==='auto'?null:val}),'Saved').then(()=>render(true)); }},
+      onchange:e=>{ const val=e.target.value; run(async()=>{ await saveClient(r.k,{name:r.name,[f]:val==='auto'?null:val});
+        // a client's priority carries to their running projects, where it weighs their tasks (staff see the project's priority, never the client ranking)
+        if(f==='priority'&&val!=='auto'){ const pv={high:'high',medium:'normal',low:'low'}[val]; for(const p of r.ps.filter(p=>!p.closed&&prioOf(p)!==pv)) await S.db.doc('projects/'+p.id).update({priority:pv}); }
+      },'Saved').then(()=>render(true)); }},
       h('option',{value:'auto',text:'Auto · '+(f==='type'?clType(r.autoType):CL_PRI.find(y=>y[0]===r.autoPri)[1])}),opts.map(([k,l])=>h('option',{value:k,text:l})));
     x.value=f==='type'?((C&&C.cl&&C.cl[r.k]&&C.cl[r.k].type)||'auto'):(r.manual?r.pri:'auto'); return x; };
   W.push(widget('All clients',`${rows.length} · ranked by score`,rows.length?h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
@@ -2955,7 +2970,7 @@ function viewDash(){
   const pt=perfTable(r), mine=perf(items);
   const idxOf=D.person?(pt.people.find(x=>x.k===D.person)||{}).idx:(D.pod&&/^pod\b/i.test(D.pod)?(pt.pods.find(x=>x.k===D.pod)||{}).idx:null);
   out.push(h('div',{class:'kpis'},
-    h('div',{class:'kpi dark','data-tip':canSeeScoring()?'Index: people against others in the same role (50% workload + 50% timeliness); pods on timeliness. Points: deliverable 3, task 1, × project size, ×1.25 on fast track; full on time, +10% early (not on relaxed projects), less the later it is, none while overdue.':'Points you earned for work due in this period. Delivering on approved dates earns them in full.'},h('div',{class:'lbl',text:'Performance points'}),h('div',{class:'num',text:mine.pos?mine.earn.toFixed(1):'—'}),
+    h('div',{class:'kpi dark','data-tip':canSeeScoring()?'Index: people against others in the same role (50% workload + 50% timeliness); pods on timeliness. Points: deliverable 3, task 1, × project size, × scope, ×1.25 on fast track, × project priority; studio work ×0.6 (development) or ×0.3; full on time, +10% early (not on relaxed projects), less the later it is, none while overdue.':'Points you earned for work due in this period. Delivering on approved dates earns them in full.'},h('div',{class:'lbl',text:'Performance points'}),h('div',{class:'num',text:mine.pos?mine.earn.toFixed(1):'—'}),
       h('div',{class:'lbl',text:idxOf!=null&&idxOf!==undefined?`Index ${idxOf} · 100 = studio average`:(mine.pos?`${Math.round(mine.q*100)}% of ${mine.pos.toFixed(1)} possible`:'Nothing due and past yet')})),
     h('div',{class:'kpi dark'},h('div',{class:'lbl',text:'On-time rate'}),h('div',{class:'num',text:rt==null?'—':Math.round(rt*100)+'%'}),h('div',{class:'lbl',style:rt!=null&&rt*100<tg?'color:#FF6B61':'',text:`Target ${tg}%`+(rt==null?'':rt*100>=tg?' · met':' · below')})),
     kpi('Due',c.total),kpi('In advance',c.early,'early'),kpi('On time',c.ontime,'ontime'),kpi('Late',c.late,'late'),kpi('Overdue',c.overdue,'overdue')));
@@ -2969,7 +2984,7 @@ function viewDash(){
         h('thead',{},h('tr',{},h('th',{text:''}),h('th',{class:'n',text:'Workload'}),h('th',{class:'n',text:'Points'}),h('th',{class:'n',text:'Timeliness'}),h('th',{class:'n',text:'Pod support'}),h('th',{class:'n',text:'Studio'}),h('th',{class:'n',text:'Index'}))),
         h('tbody',{},podRowsT.length?h('tr',{},h('td',{colspan:7,class:'sub2',style:'padding-top:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600',text:fullView()?'Pods':'Your pod'})):null,podRowsT.map(x=>row(podLabel(x.k),null,x,x.k===myPod())),
           peopleRows.length?h('tr',{},h('td',{colspan:7,class:'sub2',style:'padding-top:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600',text:fullView()||amPodLead()?'People':hdT?'Your team':'You'})):null,peopleRows.map(x=>row(nameOf(x.k),/^pod\b/i.test(teamOf(x.k))?teamLabel(x.k)+(RG[x.rg]?' · '+RG[x.rg]:''):(RG[x.rg]||teamLabel(x.k)),x,x.k===S.uid))))),
-        h('p',{class:'f-hint',style:'margin:10px 0 0',text:!canSeeScoring()?'100 is the average for your role. Only approved dates count; deliver on time to keep your index up.':'People: index = 50% workload + 50% timeliness, each compared with others in the same role (100 = their average); someone alone in a role is scored on timeliness against the studio. Interns and other staff are not scored. Pods: index = timeliness against the studio average, with workload shown beside it. Workload: deliverable 3, task 1, × project size (up to 5 katha ×1, 10 ×1.25, 20 ×1.5, 30 ×1.75, above 30 ×2), × 1.25 on fast-track projects and proposal sprints. Points: on time full, early +10% (none on relaxed projects), late −5% a day (minimum 40%), overdue nothing until done. Timeliness = points ÷ workload. Bonuses: +1 per point earned helping another pod (max +10) and +1 per point earned on studio jobs (max +5).'}))
+        h('p',{class:'f-hint',style:'margin:10px 0 0',text:!canSeeScoring()?'100 is the average for your role. Only approved dates count; deliver on time to keep your index up.':'People: index = 50% workload + 50% timeliness, each compared with others in the same role (100 = their average); someone alone in a role is scored on timeliness against the studio. Interns and other staff are not scored. Pods: index = timeliness against the studio average, with workload shown beside it. Workload: deliverable 3, task 1, × project size (up to 5 katha ×1, 10 ×1.25, 20 ×1.5, 30 ×1.75, above 30 ×2), × scope (2–3 scopes ×1.1, 4 or more ×1.2), × 1.25 on fast-track projects and proposal sprints, × project priority (High ×1.15, Low ×0.9). Studio work weighs less: studio development ×0.6, other studio work ×0.3 (from 1 Nov 2026; earlier work keeps the old weights). Points: on time full, early +10% (none on relaxed projects), late −5% a day (minimum 40%), overdue nothing until done. Timeliness = points ÷ workload. Bonuses: +1 per point earned helping another pod (max +10) and +1 per point earned on studio jobs (max +5).'}))
       :h('div',{class:'w-empty',text:'Nothing due and past in this period yet.'}),true));
   }
   if(fullView()||myHeadTeam()){ const sp=myHeadTeam()?people().filter(id=>teamOf(id)===myHeadTeam()):people().filter(id=>isSupport(id)&&(!D.pod||!/^pod\b/i.test(D.pod)?(!D.pod||teamOf(id)===D.pod):true));
@@ -4787,6 +4802,11 @@ function paceRow(p){
       canPace()&&!p.closed?seg('Pace',Object.keys(PACE).map(x=>[x,paceName(p,x)]),k,v=>setPace(p,v)):h('span',{class:'pill '+(k==='fast'?'s-overdue':k==='relaxed'?'s-early':'s-open'),text:paceName(p)})),
     h('div',{class:'f-hint',text:isSprint?PACE_NOTE.sprint:PACE_NOTE[k]}));
 }
+function prioRow(p){ if(isStudioWP(p)) return null; const k=prioOf(p);
+  return h('div',{class:'card',style:'gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Priority'}),
+      canPace()&&!p.closed?seg('Priority',Object.keys(PRIO).map(x=>[x,PRIO[x].l]),k,v=>{ if(v!==k) run(()=>S.db.doc('projects/'+p.id).update({priority:v}),'Priority set to '+PRIO[v].l); }):h('span',{class:'pill '+(k==='high'?'s-overdue':k==='low'?'s-early':'s-open'),text:PRIO[k].l})),
+    h('div',{class:'f-hint',text:{high:'Tasks on this project weigh 15% more in performance points, from 1 Nov.',normal:'Normal weight. The Principal or the COO can raise or lower a project’s priority.',low:'Tasks on this project weigh 10% less in performance points, from 1 Nov.'}[k]}));
+}
 const paceTag=p=>paceOf(p)==='fast'?h('span',{class:'tag tag-req',text:paceName(p)}):null;
 function stdDots(p){ const ks=stdPhases(p); if(!ks.length) return null; const act=activePhases(p), done=ks.filter(k=>stdState(p,k).done).length;
   return h('div',{class:'pc-phases'},h('div',{class:'pc-dots'},ks.map(k=>h('i',{class:stdState(p,k).done?'on':act.includes(k)?'wait':'',title:phLabel(k,p)}))),h('span',{class:'muted',text:act.length?'Phase '+act.map(k=>PH[k].no).join(' + ')+(act.length===1?' '+phName(act[0],p):''):done===ks.length?'All gates closed':`${done}/${ks.length} gates closed`}),paceTag(p)); }
@@ -4800,7 +4820,7 @@ function stdSection(p){
   const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub=t.legacyOk?'before SLATE OS':'before SLATE OS · COO to approve'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
     return h('div',{},h('span',{text:lbl}),extra||h('b',{style:t&&!t.doneAt&&status(t)==='overdue'?'color:var(--overdue)':'',text:v}),!extra&&sub?h('span',{style:'font-weight:500',text:sub}):null); };
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'}),h('span',{class:'cnt',text:`${closed}/${ks.length} gates closed`})),
-    paceRow(p),
+    paceRow(p),prioRow(p),
     h('div',{class:'list'},ks.map(k=>{ const s=stdState(p,k), c=clCount(p,k), isOpen=open===k, fb=((p.std&&p.std.fb)||{})[k]||'', fbGot=((p.std&&p.std.fbGot)||{})[k]||'';
       const stat=s.done?h('span',{class:'pill s-ontime',text:'Gate closed'}):!s.created?h('span',{class:'pill s-open',text:'Not set up'}):act.includes(k)?h('span',{class:'pill s-late',text:'In progress'}):h('span',{class:'pill s-open',text:'Not started'});
       const fbEl=fbEdit&&!s.done?h('input',{id:'fb-'+k,type:'date',value:fb,style:'background:var(--group);padding:4px 6px;font-size:13px','aria-label':'Client feedback due',onchange:e=>run(()=>S.db.doc('projects/'+p.id).update({std:{fb:{[k]:e.target.value||''}}}),'Client feedback date saved')}):h('b',{text:fb?fmtD(fb):'—'});
