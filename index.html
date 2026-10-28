@@ -2247,14 +2247,9 @@ function vfCat(t){ if(isChalkTask(t)) return 'chalk'; if(t.repeat) return 'repea
 const vfCfg=()=>(S.settings&&S.settings.verify)||{};
 const vfMaster=()=>vfCfg().on!==false;
 const vfOn=k=>vfMaster()&&vfCfg()[k]!==false;
-const podVerifies=t=>{ if(!t||isChalkTask(t)||!t.assignee||t.assignee===S.uid||isPriv(t.assignee)||isCOO(t.assignee)||pods().some(pd=>isPodLead(t.assignee,pd))) return false; if(!['deliverable','gate','task'].includes(vfCat(t))) return false;
-  const p=t._p||S.projects[t.projectId]; return !!p&&isProjLead(p); };
-const canVerify=t=>!!t&&S.canWrite&&(S.isOwner||(amApprover()&&!isChalkTask(t)&&t.assignee!==S.uid)||podVerifies(t));
+const canVerify=t=>!!t&&S.canWrite&&(S.isOwner||(amApprover()&&!isChalkTask(t)&&t.assignee!==S.uid));
 const mustVerify=t=>!t.legacy&&vfOn(vfCat(t))&&!canVerify(t);
-/* POD work: the project's POD leader verifies a member's task; the POD leader's own work goes to the Principal or the COO */
-const podLeadOf=t=>{ const p=t&&(t._p||S.projects[t.projectId]); if(!p||!t.assignee||p.pod==='Studio'||isInternalP(p)) return false; if(!['deliverable','gate','task'].includes(vfCat(t))) return false;
-  return !pods().some(pd=>isPodLead(t.assignee,pd)); };
-const vfWho=t=>isChalkTask(t)||isCOO(t.assignee)?'the Principal':podLeadOf(t)?'the POD leader':'the Principal or the COO';
+const vfWho=t=>isChalkTask(t)||isCOO(t.assignee)?'the Principal':'the Principal or the COO';
 const vfReturned=t=>!!t.lastReturn&&!t.verify&&!t.doneAt&&!t.archived;
 const vfTiming=t=>{ const v=t.verify; if(!v||!t.target) return ''; return v.at<t.target?`${diff(v.at,t.target)}d early`:v.at===t.target?'on time':`${diff(t.target,v.at)}d late`; };
 function vfQueue(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.verify&&!t.doneAt&&canVerify(t)).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||'')); }
@@ -2670,8 +2665,6 @@ function viewMineBody(){
 
   /* 2 · Today: one line each */
   const today_=[];
-  if(!ap){ const vq=vfQueue(); if(vq.length) vq.slice(0,6).forEach(t=>{ const p=S.projects[t.projectId];
-    today_.push(hRow({dot:'var(--early)',strong:'To verify',title:t.title,meta:`${nameOf(t.verify.by)} · done ${fmtD(t.verify.at)}${p?' · '+(p.code||p.name):''}`,onclick:()=>openTask(t.id)})); }); }
   const qn=ap?queueCount():0;
   if(qn){ const oldest=queueGroups().map(g=>g.oldest).filter(Boolean).sort()[0];
     today_.push(hRow({dot:'var(--overdue)',strong:`${qn} waiting on you`,meta:`Approvals · oldest ${ageTxt(ageOf(oldest))}`,onclick:()=>goView('queue')})); }
@@ -4275,7 +4268,7 @@ function viewSetup(){
         :h('span',{class:'tag',text:val?'On':'Off'}));
     const set=(k,v,msg)=>run(()=>settingsRef().update({verify:{[k]:v}}),msg);
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Completion verification'}),n?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ S.qf='verify'; goView('queue'); },text:`${n} waiting`}):null),
-      h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:`When a kind is on, work marked done goes to ${S.isOwner?'you or the COO':'the Principal or you'} to verify before it counts. A POD member’s work on a POD project can also be verified by that project’s POD leader; a POD leader’s own work comes to ${S.isOwner?'you or the COO':'the Principal or you'}. Verified work is dated the day it was finished, so a slow check never makes anyone late. Chalk Create work and the COO’s own tasks go to the Principal. Turning a kind off doesn’t affect work already sent.`+(ownSw?'':' Only the Principal changes these.')}),
+      h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:`When a kind is on, work marked done goes to ${S.isOwner?'you or the COO':'the Principal or you'} to verify before it counts. Verified work is dated the day it was finished, so a slow check never makes anyone late. Chalk Create work and the COO’s own tasks go to the Principal. Turning a kind off doesn’t affect work already sent.`+(ownSw?'':' Only the Principal changes these.')}),
       h('div',{class:'list'},sw(on,'Verification','Master switch for every kind below',()=>set('on',!on,on?'Verification is off':'Verification is on')),
         VF_CATS.map(([k,l,dsc])=>{ const v=cfg[k]!==false; return sw(v,l,dsc,()=>set(k,!v,`${l}: verification ${v?'off':'on'}`),!on); }))));
   }
