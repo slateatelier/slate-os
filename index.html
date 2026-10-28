@@ -4382,7 +4382,7 @@ function draftsSec(){ const xs=pdList(); if(!xs.length||!S.canWrite) return null
       h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openProjDraft(x.id),text:'Continue'}),
         h('button',{class:'btn btn-sm',type:'button','aria-label':'Delete draft',onclick:()=>{ if(confirm('Delete this draft?')) run(()=>delProjDraft(x.id),'Draft deleted'); },text:'Delete'}))))),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Only you see your drafts. A draft is removed when you send or add the project.'})); }
-function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.scope=[...(p.scope||[])]; d.scopeQty={...(p.scopeQty||{})}; d.scopeVendor={...(p.scopeVendor||{})}; if(!id&&!amApprover()&&myPod()) d.pod=myPod();
+function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.floorUnits={...(p.floorUnits||{})}; d.scope=[...(p.scope||[])]; d.scopeQty={...(p.scopeQty||{})}; d.scopeVendor={...(p.scopeVendor||{})}; if(!id&&!amApprover()&&myPod()) d.pod=myPod();
   d.pods=id?podsOfProject(p):(myPod()&&!amApprover()?[myPod()]:[]); d.people=[];
   { const pl=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null; d.ph=p.std?{sel:[...stdPhases(p)],ed:JSON.parse(JSON.stringify(p.std.ed||{})),open:null,type:p.std.type||p.type}:{sel:pl?[...pl.sel]:null,ed:JSON.parse(JSON.stringify((pl&&pl.ed)||{})),open:null,type:pl?p.type:''}; }
   S.sheet={type:'project',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{const el=document.getElementById('sh-code');el&&el.focus()},30); }
@@ -4670,10 +4670,14 @@ function sheetNewTask(){
 /* ---------- JV unit chart: tap the landowner's units, the rest are the developer's ---------- */
 const unitFloors=d=>{ const n=parseInt(d.floors)||0, st=d.mezz==='yes'&&d.mezzName==='1st floor'?2:1; return Array.from({length:n},(_,i)=>st+i); };
 const unitLetters=n=>Array.from({length:Math.min(n,26)},(_,i)=>String.fromCharCode(65+i));
-const allUnitCodes=d=>{ const L=unitLetters(parseInt(d.upf)||0); return unitFloors(d).flatMap(f=>L.map(l=>f+l)); };
+/* units on a floor: the regular number, unless that floor is set differently (floorUnits: {floor: units}) */
+const upfAt=(d,f)=>{ const fu=d.floorUnits||{}; return fu[f]!=null&&fu[f]!==''?Math.max(0,parseInt(fu[f])||0):(parseInt(d.upf)||0); };
+const maxUpf=d=>unitFloors(d).reduce((m,f)=>Math.max(m,upfAt(d,f)),parseInt(d.upf)||0);
+const cleanFU=d=>{ const out={}, fl=new Set(unitFloors(d)), reg=parseInt(d.upf)||0; Object.entries(d.floorUnits||{}).forEach(([f,n])=>{ if(n===''||n==null||!fl.has(+f)) return; const v=Math.max(0,parseInt(n)||0); if(v!==reg) out[f]=v; }); return out; };
+const allUnitCodes=d=>unitFloors(d).flatMap(f=>unitLetters(upfAt(d,f)).map(l=>f+l));
 function loSplit(d){ const all=allUnitCodes(d), ok=new Set(all), lo=(d.loUnits||[]).filter(c=>ok.has(c)); return {all,lo,total:all.length,loN:lo.length,devN:all.length-lo.length}; }
 function loChart(d,edit){
-  const upf=parseInt(d.upf)||0, floors=unitFloors(d).slice().reverse(), L=unitLetters(upf);
+  const upf=maxUpf(d), floors=unitFloors(d).slice().reverse(), L=unitLetters(upf);
   if(!upf||!floors.length) return h('div',{class:'f-hint',text:'Enter units per floor and floors with units to draw the unit chart.'});
   const sp=loSplit(d), set=new Set(sp.lo), pc=n=>sp.total?Math.round(n/sp.total*100):0;
   const save=()=>{ d.loUnits=[...set]; renderSheet(); };
@@ -4684,12 +4688,25 @@ function loChart(d,edit){
     h('div',{class:'lo-sum'},h('div',{class:'lo-b lo'},h('b',{text:String(sp.loN)}),h('span',{text:`Landowner · ${pc(sp.loN)}%`})),h('div',{class:'lo-b'},h('b',{text:String(sp.devN)}),h('span',{text:`Developer · ${sp.total?100-pc(sp.loN):0}%`})),h('div',{class:'lo-b'},h('b',{text:String(sp.total)}),h('span',{text:'Total units'}))),
     want!=null?h('div',{class:'f-hint',style:Math.round(want)!==sp.loN?'color:var(--late)':'',text:`Agreement LO share ${share}% = ${Math.round(want*10)/10} units`+(Math.round(want)!==sp.loN?` · chart has ${sp.loN}`:' · matches')}):null,
     h('div',{class:'ugrid',style:`grid-template-columns:52px repeat(${L.length},minmax(36px,1fr))`},
-      h('span',{class:'uh'}),L.map(l=>edit?h('button',{type:'button',class:'uh',title:'Toggle column '+l,onclick:()=>tgl(unitFloors(d).map(f=>f+l)),text:l}):h('span',{class:'uh',text:l})),
-      floors.flatMap(f=>[edit?h('button',{type:'button',class:'uf',title:'Toggle whole floor',onclick:()=>tgl(L.map(l=>f+l)),text:ord(f)}):h('span',{class:'uf',text:ord(f)}),...L.map(l=>cell(f+l))])),
+      h('span',{class:'uh'}),L.map(l=>edit?h('button',{type:'button',class:'uh',title:'Toggle column '+l,onclick:()=>tgl(unitFloors(d).filter(f=>unitLetters(upfAt(d,f)).includes(l)).map(f=>f+l)),text:l}):h('span',{class:'uh',text:l})),
+      floors.flatMap(f=>{ const Lf=unitLetters(upfAt(d,f)); return [edit?h('button',{type:'button',class:'uf',title:'Toggle whole floor',onclick:()=>Lf.length&&tgl(Lf.map(l=>f+l)),text:ord(f)}):h('span',{class:'uf',text:ord(f)}),...L.map(l=>Lf.includes(l)?cell(f+l):h('span',{'aria-hidden':'true'}))]; })),
     h('div',{class:'g-legend'},h('span',{},h('i',{style:'--c:var(--ink)'}),'Landowner (LO)'),h('span',{},h('i',{style:'--c:#fff;border:1px solid var(--border)'}),'Developer'),edit?h('span',{text:'Tap a unit, a floor or a column letter.'}):null),
     edit?h('div',{class:'bar'},h('label',{class:'field',style:'flex:0 1 190px'},h('span',{class:'lbl',text:'Agreement LO share % (optional)'}),h('input',{id:'sh-loShare',type:'number',min:0,max:100,step:'any',inputmode:'decimal',value:d.loShare||'',style:'background:#fff',oninput:e=>{ d.loShare=e.target.value; renderSheet(); }})),
       sp.loN?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff;align-self:end',onclick:()=>{ set.clear(); save(); },text:'Clear LO units'}):null):null);
 }
+/* floors that have a different number of units from the regular floor (e.g. 1st floor 2 units, top floor duplex 2) */
+function floorUnitsEditor(d){
+  const fl=unitFloors(d); if(!fl.length||!(parseInt(d.upf)>=0&&d.upf!=='')) return null;
+  if(!d.floorUnits||typeof d.floorUnits!=='object') d.floorUnits={};
+  const fu=d.floorUnits, used=Object.keys(fu).map(Number).filter(f=>fl.includes(f)).sort((a,b)=>a-b), free=fl.filter(f=>!used.includes(f));
+  const fname=f=>ord(f)+' floor';
+  return h('div',{style:'display:grid;gap:6px'},
+    used.length?h('div',{class:'lbl',text:'Floors with a different number of units'}):null,
+    ...used.map(f=>h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 110px 34px;gap:6px;align-items:center'},
+      (()=>{ const x=h('select',{'aria-label':'Floor',onchange:e=>{ const nf=+e.target.value, v=fu[f]; delete fu[f]; fu[nf]=v; renderSheet(); }},[f,...free].sort((a,b)=>a-b).map(n=>h('option',{value:String(n),text:fname(n)}))); x.value=String(f); return x; })(),
+      h('input',{type:'number',min:0,step:1,inputmode:'numeric','aria-label':'Units on the '+fname(f),value:fu[f],placeholder:'units',oninput:e=>{ fu[f]=e.target.value; },onchange:()=>renderSheet()}),
+      h('button',{class:'btn btn-sm',type:'button','aria-label':'Remove '+fname(f),onclick:()=>{ delete fu[f]; renderSheet(); },text:'×'}))),
+    free.length?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:()=>{ fu[free[0]]=String(parseInt(d.upf)||0); renderSheet(); },text:used.length?'+ Another floor with a different number of units':'+ A floor has a different number of units'}):null); }
 function farFormSection(d,sec){
   const rr=el=>{ el.addEventListener('change',()=>renderSheet()); return el; };
   const num=(k,ph)=>h('input',{id:'sh-'+k,type:'number',min:0,step:1,inputmode:'numeric',placeholder:ph,value:d[k]||'',oninput:e=>{ d[k]=e.target.value; renderSheet(); }});
@@ -4703,7 +4720,8 @@ function farFormSection(d,sec){
   return [sec('Building and FAR'),
     field('Is FAR applicable? *',rr(sel('farApplies',[['','Select…'],['yes','Yes: use RAJUK FAR (DAP)'],['no','No: FAR not applicable']]))),
     d.farApplies==='yes'?h('div',{class:'form-row'},field('Density block *',rr(sel('block',[['','Select block…'],...FAR_BLOCKS.map(b=>[b[0],b[0]])]))),field('Front road *',roadPicker(d,'sh-',focusW=>{ renderSheet(); if(focusW) setTimeout(()=>{ const el=document.getElementById('sh-roadw'); if(el) el.focus(); },0); },true))):null,
-    h('div',{class:'form-row'},field('Units per floor',num('upf','e.g. 4')),field('Floors with units',num('floors','e.g. 9'))),
+    h('div',{class:'form-row'},field('Units on a regular floor',num('upf','e.g. 4')),field('Floors with units',num('floors','e.g. 9'))),
+    floorUnitsEditor(d),
     h('div',{class:'form-row'},field('Basements',rr(sel('basements',[['0','None'],['1','1 basement'],['2','2 basements']]))),field('Mezzanine floor?',rr(sel('mezz',[['','No'],['no','No'],['yes','Yes']].filter((o,i)=>i!==0))))),
     d.mezz==='yes'?field('What do we call the mezzanine? *',rr(sel('mezzName',[['','Select…'],['Mezzanine','Mezzanine (G + M + floors)'],['1st floor','1st floor (counted as a floor)']]))):null,
     units?h('div',{class:'f-hint',text:`${floorText(d)} · ${units} proposed units`}):null,
@@ -4771,7 +4789,7 @@ function sheetProject(){
       if(v.farApplies==='yes'&&(plotFarOf(v.road)||{}).under) return fail(`A ${v.road} road is under ${ROAD_MIN} ft, outside the DAP plot FAR table. Set FAR to “not applicable” and enter the areas by hand, or check the road width.`);
       if(v.mezz==='yes'&&!v.mezzName) return fail('Choose what to call the mezzanine: Mezzanine or 1st floor.');
       if(v.mezz!=='yes') v.mezzName='';
-      v.units=unitsOf(v)||null;
+      v.floorUnits=cleanFU({...v,floorUnits:d.floorUnits}); v.units=unitsOf(v)||null;
       if(v.type==='jv'){ const sp=loSplit({...v,loUnits:d.loUnits}); v.loUnits=sp.lo; v.loCount=sp.loN; v.devCount=sp.devN; } else { v.loUnits=[]; v.loCount=null; v.devCount=null; }
       const fx=v.farApplies==='yes'?farCalc(v):null; v.farCalc=fx;
       if(v.farApplies!=='no'){ v.saleManual=''; v.constManual=''; }
@@ -6513,6 +6531,47 @@ function farRun(){
     input:{katha:k,block:d.block,road:d.road,basements:+d.basements||0,upf:d.upf||'',floors:d.floors||'',mezz:d.mezz||'no'},
     result:{far:x.far,farType:x.farType,farArea:x.farArea,saleable:x.saleable,construction:x.construction,mgcMax:x.mgcMax,mgcMaxPct:x.mgcMaxPct,maxUnits:x.maxUnits,zero:!!x.zero}}),'Calculated and saved to the FAR log');
 }
+/* A4 FAR report in the SLATE layout; the browser saves it as PDF */
+function printFarReport(rd,x){
+  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const logo=(document.querySelector('.logo')||{}).src||'', k=parseFloat(rd.katha)||0, land=Math.round(k*720), units=unitsOf(rd);
+  const n=v=>v==null||v===''?'—':Math.round(v).toLocaleString('en-IN'), sf=v=>v==null?'—':n(v)+' sft', pc=v=>v==null?'—':(Math.round(v*1000)/10)+'%';
+  const minF=x.mgcMax?Math.ceil(x.farArea/x.mgcMax):null, maxF=x.mgcMin?Math.ceil(x.farArea/x.mgcMin):null;
+  const p=rd.projectId&&S.projects[rd.projectId]?S.projects[rd.projectId]:null, title=rd.site||(p?p.name:'')||'FAR feasibility';
+  const ref='SL8-'+Date.now().toString(36).toUpperCase().slice(-6), when=new Date();
+  const row=(a,b,bold)=>`<tr${bold?' class="b"':''}><td>${esc(a)}</td><td>${b}</td></tr>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>FAR report · ${esc(title)}</title><style>
+  @page{size:A4;margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{margin:0;font:9pt/1.35 Jost,Futura,"Century Gothic",-apple-system,sans-serif;color:#111}
+  .pg{width:210mm;min-height:296mm;padding:13mm 14mm 10mm;display:flex;flex-direction:column}
+  .top{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:5mm;border-bottom:2px solid #111}.top img{height:15mm}
+  .meta{text-align:right;font-size:8pt;color:#555}.meta b{display:block;color:#111;font-size:11pt}
+  .ey{font-size:7.5pt;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#777;margin-top:5mm}
+  h1{font-size:22pt;margin:1mm 0;letter-spacing:-.02em}.sub{color:#555}
+  .m{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #ddd;border-radius:3mm;background:#F2F2F7;margin:4mm 0 5mm}
+  .m div{padding:3.5mm 4mm;border-right:1px solid #ddd}.m div:last-child{border-right:0}.m small{display:block;font-size:7pt;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#777}.m strong{display:block;font-size:15pt;margin-top:1mm}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 8mm}.h{font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #111;padding-bottom:1.3mm;margin-top:3mm}
+  table{width:100%;border-collapse:collapse}td{padding:1.25mm 0;border-bottom:1px solid #e5e5ea;font-size:8.5pt}td:first-child{color:#555}td:last-child{text-align:right;font-weight:600;white-space:nowrap}tr.b td{color:#111;font-weight:700}
+  .tot{background:#111;color:#fff;border-radius:3mm;padding:4.5mm 6mm;display:flex;justify-content:space-between;align-items:center;margin:5mm 0}.tot small{display:block;font-size:7pt;letter-spacing:.08em;text-transform:uppercase;color:#aaa}.tot strong{font-size:19pt}
+  .warn{color:#d7262b;font-weight:600}
+  .foot{margin-top:auto;border-top:2px solid #111;padding-top:4mm;display:flex;justify-content:space-between;gap:8mm;font-size:8.5pt;color:#333;line-height:1.55}.foot b{font-size:11pt;color:#111;display:block}
+  .note{font-size:6.5pt;color:#888;margin-top:3mm}</style></head><body><div class="pg">
+  <div class="top">${logo?`<img src="${logo}" alt="SLATE">`:'<b>SLATE</b>'}<div class="meta"><b>FAR feasibility report</b>Ref. ${ref}<br>${esc(fmtD(ymd(when)))} · prepared by ${esc(nameOf(S.uid))}</div></div>
+  <div class="ey">Residential apartment (A3) · DAP 2022–2035 · Imarot Nirman Bidhimala 2025</div>
+  <h1>${esc(title)}</h1><div class="sub">${esc([p?projLabel(p):'',rd.block,rd.road?rd.road+' road':'',k?k+' katha':''].filter(Boolean).join(' · '))}</div>
+  <div class="m"><div><small>FAR</small><strong>${x.zero?'0':x.far.toFixed(3)}</strong></div><div><small>FAR area</small><strong>${n(x.farArea)}</strong>sft</div><div><small>Saleable</small><strong>${n(x.saleable)}</strong>sft</div><div><small>Construction</small><strong>${n(x.construction)}</strong>sft</div></div>
+  <div class="cols"><div>
+    <div class="h">Site</div><table>${row('Land',`${k} katha · ${n(land)} sft`)}${row('Density block',esc(rd.block))}${row('Front road',esc(rd.road))}${row('Basements',+rd.basements?rd.basements:'None')}</table>
+    <div class="h">FAR</div><table>${row('Area FAR (DAP)',x.areaFar)}${row('Plot FAR (road)',(+x.plotFar).toFixed(3)+(x.plotExact?'':' · interpolated'))}${row('FAR used · '+x.farType,x.zero?'0':x.far.toFixed(3),1)}${row('FAR area',sf(x.farArea),1)}</table>
+  </div><div>
+    <div class="h">Ground coverage</div><table>${row('Min MGC',pc(x.mgcMinPct)+' · '+sf(x.mgcMin))}${row('Max MGC',pc(x.mgcMaxPct)+' · '+sf(x.mgcMax))}${row('Floors needed',minF&&maxF?(minF===maxF?minF:minF+' to '+maxF):minF||'—',1)}</table>
+    <div class="h">Units</div><table>${row('Maximum units (DAP)',n(x.maxUnits),1)}${units?row('Proposed units',units+(units>x.maxUnits?' <span class="warn">over the maximum</span>':'')):''}${units?row('Building',esc(floorText(rd))):''}${units&&x.saleable?row('Average unit size',sf(x.saleable/units)):''}</table>
+  </div></div>
+  <div class="tot"><div><small>Saleable area</small><strong>${n(x.saleable)} sft</strong></div><div style="text-align:right"><small>Construction area</small><strong style="font-size:13pt">${n(x.construction)} sft</strong></div></div>
+  <div class="note">Saleable = FAR area × 1.22. Construction adds 25%, 35% or 45% for 0, 1 or 2 basements. A guide for early decisions: confirm with RAJUK and a full design before committing.</div>
+  <div class="foot"><div><b>SLATE Architecture &amp; Design</b>House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212</div><div style="text-align:right">+88 01749 390 284<br>info@slate-atelier.com · slate-atelier.com</div></div>
+  </div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`;
+  const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to make the report.'); w.document.open(); w.document.write(html); w.document.close(); }
 function viewFar(){
   syncFarLog();
   const F=farState(), d=F.d, all=farLogAll(), mine=fullView()?all:all.filter(x=>x.by===S.uid);
@@ -6521,7 +6580,8 @@ function viewFar(){
   const pj=projects().filter(p=>!p.closed&&(canSeeProjectDetail(p)||workOn(p)));
   const fact=(l,v,s)=>v==null||v===''?null:h('div',{},h('div',{class:'s',text:l}),h('div',{class:'v',text:v}),s?h('div',{class:'s',text:s}):null);
   const res=F.res?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Result'}),h('span',{class:'cnt',text:F.res.d.site||(F.res.d.projectId&&S.projects[F.res.d.projectId]?projLabel(S.projects[F.res.d.projectId]):'')})),
-      h('div',{class:'facts'},farFacts({...F.res.d,farApplies:'yes'},F.res.x,fact))):null;
+      h('div',{class:'facts'},farFacts({...F.res.d,farApplies:'yes'},F.res.x,fact)),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>printFarReport(F.res.d,F.res.x),text:'Generate A4 report (PDF)'}))):null;
   const q=(F.q||'').toLowerCase(), list=mine.filter(x=>(!F.who||x.by===F.who)&&(!q||[x.site,x.project,x.input&&x.input.block,nameOf(x.by)].join(' ').toLowerCase().includes(q)));
   const whoSel=fullView()?(()=>{ const ids=[...new Set(all.map(x=>x.by))]; const el=h('select',{id:'far-who','aria-label':'Person',style:'flex:0 1 180px',onchange:e=>{F.who=e.target.value;render(true)}},h('option',{value:'',text:'Everyone'}),ids.map(id=>h('option',{value:id,text:nameOf(id)}))); el.value=F.who||''; return el; })():null;
   return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Tools'}),h('h1',{class:'h1',text:'FAR calculator'}),h('p',{class:'lead',text:'RAJUK FAR under DAP 2022–2035: block and non-block FAR, ground coverage, maximum units and areas. Every calculation is saved to the log with the date, time and who ran it.'}))),
@@ -6601,7 +6661,7 @@ function farCalc(d){
   const base=Math.ceil(k*du), maxUnits=eligible?Math.ceil(Math.ceil(base*(1+inc))*1.1):Math.ceil(base*1.1);
   return {farType:eligible?'Block FAR':'Non-block FAR',far:+far.toFixed(3),areaFar,plotFar,roadW:rw,plotExact:!!r.exact,plotLo:r.lo||null,plotHi:r.hi||null,mgcMinPct:mgcMin,mgcMaxPct:mgcMax,mgcMin:mgcMin!=null?Math.round(land*mgcMin):null,mgcMax:Math.round(land*mgcMax),maxUnits,farArea:Math.round(farArea),saleable:Math.round(sale),construction:Math.round(cons),zero:areaFar===0};
 }
-const unitsOf=d=>(parseInt(d.upf)||0)*(parseInt(d.floors)||0);
+const unitsOf=d=>unitFloors(d).reduce((a,f)=>a+upfAt(d,f),0);
 function floorText(d){ const n=parseInt(d.floors)||0; if(!n) return ''; const bs=+d.basements||0, pre=bs?bs+'B + ':'';
   if(d.mezz==='yes'&&!d.mezzName) return `${pre}G + mezzanine + ${n}`;
   if(d.mezz==='yes'&&d.mezzName==='1st floor') return `${pre}G + ${n+1} (1st floor is the mezzanine; units on 2nd–${ord(n+1)})`;
@@ -6611,7 +6671,8 @@ const sqft=n=>n==null?'—':Math.round(n).toLocaleString('en-US')+' sft';
 const pctTxt=x=>x==null?'—':(Math.round(x*1000)/10)+'%';
 function farFacts(d,x,fact){
   const units=unitsOf(d), out=[];
-  out.push(fact('Building',floorText(d),[d.upf?d.upf+' units per floor':'',d.basements&&+d.basements?d.basements+' basement'+(+d.basements>1?'s':''):''].filter(Boolean).join(' · ')));
+  const fuT=Object.entries(d.floorUnits||{}).filter(([f])=>unitFloors(d).includes(+f)).sort((a,b)=>a[0]-b[0]).map(([f,n])=>`${n} on ${ord(+f)}`).join(', ');
+  out.push(fact('Building',floorText(d),[d.upf?d.upf+' units per regular floor'+(fuT?' ('+fuT+')':''):'',units?units+' units in all':'',d.basements&&+d.basements?d.basements+' basement'+(+d.basements>1?'s':''):''].filter(Boolean).join(' · ')));
   if(d.farApplies==='yes'&&x){
     out.push(fact('FAR used',x.zero?'0 (no building permitted)':`${x.far.toFixed(3)} · ${x.farType}`,`${d.block} · ${d.road} road`));
     if(x.plotExact===false&&x.plotLo) out.push(fact('Plot FAR (custom road)',`${x.plotFar.toFixed(3)} · ${d.road}`,`Pro rata between ${x.plotLo[0]} ft (${x.plotLo[1].toFixed(3)}) and ${x.plotHi[0]} ft (${x.plotHi[1].toFixed(3)})`));
