@@ -549,7 +549,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .biz-sec{margin:20px 0 8px}.biz-sec .linkbtn{margin-left:auto;background:none;border:0;padding:0;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .biz-needs{display:grid;gap:8px}.biz-need{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font:inherit;color:inherit;cursor:pointer}
 .biz-need:hover{border-color:#C7C7CC}.biz-need .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--late)}.biz-need .dot.s-overdue{background:var(--overdue)}.biz-need .bn-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.biz-need .bn-t .muted{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pv-rules{display:grid;gap:10px;padding:10px 2px 4px}.pv-rule{display:flex;align-items:center;gap:8px;font-size:13.5px}.pv-rule input[type=number]{width:72px;padding:6px 8px}.pv-rule>span:first-child{flex:1}
+.pv-rules{display:grid;gap:10px;padding:10px 2px 4px}.pv-rule{display:flex;align-items:center;gap:8px;font-size:13.5px}.pv-rule input[type=number]{width:72px;padding:6px 8px}.pv-rule>span:first-child{flex:1}.pv-who .pv-rule>span:nth-child(2){flex:1}.pv-who{display:grid;gap:8px}
 .pv-hls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pv-hl{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}.pv-hn{font-weight:600;font-size:17px;margin-top:6px}.pv-hv{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:2px 0}
 @media (max-width:640px){.pv-hls{grid-template-columns:1fr}}.pv-mx{width:100%;height:auto;display:block}.pv-tbl td.r{text-align:right}.pv-tbl td,.pv-tbl th{white-space:nowrap}.pv-tbl td:first-child{white-space:normal;min-width:150px}
 .biz-more{margin:10px 0 4px}.biz-more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 2px;list-style:none}.biz-more summary::-webkit-details-marker{display:none}.biz-more summary::before{content:'＋ '}.biz-more[open] summary::before{content:'− '}.biz-more .kpis{margin-top:8px}
@@ -7252,7 +7252,11 @@ function viewBizOver(){
        the rest by quality-adjusted work points (task weight × on-time credit) on that project in the period
        (if no work was logged on it in the period, by the work logged on it before).
    · The Principal and Chalk Create are left out. Studio work counts for points but earns no fee. */
-const PV_DEF={lead:15,coo:5,oh:true,bench:2.5};
+const PV_DEF={lead:15,coo:5,oh:true,bench:2.5,pick:{}};
+/* who is in the People value matrix: everyone except the Principal and Chalk Create; support staff (accounts, office, admin) are left out unless ticked in Rules */
+const pvBase=id=>!!id&&id!==ownerId()&&!isChalkP(id)&&!!S.members[id]&&!isLeft(id);
+const pvDefIn=id=>roleGroup(id)!=='other'&&!/account|office|admin|peon|driver/i.test((roleOf(id)||'')+' '+nameOf(id));
+const pvIn=(id,R)=>pvBase(id)&&((R.pick||{})[id]!=null?!!R.pick[id]:pvDefIn(id));
 function pvRules(){ let r={}; try{ r=JSON.parse(localStorage.getItem('slate-pv')||'{}')||{}; }catch(e){} return {...PV_DEF,...r}; }
 function pvSave(r){ try{ localStorage.setItem('slate-pv',JSON.stringify(r)); }catch(e){} }
 function pvMonths(per){ const cur=today().slice(0,7), y=+cur.slice(0,4), m=+cur.slice(5,7), qs=ymAdd(cur,-((m-1)%3));
@@ -7265,14 +7269,16 @@ function pvMonths(per){ const cur=today().slice(0,7), y=+cur.slice(0,4), m=+cur.
 function pvCalc(per,R){
   const F=S.feeFin, months=pvMonths(per), s=months[0]+'-01', last=months[months.length-1], e=last===today().slice(0,7)?today():addDays(ymAdd(last,1)+'-01',-1);
   const own=ownerId(), coo=people().find(id=>isCOO(id))||null;
-  const inTeam=id=>!!id&&id!==own&&!isChalkP(id)&&!!(S.members[id]);
-  const ids=people().filter(inTeam);
+  const inTeam=id=>pvIn(id,R);
+  const ids=people().filter(inTeam), outIds=people().filter(id=>pvBase(id)&&!pvIn(id,R));
   /* cost */
   const stOf=id=>(F.staff||[]).find(x=>x.userId===id)||null;
   const runOf=ym=>(F.rec2||[]).filter(x=>recOn(x,ym)).reduce((a,x)=>a+(x.kind==='rent'?rentPlan(x,ym).rent:recExpect(x,ym)),0);
   const P={}; ids.forEach(id=>{ P[id]={id,name:nameOf(id),team:teamOf(id),role:roleOf(id),coo:id===coo,ctc:0,sal:0,bonus:0,oh:0,noSal:!stOf(id),pts:0,ptsC:0,ptsS:0,feeW:0,feeL:0,feeM:0,due:[]}; });
   for(const ym of months){ const on=ids.filter(id=>{ const st=stOf(id); if(!st||st.active===false) return false; if(st.joinDate&&st.joinDate.slice(0,7)>ym) return false; return salGross(salRate(st,ym))>0; });
-    const ohEach=R.oh&&on.length?runOf(ym)/on.length:0;
+    /* support staff left out of the matrix are a studio overhead: their cost is shared like running costs */
+    const sup=outIds.reduce((a,id)=>{ const st=stOf(id); if(!st||st.active===false||(st.joinDate&&st.joinDate.slice(0,7)>ym)) return a; const r=salRate(st,ym); return a+salGross(r)+(+((r||{}).basic)||0)*2/12; },0);
+    const ohEach=R.oh&&on.length?(runOf(ym)+sup)/on.length:0;
     on.forEach(id=>{ const r=salRate(stOf(id),ym), g=salGross(r), b=(+r.basic||0)*2/12; const x=P[id]; x.sal+=g; x.bonus+=b; x.oh+=ohEach; x.ctc+=g+b+ohEach; }); }
   /* work */
   const T=Object.entries(S.tasks||{}).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.unscored&&!isChalkTask(t)&&inTeam(t.assignee));
@@ -7322,6 +7328,10 @@ function viewValue(){
       h('div',{class:'pv-rules'},num('lead','POD leader share of each project’s fee',50),num('coo','COO management share of every fee',30),
         h('label',{class:'pv-rule'},h('input',{type:'checkbox',checked:!!R.oh,onchange:e=>setR('oh',e.target.checked)}),h('span',{text:'Share the studio’s running costs into each person’s cost'})),
         h('label',{class:'pv-rule'},h('span',{text:'Healthy value multiple'}),h('input',{type:'number',min:1,max:10,step:'0.1',value:R.bench,onchange:e=>setR('bench',Math.max(1,Math.min(10,+e.target.value||2.5)))}),h('span',{class:'muted',text:'×'})),
+        h('div',{class:'pv-who'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px',text:'Who is in the matrix'}),
+          people().filter(pvBase).sort((a,b)=>Number(pvDefIn(b))-Number(pvDefIn(a))||nameOf(a).localeCompare(nameOf(b))).map(id=>h('label',{class:'pv-rule'},h('input',{type:'checkbox',checked:pvIn(id,R),onchange:e=>{ setR('pick',{...(R.pick||{}),[id]:e.target.checked}); }}),
+            h('span',{text:nameOf(id)}),h('span',{class:'muted',style:'font-size:12px',text:(isCOO(id)?'COO':roleOf(id)||'')+(pvDefIn(id)?'':' · support staff')}))),
+          h('p',{class:'f-hint',style:'margin:2px 0 0',text:'Support staff are left out by default. When someone is left out, their salary is shared into everyone else’s cost, like rent.'})),
         h('p',{class:'f-hint',style:'margin:4px 0 0',text:'Cost to company = gross + Eid bonuses spread over the year (2 × basic ÷ 12) + an equal share of running costs. Fee = fee billed in the period, before VAT. Each project’s fee goes: POD leader share to its lead, COO share to the COO, the rest by work points (task weight × on-time credit) on that project. You and Chalk Create are left out. These rules are saved on this device.'}))));
   const rows=D.rows;
   if(!rows.length){ out.push(h('p',{class:'muted',text:'No salaries or finished work in this period yet. Enter salaries in HR and bill projects in Finance, and this fills in.'})); return out; }
