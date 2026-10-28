@@ -1556,11 +1556,13 @@ const STD_DEF={
   proposal:{name:'Design proposal (R&D)',note:'Pre-contract design proposal, also called R&D. Phases 0 and 1 only; phase 1 closes when the proposal is presented. If won, create the real project',phases:['0','1']}};
 /* pace: set at phase setup; fast track only by the Principal or the COO. For a design proposal, fast track is the proposal sprint */
 const PACE={fast:'Fast track',std:'Standard',relaxed:'Relaxed'};
+/* how pace weighs in the scores is shown only to the Principal and the COO */
+const paceNote=k=>PACE_NOTE[k]+(typeof canSeeScoring==='function'&&canSeeScoring()?({fast:' Gate deliverables and tasks count ×1.25.',relaxed:' Finishing early earns no extra points.'}[k]||''):'');
 const paceOf=p=>(p&&p.std&&PACE[p.std.pace])?p.std.pace:'std';
 const paceName=(p,k)=>{ k=k||paceOf(p); return k==='fast'&&p&&(p.type==='proposal'||(p.std&&p.std.type==='proposal'))?'Proposal sprint':PACE[k]; };
 const canPace=()=>S.canWrite&&(S.isOwner||amApprover());
 const SPRINT_NA=['1-0','1-2','1-6','1-8','1-11','1-12','1-13'];
-const PACE_NOTE={fast:'Shorter dates agreed with the COO, decided the same day, other work gives way. Gate deliverables and tasks count ×1.25.',std:'Standard target days.',relaxed:'Longer dates. Finishing early earns no extra points.',sprint:'Proposal due within days: one pod lead and one junior, one design option, renders only if asked. Phase 0 is folded into phase 1 and the checklist is cut to essentials. Counts ×1.25.'};
+const PACE_NOTE={fast:'Shorter dates agreed with the COO, decided the same day, other work gives way.',std:'Standard target days.',relaxed:'Longer dates.',sprint:'Proposal due within days: one pod lead and one junior, one design option, renders only if asked. Phase 0 is folded into phase 1 and the checklist is cut to essentials. Counts ×1.25.'};
 const stepsOf=(type,k)=>type==='proposal'&&k==='1'?[['sub','Proposal design submitted for internal review'],['final','Proposal presented to the client']]:(PH[k]?PH[k].steps:[]);
 const TEMPLATES=Object.fromEntries([...Object.entries(STD_DEF).map(([key,d])=>[key,{...d,std:true,items:d.phases.flatMap(k=>stepsOf(key,k).map(([s,txt])=>[txt,'lead',phLabel(k),0,1]))}])]);
 /* interior design: its own task list (not the architectural phase spine). Categories become the project's phases. */
@@ -4943,12 +4945,12 @@ function paceRow(p){
   const k=paceOf(p), isSprint=k==='fast'&&p.std&&p.std.type==='proposal';
   return h('div',{class:'card',style:'gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Pace'}),
       canPace()&&!p.closed?seg('Pace',Object.keys(PACE).map(x=>[x,paceName(p,x)]),k,v=>setPace(p,v)):h('span',{class:'pill '+(k==='fast'?'s-overdue':k==='relaxed'?'s-early':'s-open'),text:paceName(p)})),
-    h('div',{class:'f-hint',text:isSprint?PACE_NOTE.sprint:PACE_NOTE[k]}));
+    h('div',{class:'f-hint',text:isSprint?PACE_NOTE.sprint:paceNote(k)}));
 }
 function prioRow(p){ if(isStudioWP(p)) return null; const k=prioOf(p);
   return h('div',{class:'card',style:'gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Priority'}),
       canPace()&&!p.closed?seg('Priority',Object.keys(PRIO).map(x=>[x,PRIO[x].l]),k,v=>{ if(v!==k) run(()=>S.db.doc('projects/'+p.id).update({priority:v}),'Priority set to '+PRIO[v].l); }):h('span',{class:'pill '+(k==='high'?'s-overdue':k==='low'?'s-early':'s-open'),text:PRIO[k].l})),
-    h('div',{class:'f-hint',text:{high:'Tasks on this project weigh 15% more in performance points, from 1 Nov.',normal:'Normal weight. The Principal or the COO can raise or lower a project’s priority.',low:'Tasks on this project weigh 10% less in performance points, from 1 Nov.'}[k]}));
+    h('div',{class:'f-hint',text:canSeeScoring()?{high:'Tasks on this project weigh 15% more in performance points, from 1 Nov.',normal:'Normal weight. The Principal or the COO can raise or lower a project’s priority.',low:'Tasks on this project weigh 10% less in performance points, from 1 Nov.'}[k]:{high:'A high-priority project: its work comes first.',normal:'Normal priority.',low:'Lower priority: other work can come first.'}[k]}));
 }
 const paceTag=p=>paceOf(p)==='fast'?h('span',{class:'tag tag-req',text:paceName(p)}):null;
 function stdDots(p){ const ks=stdPhases(p); if(!ks.length) return null; const act=activePhases(p), done=ks.filter(k=>stdState(p,k).done).length;
@@ -5160,7 +5162,7 @@ function viewStd(){
     h('tbody',{},Object.entries(STD_DEF).map(([k,t])=>h('tr',{},h('td',{style:'font-weight:500',text:t.name}),h('td',{class:'mono',text:t.phases.filter(x=>!(t.off||[]).includes(x)).map(x=>x==='3r'?'3R':x).join(' ')+(t.off&&t.off.length?` · later: ${t.off.map(x=>x==='3r'?'3R':x).join(' ')}`:'')}),h('td',{class:'sub2',text:t.note})))))),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'3R is phase 3 run again when a land share project resumes.'})));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Pace'})),h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Pace'}),h('th',{text:'What changes'}))),
-    h('tbody',{},[['Fast track',PACE_NOTE.fast],['Standard',PACE_NOTE.std],['Relaxed',PACE_NOTE.relaxed],['Proposal sprint',PACE_NOTE.sprint]].map(([a,b])=>h('tr',{},h('td',{style:'font-weight:500',text:a}),h('td',{class:'sub2',text:b})))))),
+    h('tbody',{},[['Fast track',paceNote('fast')],['Standard',paceNote('std')],['Relaxed',paceNote('relaxed')],['Proposal sprint',PACE_NOTE.sprint]].map(([a,b])=>h('tr',{},h('td',{style:'font-weight:500',text:a}),h('td',{class:'sub2',text:b})))))),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'The pod lead chooses Standard or Relaxed at phase setup. Only the Principal or the COO can set fast track or a proposal sprint, and they can change the pace at any time.'})));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Key decisions'}),h('span',{class:'cnt',text:'agreed in the team review'})),
     h('div',{class:'card'},h('ol',{style:'margin:0;padding-left:20px;display:grid;gap:4px'},STD_DECISIONS.map(x=>h('li',{text:x}))))));
