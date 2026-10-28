@@ -1,4 +1,4 @@
--- SLATE OS · SLATE standard process v1 (approved 27 Oct 2026)
+-- SLATE OS · SLATE standard process v1.1 (approved 27 Oct 2026, POD leaders' feedback 28 Oct 2026)
 -- Tasks keep a copy of their phase name and gate title. This renames them to the v1 names:
 -- phase names on every task; gate titles only on gates still open (closed gates keep the title they were done under).
 -- Checklist ticks need no change: kept items keep their ids. Run in Supabase › SQL Editor. Safe to run more than once.
@@ -28,8 +28,8 @@ from g where t.coll in ('tasks', 'lead') and t.data->'gate'->>'k' = g.k and t.da
 -- they existed). On open phases they stay open as work to do.
 do $mig$
 declare
-  nw jsonb := '{"0":["0-n1","0-n2","0-n3","0-n4","0-n5"],"1":["1-n1","1-n2","1-n3"],"2":["2-n1","2-n2","2-n3"],"3":["3-n1"],"3r":["3r-n1","3r-n2","3r-n3"],
-               "4":["4-n1","4-n2","4-n3","4-n4","4-n5"],"5":["5-n1","5-n2"],"6":["6-n1","6-n2"],"7":["7-n1","7-n2","7-n3","7-n4","7-n5","7-n6"],"8":["8-n1","8-n2","8-n3","8-n4"]}';
+  nw jsonb := '{"0":["0-n1","0-n2","0-n3","0-n4","0-n6"],"1":["1-n1","1-n2","1-n3"],"2":["2-n1","2-n2","2-n3","2-n4","2-n5"],"3":["3-n1","3-n2"],"3r":["3r-n1","3r-n2","3r-n3","3r-n4"],
+               "4":["4-n1","4-n2","4-n3","4-n4","4-n5"],"5":["5-n1","5-n3"],"6":["6-n1","6-n2","6-n3","6-n4","6-n5","6-n6"],"7":["7-n1","7-n3","7-n4","7-n5","7-n6","7-n7","7-n8","7-n9"],"8":["8-n1","8-n2","8-n3","8-n4","8-n5","8-n6","8-n7"]}';
   p record; k text; id text; cl jsonb; ph jsonb; n int := 0;
 begin
   for p in select path, doc_id, data from public.docs where coll = 'projects' and data ? 'std' loop
@@ -62,3 +62,8 @@ update public.docs p set data = jsonb_set(data, '{cl}', coalesce(data->'cl','{}'
     jsonb_build_object('1', coalesce(data->'cl'->'1','{}'::jsonb) || '{"1-2":{"na":true,"v1":true}}'::jsonb))
  where coll = 'projects' and data->'std'->>'type' = 'share' and data->'std'->'phases' ? '1'
    and coalesce(data->'cl'->'1'->'1-2'->>'done','') = '';
+
+-- v1.1: the work order moves to phase 0. Where it was already ticked in phase 1, carry the tick across.
+update public.docs p set data = jsonb_set(data, '{cl}', coalesce(data->'cl','{}'::jsonb) ||
+    jsonb_build_object('0', coalesce(data->'cl'->'0','{}'::jsonb) || jsonb_build_object('0-n6', data->'cl'->'1'->'1-0')))
+ where coll = 'projects' and data->'std'->'phases' ? '0' and coalesce(data->'cl'->'1'->'1-0'->>'done','') <> '';
