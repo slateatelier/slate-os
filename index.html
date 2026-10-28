@@ -6758,6 +6758,15 @@ function viewProposals(f){
 const canBiz=()=>canProps()&&finOn();
 const FEE_BASIS={lump:'Lump sum',sft:'Per sft'};
 const FEE_DEF_MS=[['Signing advance',25],['Final architectural design',25],['Authority (RAJUK) drawings',25],['Working drawings',25]];
+const COST_TYPES=[['str','Structural consultant'],['mep','MEP consultant'],['viz','3D visualization'],['land','Landscape consultant'],['int','Interior consultant'],['soil','Soil test or survey'],['inc','Team incentive'],['other','Other']];
+const costTypeL=k=>(COST_TYPES.find(x=>x[0]===k)||[])[1]||'Other';
+/* work orders raised in Finance against a cost line: committed (value) and paid */
+function costWO(fr,c){ const F=S.feeFin; if(!fr||!F||F.state!=='ok') return {n:0,val:0,paid:0,vendor:''};
+  const ws=(F.wo||[]).filter(w=>w.projectId===fr.id&&w.costLineId===c.id&&(w.status||'pending')!=='rejected');
+  return {n:ws.length,val:ws.reduce((a,w)=>a+(+w.amount||0),0),paid:(F.wp||[]).filter(x=>ws.some(w=>w.id===x.woId)).reduce((a,x)=>a+(+x.gross||0),0),vendor:(ws[0]||{}).vendor||''}; }
+const costActual=(fr,c)=>+c.deal||costWO(fr,c).val||0;
+const costVar=(fr,c)=>{ const a=costActual(fr,c); return +c.budget>0&&a>0?(+c.budget)-a:null; };
+const visitsUsed=pid=>supTasks(pid).filter(t=>t.doneAt&&t.site&&['visit','oncall'].includes(t.site.type)).length;
 const finPType=p=>/comm/i.test(p.building||'')?'Commercial':/mix/i.test(p.building||'')?'Mixed use':'Residential';
 const finId=()=>{ const A='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; return Array.from(crypto.getRandomValues(new Uint8Array(20)),x=>A[x%A.length]).join(''); };
 async function loadFeeFin(force){
@@ -6765,10 +6774,10 @@ async function loadFeeFin(force){
   if(F.state==='loading'||(!force&&F.state==='ok'&&Date.now()-F.at<60000)) return;
   F.state='loading';
   try{ const sb=window.slateSupabase; if(!sb) throw new Error('Not signed in');
-    const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts']);
+    const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts','workorders','wopays']);
     if(error) throw error;
-    const fp={},inv=[],rec=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else rec.push(d); });
-    Object.assign(F,{state:'ok',fp,inv,rec,at:Date.now(),err:''});
+    const fp={},inv=[],rec=[],wo=[],wp=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else wp.push(d); });
+    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,at:Date.now(),err:''});
   }catch(e){ F.state='err'; F.err=(e&&e.message)||String(e); }
   if(S.view==='biz') render(true); if(S.sheet&&S.sheet.type==='fee') renderSheet(); }
 /* the Finance record for an OS project: linked by osId, else by the same code */
@@ -6789,7 +6798,7 @@ function viewBiz(){
   if(S.biz.tab==='proposed') return viewProposals(S.pf2||(S.pf2={q:'',ps:'open'}));
   return viewFees(); }
 function viewFees(){
-  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'The fee for every project, set here. Finance uses the same numbers for invoices; edit them here, not in Finance.'})),
+  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'Fees, cost budgets and site visit terms for every project, set here. Finance uses the same numbers; edit them here, not in Finance.'})),
     h('div',{class:'actions'},h('a',{class:'btn',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none',text:'Open Finance ↗'}))),bizSeg()];
   if(!finOn()){ out.push(h('p',{class:'muted',text:'Fees need Finance access. Sign in again if you have just been given it.'})); return out; }
   loadFeeFin(); const F=S.feeFin;
@@ -6801,8 +6810,11 @@ function viewFees(){
   const live=rows.filter(r=>!r.p.closed||outcomeOf(r.p)==='completed'), sum=k=>live.reduce((a,r)=>a+r.s[k],0)+orphan.reduce((a,x)=>a+feeStats(x)[k],0);
   const noFee=rows.filter(r=>!r.p.closed&&!r.pb&&!(r.s.fee>0));
   const propV=propList().filter(propOpen).reduce((a,p)=>a+(p.feeBasis==='sft'?0:+p.fee||0),0);
+  const cv=rows.reduce((a,r)=>a+((r.fr&&r.fr.costs)||[]).reduce((x,c)=>{ const v=costVar(r.fr,c); return x+(v||0); },0),0);
+  const vis=rows.reduce((a,r)=>{ const v=r.fr&&r.fr.visits; if(!v||v.free==null||!+v.fee) return a; return a+Math.max(0,visitsUsed(r.p.id)-v.free)*(+v.fee); },0);
   out.push(h('div',{class:'kpis kpis5'},kpi('Total fees',bdt(sum('fee'))),kpi('Billed',bdt(sum('billed'))),kpi('Collected',bdt(sum('col')),'early'),kpi('Unpaid',bdt(sum('due')),sum('due')>1?'overdue':''),kpi('Not yet billed',bdt(sum('unb')),'late')),
-    h('div',{class:'kpis kpis4'},kpi('Projects with a fee',rows.filter(r=>r.s.fee>0).length),kpi('No fee set',noFee.length,noFee.length?'late':''),kpi('Pro bono',rows.filter(r=>r.pb).length),kpi('Proposed (open, lump sum)',propV?bdt(propV):'—')));
+    h('div',{class:'kpis kpis4'},kpi('Projects with a fee',rows.filter(r=>r.s.fee>0).length),kpi('No fee set',noFee.length,noFee.length?'late':''),kpi('Pro bono',rows.filter(r=>r.pb).length),kpi('Proposed (open, lump sum)',propV?bdt(propV):'—')),
+    h('div',{class:'kpis kpis4'},kpi('Cost budget',bdt(rows.reduce((a,r)=>a+((r.fr&&r.fr.costs)||[]).reduce((x,c)=>x+(+c.budget||0),0),0))),kpi('Budget variation',cv?(cv>0?'+':'−')+bdt(Math.abs(cv)):'—',cv>0?'early':cv<0?'overdue':''),kpi('Extra site visits to bill',vis?bdt(vis):'—',vis?'late':'')));
   const stSel=h('select',{'aria-label':'Show',onchange:e=>{B.st=e.target.value;render(true)}},[['active','Active projects'],['nofee','No fee set'],['due','Money to collect'],['done','Completed'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); stSel.value=B.st;
   out.push(h('div',{class:'bar'},h('input',{type:'search',placeholder:'Search code, name or client',value:B.q,oninput:e=>{B.q=e.target.value;render(true)}}),stSel));
   const list=rows.filter(r=>{ const p=r.p;
@@ -6815,6 +6827,8 @@ function viewFees(){
       h('div',{class:'pc-name pn',text:p.name}),
       h('div',{class:'pc-meta',text:[p.client,p.katha?p.katha+' katha':'',fr&&fr.feeBasis==='sft'||(fr&&!fr.feeBasis&&+fr.rate)?`${(+fr.areaSft||0).toLocaleString('en-IN')} sft × ${taka(fr.rate)}`:fr&&s.fee?'Lump sum':''].filter(Boolean).join(' · ')}),
       h('div',{class:'pc-row'},h('b',{text:pb?'No fee':s.fee?taka(s.fee):'—'}),h('span',{class:'muted',text:s.fee?`billed ${bdt(s.billed)} · collected ${bdt(s.col)}`:''})),
+      (()=>{ const cs=(fr&&fr.costs)||[]; if(!cs.length) return null; const B=cs.reduce((a,c)=>a+(+c.budget||0),0), V=cs.reduce((a,c)=>a+(costVar(fr,c)||0),0);
+        return h('div',{class:'pc-row'},h('span',{class:'muted',text:`Costs ${bdt(B)} budgeted`}),V?h('span',{style:'color:'+(V>0?'var(--ontime)':'var(--overdue)'),text:(V>0?'saved ':'over ')+bdt(Math.abs(V))}):h('span')); })(),
       s.fee?h('div',{class:'pc-bar'},h('span',{style:`width:${pct}%`})):null); })));
   if(orphan.length&&B.st==='all') out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'In Finance only'}),h('span',{class:'cnt',text:String(orphan.length)})),
     h('p',{class:'f-hint',style:'margin:0 0 6px',text:'Fee records in Finance not linked to a SLATE OS project. Link them in Finance (SLATE OS project) to manage their fee here.'}),
@@ -6823,8 +6837,37 @@ function viewFees(){
 function openFee(pid){ const p=S.projects[pid]; if(!p) return; const fr=feeRecOf({...p,id:pid});
   const area=fr&&+fr.areaSft?String(fr.areaSft):String(+p.constManual||(p.farCalc&&p.farCalc.construction)||'');
   const d={basis:p.proBono==='yes'?'pb':fr?(fr.feeBasis||(+fr.rate&&+fr.areaSft?'sft':'lump')):'sft',area:area==='0'?'':area,rate:fr&&+fr.rate?String(fr.rate):'',fee:fr&&+fr.fee?String(fr.fee):'',note:fr&&fr.feeNote||'',
-    ms:(fr&&fr.milestones&&fr.milestones.length?fr.milestones:FEE_DEF_MS.map(([label,pct])=>({id:Math.random().toString(36).slice(2,9),label,pct}))).map(m=>({...m}))};
+    ms:(fr&&fr.milestones&&fr.milestones.length?fr.milestones:FEE_DEF_MS.map(([label,pct])=>({id:Math.random().toString(36).slice(2,9),label,pct}))).map(m=>({...m})),
+    costs:((fr&&fr.costs)||[]).map(c=>({...c,budget:c.budget?String(c.budget):'',deal:c.deal?String(c.deal):''})),vFree:fr&&fr.visits&&fr.visits.free!=null?String(fr.visits.free):'',vFee:fr&&fr.visits&&+fr.visits.fee?String(fr.visits.fee):''};
   S.sheet={type:'fee',pid,d,err:''}; renderSheet(); }
+/* cost budget (consultants, incentive and other costs) and site visit terms, inside the fee sheet */
+function costSection(d,fr,p,feeNow){
+  const lbl=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:10px',text:t});
+  const vTxt=c=>{ const a=+c.deal||costWO(fr,c).val||0, b=+c.budget||0; if(!b||!a) return null; const v=b-a; return [v>=0?(v?taka(v)+' under budget':'On budget'):taka(-v)+' over budget',v>=0?'var(--ontime)':'var(--overdue)']; };
+  const row=(c,i)=>{ const w=costWO(fr,c), vt=vTxt(c), upd=()=>{ const el=document.getElementById('cv-'+c.id); if(el){ const x=vTxt(c); el.textContent=x?x[0]:''; el.style.color=x?x[1]:''; } const t=document.getElementById('cost-tot'); if(t) t.textContent=totTxt(); };
+    const ty=h('select',{'aria-label':'Cost type',onchange:e=>{ const old=costTypeL(c.type); c.type=e.target.value; if(!c.label||c.label===old) c.label=costTypeL(c.type); renderSheet(); }},COST_TYPES.map(([v,l])=>h('option',{value:v,text:l}))); ty.value=c.type||'other';
+    const n=(k,ph)=>h('input',{type:'number',min:0,step:'1',inputmode:'numeric',placeholder:ph,value:c[k],'aria-label':ph,oninput:e=>{ c[k]=e.target.value; upd(); }});
+    const cap=(t,el)=>h('label',{style:'display:grid;gap:3px'},h('span',{class:'muted',style:'font-size:12px',text:t}),el);
+    return h('div',{class:'card',style:'gap:8px;padding:10px;background:transparent;border:1px solid var(--line)'},
+      h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 30px;gap:6px'},ty,h('input',{value:c.label,placeholder:'Description','aria-label':'Description',oninput:e=>{c.label=e.target.value}}),
+        w.n?h('span'):h('button',{class:'btn btn-sm',type:'button','aria-label':'Remove cost line',onclick:()=>{ d.costs.splice(i,1); renderSheet(); },text:'×'})),
+      h('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:6px'},cap('Budget (Tk)',n('budget','Budget (Tk)')),cap('Closed at (Tk)',n('deal',w.val?String(w.val)+' (work order)':'Deal amount'))),
+      cap('Consultant or vendor',h('input',{value:c.vendor||'',placeholder:w.vendor||'Name','aria-label':'Consultant or vendor',oninput:e=>{c.vendor=e.target.value}})),
+      h('div',{style:'display:flex;justify-content:space-between;gap:8px;font-size:12.5px;flex-wrap:wrap'},h('b',{id:'cv-'+c.id,style:vt?'color:'+vt[1]:'',text:vt?vt[0]:''}),
+        h('span',{class:'muted',text:w.n?`Work order${w.n>1?'s':''} ${taka(w.val)} · paid ${taka(w.paid)}`:c.type==='inc'?'Paid to the team':'No work order in Finance yet'}))); };
+  const totTxt=()=>{ const B=d.costs.reduce((a,c)=>a+(+c.budget||0),0), A=d.costs.reduce((a,c)=>a+(+c.deal||costWO(fr,c).val||0),0), V=d.costs.reduce((a,c)=>{ const b=+c.budget||0, x=+c.deal||costWO(fr,c).val||0; return a+(b&&x?b-x:0); },0);
+    const f=d.basis==='pb'?0:d.basis==='sft'?(+d.area&&+d.rate?Math.round(+d.area*+d.rate):0):+d.fee||0;
+    return B||A?`Budget ${taka(B)} · closed ${taka(A)} · ${V>=0?'saved '+taka(V):'over by '+taka(-V)}`+(f?` · fee left after costs ${taka(f-Math.max(B,A))}`:''):'No costs budgeted'; };
+  const used=visitsUsed(p.id), free=d.vFree===''?null:+d.vFree||0, extra=free==null?0:Math.max(0,used-free);
+  return [lbl('Cost budget'),
+    h('p',{class:'f-hint',style:'margin:0',text:'Consultants, incentive and other costs for this project. Put the budget, then the amount the deal closed at; the difference shows as the variation. In Finance, work orders are raised against these lines.'}),
+    h('div',{style:'display:grid;gap:8px'},d.costs.map(row)),
+    h('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ const t=d.costs.some(c=>c.type==='str')?d.costs.some(c=>c.type==='mep')?'other':'mep':'str'; d.costs.push({id:Math.random().toString(36).slice(2,9),type:t,label:costTypeL(t),budget:'',deal:'',vendor:''}); renderSheet(); },text:'Add cost line'}),
+      h('span',{id:'cost-tot',class:'f-hint',style:'margin:0;font-weight:600',text:totTxt()})),
+    lbl('Site visits'),
+    h('div',{class:'form-row',style:'align-items:start'},field('Free visits included',h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d.vFree,placeholder:'e.g. 6',oninput:e=>{d.vFree=e.target.value}}),'Empty means no limit agreed'),
+      field('Fee per extra visit (Tk)',h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d.vFee,placeholder:'e.g. 5000',oninput:e=>{d.vFee=e.target.value}}))),
+    h('p',{class:'f-hint',style:'margin:0',text:`${used} site visit${used===1?'':'s'} done so far (scheduled and on-call, from construction support)`+(free==null?'.':extra?` · ${extra} chargeable`+(+d.vFee?` = ${taka(extra*(+d.vFee))} to bill`:''):` · ${free-used} free visit${free-used===1?'':'s'} left.`)})]; }
 function sheetFee(){
   const pid=S.sheet.pid, p=S.projects[pid]?{...S.projects[pid],id:pid}:null; if(!p) return [head('Fee','Not found')];
   const d=S.sheet.d, fr=feeRecOf(p), s=feeStats(fr), sft=d.basis==='sft', pb=d.basis==='pb';
@@ -6837,7 +6880,10 @@ function sheetFee(){
     const ms=d.ms.filter(m=>(m.label||'').trim()).map(m=>({...m,label:m.label.trim(),pct:+m.pct||0}));
     if(!pb&&Math.round(ms.reduce((a,m)=>a+m.pct,0))!==100) return fail('Payment milestones need to add up to 100%.');
     if(fr) for(const m of (fr.milestones||[])) if(msLocked(fr,m)&&!ms.some(x=>x.id===m.id)) return fail(`“${m.label}” has been invoiced, so it can’t be removed.`);
-    const terms={feeBasis:pb?'lump':d.basis,areaSft:sft?+d.area:(+d.area||0),rate:sft?+d.rate:0,fee:pb?0:sft?Math.round(+d.area*+d.rate):Math.round(+d.fee||0),feeNote:(d.note||'').trim(),milestones:pb?(fr&&fr.milestones)||[]:ms,feeSetAt:new Date().toISOString(),feeSetBy:S.uid};
+    const costs=d.costs.filter(c=>(c.label||'').trim()||+c.budget||+c.deal).map(c=>({id:c.id,type:c.type||'other',label:(c.label||'').trim()||costTypeL(c.type),budget:+c.budget||0,deal:+c.deal||0,vendor:(c.vendor||'').trim(),note:(c.note||'').trim()}));
+    if(costs.some(c=>c.budget<0||c.deal<0)) return fail('Budget amounts can’t be negative.');
+    if(fr) for(const c of (fr.costs||[])) if(costWO(fr,c).n&&!costs.some(x=>x.id===c.id)) return fail(`“${c.label}” has a work order in Finance, so it can’t be removed.`);
+    const terms={costs,visits:{free:d.vFree===''?null:Math.max(0,Math.round(+d.vFree||0)),fee:+d.vFee||0},feeBasis:pb?'lump':d.basis,areaSft:sft?+d.area:(+d.area||0),rate:sft?+d.rate:0,fee:pb?0:sft?Math.round(+d.area*+d.rate):Math.round(+d.fee||0),feeNote:(d.note||'').trim(),milestones:pb?(fr&&fr.milestones)||[]:ms,feeSetAt:new Date().toISOString(),feeSetBy:S.uid};
     const sb=window.slateSupabase;
     const ok=await run(async()=>{
       if(fr){ const {id,...rest}=fr; const {data:o,error}=await sb.from('fin_docs').update({data:{...rest,...terms,osId:p.id}}).eq('path','projects/'+fr.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Finance is limited to the Principal and the COO.'); }
@@ -6858,7 +6904,7 @@ function sheetFee(){
     h('form',{class:'form',onsubmit:save},
       field('Fee basis',seg('Fee basis',[['sft','Per sft'],['lump','Lump sum'],['pb','Pro bono']],d.basis,v=>{ d.basis=v; renderSheet(); })),
       pb?h('p',{class:'f-hint',style:'margin:0',text:'No fee is expected. Finance and the Clients dashboard won’t look for one.'}):[
-        h('div',{class:'form-row'},field('Construction area (sft)'+(sft?' *':''),num('area',{step:'1'}),p.farCalc&&p.farCalc.construction&&!fr?'From the project’s FAR calculation':null),
+        h('div',{class:'form-row',style:'align-items:start'},field('Construction area (sft)'+(sft?' *':''),num('area',{step:'1'}),p.farCalc&&p.farCalc.construction&&!fr?'From the project’s FAR calculation':null),
           sft?field('Rate (Tk per sft) *',num('rate')):field('Total fee (Tk) *',num('fee',{step:'1'}))),
         h('div',{id:'fee-live',style:'font-weight:600;font-size:15px',text:liveTxt()}),
         field('Fee note',h('input',{value:d.note,maxlength:200,placeholder:'e.g. 3D and interior quoted separately',oninput:e=>{d.note=e.target.value}})),
@@ -6866,6 +6912,7 @@ function sheetFee(){
         h('div',{style:'display:grid;gap:6px'},d.ms.map(msRow)),
         h('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:8px'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.ms.push({id:Math.random().toString(36).slice(2,9),label:'',pct:0}); renderSheet(); },text:'Add milestone'}),
           h('span',{id:'ms-sum',class:'f-hint',style:'margin:0;'+(msSum!==100?'color:var(--overdue)':''),text:msTxt()}))],
+      ...costSection(d,fr,p,feeNow),
       h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save fee'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
 function viewProjects(){
   const f=S.pf||(S.pf={q:'',pod:'',st:'active',kind:'client'}); if(!f.kind) f.kind='client';

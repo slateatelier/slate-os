@@ -497,6 +497,10 @@ function projectSheet(p) {
     <dl class="kv"><dt>Total fee</dt><dd>${tk(s.fee)}</dd><dt>Billed (excl. VAT)</dt><dd>${tk(s.billed)}</dd><dt>Collected</dt><dd>${tk(s.collected)}</dd><dt>Not yet billed</dt><dd>${tk(s.unbilled)}</dd><dt class="tot">Outstanding</dt><dd class="tot">${tk(s.outstanding)}</dd></dl>
     <div class="sec-t" style="margin-top:18px">Milestones</div>
     <div class="mini-list rows" style="margin-top:10px">${msRows || `<div class="empty">No milestones set.</div>`}</div>
+    ${(p.costs || []).length ? `<div class="sec-t" style="margin-top:18px">Cost budget <span class="hint" style="font-weight:400">· set in SLATE OS › Business › Fees</span></div>
+    <div class="mini-list rows" style="margin-top:10px">${p.costs.map(c => { const ws = S.workorders.filter(o => o.projectId === p.id && o.costLineId === c.id && (o.status || 'pending') !== 'rejected'), wv = ws.reduce((s, o) => s + (+o.amount || 0), 0), act = +c.deal || wv, v = +c.budget && act ? +c.budget - act : null;
+      return `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${esc(c.label)}${c.vendor ? ' · ' + esc(c.vendor) : ''}</div><div class="sub">Budget ${tk(c.budget)}${act ? ' · closed at ' + tk(act) : ''}${ws.length ? ' · ' + ws.map(o => esc(o.no)).join(', ') : ''}</div></div>${v == null ? '' : v >= 0 ? chip('paid', v ? tk(v) + ' under' : 'On budget') : chip('overdue', tk(-v) + ' over')}<div class="amt">${tk(act || c.budget)}</div></div>`; }).join('')}</div>` : ''}
+    ${p.visits && (p.visits.free != null || +p.visits.fee) ? `<p class="hint" style="margin-top:10px">Site visits: ${p.visits.free != null ? p.visits.free + ' free' : 'no limit agreed'}${+p.visits.fee ? ' · ' + tk(p.visits.fee) + ' per extra visit' : ''}</p>` : ''}
     ${inv.length ? `<div class="sec-t" style="margin-top:18px">Invoices</div><div class="mini-list rows" style="margin-top:10px">${inv.map(invRow).join('')}</div>` : ''}
     ${p.note ? `<p class="hint" style="margin-top:14px">${esc(p.note)}</p>` : ''}
     <p class="hint">Added by ${who(p.createdBy)} · ${fmtDate((p.createdAt || '').slice(0, 10))}</p>
@@ -1096,6 +1100,8 @@ function woForm(w) {
     </div>
     <label class="f" for="w_vaddr">Vendor address / contact<input id="w_vaddr" name="vendorAddr" value="${esc(src.vendorAddr)}"></label>
     <label class="f" for="w_prj">Project<select id="w_prj" name="projectId"><option value="">Studio (not a project)</option>${S.projects.map(p => opt(p.id, `${p.code} · ${p.name}`, p.id === src.projectId)).join('')}</select></label>
+    <label class="f" for="w_cl" id="w_clw">Against budget line<select id="w_cl" name="costLineId"></select></label>
+    <p class="hint" id="w_clh" style="margin:-6px 0 0"></p>
     <label class="f" for="w_scope">Scope of work<textarea id="w_scope" name="scope" rows="4" required placeholder="One deliverable per line">${esc(src.scope)}</textarea></label>
     <div class="fg">
       <label class="f" for="w_amt">Value (BDT, before tax deduction)<input id="w_amt" name="amount" type="number" min="1" step="1" required value="${esc(src.amount)}"></label>
@@ -1112,6 +1118,20 @@ function woForm(w) {
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${w ? 'Save' : isPrincipal() ? 'Create work order' : 'Send for approval'}</button></div>
   </form>`, root => {
     const f = $('#wf', root);
+    /* cost budget lines come from SLATE OS › Business › Fees */
+    const COST_WO = { str: 'Structural consultant', mep: 'MEP consultant', soil: 'Survey & soil test', viz: '3D visualisation' };
+    const fillCl = keep => { const p = prj(f.projectId.value), cs = (p && p.costs) || [];
+      f.costLineId.innerHTML = opt('', cs.length ? 'Not against a budget line' : 'No budget lines for this project', !keep) + cs.map(c => opt(c.id, `${c.label}${+c.budget ? ' · budget ' + tk(c.budget) : ''}`, c.id === keep)).join('');
+      $('#w_clw', root).style.display = p ? '' : 'none'; showCl(); };
+    const showCl = () => { const p = prj(f.projectId.value), c = ((p && p.costs) || []).find(x => x.id === f.costLineId.value), a = +f.amount.value || 0, h = $('#w_clh', root);
+      if (!c) { h.textContent = p && !(p.costs || []).length ? 'Budget lines are set in SLATE OS › Business › Fees.' : ''; return; }
+      const others = S.workorders.filter(o => o.costLineId === c.id && o.projectId === p.id && o.id !== w?.id && (o.status || 'pending') !== 'rejected').reduce((s, o) => s + (+o.amount || 0), 0), v = (+c.budget || 0) - others - a;
+      h.textContent = +c.budget ? `Budget ${tk(c.budget)}${others ? ' · other work orders ' + tk(others) : ''} · ${v >= 0 ? tk(v) + ' under budget' : tk(-v) + ' over budget'}` : ''; h.className = 'hint' + (v < 0 ? ' err' : ''); };
+    fillCl(src.costLineId || '');
+    f.projectId.addEventListener('change', () => fillCl(''));
+    f.costLineId.addEventListener('change', () => { const p = prj(f.projectId.value), c = ((p && p.costs) || []).find(x => x.id === f.costLineId.value);
+      if (c && !f.vendor.value && c.vendor) f.vendor.value = c.vendor; if (c && COST_WO[c.type] && !w) f.type.value = COST_WO[c.type]; if (c && !f.amount.value && +c.deal) f.amount.value = c.deal; showCl(); });
+    f.amount.addEventListener('input', showCl);
     const readSc = () => { const ids = [...f.querySelectorAll('[name=sc_id]')].map(x => x.value), L = [...f.querySelectorAll('[name=sc_label]')].map(x => x.value.trim()), P = [...f.querySelectorAll('[name=sc_pct]')].map(x => +x.value || 0), M = [...f.querySelectorAll('[name=sc_month]')].map(x => x.value);
       return ids.map((id, i) => ({ id, label: L[i], pct: P[i], month: M[i] })).filter(x => x.label || x.pct); };
     f.addEventListener('click', e => { const b = e.target.closest('[data-sc]'); if (!b) return; if (b.dataset.sc === 'add') $('#scBox', root).insertAdjacentHTML('beforeend', schRow({ id: mid(), label: '', pct: 0, month: '' })); else b.closest('.ml').remove(); upd(); });
@@ -1125,7 +1145,7 @@ function woForm(w) {
       if (w && (+f.amount.value || 0) + 1 < woSettled(w)) { toast(`${tk(woSettled(w))} has already been paid against it.`); return; }
       const schedule = readSc(); if (Math.round(schedule.reduce((u, x) => u + x.pct, 0)) !== 100) { toast('The payment schedule needs to add up to 100%.'); return; }
       if (schedule.some(x => !x.label || !x.month)) { toast('Give each instalment a name and the month you expect to pay it.'); return; }
-      const data = { no, date: f.date.value, vendor: f.vendor.value.trim(), vendorAddr: f.vendorAddr.value.trim(), type: f.type.value, projectId: f.projectId.value, scope: f.scope.value.trim(),
+      const data = { no, date: f.date.value, vendor: f.vendor.value.trim(), vendorAddr: f.vendorAddr.value.trim(), type: f.type.value, projectId: f.projectId.value, costLineId: f.projectId.value ? f.costLineId.value : '', scope: f.scope.value.trim(),
         amount: +f.amount.value || 0, deliverBy: f.deliverBy.value, aitPct: +f.aitPct.value || 0, vdsPct: +f.vdsPct.value || 0, schedule, payTerms: f.payTerms.value.trim(), terms: f.terms.value.trim(),
         status: w ? (w.status || 'pending') : isPrincipal() ? 'approved' : 'pending', ...(w ? {} : isPrincipal() ? { decidedBy: S.uid, decidedOn: today() } : {}) };
       const ok = w ? await run(() => putDoc('workorders', w.id, { ...strip(w), ...data }), 'Work order saved') : await run(() => addDoc('workorders', data), isPrincipal() ? 'Work order created' : 'Sent to the Principal for approval');
