@@ -448,10 +448,20 @@ function projectForm(p) {
   </form>`, root => {
     const f = $('#pf', root);
     bindMl(root, f.fee);
+    /* fees for SLATE OS projects are set in SLATE OS › Business › Fees; here they are read-only */
+    const lockFee = on => { ['areaSft', 'rate', 'fee'].forEach(n => { f[n].readOnly = on; });
+      root.querySelectorAll('[name=ml_label],[name=ml_pct]').forEach(x => { x.readOnly = on; });
+      root.querySelectorAll('[data-ml]').forEach(b => { b.style.display = on ? 'none' : ''; });
+      let hn = $('#feeLockHint', root); if (on && !hn) { hn = document.createElement('p'); hn.id = 'feeLockHint'; hn.className = 'hint'; hn.style.margin = '-4px 0 0';
+        hn.textContent = 'Fee, rate, area and milestones come from SLATE OS › Business › Fees. Change them there.'; f.fee.closest('label').after(hn); }
+      if (!on && hn) hn.remove(); };
+    lockFee(!!src.osId);
     const fillAcct = () => { const list = bankAccts(f.entity.value), keep = f.payAcctId.value || src.payAcctId;
       f.payAcctId.innerHTML = list.length ? list.map(a => opt(a.id, acctLabel(a), a.id === keep)).join('') : opt('', `No ${f.entity.value} bank account yet (add it in Cash & bank)`, true); };
     fillAcct(); f.entity.addEventListener('change', () => { f.payAcctId.value = ''; fillAcct(); });
-    f.osId.addEventListener('change', () => { const o = S.os.find(x => x.id === f.osId.value); if (!o) return;
+    f.osId.addEventListener('change', () => { const o = S.os.find(x => x.id === f.osId.value); lockFee(!!o);
+      if (o && S.projects.some(x => x.osId === o.id && x.id !== p?.id)) { toast('That project already has a fee record in Finance.'); f.osId.value = src.osId || ''; lockFee(!!src.osId); return; }
+      if (!o) return;
       f.code.value = o.code || ''; f.name.value = o.name || ''; if (o.client) f.client.value = o.client; const site = [o.plotNo ? 'Plot ' + o.plotNo : '', o.roadNo ? 'Road ' + o.roadNo : '', o.blockSector ? (/^[A-Z]{1,2}$/i.test(o.blockSector) ? 'Block ' + o.blockSector : /^\d+[A-Z]?$/i.test(o.blockSector) ? 'Sector ' + o.blockSector : o.blockSector) : '', o.location || ''].filter(Boolean).join(', ');
       if (site) f.location.value = site;
       if (o.proBono && !+f.fee.value) { f.fee.value = 0; f.fee.dispatchEvent(new Event('input', { bubbles: true })); toast('Pro bono project: fee set to 0'); } });
