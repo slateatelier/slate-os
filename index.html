@@ -66,6 +66,7 @@ body[data-view=far] main{padding-bottom:4px}#far-host{padding-bottom:80px}
 .tg-n{flex:none;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .tg-row .btn{flex:none;align-self:center}
 .list{display:grid;background:var(--group);border-radius:var(--r);overflow:hidden}
+.more-g{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:6px 4px -16px}
 .list>p{padding:14px 16px}
 /* Approvals: tick-and-approve rows (the whole row is the tap target) */
 .q-row{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;align-items:start;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;min-height:44px}
@@ -2243,13 +2244,17 @@ function buildView(){
 
 function viewMore(){
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
+  /* grouped: Studio, Tools, Records, Admin, then Account; a group with nothing in it for this person is left out */
+  const grp=(title,...xs)=>{ const its=xs.filter(Boolean); return its.length?[h('div',{class:'more-g',text:title}),h('div',{class:'list'},...its)]:[]; };
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
-    h('div',{class:'list'},item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),item('help','How to use','Your routine, the phases and how scoring works, in pictures'),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('activity','Log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
-      item('reports','Report log',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
-      window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null,
+    ...grp('Studio',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
+    ...grp('Tools',item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
+      window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
+    ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
-      amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null,
-      amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null,
+      item('reports','Issue reports',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
+      amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
+    ...grp('Admin',amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
@@ -6089,7 +6094,7 @@ const HOWTO=[
    ['down','Download the backup','More › Backup every Thursday: all data as Excel or JSON. The COO is reminded on Home.','Backup'],
    ['chart','Money in Finance','More › Finance: invoices, receipts, costs, payroll and reports. Only the two of you can open it; it has its own guide.','Finance'],
    ['key','Look after accounts','More › People › Accounts and passwords: reset a forgotten password or add a new person.','Accounts and passwords'],
-   ['shield','Check the record','More › Log shows every change, notification and message. Nothing in it can be edited.','Log']],
+   ['shield','Check the record','More › Activity log shows every change, notification and message. Nothing in it can be edited.','Log']],
   rules:['Only approved dates count on the dashboard.',`Work finished before ${fmtD(goLive())} is history: you approve it, and it is never scored.`,'Standing guidelines go in Weekly meeting › Studio rules once, not in every set of minutes.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
 /* scoring is explained only to the Principal and the COO */
 const canSeeScoring=()=>S.isOwner||isCOO(S.uid);
@@ -6180,7 +6185,7 @@ const HOWDO=[
  ['start','all','Install SLATE OS on my phone',['iPhone (Safari): tap Share › Add to Home Screen › Add, then open SLATE OS from the red icon.','Android (Chrome): tap ⋮ › Install app.','Or use the Install SLATE OS / Add to Home Screen banner, or More › Account › App.'],'It opens like an app, without the browser bar.','On iPhone, notifications only work once it is on the Home Screen.'],
  ['start','all','Turn on notifications',['Tap Turn on in the notification banner, or More › Account › Turn on notifications.','Allow notifications when the phone asks.'],'You get alerts for tasks, approvals and messages even when the app is closed.','If you blocked them by mistake, allow them for SLATE OS in your phone’s settings. Turn them on separately on each device you use.'],
  ['start','all','Set my profile icon',['Tap your picture at the top left.','Pick an icon. Each icon belongs to one person only.','To go back to initials, tap Use my initials instead.'],null,null],
- ['start','all','Report a problem with the app',['Tap the ! button at the bottom left (Report an issue on larger screens).','Describe the problem and tap Send report.'],'The Principal and COO are told. Follow it in More › Report log: Open, Being fixed, Fixed or Closed.','The screen you were on is attached for you.'],
+ ['start','all','Report a problem with the app',['Tap the ! button at the bottom left (Report an issue on larger screens).','Describe the problem and tap Send report.'],'The Principal and COO are told. Follow it in More › Issue reports: Open, Being fixed, Fixed or Closed.','The screen you were on is attached for you.'],
 
  // ---- tasks
  ['tasks','all','See what I have to do today',['Open Home.','Read Needs attention first: overdue work and anything due in the next 3 days.','Then My checklist, Waiting for an approved date and In progress.'],null,'Messages from the Principal or COO sit at the top of Home until you answer them.'],
@@ -6273,7 +6278,7 @@ const HOWDO=[
  ['admin','boss','Download the weekly backup',['More › Backup.','Download as Excel, or Download full backup (JSON).'],'Each download is logged. The COO is reminded every Thursday.','Keep the file somewhere safe outside the office computer.'],
  ['admin','boss','Check what changed and who did it',['More › Log.','Full audit trail, or Task history; filter by type, project or person.'],'Nothing in the log can be edited or removed.',null],
  ['admin','boss','Edit the SLATE standard process',['More › SLATE standard process › Edit on a phase.','Change the phase, gate, gate deliverables or checklist items.','Tap Save phase.'],'It applies to every project. Ticks already made stay with their items.','Restore original brings back the first standard.'],
- ['admin','boss','Reply to issues the team reported',['More › Report log.','Set Being fixed, Fixed or Close, with a note for the reporter.'],'The reporter is told.',null],
+ ['admin','boss','Reply to issues the team reported',['More › Issue reports.','Set Being fixed, Fixed or Close, with a note for the reporter.'],'The reporter is told.',null],
 
  // ---- tools
  ['tools','all','Check FAR and areas for a site',['More › FAR calculator.','Enter land size (katha), density block, front road and basements. For a road width not in the list, choose Custom width… and type it in feet.','Tap Calculate.'],'You see FAR, ground coverage, unit count and areas. Every calculation is saved in the FAR log.','Tap a row in the log to load it again.'],

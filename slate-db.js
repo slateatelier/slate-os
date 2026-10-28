@@ -1133,7 +1133,7 @@
   window.slateAuditView = auditView;
   window.slateAuditReload = () => loadAudit(true);
 
-  /* ---------------- report an issue: a floating button on every screen; reports kept in More → Report log ---------------- */
+  /* ---------------- report an issue: a floating button on every screen; reports kept in More → Issue reports ---------------- */
   const RP = { rows: [], loaded: false, busy: false, err: '', notes: {} };
   const RST = { open: 'Open', fixing: 'Being fixed', fixed: 'Fixed', closed: 'Closed' };
   async function loadReports() {
@@ -1146,7 +1146,7 @@
   window.slateOpenReports = () => RP.rows.filter(r => r.status === 'open').length;
   function screenName() {
     try {
-      const v = S.view, names = { mine: 'Home', all: 'Tasks', board: 'Board', gantt: 'Timeline', projects: 'Projects', cal: 'Calendar', dash: 'Dashboard', people: 'People', more: 'More', team: 'Team', activity: 'Log', setup: 'Settings', meet: 'Weekly meeting', std: 'Standard process', help: 'How to use', far: 'FAR calculator', chalk: 'Chalk Create', reports: 'Report log' };
+      const v = S.view, names = { mine: 'Home', all: 'Tasks', board: 'Board', gantt: 'Timeline', projects: 'Projects', cal: 'Calendar', dash: 'Dashboard', people: 'People', more: 'More', team: 'Team', activity: 'Activity log', setup: 'Settings', meet: 'Weekly meeting', std: 'Standard process', help: 'How to use', far: 'FAR calculator', chalk: 'Chalk Create', reports: 'Issue reports' };
       const sh = S.sheet && S.sheet.type ? ' · ' + ({ task: 'task', newTask: 'new task', project: 'project form', projView: 'project page', meeting: 'meeting minutes', pmeet: 'project meeting', notif: 'notifications', msgTask: 'message task' }[S.sheet.type] || S.sheet.type) : '';
       return ((names[v] || v || '') + sh).slice(0, 80);
     } catch (_) { return ''; }
@@ -1162,7 +1162,7 @@
     const form = el('form', { class: 'box', novalidate: '' },
       el('div', { class: 'brand' }, el('b', { style: 'font-size:22px;letter-spacing:.04em' }, 'Report an issue'), el('i', {}), el('span', {}, where ? 'On: ' + where : 'SLATE OS')),
       el('label', {}, 'Describe the problem', ta),
-      el('span', { class: 'f', style: 'font-size:13px;color:#6e6e73' }, 'The screen you were on and your device are added automatically. The Principal and the COO see every report; you can follow yours in More → Report log.'),
+      el('span', { class: 'f', style: 'font-size:13px;color:#6e6e73' }, 'The screen you were on and your device are added automatically. The Principal and the COO see every report; you can follow yours in More → Issue reports.'),
       go, el('div', { class: 'row' }, close), msg);
     const root = el('div', { id: 'slate-report-sheet', class: 'slate-sheet', role: 'dialog', 'aria-label': 'Report an issue' }, form);
     close.addEventListener('click', () => root.remove());
@@ -1187,7 +1187,7 @@
   function reportView() {
     if (!RP.busy && (!RP.loaded || Date.now() - (RP.at || 0) > 10000)) loadReports();
     const boss = canAdmin(), nm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
-    const out = [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, boss ? 'Everyone’s reports' : 'Your reports'), el('h1', { class: 'h1' }, 'Report log'),
+    const out = [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, boss ? 'Everyone’s reports' : 'Your reports'), el('h1', { class: 'h1' }, 'Issue reports'),
       el('p', { class: 'lead' }, boss ? 'Problems the team reported with the Report an issue button. Mark each one as it’s handled; the reporter is told.' : 'Problems you reported and where each one stands.')),
       (() => { const b = el('button', { class: 'btn btn-primary', type: 'button' }, 'Report an issue'); b.addEventListener('click', reportSheet); return b; })())];
     if (RP.err) out.push(el('div', { class: 'err' }, RP.err));
