@@ -35,8 +35,29 @@
   }
 
   // tidy the page for SLATE OS: no install button, no call buttons, no proposal request
+  /* inside SLATE OS: the SLATE OS look (white page, light grey groups, white bordered cards, uppercase section labels,
+     full width of the SLATE OS column) and none of the website-only parts */
   if (inOS) { const st = document.createElement('style');
-    st.textContent = '.calc-note,.legend,#emptyState,.foot-links{display:none!important}.vertical-layout{padding-bottom:8px!important}body{min-height:0!important}';
+    st.textContent = [
+      ':root{--bg-color:#fff;--input-bg:#F2F2F7;--output-bg:#fff;--border-color:#E5E5EA;--radius-md:10px;--radius-lg:12px;--shadow-sm:none;--shadow-md:none}',
+      'html,body{background:#fff!important;min-height:0!important}',
+      '.calc-note,.legend,#emptyState,.foot-links,.hero-tag,.cta-tag,.city-caption{display:none!important}',
+      '.vertical-layout{max-width:none!important;padding:0 0 8px!important;gap:12px!important}',
+      '.section-title{font-size:12px!important;letter-spacing:.05em!important;margin:18px 4px 8px!important;color:#8E8E93!important}',
+      '.input-group{box-shadow:none!important;border-radius:10px!important}',
+      '.field,.field-row{border-color:rgba(60,60,67,.12)!important}',
+      '.field.out{background:#E8E8EC!important}',
+      '.card{border:1px solid #E5E5EA;box-shadow:none!important}',
+      '.card[style*="text-primary"]{border-color:#000}',
+      '.city-switch{display:inline-flex!important;width:auto!important;background:#E8E8EC!important;border-radius:9px!important;padding:2px!important;box-shadow:none!important;gap:0!important;align-self:flex-start}',
+      '.city-switch button{flex:none!important;font-size:13px!important;font-weight:500!important;padding:6px 14px!important;border-radius:7px!important;color:#000!important}',
+      '.city-switch button.active{background:#fff!important;box-shadow:0 1px 3px rgba(0,0,0,.12)!important}',
+      '.btn-calc{font-size:15px!important;padding:13px 20px!important;border-radius:10px!important}',
+      '.btn-report{background:#E8E8EC!important;border:0!important;border-radius:10px!important;font-size:14px!important;padding:12px 18px!important}',
+      '.results-header{border-color:#E5E5EA!important}',
+      '.notice{border-radius:10px!important}',
+      '.project-title{font-size:22px!important}'
+    ].join('');
     (document.head || document.documentElement).appendChild(st); }
   const tidy = () => {
     if (!inOS) return;
