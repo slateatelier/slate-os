@@ -71,7 +71,7 @@ const DEFAULT_WA_MSG = 'Dear {client},\n\nPlease find invoice {no} for {project}
 const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, woTerms: DEFAULT_WO_TERMS, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [], waOn: false, waMsg: DEFAULT_WA_MSG };
 const S = {
   role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], links: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
-  os: [], people: {}, audit: null, pick: { accounts: [], projects: [] }, loaded: false, fy: fyOf(today()), tab: 'overview',
+  os: [], people: {}, audit: null, pick: { accounts: [], projects: [] }, intakes: [], ledger: [], loaded: false, fy: fyOf(today()), tab: 'overview',
   f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open', rep: 'pl', basis: 'billed', bm: '', guide: '' }
 };
 const isPrincipal = () => S.role === 'principal';
@@ -95,7 +95,7 @@ const MODE_LABEL = { cash: 'Cash', bank: 'Bank' };
 const acct = id => S.accounts.find(a => a.id === id);
 const bankAccts = ent => S.accounts.filter(a => a.kind === 'bank' && a.active !== false && entOf({ entity: a.title }) === ent);
 const acctLabel = a => `${a.name}${a.number ? ' · ' + a.number.slice(-4) : ''}`;
-const ACCT_KIND = { cash: 'Office vault (cash)', petty: 'Petty cash box', bank: 'Bank account', mfs: 'Mobile wallet' };
+const ACCT_KIND = { cash: 'Cash', petty: 'Petty cash box', bank: 'Bank account', mfs: 'Mobile wallet' };
 const KIND_ORDER = { cash: 0, petty: 1, bank: 2, mfs: 3 };
 const isCashLike = a => a && (a.kind === 'cash' || a.kind === 'petty');
 const activeAccts = () => S.accounts.filter(a => a.active !== false).sort((a, b) => (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9) || (a.name || '').localeCompare(b.name || ''));
@@ -104,7 +104,7 @@ function acctEntries(a) {
   const e = [];
   S.receipts.forEach(r => { const pt = recParts(r).filter(x => x.accountId === a.id); if (!pt.length) return; const i = S.invoices.find(x => x.id === r.invoiceId), p = i && prj(i.projectId);
     pt.forEach(x => e.push({ date: r.date, amt: +x.amount || 0, what: `Received · ${p ? p.client || p.name : 'client'}`, sub: `${r.mrNo || ''}${i ? ' · ' + i.no : ''}${recParts(r).length > 1 ? ' · part of ' + tk(r.received) : ''}`, kind: 'receipt', id: r.id, at: r.createdAt })); });
-  S.moves.forEach(m => {
+  S.moves.filter(m => !['pending', 'rejected'].includes(m.status)).forEach(m => {
     const other = id => (acct(id) || {}).name || 'another account';
     if (m.to === a.id) e.push({ date: m.date, amt: +m.amount || 0, what: m.type === 'transfer' ? `Transfer from ${other(m.from)}` : MOVE_LABEL[m.type], sub: m.note || m.ref || '', kind: 'move', id: m.id, at: m.createdAt });
     if (m.from === a.id) e.push({ date: m.date, amt: -(+m.amount || 0), what: m.type === 'transfer' ? `Transfer to ${other(m.to)}` : MOVE_LABEL[m.type], sub: m.note || m.ref || '', kind: 'move', id: m.id, at: m.createdAt });
@@ -175,7 +175,8 @@ async function load() {
   S.projects = by('projects'); S.invoices = by('invoices'); S.receipts = by('receipts');
   S.accounts = by('accounts'); S.moves = by('moves'); S.recons = by('recons');
   S.expenses = by('expenses'); S.workorders = by('workorders'); S.wopays = by('wopays');
-  S.staff = by('staff'); S.advances = by('advances'); S.payruns = by('payruns'); S.budgets = by('budgets');
+  S.staff = by('staff'); S.advances = by('advances'); S.payruns = by('payruns'); S.budgets = by('budgets'); S.intakes = by('intakes');
+  if (S.role === 'accountant') { await loadPick(); const { data: lg, error: le } = await sb.rpc('fin_ledger'); if (le) throw le; S.ledger = lg || []; }
   const st = rows.find(r => r.path === 'config/settings');
   S.settingsRow = !!st; S.settings = { ...DEFAULT_SETTINGS, ...(st ? st.data : {}) };
   S.loaded = true;
@@ -276,14 +277,14 @@ function renderChrome() {
   $('#fySel').innerHTML = [...fys].sort((a, b) => b - a).map(y => opt(y, 'FY ' + fyLabel(y), y === S.fy)).join('');
   $('#fyWrap').hidden = !S.loaded || isAcc();
   const overdueCt = S.invoices.filter(i => invStatus(i) === 'overdue').length;
-  const badge = { invoices: overdueCt, expenses: pendingExp().length, workorders: S.workorders.filter(w => (w.status || 'pending') === 'pending').length, payroll: submittedRuns().length + pendingAdv().length };
-  $('#tabs').innerHTML = S.loaded && isAcc() ? '<button class="tab" role="tab" aria-selected="true">My entries</button>' : S.loaded ? TABS.map(([k, l]) => `<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}${badge[k] ? `<span class="ct">${badge[k]}</span>` : ''}</button>`).join('') : '';
+  const badge = { cash: pendingMoves().length, invoices: overdueCt + pendingIntakes().length, expenses: pendingExp().length, workorders: S.workorders.filter(w => (w.status || 'pending') === 'pending').length, payroll: submittedRuns().length + pendingAdv().length };
+  $('#tabs').innerHTML = S.loaded && isAcc() ? [['mine', 'My entries'], ['acash', 'Cash & bank']].map(([k, l]) => `<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}</button>`).join('') : S.loaded ? TABS.map(([k, l]) => `<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}${badge[k] ? `<span class="ct">${badge[k]}</span>` : ''}</button>`).join('') : '';
   $('#who').textContent = S.role ? (S.people[S.uid] || 'You') + ' · ' + (isPrincipal() ? 'Principal' : isAcc() ? 'Accountant' : 'COO') : '';
 }
 function render() {
   renderChrome();
   if (!S.loaded) return;
-  if (isAcc()) { $('#app').innerHTML = accView(); return; }
+  if (isAcc()) { $('#app').innerHTML = S.tab === 'acash' ? accCashView() : accView(); return; }
   const v = { overview, dash: dashboard, billing, invoices, expenses: expensesView, workorders: workordersView, payroll: payrollView, petty: pettyView, cash: cashbook, reports, activity, settings, guide: guideView }[S.tab] || overview;
   $('#app').innerHTML = v();
 }
@@ -505,6 +506,7 @@ function invoices() {
   return `
   <div class="head"><div><h2>Invoices</h2><p>Raise against project milestones, then record what the client pays, including tax deducted at source. Issued invoices are fixed: void and re-issue to correct one.</p></div>
     <div class="actions"><button class="btn" data-act="export-inv">Export CSV</button><button class="btn pri" data-act="new-invoice" ${S.projects.length ? '' : 'disabled'}>New invoice</button></div></div>
+  ${intakesPanel()}
   <div class="filters"><div class="seg">${[['open', 'Open'], ['overdue', 'Overdue'], ['draft', 'Drafts'], ['paid', 'Paid'], ['void', 'Void'], ['fy', `FY ${fyLabel(S.fy)}`]].map(([k, l]) => `<button data-act="f-inv" data-v="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}</div>
     <input type="search" id="q" placeholder="Search client, project, number" value="${esc(S.f.q)}"></div>
   <div class="panel"><div class="ph"><h3>${list.length} invoice${list.length === 1 ? '' : 's'}</h3><span class="meta num">${f === 'open' || f === 'overdue' ? 'balance ' : 'total '}${tk(sum)}</span></div>
@@ -645,7 +647,7 @@ function dueForm(i) {
 }
 const recParts = r => Array.isArray(r.parts) && r.parts.length ? r.parts : (r.accountId ? [{ accountId: r.accountId, amount: +r.received || 0 }] : []);
 const partsLabel = r => recParts(r).map(x => `${(acct(x.accountId) || {}).name || 'account'} ${tk(x.amount)}`).join(' + ');
-function receiptForm(i) {
+function receiptForm(i, pre) {
   const accts = activeAccts().filter(a => a.kind !== 'petty');
   if (!accts.length) { closeSheet(); S.tab = 'cash'; render(); toast('Add your vault and bank accounts first, so each payment goes into one.'); return; }
   const bal = Math.max(0, invTotal(i) - invSettled(i));
@@ -655,8 +657,8 @@ function receiptForm(i) {
   openSheet(`${sheetHead('Record payment', `${esc(i.no)} · balance ${tk(bal)}`)}
   <form id="rf">
     <div class="fg">
-      <label class="f" for="r_date">Date received<input id="r_date" name="date" type="date" required value="${today()}"></label>
-      <label class="f" for="r_mr">Money receipt no.<input id="r_mr" name="mrNo" required class="mono" value="${esc(nextMrNo(today()))}"></label>
+      <label class="f" for="r_date">Date received<input id="r_date" name="date" type="date" required value="${esc(pre?.date || today())}"></label>
+      <label class="f" for="r_mr">Money receipt no.<input id="r_mr" name="mrNo" required class="mono" value="${esc(nextMrNo(pre?.date || today()))}"></label>
     </div>
     <div class="sec-t">How it came in</div>
     <div style="display:flex;flex-direction:column;gap:6px">${accts.map(a => `<label class="f" style="display:grid;grid-template-columns:minmax(0,1fr) 140px;align-items:center;gap:10px"><span>${esc(a.name)} <span class="hint">${a.kind === 'cash' ? 'cash' : a.kind === 'mfs' ? 'mobile' : 'bank / cheque'}</span></span><input type="number" min="0" step="1" name="part" data-acct="${a.id}" value="${a.id === defA ? first : ''}" placeholder="0" aria-label="Amount into ${esc(a.name)}"></label>`).join('')}</div>
@@ -680,6 +682,7 @@ function receiptForm(i) {
       h.className = 'hint' + (left < -1 || locked(f.date.value) || late ? ' err' : ''); };
     f.addEventListener('input', e => { if ((e.target === f.ait || e.target === f.vds) && parts().length <= 1) { const el = partEls.find(x => +x.value > 0) || partEls.find(x => x.dataset.acct === defA); el.value = Math.max(0, Math.round(bal - (+f.ait.value || 0) - (+f.vds.value || 0))); } upd(); });
     f.date.addEventListener('change', () => { f.mrNo.value = nextMrNo(f.date.value); upd(); });
+    if (pre) { partEls.forEach(e => { e.value = e.dataset.acct === pre.accountId ? Math.round(+pre.amount || 0) : ''; }); if (pre.ref) f.ref.value = pre.ref; }
     upd();
     f.addEventListener('submit', async ev => { ev.preventDefault();
       const P = parts(), rec = P.reduce((u, x) => u + x.amount, 0), mrNo = f.mrNo.value.trim(), h = $('#rHint', root);
@@ -690,7 +693,10 @@ function receiptForm(i) {
       const methodOf = a => a?.kind === 'cash' ? 'Cash' : a?.kind === 'mfs' ? 'bKash / MFS' : 'Bank transfer';
       const data = { invoiceId: i.id, projectId: i.projectId, date: f.date.value, accountId: main.accountId, parts: P, method: P.map(x => methodOf(acct(x.accountId))).filter((v, k, a) => a.indexOf(v) === k).join(' + ') || methodOf(acct(main.accountId)),
         mrNo, received: rec, ait: +f.ait.value || 0, vds: +f.vds.value || 0, ref: f.ref.value.trim() };
-      if (await run(() => addDoc('receipts', data), `Payment recorded · receipt ${mrNo}`)) invoiceSheet(S.invoices.find(x => x.id === i.id) || i); });
+      if (await run(async () => { const rid = await addDoc('receipts', data);
+          const it = pre && pre.intakeId && S.intakes.find(k => k.id === pre.intakeId);
+          if (it) await putDoc('intakes', it.id, { ...strip(it), status: 'matched', receiptId: rid, invoiceId: i.id, decidedBy: S.uid, decidedOn: today() }); },
+        `Payment recorded · receipt ${mrNo}`)) invoiceSheet(S.invoices.find(x => x.id === i.id) || i); });
   });
 }
 
@@ -1600,15 +1606,16 @@ function cashbook() {
     <div class="actions" style="justify-content:center"><button class="btn" data-act="new-acct" data-v="cash">Add office vault</button><button class="btn pri" data-act="new-acct" data-v="bank">Add bank account</button></div></div></div>`;
   return `
   <div class="head"><div><h2>Cash & bank</h2><p>Balances as of today. Client payments, paid expenses, work order payments, salaries, transfers and drawings all post here.</p></div>
-    <div class="actions"><button class="btn" data-act="new-acct">Add account</button><button class="btn" data-act="new-move" data-v="transfer">Transfer</button><button class="btn" data-act="new-move" data-v="drawing">Owner’s drawing</button><button class="btn" data-act="new-move" data-v="capital">Capital in</button><button class="btn" data-act="new-move" data-v="income">Other income</button></div></div>
+    <div class="actions"><button class="btn" data-act="reg-ff">Fund flow</button><button class="btn" data-act="new-acct">Add account</button><button class="btn" data-act="new-move" data-v="transfer">Transfer</button><button class="btn" data-act="new-move" data-v="drawing">Owner’s drawing</button><button class="btn" data-act="new-move" data-v="capital">Capital in</button><button class="btn" data-act="new-move" data-v="income">Other income</button></div></div>
   <div class="kpis">
     <div class="kpi"><div class="lb">Total cash & bank</div><div class="v" style="${total < 0 ? 'color:var(--bad)' : ''}">${compact(total)}</div><div class="s">${accts.length} active account${accts.length === 1 ? '' : 's'}</div></div>
-    <div class="kpi"><div class="lb">Office vault</div><div class="v">${compact(sumKind('cash'))}</div><div class="s">count it at month end</div></div>
+    <div class="kpi"><div class="lb">Cash</div><div class="v">${compact(sumKind('cash'))}</div><div class="s">vault and cash in hand · count at month end</div></div>
     <div class="kpi"><div class="lb">Bank</div><div class="v">${compact(sumKind('bank'))}</div><div class="s">check against the statement</div></div>
     ${accts.some(a => a.kind === 'mfs') ? `<div class="kpi"><div class="lb">Mobile wallets</div><div class="v">${compact(sumKind('mfs'))}</div><div class="s">bKash, Nagad</div></div>`
       : (() => { const lm = (() => { const d = new Date(); d.setDate(0); return iso(d).slice(0, 7); })(), due = accts.filter(a => a.openingDate <= monthEnd(lm) && !S.recons.some(r => r.accountId === a.id && r.month === lm));
         return `<div class="kpi"><div class="lb">Month-end check</div><div class="v">${due.length ? `${due.length} due` : 'Done'}</div><div class="s">${fmtShort(monthEnd(lm))}${due.length ? ' · ' + esc(due.map(a => a.name).join(', ')) : ' · all matched up'}</div></div>`; })()}
   </div>
+  ${movesPanel()}
   <div class="panel"><div class="ph"><h3>Accounts</h3><span class="meta">tap one for its book</span></div><div class="rows">${accts.map(acRow).join('')}${inactive.map(acRow).join('')}</div></div>
   <div class="panel"><div class="ph"><h3>Money in and out · FY ${fyLabel(S.fy)}</h3><span class="meta">latest first</span></div>
     ${recent.length ? `<div class="rows">${recent.slice(0, 25).map(e => entryRow(e, e.a)).join('')}</div>` : `<div class="empty">Nothing in or out in FY ${fyLabel(S.fy)} yet.</div>`}</div>`;
@@ -1679,7 +1686,7 @@ function accountSheet(a) {
       <div class="amt" style="color:var(${e.amt < 0 ? '--bad' : '--good'})">${e.amt < 0 ? '− ' : '+ '}${tk(Math.abs(e.amt))}<small>bal ${tk(e.bal)}</small></div></button>`).join('') : `<div class="empty" style="padding:14px">No entries in FY ${fyLabel(fy)}.</div>`}</div>
     <div class="sec-t" style="margin-top:18px">Month-end checks</div>
     <div class="mini-list rows" style="margin-top:10px">${checks.length ? checks.map(r => `<div class="row r-mini" style="cursor:default"><div style="min-width:0"><div class="t">${fmtDate(monthEnd(r.month))}</div><div class="sub">Book ${tk(r.book)} · ${isCashLike(a) ? 'counted' : 'statement'} ${tk(r.actual)}${r.note ? ' · ' + esc(r.note) : ''} · by ${who(r.createdBy)}</div></div>${Math.abs(+r.diff || 0) < 1 ? chip('paid', 'Matched') : chip('overdue', (r.diff > 0 ? 'Short ' : 'Over ') + tk(Math.abs(r.diff)))}<span></span></div>`).join('') : `<div class="empty" style="padding:14px">No checks yet. At each month end, compare the book with the ${isCashLike(a) ? 'cash in the box' : 'bank statement'}.</div>`}</div>
-    <div class="foot"><button class="btn" data-act="export-acct" data-id="${a.id}">Export CSV</button><button class="btn" data-act="edit-acct" data-id="${a.id}">Edit</button><button class="btn pri" data-act="recon-acct" data-id="${a.id}">Month-end check</button></div>`);
+    <div class="foot"><button class="btn" data-act="reg-cb" data-id="${a.id}">Cash book</button><button class="btn" data-act="reg-vr" data-id="${a.id}">${a.kind === 'cash' ? 'Vault register' : 'Register'}</button><button class="btn" data-act="export-acct" data-id="${a.id}">Export CSV</button><button class="btn" data-act="edit-acct" data-id="${a.id}">Edit</button><button class="btn pri" data-act="reg-count" data-id="${a.id}">${isCashLike(a) ? "Count cash" : "Statement check"}</button></div>`);
 }
 function moveForm(type, m, preset) {
   const accts = activeAccts(), src = m || { type, date: today(), ...(preset || {}) };
@@ -2525,18 +2532,26 @@ const pickPrj = id => S.pick.projects.find(p => p.id === id);
 const pettyPick = () => S.pick.accounts.find(a => a.kind === 'petty');
 const accSt = x => (x.status || 'pending');
 function accView() {
-  const mine = S.expenses.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
-  const pend = mine.filter(x => accSt(x) === 'pending');
-  const row = x => { const p = x.projectId ? pickPrj(x.projectId) : null, st = accSt(x);
-    return `<button class="row r-exp" data-act="acc-open" data-id="${x.id}"><div style="min-width:0"><div class="t">${esc(x.desc)}</div><div class="sub">${esc(x.category)}${x.payee ? ' · ' + esc(x.payee) : ''}${p ? ' · <span class="mono">' + esc(p.code) + '</span>' : ''}${x.accountId ? ' · paid from ' + esc(pickAcct(x.accountId)) : ''}</div></div>
-      <div class="c2 sub">${fmtDate(x.date)}</div>${st === 'pending' ? chip('pending', 'Awaiting approval') : st === 'rejected' ? chip('rejected', 'Rejected') : chip('paid', 'Approved')}<div class="amt">${tk(x.amount)}</div></button>`; };
+  const name = id => (S.pick.accounts.find(a => a.id === id) || {}).name || '—';
+  const items = [
+    ...S.expenses.map(x => ({ kind: 'Expense', act: 'acc-open', id: x.id, date: x.date, at: x.createdAt, amt: x.amount, st: accSt(x), t: x.desc,
+      sub: `${esc(x.category)}${x.payee ? ' · ' + esc(x.payee) : ''}${x.projectId && pickPrj(x.projectId) ? ' · <span class="mono">' + esc(pickPrj(x.projectId).code) + '</span>' : ''}${x.accountId ? ' · paid from ' + esc(pickAcct(x.accountId)) : ''}` })),
+    ...S.intakes.map(x => ({ kind: 'Money received', act: 'acc-open-doc', id: 'intakes/' + x.id, date: x.date, at: x.createdAt, amt: x.amount, st: x.status || 'pending', t: `Received · ${x.client || 'client'}`,
+      sub: `into ${esc(name(x.accountId))}${x.ref ? ' · ' + esc(x.ref) : ''}` })),
+    ...S.moves.map(x => ({ kind: 'Transfer', act: 'acc-open-doc', id: 'moves/' + x.id, date: x.date, at: x.createdAt, amt: x.amount, st: x.status || 'pending', t: `${name(x.from)} → ${name(x.to)}`,
+      sub: `Transfer${x.ref ? ' · ' + esc(x.ref) : ''}` }))
+  ].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.at || '').localeCompare(a.at || ''));
+  const STC = { pending: ['pending', 'Waiting'], approved: ['paid', 'Approved'], matched: ['paid', 'Matched'], rejected: ['rejected', 'Rejected'], dismissed: ['rejected', 'Not matched'] };
+  const pend = items.filter(x => x.st === 'pending');
+  const row = x => `<button class="row r-exp" data-act="${x.act}" data-id="${x.id}"><div style="min-width:0"><div class="t">${esc(x.t)}</div><div class="sub">${x.kind} · ${x.sub}</div></div>
+      <div class="c2 sub">${fmtDate(x.date)}</div>${chip(...(STC[x.st] || STC.pending))}<div class="amt">${tk(x.amt)}</div></button>`;
   return `
-  <div class="head"><div><h2>My entries</h2><p>Expenses and petty cash bills you enter go to the Principal for approval. You can correct or remove an entry until it has been decided.</p></div>
-    <div class="actions">${pettyPick() ? '<button class="btn" data-act="acc-petty">Petty cash bills</button>' : ''}<button class="btn pri" data-act="acc-new">New expense</button></div></div>
-  <div class="kpis"><div class="kpi"><div class="lb">Awaiting approval</div><div class="v">${pend.length}</div><div class="s">${tk(pend.reduce((u, x) => u + (+x.amount || 0), 0))}</div></div>
-    <div class="kpi"><div class="lb">Entered by you</div><div class="v">${mine.length}</div><div class="s">all time</div></div></div>
-  <div class="panel"><div class="ph"><h3>${mine.length} entr${mine.length === 1 ? 'y' : 'ies'}</h3></div>
-  ${mine.length ? `<div class="rows">${mine.map(row).join('')}</div>` : '<div class="empty"><strong>Nothing entered yet</strong>Use New expense for a bill or payment, or Petty cash bills for small bills paid from the box.</div>'}</div>`;
+  <div class="head"><div><h2>My entries</h2><p>Everything you enter goes to the Principal or COO: expenses for approval, money received for matching to an invoice, transfers for approval. You can correct or remove an entry while it's still waiting.</p></div>
+    <div class="actions">${pettyPick() ? '<button class="btn" data-act="acc-petty">Petty cash bills</button>' : ''}<button class="btn" data-act="acc-transfer">Transfer</button><button class="btn" data-act="acc-intake">Money received</button><button class="btn pri" data-act="acc-new">New expense</button></div></div>
+  <div class="kpis"><div class="kpi"><div class="lb">Waiting</div><div class="v">${pend.length}</div><div class="s">for approval or matching</div></div>
+    <div class="kpi"><div class="lb">Entered by you</div><div class="v">${items.length}</div><div class="s">all time</div></div></div>
+  <div class="panel"><div class="ph"><h3>${items.length} entr${items.length === 1 ? 'y' : 'ies'}</h3></div>
+  ${items.length ? `<div class="rows">${items.map(row).join('')}</div>` : '<div class="empty"><strong>Nothing entered yet</strong>Use New expense for a bill or payment, Money received when a client pays, Transfer to move money between cash points, or Petty cash bills for small bills paid from the box.</div>'}</div>`;
 }
 function accExpForm(x) {
   const src = x || { date: today(), category: EXP_CATS[0] }, paid = !!(x && x.accountId), accts = S.pick.accounts;
@@ -2612,6 +2627,268 @@ document.addEventListener('click', async ev => {
   }
 });
 
+/* ---------- Cash point registers (everyone with Finance access) ----------
+   One shape for every viewer: { id, name, kind, opening, openingDate, entries: [{ date, amt, what, sub }], counts: [...] }.
+   The Principal and COO build it from their full data; the Accountant gets it from fin_ledger(), which carries
+   only what moved, when, and a plain label — no fees, invoice amounts or individual salaries. */
+const NOTES = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
+function ledgerAccounts() {
+  if (isAcc()) return S.ledger || [];
+  return activeAccts().map(a => ({ id: a.id, name: a.name, kind: a.kind, active: a.active !== false, opening: +a.opening || 0, openingDate: a.openingDate, float: a.float,
+    entries: acctEntries(a).map(e => ({ date: e.date, amt: e.amt, what: e.what, sub: e.sub })),
+    counts: S.recons.filter(r => r.accountId === a.id).map(r => ({ month: r.month, date: r.date, book: r.book, actual: r.actual, diff: r.diff, notes: r.notes, note: r.note })) }));
+}
+const lgFind = id => ledgerAccounts().find(L => L.id === id);
+const lgBal = (L, upto) => (L.entries || []).filter(e => !upto || e.date <= upto).reduce((s, e) => s + (+e.amt || 0), +L.opening || 0);
+const lgCashLike = L => L.kind === 'cash' || L.kind === 'petty';
+const nn = v => nf.format(Math.round(+v || 0));
+function denomTable(notes) {
+  if (!notes || !Object.keys(notes).length) return '';
+  const rows = NOTES.map(d => ({ d, q: +notes[d] || 0 })).filter(x => x.q);
+  const tot = rows.reduce((u, x) => u + x.d * x.q, 0);
+  return `<table style="font-size:8.8pt;width:auto;min-width:70mm"><thead><tr><th>Note</th><th class="n">Quantity</th><th class="n">Amount</th></tr></thead><tbody>
+    ${rows.map(x => `<tr><td>${nn(x.d)}</td><td class="n">${nn(x.q)}</td><td class="n">${nn(x.d * x.q)}</td></tr>`).join('')}
+    <tr class="tot"><td>Total</td><td></td><td class="n">${nn(tot)}</td></tr></tbody></table>`;
+}
+const regSig = `<div class="sig"><div><b>Prepared by</b>Accountant</div><div><b>Verified by</b>COO</div><div><b>Approved by</b>Principal</div></div>`;
+/* Cash book: two-sided for one month — receipts left, payments right */
+function cashBookDoc(L, mo) {
+  const start = mo + '-01', end = monthEnd(mo);
+  const opening = lgBal(L, iso(new Date(new Date(start + 'T00:00:00').getTime() - 864e5)));
+  const rows = (L.entries || []).filter(e => e.date >= start && e.date <= end);
+  const ins = rows.filter(e => e.amt > 0), outs = rows.filter(e => e.amt < 0);
+  const inT = ins.reduce((u, e) => u + e.amt, 0), outT = -outs.reduce((u, e) => u + e.amt, 0), closing = opening + inT - outT;
+  const left = [{ date: '', what: '<b>Opening balance</b>', amt: opening }, ...ins.map(e => ({ date: fmtShort(e.date), what: esc(e.what) + (e.sub ? `<br><span style="color:#545454;font-size:7.5pt">${esc(e.sub)}</span>` : ''), amt: e.amt }))];
+  const right = outs.map(e => ({ date: fmtShort(e.date), what: esc(e.what) + (e.sub ? `<br><span style="color:#545454;font-size:7.5pt">${esc(e.sub)}</span>` : ''), amt: -e.amt }));
+  const n = Math.max(left.length, right.length);
+  const cell = x => x ? `<td>${x.date}</td><td>${x.what}</td><td class="n">${nn(x.amt)}</td>` : '<td></td><td></td><td></td>';
+  const cnt = (L.counts || []).find(c => c.month === mo);
+  const body = `<h1>${lgCashLike(L) ? 'Cash book' : 'Bank book'}</h1>
+  <div class="ref"><span>Cash point <b>${esc(L.name)}</b></span><span>Month <b>${monthName(mo)}</b></span><span>Printed <b>${fmtDate(today())}</b></span></div>
+  <table style="font-size:8.6pt;table-layout:fixed"><colgroup><col style="width:9%"><col style="width:28%"><col style="width:13%"><col style="width:9%"><col style="width:28%"><col style="width:13%"></colgroup>
+  <thead><tr><th>Date</th><th>Received</th><th class="n">Taka</th><th style="border-left:.5pt solid #CFCFCF;padding-left:2mm">Date</th><th>Paid</th><th class="n">Taka</th></tr></thead><tbody>
+  ${Array.from({ length: n }, (_, k) => `<tr>${cell(left[k])}${cell(right[k]).replace('<td>', '<td style="border-left:.5pt solid #CFCFCF;padding-left:2mm">')}</tr>`).join('')}
+  <tr class="sub"><td></td><td></td><td></td><td style="border-left:.5pt solid #CFCFCF"></td><td><b>Total paid</b></td><td class="n">${nn(outT)}</td></tr>
+  <tr class="sub"><td></td><td></td><td></td><td style="border-left:.5pt solid #CFCFCF"></td><td><b>Closing balance</b></td><td class="n">${nn(closing)}</td></tr>
+  <tr class="tot"><td></td><td>Total</td><td class="n">${nn(opening + inT)}</td><td></td><td>Total</td><td class="n">${nn(outT + closing)}</td></tr></tbody></table>
+  ${cnt ? `<h2>${lgCashLike(L) ? 'Cash counted' : 'Bank statement'} · ${fmtDate(cnt.date || end)}</h2>
+    <p class="note" style="margin-top:0">Book ${nn(cnt.book)} · ${lgCashLike(L) ? 'counted' : 'statement'} ${nn(cnt.actual)} · ${Math.abs(+cnt.diff || 0) < 1 ? 'matches the book' : `${cnt.diff > 0 ? 'short' : 'over'} by ${nn(Math.abs(cnt.diff))}`}${cnt.note ? ' · ' + esc(cnt.note) : ''}</p>
+    ${denomTable(cnt.notes)}` : `<p class="note">No ${lgCashLike(L) ? 'cash count' : 'statement check'} recorded for this month.</p>`}
+  ${regSig}`;
+  return docShell(`${L.name} · ${monthName(mo)}`, `${L.name} · cash book · ${monthName(mo)}`, body);
+}
+/* Vault register: what came in (with source), what went out, running balance, last note count */
+function vaultRegisterDoc(L, from, to) {
+  const opening = lgBal(L, iso(new Date(new Date(from + 'T00:00:00').getTime() - 864e5)));
+  const rows = (L.entries || []).filter(e => e.date >= from && e.date <= to);
+  let run = opening, cumIn = 0;
+  const cnt = (L.counts || []).filter(c => (c.date || '') <= to).slice(-1)[0];
+  const body = `<h1>${/vault/i.test(L.name) ? 'Vault cash register' : L.kind === 'bank' || L.kind === 'mfs' ? 'Account register' : 'Cash register'}</h1>
+  <div class="ref"><span>Cash point <b>${esc(L.name)}</b></span><span>Period <b>${fmtDate(from)} – ${fmtDate(to)}</b></span><span>Printed <b>${fmtDate(today())}</b></span></div>
+  <table style="font-size:8.4pt"><thead><tr><th>Date</th><th>Received from / paid to</th><th>Reference</th><th class="n">In</th><th class="n">Cumulative in</th><th class="n">Out</th><th class="n">Balance</th></tr></thead><tbody>
+  <tr class="sub"><td>${fmtShort(from)}</td><td>Opening balance</td><td></td><td></td><td></td><td></td><td class="n">${nn(opening)}</td></tr>
+  ${rows.map(e => { run += e.amt; if (e.amt > 0) cumIn += e.amt; return `<tr><td>${fmtShort(e.date)}</td><td>${esc(e.what)}</td><td style="color:#545454;font-size:7.6pt">${esc(e.sub || '')}</td><td class="n">${e.amt > 0 ? nn(e.amt) : ''}</td><td class="n">${e.amt > 0 ? nn(cumIn) : ''}</td><td class="n">${e.amt < 0 ? nn(-e.amt) : ''}</td><td class="n">${nn(run)}</td></tr>`; }).join('')}
+  <tr class="tot"><td></td><td>Closing balance</td><td></td><td class="n">${nn(cumIn)}</td><td></td><td class="n">${nn(-rows.filter(e => e.amt < 0).reduce((u, e) => u + e.amt, 0))}</td><td class="n">${nn(run)}</td></tr></tbody></table>
+  ${cnt ? `<h2>Last count · ${fmtDate(cnt.date)}</h2><p class="note" style="margin-top:0">Book ${nn(cnt.book)} · counted ${nn(cnt.actual)} · difference ${nn(cnt.diff)}${cnt.note ? ' · ' + esc(cnt.note) : ''}</p>${denomTable(cnt.notes)}` : ''}
+  ${regSig}`;
+  return docShell(`${L.name} register`, `${L.name} · register · ${fmtDate(from)} – ${fmtDate(to)}`, body);
+}
+/* Fund flow: every cash point for a period — opening, collection, payment, closing */
+function fundFlowDoc(from, to) {
+  const before = iso(new Date(new Date(from + 'T00:00:00').getTime() - 864e5));
+  const Ls = ledgerAccounts().filter(L => L.active !== false);
+  const rows = Ls.map(L => { const es = (L.entries || []).filter(e => e.date >= from && e.date <= to);
+    const op = lgBal(L, before), inn = es.filter(e => e.amt > 0).reduce((u, e) => u + e.amt, 0), out = -es.filter(e => e.amt < 0).reduce((u, e) => u + e.amt, 0);
+    return { L, op, inn, out, cl: op + inn - out }; });
+  const sum = (k, f = () => true) => rows.filter(r => f(r.L)).reduce((u, r) => u + r[k], 0);
+  const KIND = { cash: 'Cash', petty: 'Petty cash', bank: 'Bank', mfs: 'Mobile wallet' };
+  const body = `<h1>Fund flow statement</h1>
+  <div class="ref"><span>Period <b>${fmtDate(from)} – ${fmtDate(to)}</b></span><span>Printed <b>${fmtDate(today())}</b></span></div>
+  <table style="font-size:9pt"><thead><tr><th>#</th><th>Cash point</th><th>Type</th><th class="n">Opening</th><th class="n">Collection</th><th class="n">Payment</th><th class="n">Closing</th></tr></thead><tbody>
+  ${rows.map((r, k) => `<tr><td>${k + 1}</td><td>${esc(r.L.name)}</td><td>${KIND[r.L.kind] || ''}</td><td class="n">${nn(r.op)}</td><td class="n">${nn(r.inn)}</td><td class="n">${nn(r.out)}</td><td class="n">${nn(r.cl)}</td></tr>`).join('')}
+  <tr class="tot"><td></td><td>This period</td><td></td><td class="n">${nn(sum('op'))}</td><td class="n">${nn(sum('inn'))}</td><td class="n">${nn(sum('out'))}</td><td class="n">${nn(sum('cl'))}</td></tr></tbody></table>
+  <h2>Position at ${fmtDate(to)}</h2>
+  <table style="font-size:9.5pt;width:auto;min-width:90mm"><tbody>
+    <tr><td>Total bank</td><td class="n">${nn(sum('cl', L => !lgCashLike(L)))}</td></tr>
+    <tr><td>Total cash</td><td class="n">${nn(sum('cl', lgCashLike))}</td></tr>
+    <tr class="tot"><td>Total funds</td><td class="n">${nn(sum('cl'))}</td></tr></tbody></table>
+  ${regSig}`;
+  return docShell('Fund flow statement', `Fund flow · ${fmtDate(from)} – ${fmtDate(to)}`, body);
+}
+function registerForm(kind, id) {
+  const L = id ? lgFind(id) : null, mo = today().slice(0, 7);
+  const titles = { cb: 'Cash book', vr: L && L.kind === 'cash' ? 'Vault register' : 'Account register', ff: 'Fund flow statement' };
+  openSheet(`${sheetHead(titles[kind], L ? esc(L.name) : 'All cash points')}
+  <form id="rgf"><div class="fg">${kind === 'cb' ? `<label class="f" for="rg_m">Month<input id="rg_m" name="m" type="month" required value="${mo}" max="${mo}"></label>`
+    : `<label class="f" for="rg_f">From<input id="rg_f" name="from" type="date" required value="${mo}-01"></label><label class="f" for="rg_t">To<input id="rg_t" name="to" type="date" required value="${today()}"></label>`}</div>
+    <p class="hint">Opens on the SLATE letterhead: print it, or save it as a PDF.</p>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Open</button></div></form>`, root => {
+    $('#rgf', root).addEventListener('submit', ev => { ev.preventDefault(); const f = ev.target;
+      if (kind !== 'cb' && f.from.value > f.to.value) { toast('The start date is after the end date.'); return; }
+      if (kind === 'cb') openDoc(cashBookDoc(L, f.m.value), `${fileSafe(L.name)}-cash-book-${f.m.value}.html`);
+      else if (kind === 'vr') openDoc(vaultRegisterDoc(L, f.from.value, f.to.value), `${fileSafe(L.name)}-register.html`);
+      else openDoc(fundFlowDoc(f.from.value, f.to.value), 'Fund-flow-statement.html');
+      closeSheet(); });
+  });
+}
+/* Cash count with note count (cash points) or statement balance (bank) — Accountant, COO, Principal */
+function countForm(id) {
+  const L = lgFind(id); if (!L) return;
+  const d = new Date(); d.setDate(0); const ym0 = iso(d).slice(0, 7), cashy = lgCashLike(L);
+  openSheet(`${sheetHead(cashy ? 'Cash count' : 'Bank statement check', esc(L.name))}
+  <form id="ccf"><div class="fg">
+    <label class="f" for="cc_m">Month<input id="cc_m" name="month" type="month" required value="${ym0}" max="${today().slice(0, 7)}"></label>
+    ${cashy ? '' : `<label class="f" for="cc_a">Statement balance on the last day<input id="cc_a" name="actual" type="number" step="1" required></label>`}</div>
+    ${cashy ? `<div class="sec-t">Notes counted</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">${NOTES.map(n => `<label class="f" for="cc_${n}">৳ ${n}<input id="cc_${n}" name="n${n}" type="number" min="0" step="1" placeholder="0"></label>`).join('')}</div>` : ''}
+    <dl class="kv" id="ccTot"></dl>
+    <label class="f" for="cc_note">Note<input id="cc_note" name="note" placeholder="Explain any difference"></label>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Save</button></div></form>`, root => {
+    const f = $('#ccf', root);
+    const notes = () => { const o = {}; if (cashy) NOTES.forEach(n => { const q = Math.max(0, Math.round(+f['n' + n].value || 0)); if (q) o[n] = q; }); return o; };
+    const actual = () => cashy ? Object.entries(notes()).reduce((u, [n, q]) => u + n * q, 0) : (+f.actual.value || 0);
+    const upd = () => { if (!f.month.value) return; const book = Math.round(lgBal(L, monthEnd(f.month.value))), act = actual(), diff = book - act;
+      $('#ccTot', root).innerHTML = `<dt>Book balance on ${fmtDate(monthEnd(f.month.value))}</dt><dd>${tk(book)}</dd><dt>${cashy ? 'Counted' : 'Statement'}</dt><dd>${tk(act)}</dd><dt class="tot">${Math.abs(diff) < 1 ? 'Matched' : diff > 0 ? 'Short by' : 'Over by'}</dt><dd class="tot" style="color:var(${Math.abs(diff) < 1 ? '--good' : '--bad'})">${tk(Math.abs(diff))}</dd>`; };
+    f.addEventListener('input', upd); upd();
+    f.addEventListener('submit', async ev => { ev.preventDefault();
+      const month = f.month.value, end = monthEnd(month), book = Math.round(lgBal(L, end)), act = actual();
+      if (L.openingDate && end < L.openingDate) { toast(`${L.name} starts on ${fmtDate(L.openingDate)}.`); return; }
+      const rid = `${L.id}_${month.replace('-', '')}`, prev = S.recons.find(r => r.id === rid);
+      const data = { accountId: L.id, month, date: end, book, actual: act, diff: book - act, notes: notes(), note: f.note.value.trim() };
+      if (await run(() => setDoc('recons', rid, prev ? { ...strip(prev), ...data } : data, !!prev), Math.abs(book - act) < 1 ? 'Matched and saved' : 'Saved with a difference')) closeSheet(); });
+  });
+}
+
+/* ---------- Accountant: money received and transfers ---------- */
+function accIntakeForm(x) {
+  const src = x || { date: today() }, accts = S.pick.accounts.filter(a => a.kind !== 'petty');
+  if (!accts.length) { toast('The cash points aren’t set up yet. Ask the COO to add them under Cash & bank.'); return; }
+  openSheet(`${sheetHead(x ? 'Correct money received' : 'Money received', 'The Principal or COO matches it to the client’s invoice')}
+  <form id="aif"><div class="fg">
+    <label class="f" for="i_date">Date received<input id="i_date" name="date" type="date" required value="${esc(src.date)}"></label>
+    <label class="f" for="i_amt">Amount received (BDT)<input id="i_amt" name="amount" type="number" min="1" step="1" required value="${esc(src.amount)}"></label></div>
+    <label class="f" for="i_prj">Project<select id="i_prj" name="projectId"><option value="">Not sure / other</option>${S.pick.projects.map(p => opt(p.id, `${p.code} · ${p.name}`, p.id === src.projectId)).join('')}</select></label>
+    <label class="f" for="i_cl">Received from (client)<input id="i_cl" name="client" value="${esc(src.client)}" placeholder="Client or person who paid"></label>
+    <div class="fg"><label class="f" for="i_acct">Went into<select id="i_acct" name="accountId">${accts.map(a => opt(a.id, a.name, a.id === src.accountId)).join('')}</select></label>
+      <label class="f" for="i_ref">Cheque / transfer / slip no.<input id="i_ref" name="ref" value="${esc(src.ref)}"></label></div>
+    <label class="f" for="i_note">Note<input id="i_note" name="note" value="${esc(src.note)}" placeholder="e.g. 2nd instalment, tax deducted by client"></label>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${x ? 'Save' : 'Send for matching'}</button></div></form>`, root => {
+    const f = $('#aif', root);
+    f.projectId.addEventListener('change', () => { const p = pickPrj(f.projectId.value); if (p && !f.client.value) f.client.value = p.client || ''; });
+    f.addEventListener('submit', async ev => { ev.preventDefault();
+      const a = S.pick.accounts.find(k => k.id === f.accountId.value) || {};
+      const data = { date: f.date.value, amount: +f.amount.value || 0, projectId: f.projectId.value, client: f.client.value.trim(), accountId: f.accountId.value,
+        mode: a.kind === 'cash' ? 'cash' : 'bank', ref: f.ref.value.trim(), note: f.note.value.trim(), status: 'pending' };
+      if (!(data.amount > 0)) { toast('Enter the amount received.'); return; }
+      const ok = x ? await run(() => putDoc('intakes', x.id, { ...strip(x), ...data }), 'Saved') : await run(() => addDoc('intakes', data), 'Sent to the Principal and COO for matching');
+      if (ok) closeSheet(); });
+  });
+}
+function accTransferForm(x) {
+  const accts = S.pick.accounts; if (accts.length < 2) { toast('At least two cash points are needed. Ask the COO to add them under Cash & bank.'); return; }
+  const src = x || { date: today(), from: (accts.find(a => a.kind === 'cash') || accts[0]).id, to: (accts.find(a => a.kind !== 'cash') || accts[1]).id };
+  const sel = (n, v) => `<select id="t_${n}" name="${n}">${accts.map(a => opt(a.id, a.name, a.id === v)).join('')}</select>`;
+  openSheet(`${sheetHead(x ? 'Correct transfer' : 'Transfer between cash points', 'Waits for the Principal or COO to approve; balances change once approved')}
+  <form id="atf"><div class="fg"><label class="f" for="t_from">From${sel('from', src.from)}</label><label class="f" for="t_to">Into${sel('to', src.to)}</label>
+    <label class="f" for="t_date">Date<input id="t_date" name="date" type="date" required value="${esc(src.date)}"></label>
+    <label class="f" for="t_amt">Amount (BDT)<input id="t_amt" name="amount" type="number" min="1" step="1" required value="${esc(src.amount)}"></label></div>
+    <label class="f" for="t_ref">Reference<input id="t_ref" name="ref" value="${esc(src.ref)}" placeholder="Deposit slip, cheque no."></label>
+    <label class="f" for="t_note">Note<input id="t_note" name="note" value="${esc(src.note)}" placeholder="e.g. Vault cash for this week's payments"></label>
+    <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${x ? 'Save' : 'Send for approval'}</button></div></form>`, root => {
+    $('#atf', root).addEventListener('submit', async ev => { ev.preventDefault(); const f = ev.target;
+      if (f.from.value === f.to.value) { toast('Pick two different cash points.'); return; }
+      const data = { type: 'transfer', from: f.from.value, to: f.to.value, date: f.date.value, amount: +f.amount.value || 0, ref: f.ref.value.trim(), note: f.note.value.trim(), status: 'pending' };
+      const ok = x ? await run(() => putDoc('moves', x.id, { ...strip(x), ...data }), 'Saved') : await run(() => addDoc('moves', data), 'Sent for approval');
+      if (ok) closeSheet(); });
+  });
+}
+function accCashView() {
+  const Ls = (S.ledger || []).filter(L => L.active !== false), t = today();
+  const tot = Ls.reduce((u, L) => u + lgBal(L, t), 0), cashT = Ls.filter(lgCashLike).reduce((u, L) => u + lgBal(L, t), 0);
+  const pend = S.moves.filter(m => m.status === 'pending');
+  return `
+  <div class="head"><div><h2>Cash & bank</h2><p>Balances of SLATE's cash points today. Transfers you enter change them once the Principal or COO approves.</p></div>
+    <div class="actions"><button class="btn" data-act="acc-ff">Fund flow</button><button class="btn pri" data-act="acc-transfer">Transfer</button></div></div>
+  <div class="kpis"><div class="kpi"><div class="lb">Total funds</div><div class="v">${compact(tot)}</div><div class="s">${Ls.length} cash point${Ls.length === 1 ? '' : 's'}</div></div>
+    <div class="kpi"><div class="lb">Cash</div><div class="v">${compact(cashT)}</div><div class="s">vault, cash in hand, petty</div></div>
+    <div class="kpi"><div class="lb">Bank</div><div class="v">${compact(tot - cashT)}</div><div class="s">check against statements</div></div>
+    <div class="kpi"><div class="lb">Transfers waiting</div><div class="v">${pend.length}</div><div class="s">${tk(pend.reduce((u, m) => u + (+m.amount || 0), 0))}</div></div></div>
+  <div class="panel"><div class="ph"><h3>Cash points</h3><span class="meta">tap one for its book</span></div>
+  ${Ls.length ? `<div class="rows">${Ls.map(L => { const last = (L.counts || []).slice(-1)[0];
+    return `<button class="row r-prj" data-act="acc-acct" data-id="${L.id}"><div style="min-width:0"><div class="t">${esc(L.name)}</div><div class="sub">${ACCT_KIND[L.kind] || ''}</div></div>
+      <div class="c2 sub">${last ? `Counted ${fmtShort(last.date)} · ${Math.abs(+last.diff || 0) < 1 ? '<span style="color:var(--good)">matched</span>' : `<span class="warnt">off by ${tk(Math.abs(last.diff))}</span>`}` : 'Not counted yet'}</div>
+      <div class="amt">${tk(lgBal(L, t))}</div></button>`; }).join('')}</div>` : '<div class="empty"><strong>No cash points yet</strong>The COO adds the vault, cash in hand, petty cash and bank accounts under Cash & bank.</div>'}</div>`;
+}
+function accAcctSheet(id) {
+  const L = lgFind(id); if (!L) return;
+  let run = +L.opening || 0; const rows = (L.entries || []).map(e => { run += +e.amt || 0; return { ...e, bal: run }; }).reverse().slice(0, 80);
+  openSheet(`${sheetHead(L.name, ACCT_KIND[L.kind] || '')}
+    <dl class="kv"><dt>Opening balance${L.openingDate ? ', ' + fmtDate(L.openingDate) : ''}</dt><dd>${tk(L.opening)}</dd><dt class="tot">Balance today</dt><dd class="tot">${tk(lgBal(L, today()))}</dd></dl>
+    <div class="sec-t" style="margin-top:18px">Latest entries</div>
+    <div class="mini-list rows" style="margin-top:10px">${rows.length ? rows.map(e => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><div style="min-width:0"><div class="t">${esc(e.what)}</div><div class="sub">${fmtDate(e.date)}${e.sub ? ' · ' + esc(e.sub) : ''}</div></div>
+      <div class="amt" style="color:var(${e.amt < 0 ? '--bad' : '--good'})">${e.amt < 0 ? '− ' : '+ '}${tk(Math.abs(e.amt))}<small>bal ${tk(e.bal)}</small></div></div>`).join('') : '<div class="empty" style="padding:14px">No entries yet.</div>'}</div>
+    <div class="foot"><button class="btn" data-act="reg-cb" data-id="${L.id}">Cash book</button><button class="btn" data-act="reg-vr" data-id="${L.id}">${L.kind === 'cash' ? 'Vault register' : 'Register'}</button><button class="btn pri" data-act="reg-count" data-id="${L.id}">${lgCashLike(L) ? 'Count cash' : 'Statement check'}</button></div>`);
+}
+
+/* ---------- Principal and COO: match money received; approve transfers ---------- */
+const pendingIntakes = () => S.intakes.filter(x => (x.status || 'pending') === 'pending');
+const pendingMoves = () => S.moves.filter(m => m.status === 'pending');
+function intakesPanel() {
+  const L = pendingIntakes(); if (!L.length) return '';
+  return `<div class="panel"><div class="ph"><h3>Money received · to match</h3><span class="meta">entered by the Accountant</span></div><div class="rows">${L.map(x => { const p = prj(x.projectId);
+    return `<button class="row r-exp" data-act="open-intake" data-id="${x.id}"><div style="min-width:0"><div class="t">${esc(x.client || (p ? p.client || p.name : 'Unknown payer'))}</div><div class="sub">${p ? `<span class="mono">${esc(p.code)}</span> · ` : ''}into ${esc((acct(x.accountId) || {}).name || '—')}${x.ref ? ' · ' + esc(x.ref) : ''}</div></div>
+      <div class="c2 sub">${fmtDate(x.date)}</div>${chip('pending', 'To match')}<div class="amt">${tk(x.amount)}</div></button>`; }).join('')}</div></div>`;
+}
+function intakeSheet(x) {
+  const p = prj(x.projectId), open = S.invoices.filter(i => invOpen(i)).sort((a, b) => (a.projectId === x.projectId ? 0 : 1) - (b.projectId === x.projectId ? 0 : 1) || (a.date || '').localeCompare(b.date || ''));
+  openSheet(`${sheetHead('Money received', `${esc(x.client || 'Unknown payer')} · ${tk(x.amount)}`)}
+    <dl class="kv"><dt>Date</dt><dd class="txt">${fmtDate(x.date)}</dd><dt>Project</dt><dd class="txt">${p ? `<span class="mono">${esc(p.code)}</span> · ${esc(p.name)}` : 'Not given'}</dd>
+      <dt>Went into</dt><dd class="txt">${esc((acct(x.accountId) || {}).name || '—')}${x.ref ? ' · ' + esc(x.ref) : ''}</dd><dt>Entered by</dt><dd class="txt">${who(x.createdBy)} · ${fmtWhen(x.createdAt)}</dd></dl>
+    ${x.note ? `<p class="hint" style="margin-top:10px">${esc(x.note)}</p>` : ''}
+    <label class="f" for="ix_inv" style="margin-top:14px">Invoice it pays<select id="ix_inv">${open.length ? open.map(i => { const q = prj(i.projectId); return opt(i.id, `${i.no} · ${q ? q.code : ''} · due ${tk(invDue(i))}`, false); }).join('') : '<option value="">No open invoices</option>'}</select></label>
+    <p class="hint">Match opens the money receipt filled in with this payment; check it, add any tax the client deducted, and save.</p>
+    <div class="foot"><button class="btn danger" data-act="dismiss-intake" data-id="${x.id}">Not an invoice payment</button>${open.length ? `<button class="btn pri" data-act="match-intake" data-id="${x.id}">Match</button>` : ''}</div>`);
+}
+function movesPanel() {
+  const L = pendingMoves(); if (!L.length) return '';
+  return `<div class="panel"><div class="ph"><h3>Transfers awaiting approval</h3><span class="meta">entered by the Accountant</span></div><div class="rows">${L.map(m => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;cursor:default"><div style="min-width:0"><div class="t">${esc((acct(m.from) || {}).name || '?')} → ${esc((acct(m.to) || {}).name || '?')}</div><div class="sub">${fmtDate(m.date)}${m.ref ? ' · ' + esc(m.ref) : ''}${m.note ? ' · ' + esc(m.note) : ''} · ${who(m.createdBy)}</div></div>
+    <div class="amt">${tk(m.amount)}</div><div style="display:flex;gap:4px"><button class="btn ghost sm danger" data-act="reject-move" data-id="${m.id}">Reject</button><button class="btn sm pri" data-act="approve-move" data-id="${m.id}">Approve</button></div></div>`).join('')}</div></div>`;
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-act]'); if (!b || !S.role) return;
+  const id = b.dataset.id, a = b.dataset.act;
+  if (a === 'reg-cb') registerForm('cb', id);
+  else if (a === 'reg-vr') registerForm('vr', id);
+  else if (a === 'reg-count') countForm(id);
+  else if (a === 'reg-ff' || a === 'acc-ff') registerForm('ff');
+  else if (isAcc()) {
+    if (a === 'acc-intake') accIntakeForm();
+    else if (a === 'acc-transfer') accTransferForm();
+    else if (a === 'acc-acct') accAcctSheet(id);
+    else if (a === 'acc-edit-intake') { const x = S.intakes.find(k => k.id === id); if (x) accIntakeForm(x); }
+    else if (a === 'acc-edit-move') { const x = S.moves.find(k => k.id === id); if (x) accTransferForm(x); }
+    else if (a === 'acc-del-doc') { const [coll, did] = (id || '').split('/'); if (coll && did && confirm('Remove this entry?')) { if (await run(async () => { const { error } = await sb.from('fin_docs').delete().eq('path', coll + '/' + did); if (error) throw error; }, 'Removed')) closeSheet(); } }
+    else if (a === 'acc-open-doc') { const [coll, did] = (id || '').split('/'); const x = (coll === 'intakes' ? S.intakes : S.moves).find(k => k.id === did); if (x) accDocSheet(coll, x); }
+  } else {
+    if (a === 'open-intake') { const x = S.intakes.find(k => k.id === id); if (x) intakeSheet(x); }
+    else if (a === 'match-intake') { const x = S.intakes.find(k => k.id === id), i = S.invoices.find(v => v.id === ($('#ix_inv') || {}).value); if (x && i) receiptForm(i, { date: x.date, accountId: x.accountId, amount: x.amount, ref: x.ref, intakeId: x.id }); }
+    else if (a === 'dismiss-intake') { const x = S.intakes.find(k => k.id === id); const why = x && prompt('Why isn’t this an invoice payment? (e.g. advance, refund, other income — record it separately)'); if (x && why) { if (await run(() => putDoc('intakes', x.id, { ...strip(x), status: 'dismissed', dismissNote: why, decidedBy: S.uid, decidedOn: today() }), 'Marked as not an invoice payment')) closeSheet(); } }
+    else if (a === 'approve-move') { const m = S.moves.find(k => k.id === id); if (m) await run(() => putDoc('moves', m.id, { ...strip(m), status: 'approved', approvedBy: S.uid, approvedOn: today() }), 'Transfer approved'); }
+    else if (a === 'reject-move') { const m = S.moves.find(k => k.id === id); if (m && confirm('Reject this transfer? It won’t change any balance.')) await run(() => putDoc('moves', m.id, { ...strip(m), status: 'rejected', approvedBy: S.uid, approvedOn: today() }), 'Transfer rejected'); }
+  }
+});
+function accDocSheet(coll, x) {
+  const st = x.status || 'pending', isI = coll === 'intakes';
+  const name = id => (S.pick.accounts.find(a => a.id === id) || {}).name || '—';
+  openSheet(`${sheetHead(isI ? 'Money received' : 'Transfer', tk(x.amount))}
+    <dl class="kv"><dt>Date</dt><dd class="txt">${fmtDate(x.date)}</dd>
+      ${isI ? `<dt>From</dt><dd class="txt">${esc(x.client || '—')}${pickPrj(x.projectId) ? ' · <span class="mono">' + esc(pickPrj(x.projectId).code) + '</span>' : ''}</dd><dt>Went into</dt><dd class="txt">${esc(name(x.accountId))}</dd>`
+        : `<dt>From</dt><dd class="txt">${esc(name(x.from))}</dd><dt>Into</dt><dd class="txt">${esc(name(x.to))}</dd>`}
+      ${x.ref ? `<dt>Reference</dt><dd class="txt">${esc(x.ref)}</dd>` : ''}
+      <dt>Status</dt><dd class="txt">${st === 'pending' ? (isI ? 'Waiting to be matched' : 'Awaiting approval') : st === 'matched' ? 'Matched to an invoice' : st === 'approved' ? 'Approved' : st === 'dismissed' ? 'Not an invoice payment' + (x.dismissNote ? ' · ' + esc(x.dismissNote) : '') : 'Rejected'}</dd></dl>
+    ${x.note ? `<p class="hint" style="margin-top:10px">${esc(x.note)}</p>` : ''}
+    <div class="foot">${st === 'pending' ? `<button class="btn danger" data-act="acc-del-doc" data-id="${coll}/${x.id}">Remove</button><button class="btn pri" data-act="${isI ? 'acc-edit-intake' : 'acc-edit-move'}" data-id="${x.id}">Correct</button>` : '<button class="btn ghost" type="button" data-act="close">Close</button>'}</div>`);
+}
+
 /* ---------- boot ---------- */
 try { const t = localStorage.getItem('slate-fin-tab'); if (t && TABS.some(x => x[0] === t)) S.tab = t; } catch (_) {}
 renderChrome();
@@ -2625,7 +2902,7 @@ const watchdog = setTimeout(() => { if (!S.loaded && /Opening finance/.test($('#
   if (!['principal', 'coo', 'accountant'].includes(role)) { notice('Finance is limited to the Principal and the COO', 'Your account doesn’t have access to studio finances.', true); return; }
   S.role = role;
   if (role === 'accountant') { S.tab = 'mine'; const bk = $('#backOS'); if (bk) bk.hidden = true; }
-  try { await Promise.all(role === 'accountant' ? [load(), loadPick(), loadAux()] : [load(), loadAux()]); }
+  try { await Promise.all([load(), loadAux()]); }
   catch (e) { notice('Couldn’t open finance', esc(friendly(e)), true); return; }
   clearTimeout(watchdog);
   render();
