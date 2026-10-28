@@ -23,7 +23,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
 /* header fixed to the top on every device, slightly see-through */
-.chrome{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.78);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--border)}
+.chrome{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.62);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border)}
 .top-in{display:flex;align-items:center;justify-content:center;gap:12px;padding-block:14px 6px}
 .logo{height:40px;width:auto;display:block}
 .divider{width:1px;height:26px;background:var(--border)}
@@ -428,8 +428,9 @@ span.uh,span.uf{cursor:default}
 .ava-lg{width:64px;height:64px;font-size:22px}
 span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align:middle}
 .who{display:inline-flex;align-items:center;gap:5px}
-.mebtn{position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:50%;transform:translateY(-35%);appearance:none;border:0;background:none;padding:0;cursor:pointer;display:block;line-height:0;width:40px;height:40px}
-.mebtn .ava{width:40px;height:40px;font-size:14px}
+.mebtn{position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:calc(50% + 4px);transform:translateY(-50%);appearance:none;border:0;background:none;padding:0;cursor:pointer;display:block;line-height:0;width:var(--hic,38px);height:var(--hic,38px)}
+.mebtn .ava{width:var(--hic,38px);height:var(--hic,38px);font-size:13px}
+.top-in{--hic:38px}
 .me-plus{position:absolute;right:-3px;bottom:-2px;width:16px;height:16px;border-radius:50%;background:var(--early);color:#fff;font-size:12px;font-weight:700;line-height:16px;text-align:center;border:2px solid #fff;box-sizing:content-box}
 .icgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px}
 .icopt{appearance:none;border:2px solid transparent;background:var(--group);border-radius:12px;padding:10px 4px 8px;display:grid;justify-items:center;gap:6px;cursor:pointer;font:inherit}
@@ -458,9 +459,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .mt-nm{font-size:12px;font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* ---- notifications ---- */
 .top-in{position:relative}
-.bell{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-35%);appearance:none;border:0;background:none;height:40px;padding:0;border-radius:999px;cursor:pointer;display:flex;align-items:center;color:var(--ink);font:inherit}
-.bell .bi{width:40px;height:40px;border-radius:50%;background:var(--group);display:grid;place-items:center;flex:none}
-.bell svg{width:19px;height:19px}
+.bell{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:calc(50% + 4px);transform:translateY(-50%);appearance:none;border:0;background:none;height:var(--hic,38px);padding:0;border-radius:999px;cursor:pointer;display:flex;align-items:center;color:var(--ink);font:inherit}
+.bell .bi{width:var(--hic,38px);height:var(--hic,38px);border-radius:50%;background:var(--group);display:grid;place-items:center;flex:none}
+.bell svg{width:calc(var(--hic,38px)*.47);height:calc(var(--hic,38px)*.47)}
 /* pending: red ring on the bell, the count in a soft red capsule beside it */
 .bell.has{background:#FCE4E4;padding-right:13px}
 .bell.has .bi{background:#fff;box-shadow:0 0 0 2px #d7262b;color:#d7262b}
@@ -468,7 +469,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 /* online: green ring round a person's icon */
 .ava.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #34C759}
 .mebtn .ava.on{box-shadow:0 0 0 2px #34C759}
-@media (max-width:640px){.bell.has{padding-right:9px}.bell .bn{margin-left:6px;font-size:12.5px}}
+@media (max-width:640px){.top-in{--hic:34px}.bell.has{padding-right:9px}.bell .bn{margin-left:6px;font-size:12.5px}.me-plus{width:14px;height:14px;line-height:14px;font-size:11px}}
 .bell .badge{position:absolute;top:-3px;right:-4px;min-width:18px;text-align:center;border:2px solid #fff}
 .n-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
 .n-sum div{background:var(--group);border-radius:10px;padding:10px 12px;display:grid;gap:2px}
@@ -490,7 +491,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .c-action{--c:var(--overdue)}.c-deadline{--c:var(--late)}.c-update{--c:var(--early)}.c-weekly{--c:var(--ink)}
 .n-snd{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);cursor:pointer;padding:0 4px}
 /* notifications as a tab beside the main tabs (replaces the corner bell) */
-#bell-slot .bell{right:auto;left:calc(max(16px,env(safe-area-inset-left,0px)) + 52px)}
+#bell-slot .bell{right:auto;left:calc(max(16px,env(safe-area-inset-left,0px)) + var(--hic,38px) + 10px)}
 .tab-notif{position:relative;margin-left:9px}
 .tab-notif::before{content:"";position:absolute;left:-6px;top:50%;width:1px;height:16px;background:var(--border);transform:translateY(-50%)}
 .tab-notif svg{width:15px;height:15px;flex:none}
@@ -502,7 +503,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .w-h{flex-wrap:wrap}
 @media (max-width:640px){
   .tabs-in{justify-content:flex-start;padding-inline:8px}
-  .top-in{padding-block:10px 2px}.logo{height:32px}
+  .top-in{padding-block:10px 2px}.logo{height:34px}
   main{padding-block:16px 64px;gap:18px}
   .page-h{align-items:flex-start}
   .page-h>.btn,.page-h>.actions{width:100%}
