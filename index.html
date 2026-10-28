@@ -2009,6 +2009,7 @@ async function boot(){
   db.collection('tasklib').onSnapshot(q=>{ S.lib={}; q.docs.forEach(d=>{S.lib[d.id]=d.data()}); schedule(); },()=>{});
   db.collection('projects').onSnapshot(q=>{ S.projects={}; q.docs.forEach(d=>{S.projects[d.id]=d.data()}); schedule(); },onSubErr);
   db.doc(`data/users/${S.uid}/notif`).onSnapshot(snap=>{ S.nst=snap.exists?snap.data():{}; schedule(); },()=>{ S.nst={}; });
+  db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
   db.collection('tasks').onSnapshot(q=>{ S.shared={}; q.docs.forEach(d=>{S.shared[d.id]=d.data()}); mergeTasks(); },onSubErr);
 
   try{ const m=db.doc('members/'+S.uid); const g=await m.get(); if(!g.exists) await m.set({joinedAt:new Date().toISOString()}); }catch(e){}
@@ -4304,6 +4305,21 @@ const SCOPE_VENDOR={'Structural design':'Consultant','MEP design':'Consultant','
 const scopeLabel=(p,x)=>{ const q=SCOPE_QTY[x], n=q&&p&&p.scopeQty&&+p.scopeQty[x], vn=SCOPE_VENDOR[x]&&p&&p.scopeVendor&&p.scopeVendor[x]; return [x,n?`${n} ${q.short}`:'',vn||''].filter(Boolean).join(' · '); };
 const SCOPES=['Real estate solutions','Feasibility study','Master planning','Architectural design','Structural design','MEP design','Structural and MEP coordination','Interior design','Common area interior design','Landscape design','3D visualization','Professional 3D visualization','Animation','Authority (RAJUK) drawings','Working drawings','Site supervision'];
 const AGS=[['','Select…'],['none','Not signed yet'],['loi','Letter of intent'],['signed','Signed agreement'],['internal','Internal (no agreement)']];
+/* new-project drafts: saved in the person's own data, so only they see them, on any device */
+const pdList=()=>Object.entries(S.pdrafts||{}).map(([id,x])=>({id,...x})).filter(x=>x&&x.d).sort((a,b)=>(b.at||'').localeCompare(a.at||''));
+const pdWrite=items=>S.db.doc(`data/users/${S.uid}/projDrafts`).set({items});
+function saveProjDraft(){ const sh=S.sheet, d=sh.d; if(!(d.name||'').trim()&&!(d.client||'').trim()) return fail('Give at least a project name or client to save a draft.');
+  const id=sh.draftId||('d'+Date.now().toString(36)), items={...(S.pdrafts||{})}; items[id]={at:new Date().toISOString(),d:JSON.parse(JSON.stringify(d))};
+  sh.draftId=id; return run(()=>pdWrite(items),'Draft saved'); }
+function delProjDraft(id){ const items={...(S.pdrafts||{})}; delete items[id]; return pdWrite(items); }
+function openProjDraft(id){ const x=(S.pdrafts||{})[id]; if(!x) return; openProject(); S.sheet.d=JSON.parse(JSON.stringify(x.d)); S.sheet.draftId=id; renderSheet(); }
+function draftsSec(){ const xs=pdList(); if(!xs.length||!S.canWrite) return null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Your drafts'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('div',{class:'list'},xs.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px'},
+      h('div',{style:'min-width:0'},h('div',{style:'font-weight:600',text:x.d.name||'Untitled project'}),h('div',{class:'f-hint',style:'margin:0',text:[x.d.client,x.d.katha?x.d.katha+' katha':'',x.d.location,'saved '+fmtTs(x.at)].filter(Boolean).join(' · ')})),
+      h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openProjDraft(x.id),text:'Continue'}),
+        h('button',{class:'btn btn-sm',type:'button','aria-label':'Delete draft',onclick:()=>{ if(confirm('Delete this draft?')) run(()=>delProjDraft(x.id),'Draft deleted'); },text:'Delete'}))))),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Only you see your drafts. A draft is removed when you send or add the project.'})); }
 function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forEach(k=>{d[k]=p[k]==null?'':String(p[k])}); if(!d.mezz) d.mezz='no'; if(!d.basements) d.basements='0'; d.loUnits=[...(p.loUnits||[])]; d.scope=[...(p.scope||[])]; d.scopeQty={...(p.scopeQty||{})}; d.scopeVendor={...(p.scopeVendor||{})}; if(!id&&!amApprover()&&myPod()) d.pod=myPod();
   d.pods=id?podsOfProject(p):(myPod()&&!amApprover()?[myPod()]:[]); d.people=[];
   { const pl=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null; d.ph=p.std?{sel:[...stdPhases(p)],ed:JSON.parse(JSON.stringify(p.std.ed||{})),open:null,type:p.std.type||p.type}:{sel:pl?[...pl.sel]:null,ed:JSON.parse(JSON.stringify((pl&&pl.ed)||{})),open:null,type:pl?p.type:''}; }
@@ -4710,7 +4726,8 @@ function sheetProject(){
       else v.phasePlan={sel:phaseOrder(d.type,d.ph.sel),ed:edFull((id&&S.projects[id]&&S.projects[id].phasePlan&&S.projects[id].phasePlan.ed)||{},d.ph.ed,d.type)}; }
     const fn=id?async()=>{ await ref.update(v); if(phNow) await applyPhaseChanges(id,d.ph); }:()=>ref.set({...v,closed:v.entry==='completed',...(v.entry==='completed'?{legacy:true}:{}),createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
     const plan=!id&&ap&&v.type&&!internal&&v.entry!=='completed'?{pid:ref.id,type:v.type,pod:v.pod}:null;
-    run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
+    const dft=!id&&S.sheet.draftId;
+    run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(dft) delProjDraft(dft).catch(()=>{}); if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
   };
   return [head(id?'Edit project':ap?'New project':'Request a project',id?(d.name||'Project'):ap?'Add to the project list':'New project for the list'),
     !id&&!ap&&h('p',{class:'lead',style:'margin:0',text:'Projects come from one studio list. Fill in what you know; the COO checks it and approves it before it appears in the menus.'}),
@@ -4746,7 +4763,7 @@ function sheetProject(){
       field('Note (optional)',ta('note',{placeholder:!ap&&!id?'Anything the COO should know':''})),
       h('div',{class:'f-hint',text:'No fees or payment figures are kept here. Agreement status, date, reference, pro bono and document link are stored separately and only the Principal and the COO can read them.'}),
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save project':ap?'Add project':'Send for approval'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))];
+      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save project':ap?'Add project':'Send for approval'}),!id&&S.canWrite?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:saveProjDraft,text:S.sheet.draftId?'Update draft':'Save draft'}):null,h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))];
 }
 
 /* ---------- project team: several pods and named people on studio-work projects; extra people on any project ---------- */
@@ -6536,29 +6553,34 @@ const canSeeProjectDetail=p=>fullView()||inMyPodProject(p)||(!!myPod()&&p.pod===
 const canViewProjectDetail=p=>!!p&&(canSeeProjectDetail(p)||(!!myHeadTeam()&&!isChalkProj(p)&&!p.closed&&isLive(p)));
 const podText=p=>{ const ps=podsOfProject(p); return ps.length?ps.map(podLabel).join(' + '):isInternalP(p)?'Studio work':'Studio / internal'; };
 function viewProjects(){
-  const f=S.pf||(S.pf={q:'',pod:'',st:'active'}), q=f.q.trim().toLowerCase(), ap=amApprover(); acctLoad();
-  const all=projects(), act=all.filter(p=>!p.closed&&p.pod!=='Studio'), stats=new Map(all.map(p=>[p.id,projStats(p)]));
+  const f=S.pf||(S.pf={q:'',pod:'',st:'active',kind:'client'}), q=f.q.trim().toLowerCase(), ap=amApprover(); acctLoad(); if(!f.kind) f.kind='client';
+  const isSt=p=>p.pod==='Studio'||isInternalP(p), sv=f.kind==='studio';
+  const every=projects(), all=every.filter(p=>sv?isSt(p):!isSt(p)), act=all.filter(p=>!p.closed), stats=new Map(all.map(p=>[p.id,projStats(p)]));
+  const clientAll=every.filter(p=>!isSt(p)), compN=clientAll.filter(p=>p.closed&&outcomeOf(p)==='completed').length;
   const hc=k=>act.filter(p=>stats.get(p.id).health===k).length;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Studio list'}),h('h1',{class:'h1',text:'Projects'}),h('p',{class:'lead',text:'Every project, its agreement and its progress. New projects are approved by the COO before they join the list.'})),
     S.canWrite&&h('div',{class:'actions'},canChalkEdit()?h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New Chalk project'}):null,canProjReq()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:ap?'New project':'Request a project'}):null))];
-  const hold=all.filter(p=>isOnHold(p)&&p.pod!=='Studio');
-  out.push(h('div',{class:'kpis'},kpi('Active projects',act.length),kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open'),hold.length?kpi('On hold',hold.length,'late'):null));
+  const hold=all.filter(p=>isOnHold(p));
+  out.push(h('div',{class:'bar',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work']],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })));
+  if(sv) out.push(h('div',{class:'kpis'},kpi('Studio areas',act.length),kpi('Open tasks',act.reduce((a,p)=>a+Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!t.doneAt).length,0))));
+  else out.push(h('div',{class:'kpis'},kpi('Total projects',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open'),hold.length?kpi('On hold',hold.length,'late'):null));
+  if(!sv){ const ds=draftsSec(); if(ds) out.push(ds); }
   const crq=ap?closeReqCards():null; if(crq) out.push(crq);
   const pr=ap?projReqCards():null; if(pr) out.push(pr);
   const phr=ap?phaseReqCards():null; if(phr) out.push(phr);
   const mr=myProjReqs(); if(mr) out.push(mr);
-  const podSel=h('select',{id:'pf-pod','aria-label':'Pod',onchange:e=>{f.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),pods().map(x=>h('option',{value:x,text:podLabel(x)})),h('option',{value:'Studio',text:'Studio / internal'})); podSel.value=f.pod;
+  const podSel=h('select',{id:'pf-pod','aria-label':'Pod',onchange:e=>{f.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),pods().map(x=>h('option',{value:x,text:podLabel(x)}))); podSel.value=f.pod;
   const stSel=h('select',{id:'pf-st','aria-label':'Status',onchange:e=>{f.st=e.target.value;render(true)}},[['active','Active'],['risk','At risk or off track'],['site','Construction support'],['onhold','On hold'],...(finOn()?[['acct','Account open']]:[]),['archive','Archive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); if(f.st==='closed') f.st='archive'; stSel.value=f.st;
   const arch=all.filter(isArchivedP), yrs=[...new Set(arch.map(p=>closedOn(p).slice(0,4)).filter(Boolean))].sort().reverse();
   const aSel=f.st==='archive'?[
     (()=>{ const x=h('select',{id:'pf-ao','aria-label':'Outcome',onchange:e=>{f.ao=e.target.value;render(true)}},[['','Every outcome'],['completed','Completed'],['partial','Closed after phase'],['cancelled','Cancelled'],['closed','Closed (not recorded)']].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ao||''; return x; })(),
     (()=>{ const x=h('select',{id:'pf-ay','aria-label':'Year',onchange:e=>{f.ay=e.target.value;render(true)}},[['','Any year'],...yrs.map(y=>[y,y])].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ay||''; return x; })(),
     (()=>{ const x=h('select',{id:'pf-ar','aria-label':'Reason',onchange:e=>{f.ar=e.target.value;render(true)}},[['','Any reason'],...CLOSE_REASONS].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ar||''; return x; })()]:[];
-  out.push(h('div',{class:'bar'},h('input',{id:'pf-q',type:'search',placeholder:'Search code, name or client',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),podSel,stSel,...aSel));
+  out.push(h('div',{class:'bar'},h('input',{id:'pf-q',type:'search',placeholder:sv?'Search studio work':'Search code, name or client',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),sv?null:podSel,stSel,...aSel));
   const list=all.filter(p=>{ const st=stats.get(p.id);
     if(f.st==='active'&&p.closed&&!abOn(p)&&!supOn(p)) return false; if(f.st==='site'&&!supOn(p)) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='acct'&&!acctOf(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
     if(f.st==='archive'){ if(!isArchivedP(p)) return false; if(f.ao&&outcomeOf(p)!==f.ao) return false; if(f.ay&&closedOn(p).slice(0,4)!==f.ay) return false; if(f.ar&&((p.closure||{}).reason||'')!==f.ar) return false; }
-    if(f.pod&&!(f.pod==='Studio'?p.pod==='Studio':[p.pod,p.pod2].includes(f.pod))) return false;
+    if(f.pod&&![p.pod,p.pod2].includes(f.pod)) return false;
     if(q&&!`${p.code} ${p.name} ${p.client||''}`.toLowerCase().includes(q)) return false; return true; });
   const holdSec=f.st==='active'&&hold.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'On hold'}),h('span',{class:'cnt',text:String(hold.length)})),
     h('div',{class:'list'},hold.filter(p=>!f.pod||[p.pod,p.pod2].includes(f.pod)).map(p=>{ const c=p.closure||{}, due=c.reviewOn&&c.reviewOn<=today();
