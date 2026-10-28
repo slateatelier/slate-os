@@ -16,11 +16,14 @@ html,body{background:var(--bg);color:var(--ink)}
 body{font-family:var(--font);font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased}
 body.locked{overflow:hidden}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:rgba(255,255,255,.92)}
+body{padding-top:calc(var(--chrome-h,112px) + env(safe-area-inset-top,0px))}
+html{scroll-padding-top:calc(var(--chrome-h,112px) + env(safe-area-inset-top,0px) + 8px)}
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
-.chrome{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+/* header fixed to the top on every device, slightly see-through */
+.chrome{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.78);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--border)}
 .top-in{display:flex;align-items:center;justify-content:center;gap:12px;padding-block:14px 6px}
 .logo{height:40px;width:auto;display:block}
 .divider{width:1px;height:26px;background:var(--border)}
@@ -478,7 +481,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .c-action{--c:var(--overdue)}.c-deadline{--c:var(--late)}.c-update{--c:var(--early)}.c-weekly{--c:var(--ink)}
 .n-snd{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);cursor:pointer;padding:0 4px}
 /* notifications as a tab beside the main tabs (replaces the corner bell) */
-#bell-slot{display:none}
+#bell-slot .bell{right:auto;left:calc(max(16px,env(safe-area-inset-left,0px)) + 48px)}
 .tab-notif{position:relative;margin-left:9px}
 .tab-notif::before{content:"";position:absolute;left:-6px;top:50%;width:1px;height:16px;background:var(--border);transform:translateY(-50%)}
 .tab-notif svg{width:15px;height:15px;flex:none}
@@ -945,7 +948,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .rv-btns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .rv-btns .btn{justify-content:center;padding-left:6px;padding-right:6px}.rv-btns .btn.on{background:var(--c);border-color:var(--c);color:#fff}
 /* Back: one ‹ in the same top-left spot on every inner page, kept in view under the tab bar while the page scrolls */
-.nav-back{position:sticky;top:calc(var(--chrome-h,0px) + 8px);z-index:4;justify-self:start;align-self:start;display:inline-flex;align-items:center;gap:2px;
+.nav-back{position:sticky;top:calc(var(--chrome-h,0px) + env(safe-area-inset-top,0px) + 8px);z-index:4;justify-self:start;align-self:start;display:inline-flex;align-items:center;gap:2px;
   min-height:40px;margin:-4px 0 -6px -6px;padding:0 14px 0 6px;border:0;border-radius:999px;background:rgba(242,242,247,.92);
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:var(--ink);font:600 15px var(--font);letter-spacing:-.01em;cursor:pointer;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:color .12s,background-color .12s}
@@ -2208,10 +2211,7 @@ function renderHeader(){
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
-  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)),
-    (()=>{ const nn=bellN; return h('button',{class:'tab tab-notif',type:'button','data-k':'notifs','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
-      svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'})),
-      'Notifications',nn?h('span',{class:'badge',text:nn>99?'99+':String(nn)}):null); })());
+  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
   try{ document.body.dataset.view=S.view; }catch(e){}
   const fab=$('#fab'); fab.hidden=!(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view)); fab.onclick=()=>openNewTask();
 }
