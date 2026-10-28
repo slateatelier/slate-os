@@ -6943,6 +6943,8 @@ function viewLeads(){
 /* ---------- Business › HR: salaries, set here; Finance payroll reads them ----------
    Kept in Finance's own staff record (fin_docs staff/<id>, linked by userId to the SLATE OS account), so payroll always uses these
    numbers; in Finance the staff details are read-only. Only the Principal and the COO see this. */
+/* SLATE standard salary split (Oct 2026): 60 / 30 / 6 / 4 of gross; conveyance takes the rounding */
+const salSplit=g=>{ const b=Math.round(g*.6), hr=Math.round(g*.3), m=Math.round(g*.06); return {basic:String(b),house:String(hr),medical:String(m),conv:String(g-b-hr-m),other:'0'}; };
 const SAL_P=[['basic','Basic'],['house','House rent'],['medical','Medical'],['conv','Conveyance'],['other','Other allowance']];
 const salGross=r=>r?SAL_P.reduce((a,[k])=>a+(+r[k]||0),0):0;
 const salRate=(st,ym)=>{ const rs=(st&&st.rates)||[]; ym=ym||today().slice(0,7); return rs.filter(r=>r.from<=ym).sort((a,b)=>b.from.localeCompare(a.from))[0]||rs.slice().sort((a,b)=>a.from.localeCompare(b.from))[0]||null; };
@@ -7011,6 +7013,9 @@ function sheetSal(){
     h('form',{class:'form',onsubmit:save},
       h('div',{class:'form-row'},d.uid?field('Name',h('input',{value:d.name,readonly:true,style:'color:var(--muted)'})):cap('Name *',h('input',{value:d.name,oninput:e=>{d.name=e.target.value}})),cap('Designation',h('input',{value:d.designation,oninput:e=>{d.designation=e.target.value}}))),
       h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:'Monthly salary (Tk)'}),
+      h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center'},h('input',{id:'sal-gross',type:'number',min:0,step:'1',inputmode:'numeric','aria-label':'Gross salary',placeholder:'Gross a month',value:SAL_P.reduce((a,[k])=>a+(+d[k]||0),0)||'',style:'width:100%;min-width:0'}),
+        h('button',{class:'btn',type:'button',style:'white-space:nowrap',onclick:()=>{ const g=Math.round(+((document.getElementById('sal-gross')||{}).value)||0); if(!(g>0)) return fail('Enter the gross salary first.'); Object.assign(d,salSplit(g)); S.sheet.err=''; renderSheet(); },text:'Standard split'})),
+      h('p',{class:'f-hint',style:'margin:-2px 0 0',text:'SLATE standard: Basic 60% · House rent 30% · Medical 6% · Conveyance 4% of gross. The Eid bonus is one month’s basic.'}),
       h('div',{class:'form-row',style:'grid-template-columns:repeat(auto-fill,minmax(130px,1fr))'},...SAL_P.map(([k,l])=>cap(l,n(k))),cap('Tax deducted',n('tax'))),
       h('div',{class:'form-row',style:'align-items:start'},cap('Applies from',h('input',{type:'month',value:d.from,oninput:e=>{d.from=e.target.value}}),'A change starts a new line in the history; earlier months keep the old salary.'),cap('Reason for change',h('input',{value:d.why,maxlength:120,placeholder:'e.g. Annual increment, promotion',oninput:e=>{d.why=e.target.value}}))),
       h('div',{id:'sal-tot',style:'font-weight:600;font-size:15px',text:totT()}),
