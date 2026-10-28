@@ -221,9 +221,22 @@ main.wide{max-width:1160px}
 .cm-n{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;min-width:0}
 .cm-n i{flex:0 0 7px;height:7px;border-radius:50%;background:var(--pc)}
 .cm-n span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cm-m{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-m{font-size:11.5px;color:var(--muted);line-height:1.35}
 .cm-bar{height:3px;border-radius:2px;background:var(--group);margin-top:4px;overflow:hidden}
 .cm-bar b{display:block;height:100%;background:var(--pc);border-radius:2px}
+.wo-wrap{overflow-x:auto}
+.wo-grid{display:grid;align-items:center;min-width:620px;row-gap:2px}
+.wo-yr{font-size:11px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:visible}
+.wo-mo{font-size:10px;color:var(--faint);text-align:center;padding-bottom:4px}
+.wo-name{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;min-width:0;padding-right:8px;height:26px}
+.wo-name i{flex:0 0 6px;height:6px;border-radius:50%}
+.wo-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wo-cell{height:26px;display:flex;align-items:center;justify-content:center;border-top:1px solid var(--group)}
+.wo-cell.jan{box-shadow:inset 1px 0 0 var(--fill)}
+.wo-cell b{display:block;border-radius:50%;background:var(--c);opacity:.85}
+.wo-form{gap:10px;background:var(--group)}
+.wo-log{display:grid;gap:4px}
+.wo-li{display:grid;grid-template-columns:72px 1fr auto auto;gap:10px;align-items:center;font-size:13px;padding:6px 0;border-top:1px solid var(--group)}
 .cm-empty{font-size:12px;color:var(--faint);padding:18px 0;text-align:center}
 @media (max-width:640px){.cm{grid-template-columns:1fr}.cm-corner,.cm-col,.cm-row{display:none}.cm-q{min-height:0}}
 @media (max-width:760px){.w.span2{grid-column:auto}}
@@ -245,6 +258,7 @@ main.wide{max-width:1160px}
 .leg b{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
 .hbars{display:grid;gap:10px}
 .hb{display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:13px}
+.hb.hbw{grid-template-columns:minmax(0,110px) minmax(40px,1fr) auto}
 .hb .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hb .v{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
 .track{position:relative;height:12px;background:var(--group);border-radius:4px;display:flex;gap:2px;overflow:hidden}
@@ -2868,13 +2882,15 @@ async function saveClient(k,patch){
   else { const {error}=await sb.from('fin_docs').insert({path:'clients/'+k,coll:'clients',doc_id:k,data}); if(error) throw error; }
   C.cl={...(C.cl||{}),[k]:data};
 }
+const monthsAgo=ym=>{ const [y,m]=ym.split('-').map(Number), t=new Date(); return (t.getFullYear()-y)*12+(t.getMonth()+1-m); };
+const fmtYM=ym=>{ if(!ym) return '—'; const [y,m]=ym.split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]+' '+y; };
 function clientRows(){
   const C=S.clientFin||{}, fp=C.fp||{}, byCode=C.code||{}, cl=C.cl||{}, m={}, td=today(), first={};
   // a project's start: its first task or record (there is no separate start date); its end: completion, or today while running
   Object.values(S.tasks).forEach(t=>{ const d=(t.createdAt||'').slice(0,10); if(t.projectId&&d&&(!first[t.projectId]||d<first[t.projectId])) first[t.projectId]=d; });
   projects().filter(p=>!isInternalP(p)&&p.pod!=='Studio'&&p.status!=='pending'&&p.status!=='declined').forEach(p=>{
     const name=(p.client||'').trim()||'Client not named', k=clKey(name);
-    const r=m[k]||(m[k]={k,name,ps:[],katha:0,fee:0,feeN:0,sft:0,rateFee:0,perSft:0,lump:0,active:0,done:0,prop:0,lost:0,last:'',types:{},mo:0,moN:0,feeMo:0,moFee:0,feeK:0,kFee:0,scope:{}});
+    const r=m[k]||(m[k]={k,name,ps:[],katha:0,fee:0,feeN:0,sft:0,rateFee:0,perSft:0,lump:0,active:0,done:0,prop:0,lost:0,last:'',types:{},wos:[],woN:0,woVal:0,mo:0,moN:0,feeMo:0,moFee:0,feeK:0,kFee:0,scope:{}});
     r.ps.push(p); const t=(p.std&&p.std.type)||p.type||''; r.types[t]=(r.types[t]||0)+1;
     const o=outcomeOf(p), prop=t==='proposal';
     if(prop) r.prop++; else if(o==='active'||o==='onhold') r.active++; else if(o==='completed') r.done++; else r.lost++;
@@ -2886,10 +2902,14 @@ function clientRows(){
     if(!prop){ const a=[first[p.id],(p.createdAt||'').slice(0,10)].filter(Boolean).sort()[0], e=p.closed?closedOn(p):td;
       if(a&&e&&e>a){ const mo=Math.max(.5,(new Date(e)-new Date(a))/2629800000); r.mo+=mo; r.moN++; if(fee){ r.feeMo+=fee; r.moFee+=mo; } } }
     const d=(p.createdAt||closedOn(p)||'').slice(0,10); if(d>r.last) r.last=d;
+    // a signed agreement is the project's first work order
+    if(p.agDate) r.wos.push({on:p.agDate.slice(0,7),pid:p.id,ref:p.agRef||'',what:'Agreement · '+(p.code||p.name||''),auto:true});
   });
+  // work orders logged by hand: more work from the same client, often inside a project they already have
+  Object.entries(cl).forEach(([k,ov])=>{ const r=m[k]; if(!r) return; (Array.isArray(ov.orders)?ov.orders:[]).forEach(o=>{ if(o&&o.on){ r.wos.push({...o}); r.woN++; r.woVal+=+o.value||0; } }); });
   const rows=Object.values(m), hasFee=rows.some(r=>r.fee>0);
   rows.forEach(r=>{ r.rate=r.sft?r.rateFee/r.sft:0; r.perK=r.kFee?r.feeK/r.kFee:0; r.perMo=r.moFee?r.feeMo/r.moFee:0; r.months=r.moN?r.mo/r.moN:0; const nn=r.active+r.done+r.lost; r.size=nn?r.katha/nn:0; });
-  const mxF=Math.max(1,...rows.map(r=>r.fee)), mxK=Math.max(1,...rows.map(r=>r.katha)), mxR=Math.max(1,...rows.map(r=>r.rate)), mxM=Math.max(1,...rows.map(r=>r.perMo));
+  const mxF=Math.max(1,...rows.map(r=>r.fee+r.woVal)), mxK=Math.max(1,...rows.map(r=>r.katha)), mxR=Math.max(1,...rows.map(r=>r.rate)), mxM=Math.max(1,...rows.map(r=>r.perMo));
   rows.forEach(r=>{ const ov=cl[r.k]||{};
     r.n=r.active+r.done+r.lost;
     const ty=r.types, dev=(ty.dev||0)+(ty.jv||0)+(ty.share||0);
@@ -2897,8 +2917,12 @@ function clientRows(){
     // value: fee where Finance has it, land otherwise; relationship: repeat work and work running now; less for projects lost
     // value: total fee 45%, land 25%, rate per sft 15%, fee earned per month of work 15%; land alone until Finance has fees
     // a client whose fees aren't all in Finance yet is valued on land alone, so a missing fee never pushes them down
-    r.value=hasFee&&r.n&&r.feeN>=r.n?Math.sqrt(r.fee/mxF)*.45+Math.sqrt(r.katha/mxK)*.25+(r.rate/mxR)*.15+Math.sqrt(r.perMo/mxM)*.15:Math.sqrt(r.katha/mxK);
-    r.rel=Math.min(1,Math.max(0,r.n-1)/3)*.7+(r.active?.3:0);
+    r.money=r.fee+r.woVal;
+    r.value=hasFee&&r.n&&r.feeN>=r.n?Math.sqrt(r.money/mxF)*.45+Math.sqrt(r.katha/mxK)*.25+(r.rate/mxR)*.15+Math.sqrt(r.perMo/mxM)*.15:Math.sqrt(r.katha/mxK);
+    // relationship: how much work they give (projects plus extra work orders), how recently, and whether work is running now
+    r.wos.sort((a,b)=>b.on.localeCompare(a.on)); r.jobs=r.n+r.woN;
+    const lastM=[r.wos[0]&&r.wos[0].on,r.last.slice(0,7)].filter(Boolean).sort().pop()||'', ago=lastM?monthsAgo(lastM):99; r.lastM=lastM;
+    r.rel=Math.min(1,Math.max(0,r.jobs-1)/4)*.5+(ago<=12?1:ago<=24?.5:0)*.25+(r.active?.25:0);
     r.score=Math.round(100*Math.max(0,r.value*.6+r.rel*.4-(r.n?r.lost/r.n*.15:0)));
     r.autoPri=r.score>=55?'high':r.score>=30?'medium':'low'; r.pri=ov.priority||r.autoPri; r.manual=!!ov.priority; r.note=ov.note||'';
   });
@@ -2907,20 +2931,53 @@ function clientRows(){
 const PRI_C={high:'var(--overdue)',medium:'var(--late)',low:'var(--muted)'};
 function clientMatrix(rows){
   // 2 × 2 board: across, one project or repeat client; down, higher or lower value (half the top client's value or more)
-  const top=Math.max(...rows.map(r=>r.value),0)||1, hiV=r=>r.value/top>=0.5, rep=r=>r.n>=2;
-  const Q=[['grow','Grow','High value, first project. Win the next one.',r=>hiV(r)&&!rep(r)],['key','Key clients','High value and coming back. Protect these.',r=>hiV(r)&&rep(r)],
-    ['std','Standard','One project, smaller value. Serve well, keep in touch.',r=>!hiV(r)&&!rep(r)],['loyal','Loyal','Smaller jobs, but they return. Look for bigger briefs.',r=>!hiV(r)&&rep(r)]];
+  const top=Math.max(...rows.map(r=>r.value),0)||1, hiV=r=>r.value/top>=0.5, rep=r=>r.jobs>=2;
+  const Q=[['grow','Grow','High value, one job so far. Win the next one.',r=>hiV(r)&&!rep(r)],['key','Key clients','High value and repeat work. Protect these.',r=>hiV(r)&&rep(r)],
+    ['std','Standard','One job, smaller value. Serve well, keep in touch.',r=>!hiV(r)&&!rep(r)],['loyal','Loyal','Smaller jobs, but they keep giving work. Look for bigger briefs.',r=>!hiV(r)&&rep(r)]];
   const card=r=>h('div',{class:'cm-card cm-'+r.pri,'data-tip':`${r.name}\n${clType(r.type)} · score ${r.score} · ${CL_PRI.find(x=>x[0]===r.pri)[1]} priority${r.manual?' (set by hand)':''}`},
     h('div',{class:'cm-n'},h('i'),h('span',{text:r.name})),
-    h('div',{class:'cm-m',text:[`${r.n||0} project${r.n===1?'':'s'}`+(r.prop?` + ${r.prop} proposal${r.prop===1?'':'s'}`:''),r.katha?`${+r.katha.toFixed(1)} katha`:null,r.fee?bdt(r.fee):null].filter(Boolean).join(' · ')}),
+    h('div',{class:'cm-m',text:[`${r.n||0} project${r.n===1?'':'s'}`+(r.prop?` + ${r.prop} proposal${r.prop===1?'':'s'}`:''),r.woN?`${r.woN} more order${r.woN===1?'':'s'}`:null,r.katha?`${+r.katha.toFixed(1)} katha`:null,r.money?bdt(r.money):null].filter(Boolean).join(' · ')}),
+    h('div',{class:'cm-m',text:r.lastM?'Last work '+fmtYM(r.lastM):'No dated work yet'}),
     h('div',{class:'cm-bar'},h('b',{style:`width:${Math.max(4,r.score)}%`})));
   const cell=([k,t,d,f])=>{ const xs=rows.filter(f);
     return h('div',{class:'cm-q cm-q-'+k},h('div',{class:'cm-qh'},h('div',{},h('div',{class:'cm-qt',text:t}),h('div',{class:'cm-qd',text:d})),h('span',{class:'cm-qc',text:String(xs.length)})),
       xs.length?h('div',{class:'cm-list'},xs.map(card)):h('div',{class:'cm-empty',text:'No clients here yet'})); };
   return h('div',{class:'cm'},
-    h('div',{class:'cm-corner'}),h('div',{class:'cm-col',text:'One project'}),h('div',{class:'cm-col',text:'Repeat client'}),
+    h('div',{class:'cm-corner'}),h('div',{class:'cm-col',text:'One job'}),h('div',{class:'cm-col',text:'Repeat work'}),
     h('div',{class:'cm-row'},h('span',{text:'Higher value'})),cell(Q[0]),cell(Q[1]),
     h('div',{class:'cm-row'},h('span',{text:'Lower value'})),cell(Q[2]),cell(Q[3]));
+}
+/* work orders by month: each signed agreement plus every order logged by hand, over the last two years */
+function woTimeline(rows,st){
+  const N=24, t=new Date(), months=[...Array(N)].map((_,i)=>{ const d=new Date(t.getFullYear(),t.getMonth()-(N-1-i),1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); });
+  const from=months[0], act=rows.filter(r=>r.wos.some(o=>o.on>=from)).sort((a,b)=>(b.lastM||'').localeCompare(a.lastM||'')||b.wos.length-a.wos.length);
+  const grid=h('div',{class:'wo-grid',style:`grid-template-columns:minmax(110px,170px) repeat(${N},minmax(0,1fr))`},
+    h('div'),months.map((m,i)=>h('div',{class:'wo-yr',text:(m.endsWith('-01')||(i===0&&+m.slice(5)<=10))?m.slice(0,4):''})),
+    h('div'),months.map(m=>h('div',{class:'wo-mo',text:'JFMAMJJASOND'[+m.slice(5)-1]})),
+    act.map(r=>[h('div',{class:'wo-name',title:r.name},h('i',{style:`background:${PRI_C[r.pri]}`}),h('span',{text:r.name})),
+      months.map(m=>{ const os=r.wos.filter(o=>o.on===m), n=os.length;
+        return h('div',{class:'wo-cell'+(m.endsWith('-01')?' jan':'')},n?h('b',{style:`--c:${PRI_C[r.pri]};width:${Math.min(16,8+n*3)}px;height:${Math.min(16,8+n*3)}px`,
+          'data-tip':`${r.name} · ${fmtYM(m)}\n`+os.map(o=>(o.auto?'':'Work order · ')+(o.what||'')+(o.ref?` (${o.ref})`:'')+(o.value?' · '+bdt(o.value):'')).join('\n')}):null); })]));
+  const F=S.woForm, body=[act.length?h('div',{class:'wo-wrap'},grid):h('div',{class:'w-empty',text:'No dated work yet. Add agreement dates to projects (Edit project › Agreement) or log a work order below.'})];
+  const logged=rows.flatMap(r=>r.wos.filter(o=>!o.auto).map(o=>({...o,r}))).sort((a,b)=>b.on.localeCompare(a.on));
+  if(S.canWrite&&st==='ok'){
+    if(!F) body.push(h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ S.woForm={k:rows[0]?rows[0].k:'',on:today().slice(0,7),pid:'',what:'',ref:'',value:''}; render(true); },text:'+ Log a work order'})));
+    else { const r=rows.find(x=>x.k===F.k)||rows[0], set=k=>e=>{ F[k]=e.target.value; };
+      const cs=h('select',{'aria-label':'Client',onchange:e=>{ F.k=e.target.value; F.pid=''; render(true); }},rows.map(x=>h('option',{value:x.k,text:x.name}))); cs.value=F.k;
+      const ps=h('select',{'aria-label':'Project',onchange:set('pid')},h('option',{value:'',text:'Not tied to one project'}),(r?r.ps:[]).map(p=>h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')}))); ps.value=F.pid;
+      body.push(h('form',{class:'card wo-form',onsubmit:e=>{ e.preventDefault(); if(!F.on) return toast('Give the month of the work order.'); if(!F.what.trim()) return toast('Say what the work order covers.');
+          const cur=((S.clientFin.cl||{})[r.k]||{}).orders||[], o={id:Math.random().toString(36).slice(2,10),on:F.on,pid:F.pid||'',what:F.what.trim(),ref:F.ref.trim(),value:+F.value||0,by:S.uid,at:new Date().toISOString()};
+          run(()=>saveClient(r.k,{name:r.name,orders:[...cur,o]}),'Work order logged').then(ok=>{ if(ok) S.woForm=null; render(true); }); }},
+        h('b',{text:'Log a work order'}),h('div',{class:'f-hint',style:'margin:0',text:'For more work from a client, e.g. a new building, extra scope or a separate job inside a project they already have. A project’s signed agreement is counted already: don’t log it again.'}),
+        h('div',{class:'form-row'},field('Client',cs),field('Month *',h('input',{type:'month',value:F.on,max:today().slice(0,7),oninput:set('on')}))),
+        h('div',{class:'form-row'},field('Project',ps),field('Reference',h('input',{value:F.ref,placeholder:'e.g. WO-112',oninput:set('ref')}))),
+        h('div',{class:'form-row'},field('What it covers *',h('input',{value:F.what,placeholder:'e.g. Interior of level 5 and 6',oninput:set('what')})),field('Value, BDT',h('input',{type:'number',min:'0',step:'1',value:F.value,oninput:set('value')}))),
+        h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ S.woForm=null; render(true); },text:'Cancel'})))); }
+  }
+  if(logged.length) body.push(h('div',{class:'wo-log'},h('div',{class:'sub2',style:'text-transform:uppercase;letter-spacing:.06em;font-weight:600',text:`Logged work orders · ${logged.length}`}),
+    logged.slice(0,12).map(o=>h('div',{class:'wo-li'},h('span',{class:'mono',text:fmtYM(o.on)}),h('span',{},h('b',{text:o.r.name}),h('span',{class:'muted',text:' · '+o.what+(o.ref?` (${o.ref})`:'')})),h('span',{class:'mono',text:o.value?bdt(o.value):''}),
+      S.canWrite?h('button',{class:'btn btn-sm',type:'button','aria-label':'Remove work order',onclick:()=>{ if(!confirm('Remove this work order?')) return; const cur=((S.clientFin.cl||{})[o.r.k]||{}).orders||[]; run(()=>saveClient(o.r.k,{name:o.r.name,orders:cur.filter(x=>x.id!==o.id)}),'Removed').then(()=>render(true)); },text:'×'}):h('span')))));
+  return widget('Work orders by month','last two years · dot size = orders that month',h('div',{style:'display:grid;gap:12px'},body),true);
 }
 function clientsDash(){
   const C=S.clientFin; if(!C||C.state==='idle'||(C.state==='ok'&&Date.now()-C.at>120000)) loadClientFin();
@@ -2934,16 +2991,17 @@ function clientsDash(){
   const W=[];
   W.push(widget('Client priority matrix','value against repeat business · bar = score',rows.length?h('div',{style:'display:grid;gap:10px'},clientMatrix(rows),
     h('div',{class:'legend',style:'justify-content:flex-start'},CL_PRI.map(([k,l])=>h('span',{style:`--c:${PRI_C[k]}`,text:l+' priority'}))),
-    h('p',{class:'f-hint',style:'margin:6px 0 0',text:'Value = 45% total fee + 25% land + 15% rate per sft + 15% fee per month of work; a client whose fees aren’t all in Finance yet is valued on land alone. Higher value = half the top client’s value or more.'+' Score = 60% value + 40% relationship (repeat projects, work running now), less up to 15 for projects cancelled or closed early. High ≥ 55, Medium ≥ 30. Set a client’s priority by hand in the table and it overrides the score; it also sets the priority of that client’s running projects (High, Normal or Low), which weighs their tasks.'})):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
+    h('p',{class:'f-hint',style:'margin:6px 0 0',text:'Value = 45% total fee + 25% land + 15% rate per sft + 15% fee per month of work; a client whose fees aren’t all in Finance yet is valued on land alone. Higher value = half the top client’s value or more.'+' Score = 60% value + 40% relationship (how much work they give: projects plus extra work orders; how recently; work running now), less up to 15 for projects cancelled or closed early. High ≥ 55, Medium ≥ 30. Set a client’s priority by hand in the table and it overrides the score; it also sets the priority of that client’s running projects (High, Normal or Low), which weighs their tasks.'})):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
+  W.push(woTimeline(rows,st));
   const types={}; rows.forEach(r=>{ const t=types[r.type]||(types[r.type]={c:0,n:0,k:0,f:0}); t.c++; t.n+=r.n; t.k+=r.katha; t.f+=r.fee; });
   const tl=Object.entries(types).sort((a,b)=>b[1].n-a[1].n), mx=Math.max(1,...tl.map(x=>x[1].n));
-  W.push(widget('Clients by type','projects, land and fees',tl.length?h('div',{class:'hbars'},tl.map(([k,t])=>h('div',{class:'hb'},h('span',{class:'nm',text:clType(k)}),
+  W.push(widget('Clients by type','projects, land and fees',tl.length?h('div',{class:'hbars'},tl.map(([k,t])=>h('div',{class:'hb hbw'},h('span',{class:'nm',text:clType(k)}),
     h('div',{class:'track','data-tip':`${clType(k)}\n${t.c} client${t.c===1?'':'s'} · ${t.n} project${t.n===1?'':'s'}\n${+t.k.toFixed(1)} katha${t.f?` · fees ${bdt(t.f)}`:''}`},h('span',{class:'s-ontime',style:`flex:0 0 ${t.n/mx*100}%`})),
-    h('span',{class:'v',text:`${t.c} · ${t.n}p`})))):h('div',{class:'w-empty',text:'No clients yet.'})));
+    h('span',{class:'v',style:'white-space:nowrap',text:`${t.c} · ${t.n} project${t.n===1?'':'s'}`})))):h('div',{class:'w-empty',text:'No clients yet.'})));
   { const ps=CL_PRI.map(([k,l])=>{ const xs=rows.filter(r=>r.pri===k); return {k,l,c:xs.length,n:xs.reduce((a,r)=>a+r.n,0),kt:xs.reduce((a,r)=>a+r.katha,0),f:xs.reduce((a,r)=>a+r.fee,0)}; }), mx=Math.max(1,...ps.map(x=>x.kt));
-    W.push(widget('Priority split','clients, projects and land',h('div',{class:'hbars'},ps.map(x=>h('div',{class:'hb'},h('span',{class:'nm',text:x.l}),
+    W.push(widget('Priority split','clients, projects and land',h('div',{class:'hbars'},ps.map(x=>h('div',{class:'hb hbw'},h('span',{class:'nm',text:x.l}),
       h('div',{class:'track','data-tip':`${x.l} priority\n${x.c} client${x.c===1?'':'s'} · ${x.n} project${x.n===1?'':'s'}\n${+x.kt.toFixed(1)} katha${x.f?` · fees ${bdt(x.f)}`:''}`},h('span',{style:`flex:0 0 ${x.kt/mx*100}%;background:${PRI_C[x.k]}`})),
-      h('span',{class:'v',text:`${x.c} · ${Math.round(x.kt)}k`}))))));
+      h('span',{class:'v',style:'white-space:nowrap',text:`${x.c} · ${Math.round(x.kt)} katha`}))))));
   }
   const basis=r=>!r.feeN?'—':r.perSft&&!r.lump?`৳${Math.round(r.rateFee/Math.max(1,r.sft))}/sft`:r.lump&&!r.perSft?'Lump sum':`Mixed (${r.perSft} per sft, ${r.lump} lump)`;
   const pick=(r,f,opts)=>{ const v=f==='type'?(r.type):(r.pri), x=h('select',{'aria-label':(f==='type'?'Type for ':'Priority for ')+r.name,style:'min-width:0;padding:4px 6px;font-size:13px'+(f==='priority'?`;color:${PRI_C[r.pri]};font-weight:600`:''),
@@ -2954,11 +3012,11 @@ function clientsDash(){
       h('option',{value:'auto',text:'Auto · '+(f==='type'?clType(r.autoType):CL_PRI.find(y=>y[0]===r.autoPri)[1])}),opts.map(([k,l])=>h('option',{value:k,text:l})));
     x.value=f==='type'?((C&&C.cl&&C.cl[r.k]&&C.cl[r.k].type)||'auto'):(r.manual?r.pri:'auto'); return x; };
   W.push(widget('All clients',`${rows.length} · ranked by score`,rows.length?h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
-    h('thead',{},h('tr',{},h('th',{text:'Client'}),h('th',{text:'Type'}),h('th',{class:'n',text:'Projects'}),h('th',{class:'n',text:'Land (katha)'}),h('th',{class:'n',text:'Fee'}),h('th',{text:'Fee basis'}),h('th',{class:'n',text:'Score'}),h('th',{text:'Priority'}))),
+    h('thead',{},h('tr',{},h('th',{text:'Client'}),h('th',{text:'Type'}),h('th',{class:'n',text:'Projects'}),h('th',{class:'n',text:'Work orders'}),h('th',{class:'n',text:'Land (katha)'}),h('th',{class:'n',text:'Fee'}),h('th',{text:'Fee basis'}),h('th',{class:'n',text:'Score'}),h('th',{text:'Priority'}))),
     h('tbody',{},rows.map(r=>h('tr',{},
       h('td',{},h('div',{style:'font-weight:600',text:r.name}),h('div',{class:'sub2',text:[r.active&&`${r.active} running`,r.done&&`${r.done} completed`,r.lost&&`${r.lost} closed early`,r.prop&&`${r.prop} proposal${r.prop===1?'':'s'}`].filter(Boolean).join(' · ')||'—'})),
       h('td',{},S.canWrite&&st==='ok'?pick(r,'type',CL_TYPES):h('span',{text:clType(r.type)})),
-      h('td',{class:'n',text:String(r.n)}),h('td',{class:'n',text:r.katha?String(+r.katha.toFixed(1)):'—'}),
+      h('td',{class:'n',text:String(r.n)}),h('td',{class:'n'},h('div',{text:String(r.wos.length)}),r.lastM?h('div',{class:'sub2',text:'last '+fmtYM(r.lastM)}):null),h('td',{class:'n',text:r.katha?String(+r.katha.toFixed(1)):'—'}),
       h('td',{class:'n',title:r.feeN&&r.feeN<r.n?`${r.feeN} of ${r.n} projects have a fee in Finance`:null,text:st==='ok'?bdt(r.fee)+(r.feeN&&r.feeN<r.n?' *':''):'…'}),
       h('td',{text:st==='ok'?basis(r):'…'}),h('td',{class:'n',text:String(r.score)}),
       h('td',{},S.canWrite&&st==='ok'?pick(r,'priority',CL_PRI):h('b',{style:`color:${PRI_C[r.pri]}`,text:CL_PRI.find(x=>x[0]===r.pri)[1]}))))))):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
@@ -2975,8 +3033,10 @@ function clientsDash(){
   W[W.length-1].append(h('p',{class:'f-hint',style:'margin:0',text:'Rate and fees come from Finance. Duration runs from a project’s first task to its completion, or to today while it runs. Fee per month = fees ÷ months of work, so it shows which clients pay well for the time the studio spends.'}));
   W[W.length-2].append(h('p',{class:'f-hint',style:'margin:0',text:'Clients are grouped by the client name on each project, so spell a client the same way on every project. Fees come from Finance; * means some of that client’s projects have no fee there yet. Only you and the COO can see this view.'}));
   // the two tables run the full width of the page
-  [W[0],...W.slice(3)].forEach(w=>{ w.classList.remove('span2'); w.style.gridColumn='1 / -1'; });
-  out.push(h('div',{class:'widgets'},W));
+  [W[0],W[1],...W.slice(4)].forEach(w=>{ w.classList.remove('span2'); w.style.gridColumn='1 / -1'; });
+  // the two small charts share one row
+  const pair=h('div',{style:'grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px'},W[2],W[3]);
+  out.push(h('div',{class:'widgets'},W[0],W[1],pair,...W.slice(4)));
   return out;
 }
 function viewDash(){
