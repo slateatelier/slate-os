@@ -399,7 +399,7 @@
      Online: SLATE OS is open on screen. Away: still open but minimised or in the background (stays
      connected on a computer; phones usually suspend the app, so it then shows "last seen").
      A heartbeat records when each person last had SLATE OS open. */
-  let onlineIds = [], awayIds = [], seenMap = new Map();
+  let onlineIds = [], awayIds = [], seenMap = new Map(), lastOnlineKey = '';
   const seenOf = id => {
     if (onlineIds.includes(id)) return { st: 'on', label: 'Online' };
     if (awayIds.includes(id)) return { st: 'away', label: 'Away · app open' };
@@ -428,7 +428,9 @@
     ch.on('presence', { event: 'sync' }, () => {
         const st = ch.presenceState(); onlineIds = []; awayIds = [];
         for (const [id, metas] of Object.entries(st)) (metas.some(m => m.st !== 'away') ? onlineIds : awayIds).push(id);
-        placeOnline(true); try { if (S.view === 'people') render(true); } catch (_) {}
+        const key = onlineIds.slice().sort().join(',');
+        if (key !== lastOnlineKey) { lastOnlineKey = key; try { if (!S.sheet) render(true); } catch (_) {} } /* green rings on people's icons */
+        else { placeOnline(true); try { if (S.view === 'people') render(true); } catch (_) {} }
       })
       .subscribe(s => { if (s === 'SUBSCRIBED') track(); });
     document.addEventListener('visibilitychange', () => { track(); beat(); if (vis()) loadSeen(); });
