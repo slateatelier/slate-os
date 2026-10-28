@@ -1268,7 +1268,7 @@ async function createTask(d){
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
-    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
+    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
@@ -2696,7 +2696,7 @@ function range(kind,offset){
 }
 function count(items,basis){
   const c={early:0,ontime:0,late:0,overdue:0,open:0,total:0,slip:0,slipN:0};
-  for(const t of items){ if(t.legacy||(t.ongoing&&!t.target)) continue; let k=status(t,basis); if(k==='soon'||k==='verify') k='open'; c[k]++; c.total++;
+  for(const t of items){ if(t.legacy||t.unscored||(t.ongoing&&!t.target)) continue; let k=status(t,basis); if(k==='soon'||k==='verify') k='open'; c[k]++; c.total++;
     const g=tgt(t,basis); if(k==='late'){c.slip+=diff(g,t.doneAt);c.slipN++} if(k==='overdue'){c.slip+=diff(g,today());c.slipN++} }
   return c;
 }
@@ -2737,7 +2737,7 @@ function scaleOf(p){ if(!p||p.pod==='Studio') return 1; const k=parseFloat(p.kat
 function weightOf(t){ const p=t._p||S.projects[t.projectId]; return (t.kind==='Deliverable'?3:1)*scaleOf(p)*(paceOf(p)==='fast'?1.25:1); }
 function creditOf(t){ const s=status(t); if(s==='early') return paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
-function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!isChalkP(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
+function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!isChalkP(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id)))); }
 /* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
 S.dashAnon={}; S.anonInfo={};
 function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
@@ -4010,7 +4010,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -6046,7 +6046,7 @@ function viewProjects(){
   const phr=ap?phaseReqCards():null; if(phr) out.push(phr);
   const mr=myProjReqs(); if(mr) out.push(mr);
   const podSel=h('select',{id:'pf-pod','aria-label':'Pod',onchange:e=>{f.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),pods().map(x=>h('option',{value:x,text:podLabel(x)})),h('option',{value:'Studio',text:'Studio / internal'})); podSel.value=f.pod;
-  const stSel=h('select',{id:'pf-st','aria-label':'Status',onchange:e=>{f.st=e.target.value;render(true)}},[['active','Active'],['risk','At risk or off track'],['onhold','On hold'],...(finOn()?[['acct','Account open']]:[]),['archive','Archive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); if(f.st==='closed') f.st='archive'; stSel.value=f.st;
+  const stSel=h('select',{id:'pf-st','aria-label':'Status',onchange:e=>{f.st=e.target.value;render(true)}},[['active','Active'],['risk','At risk or off track'],['site','Construction support'],['onhold','On hold'],...(finOn()?[['acct','Account open']]:[]),['archive','Archive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); if(f.st==='closed') f.st='archive'; stSel.value=f.st;
   const arch=all.filter(isArchivedP), yrs=[...new Set(arch.map(p=>closedOn(p).slice(0,4)).filter(Boolean))].sort().reverse();
   const aSel=f.st==='archive'?[
     (()=>{ const x=h('select',{id:'pf-ao','aria-label':'Outcome',onchange:e=>{f.ao=e.target.value;render(true)}},[['','Every outcome'],['completed','Completed'],['partial','Closed after phase'],['cancelled','Cancelled'],['closed','Closed (not recorded)']].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ao||''; return x; })(),
@@ -6054,7 +6054,7 @@ function viewProjects(){
     (()=>{ const x=h('select',{id:'pf-ar','aria-label':'Reason',onchange:e=>{f.ar=e.target.value;render(true)}},[['','Any reason'],...CLOSE_REASONS].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ar||''; return x; })()]:[];
   out.push(h('div',{class:'bar'},h('input',{id:'pf-q',type:'search',placeholder:'Search code, name or client',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),podSel,stSel,...aSel));
   const list=all.filter(p=>{ const st=stats.get(p.id);
-    if(f.st==='active'&&p.closed&&!abOn(p)) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='acct'&&!acctOf(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
+    if(f.st==='active'&&p.closed&&!abOn(p)&&!supOn(p)) return false; if(f.st==='site'&&!supOn(p)) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='acct'&&!acctOf(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
     if(f.st==='archive'){ if(!isArchivedP(p)) return false; if(f.ao&&outcomeOf(p)!==f.ao) return false; if(f.ay&&closedOn(p).slice(0,4)!==f.ay) return false; if(f.ar&&((p.closure||{}).reason||'')!==f.ar) return false; }
     if(f.pod&&!(f.pod==='Studio'?p.pod==='Studio':[p.pod,p.pod2].includes(f.pod))) return false;
     if(q&&!`${p.code} ${p.name} ${p.client||''}`.toLowerCase().includes(q)) return false; return true; });
@@ -6076,10 +6076,12 @@ function viewProjects(){
   out.push(h('div',{class:'pgrid'},list.map(p=>{ const st=stats.get(p.id), [hl,hk]=HEALTH[st.health];
     const done=outcomeOf(p)==='completed';
     return h('button',{class:'pcard'+(done?' done':''),type:'button',onclick:()=>openProjectView(p.id)},
-      done?h('span',{class:'pc-stamp','aria-hidden':'true',innerHTML:stampSVG(p.id,closedOn(p))}):null,
+      done?h('span',{class:'pc-stamp','aria-hidden':'true',innerHTML:handedOver(p)?stampSVG(p.id,p.support.handedOn,'HANDED OVER'):stampSVG(p.id,closedOn(p))}):null,
       h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},done?null:h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),abOn(p)?h('span',{class:'pill s-late',text:'As-built'}):null,noTech(p)?h('span',{class:'pill tech-pill',title:TECH_TIP,text:'⚠'}):null,acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
       h('div',{class:'pc-name',text:p.name}),
       h('div',{class:'pc-meta',text:[p.client,podText(p),p.katha?p.katha+' katha':'',p.units?p.units+' units'+(p.type==='jv'&&p.loCount!=null?` (LO ${p.loCount} · Dev ${p.devCount})`:''):'',p.farApplies==='yes'&&p.farCalc?Math.round(p.farCalc.saleable/1000)+'k sft saleable':''].filter(Boolean).join(' · ')}),
+      done&&supOn(p)?(()=>{ const nx=supTasks(p.id).filter(t=>!t.doneAt&&t.site.type==='visit'&&t.target).sort((a,b)=>a.target.localeCompare(b.target))[0];
+        return h('div',{class:'pc-row'},h('span',{class:'pill s-late',style:'justify-self:start',text:'Construction support'}),h('span',{class:'muted',text:nx?'Next visit '+fmtD(nx.target):'No visit scheduled'})); })():null,
       ...(()=>{ const pk=p.closed?projParkedTasks(p.id).length:0, dn=st.ts.filter(t=>t.doneAt).length, pc=pk?Math.round(dn/(dn+pk)*100):st.pct;
         return [h('div',{class:'pc-bar'},h('span',{style:`width:${pc}%`})),
           h('div',{class:'pc-row'},h('span',{text:pk?`${dn} done · ${pk} ${isOnHold(p)?'frozen':'dropped'}`:st.tot?`${st.pct}% done`:'No tasks yet'}),h('span',{text:p.closed?'':st.phase||(st.tot?'':'—')}))]; })(),
@@ -6145,7 +6147,7 @@ const OUTCOMES={
 const CLOSE_REASONS=[['client','Client decision'],['funding','Funding'],['land','Land or legal'],['approvals','Approvals (RAJUK etc.)'],['fee','Fee dispute'],['scope','Scope change'],['complete','Work complete'],['other','Other']];
 const reasonLabel=k=>(CLOSE_REASONS.find(x=>x[0]===k)||['',k||'—'])[1];
 /* round "COMPLETED" rubber stamp for project cards: ring text with the date, double border, the SLATE mark in the middle */
-function stampSVG(id,on){
+function stampSVG(id,on,label){
   const k='st'+String(id).replace(/[^\w-]/g,''), M=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   const [y,m,d]=(on||'').split('-').map(Number), date=y&&m&&d?`${d} ${M[m-1]} ${y}`:'SLATE';
   // the SLATE mark (same geometry as the letterhead), scaled into the centre
@@ -6153,7 +6155,7 @@ function stampSVG(id,on){
   const mark=R.map(([x,yy,w,h])=>`<rect x="${(49+x*sc).toFixed(2)}" y="${(48.7+yy*sc).toFixed(2)}" width="${(w*sc).toFixed(2)}" height="${(h*sc).toFixed(2)}"/>`).join('');
   return `<svg viewBox="0 0 132 132" aria-hidden="true"><defs><path id="${k}" d="M66,110 a44,44 0 1,1 0,-88 a44,44 0 1,1 0,88"/></defs>
   <g fill="none" stroke="currentColor"><circle cx="66" cy="66" r="60" stroke-width="3"/><circle cx="66" cy="66" r="55" stroke-width="1"/><circle cx="66" cy="66" r="33" stroke-width="1.2"/></g>
-  <text fill="currentColor" font-size="12.5" font-weight="700" letter-spacing="3"><textPath href="#${k}" startOffset="0" textLength="272" lengthAdjust="spacing">COMPLETED ★ ${date} ★</textPath></text>
+  <text fill="currentColor" font-size="12.5" font-weight="700" letter-spacing="3"><textPath href="#${k}" startOffset="0" textLength="272" lengthAdjust="spacing">${label||'COMPLETED'} ★ ${date} ★</textPath></text>
   <g fill="currentColor">${mark}</g></svg>`;
 }
 function outcomeOf(p){ if(!p||!p.closed) return 'active'; if(p.outcome&&OUTCOMES[p.outcome]) return p.outcome; return p.entry==='completed'?'completed':'closed'; }
@@ -6170,7 +6172,7 @@ const techTag=p=>noTech(p)?h('span',{class:'tag tag-tech',title:TECH_TIP+(p.tech
    scored like any task once their dates are approved. It ends when the final print is done, or when stopped. */
 const abOn=p=>!!p&&!!p.closed&&!isOnHold(p)&&!!p.asbuilt&&p.asbuilt.status==='active'&&!stdState({...p,id:p.id||pidOf(p)},'9').done;
 const pidOf=p=>Object.keys(S.projects).find(k=>S.projects[k]===p)||'';
-const workable=p=>!!p&&(!p.closed||abOn(p));
+const workable=p=>!!p&&(!p.closed||abOn(p)||supOn(p));
 const abCan=p=>!!p&&amApprover()&&S.canWrite&&isArchivedP(p)&&['completed','closed'].includes(outcomeOf(p))&&!isInternalP(p)&&p.pod!=='Studio';
 const closedOn=p=>(p&&p.closure&&p.closure.on)||(p&&p.completedOn)||'';
 const taka=n=>'৳'+Math.round(+n||0).toLocaleString('en-IN');
@@ -6224,6 +6226,10 @@ function sheetProjClose(){
     f.push(h('div',{class:'field'},h('span',{class:'lbl',text:'Scope delivered'}),
       h('div',{class:'chips',style:'margin-top:2px'},scope.map(x=>h('button',{type:'button',class:'chip'+(dl.has(x)?' on':''),style:'border:1px solid var(--line);cursor:pointer;padding:6px 12px;background:#fff','aria-pressed':String(dl.has(x)),onclick:()=>{ dl.has(x)?dl.delete(x):dl.add(x); d.delivered=scope.filter(y=>dl.has(y)); renderSheet(); },text:(dl.has(x)?'✓ ':'')+x}))),
       h('span',{class:'f-hint',text:`Tap to switch. ${scope.length-dl.size} item${scope.length-dl.size===1?'':'s'} will be recorded as dropped.`}))); }
+  if(o==='completed'&&!internal){ if(!d.site) d.site='ongoing';
+    f.push(h('div',{class:'field'},h('span',{class:'lbl',text:'The building now'}),seg('Site',[['ongoing','Under construction'],['handover','Handed over'],['none','Not known']],d.site,v=>{ d.site=v; renderSheet(); }),
+      h('span',{class:'f-hint',text:d.site==='ongoing'?'SLATE keeps supporting the site: site visits and drawing corrections can be recorded until it’s handed over.':d.site==='handover'?'The building is already handed over; the project becomes a record.':'You can start construction support later from the project page.'})));
+    if(d.site==='handover') f.push(field('Handed over on *',inp('handedOn',{type:'date',max:td}))); }
   f.push(field('Note',ta('note',{rows:2,placeholder:o==='onhold'?'e.g. Client waiting on land documents':'What happened, in a line or two'})));
   // what happens to the work
   const n=o==='onhold'?open.length:open.length+frozen.length;
@@ -6247,6 +6253,7 @@ function sheetProjClose(){
       if(!d.reason) return fail('Choose a reason.'); if(!d.on) return fail('Give the date.');
       if(o==='onhold'&&(!d.reviewOn||d.reviewOn<td)) return fail('Give a review date from today on.');
       if(o==='partial'&&!internal&&!d.lastPhase) return fail('Choose the last phase reached.');
+      if(o==='completed'&&d.site==='handover'&&!d.handedOn) return fail('Give the handover date.');
       run(()=>doCloseProject(p.id,d,du),o==='onhold'?'Project on hold':`Project ${OUTCOMES[o].l.toLowerCase()}`).then(ok=>{ if(ok){ acctLoad(true); back(); } }); }},
     f,S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
     h('div',{class:'actions'},h('button',{class:'btn '+(o==='cancelled'?'btn-accent':'btn-primary'),type:'submit',disabled:S.busy,text:OUTCOMES[o].btn}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'}))));
@@ -6264,7 +6271,9 @@ async function doCloseProject(pid,d,du){
   else for(const t of [...projOpenTasks(pid),...projParkedTasks(pid).filter(t=>t.held)]){
     const late=t.target&&t.target<td&&!t.held?diff(t.target,td):0;
     await taskUpdate(t.id,{archived:true,held:null,dropped:o},[{type:'dropped',to:o,note:why+(late?` (was ${late} day${late===1?'':'s'} overdue)`:'')}]); }
-  await S.db.doc('projects/'+pid).update({closed:true,outcome:o,closure,closeReq:null,
+  const sup=o==='completed'&&d.site==='ongoing'?{support:{status:'active',from:d.on,by:S.uid,note:'',handedOn:null,handedBy:null,log:[{type:'started',on:d.on,at:now,by:S.uid}]}}
+    :o==='completed'&&d.site==='handover'?{support:{status:'handover',from:null,by:S.uid,handedOn:d.handedOn||d.on,handedBy:S.uid,log:[{type:'handover',on:d.handedOn||d.on,at:now,by:S.uid}]}}:{};
+  await S.db.doc('projects/'+pid).update({...sup,closed:true,outcome:o,closure,closeReq:null,
     closeLog:[...(p.closeLog||[]),{type:o==='onhold'?'held':'closed',outcome:o,on:d.on,reason:d.reason,note,by:S.uid,at:now}].slice(-40)});
 }
 
@@ -6349,6 +6358,7 @@ function closureSection(p){
       ap&&(c.dropped||[]).length?h('div',{style:'grid-column:1/-1'},h('div',{class:'lbl',text:'Scope dropped'}),h('div',{class:'chips',style:'margin-top:4px'},c.dropped.map(x=>h('span',{class:'chip',style:'padding-right:12px;background:#fff;text-decoration:line-through;color:var(--muted)',text:x})))):null),
     (ap||canSeeProjectDetail(p))&&c.note?h('p',{class:'quote',text:c.note}):null,
     o!=='onhold'?abBox(p):null,
+    o==='completed'?supBox(p):null,
     o!=='onhold'?acctBox(p):null);
 }
 /* as-built status on a completed project's page */
@@ -6394,6 +6404,82 @@ function stopAb(pid){ const p=S.projects[pid]; if(!p||!abOn({...p,id:pid})) retu
   if(why===null) return; const now=new Date().toISOString(), note=why.trim();
   run(async()=>{ for(const t of open) await taskUpdate(t.id,{archived:true,dropped:'asbuilt'},[{type:'dropped',to:'asbuilt',note:'As-built work stopped'+(note?': '+note:'')}]);
     await S.db.doc('projects/'+pid).update({asbuilt:{status:'stopped',stoppedAt:now,stoppedBy:S.uid,stopNote:note,log:[...((p.asbuilt&&p.asbuilt.log)||[]),{type:'stopped',at:now,by:S.uid,note}].slice(-20)}}); },'As-built work stopped'); }
+/* ---------- construction support: after SLATE's scope is complete, until the building is handed over ----------
+   p.support = { status:'active'|'handover', from, by, handedOn, handedBy, note, log:[...] }
+   Work under it: site visits (scheduled ones are scored; on-call ones are recorded after the visit and not scored)
+   and drawing corrections (counted, not scored). The project stays Completed throughout. */
+const SUP_PHASE='Construction support';
+const supOn=p=>!!p&&!!p.closed&&outcomeOf(p)==='completed'&&!!p.support&&p.support.status==='active';
+const handedOver=p=>!!p&&!!p.support&&p.support.status==='handover';
+const supCan=p=>!!p&&S.canWrite&&outcomeOf(p)==='completed'&&!isInternalP(p)&&p.pod!=='Studio'&&(amApprover()||isProjLead(p));
+const supTasks=pid=>Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.projectId===pid&&t.site&&!t.archived);
+const SITE_KIND={visit:'Site visit',oncall:'On-call site visit',correction:'Drawing correction'};
+const cooUid=()=>people().find(id=>isCOO(id)&&id!==ownerId())||'';
+function supBox(p){ const s=p.support; if(!s) return null;
+  const ts=supTasks(p.id), next=ts.filter(t=>!t.doneAt&&t.site.type==='visit'&&t.target).sort((a,b)=>a.target.localeCompare(b.target))[0];
+  const visits=ts.filter(t=>t.site.type!=='correction'&&t.doneAt).length, corr=ts.filter(t=>t.site.type==='correction').length, openC=ts.filter(t=>t.site.type==='correction'&&!t.doneAt).length;
+  if(handedOver(p)) return h('div',{class:'callout',style:'margin-top:10px;box-shadow:inset 3px 0 0 var(--ontime)'},h('b',{text:`Building handed over ${s.handedOn?fmtD(s.handedOn):''}`}),
+    h('span',{class:'f-hint',style:'margin:0',text:(s.from?`Construction support from ${fmtD(s.from)}. `:'')+`${visits} site visit${visits===1?'':'s'} and ${corr} drawing correction${corr===1?'':'s'} recorded.`+(s.handedBy?` Marked by ${nameOf(s.handedBy)}.`:'')}),
+    s.handNote?h('p',{class:'quote',style:'margin:0',text:s.handNote}):null);
+  return h('div',{class:'callout',style:'margin-top:10px'},h('b',{text:'Construction support · building under construction'}),
+    h('span',{class:'f-hint',style:'margin:0',text:`Since ${fmtD(s.from)} · ${visits} visit${visits===1?'':'s'} done · ${corr} correction${corr===1?'':'s'}${openC?` (${openC} open)`:''}`+(next?` · next visit ${fmtD(next.target)}`:' · no visit scheduled')}),
+    s.note?h('p',{class:'quote',style:'margin:0',text:s.note}):null,
+    ts.length?h('div',{style:'display:grid;gap:4px;margin-top:4px'},ts.sort((a,b)=>(b.target||b.doneAt||'').localeCompare(a.target||a.doneAt||'')).slice(0,8).map(t=>
+      h('button',{type:'button',class:'card',style:'background:#fff;cursor:pointer;gap:2px;padding:8px 10px',onclick:()=>openTask(t.id)},
+        h('div',{style:'display:flex;justify-content:space-between;gap:8px'},h('b',{style:'font-weight:600',text:t.title}),h('span',{class:'mono f-hint',style:'margin:0',text:fmtD(t.doneAt||t.target)})),
+        h('span',{class:'f-hint',style:'margin:0',text:SITE_KIND[t.site.type]+(t.assignee?' · '+nameOf(t.assignee):'')+(t.doneAt?' · done':'')})))):null); }
+function supActs(p){ if(!supCan(p)||handedOver(p)) return [];
+  if(!supOn(p)) return [h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'start'),text:'Construction support'}),h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'hand'),text:'Mark handed over'})];
+  return [h('button',{class:'btn btn-primary',type:'button',onclick:()=>openSup(p.id,'visit'),text:'Schedule site visit'}),
+    h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'oncall'),text:'Log on-call visit'}),
+    h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'correction'),text:'Drawing correction'}),
+    h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'hand'),text:'Mark handed over'})]; }
+function openSup(pid,mode){ const p=S.projects[pid]; if(!p) return;
+  const lead=(p.std&&p.std.lead)||personFor('lead',p.pod)||'';
+  S.sheet={type:'sup',id:pid,mode,err:'',d:{from:closedOn(p)||today(),on:mode==='oncall'?today():addDays(today(),7),who:lead,purpose:'',drawing:'',note:'',handedOn:today(),time:''}}; renderSheet(); }
+function sheetSup(){
+  const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
+  const m=S.sheet.mode, d=D(), td=today(), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
+  const who=()=>{ const x=h('select',{id:'sh-who',onchange:e=>{d.who=e.target.value}},memberOpts(d.who).map(([v,l])=>h('option',{value:v,text:l}))); x.value=d.who||''; return x; };
+  const T={start:'Start construction support',visit:'Schedule a site visit',oncall:'Log an on-call site visit',correction:'Drawing correction',hand:'Building handed over'}[m];
+  const intro={start:'SLATE’s scope is complete and the building is under construction. Site visits and drawing corrections can be recorded on this project until it’s handed over. The project stays Completed.',
+    visit:'A planned visit, e.g. a slab casting or a monthly check. It counts like any task once its date is approved.',
+    oncall:'A visit made when the site called. Record it after the visit; it isn’t scored.',
+    correction:'A change to issued drawings asked for by the site or the client. Counted, not scored.',
+    hand:'The developer or owner has handed the building over. Construction support ends and the project becomes a record.'}[m];
+  const f=[];
+  if(m==='start') f.push(field('Under construction since *',inp('from',{type:'date',max:td})),field('Note',ta('note',{rows:2,placeholder:'e.g. Contractor on site, piling done'})));
+  if(m==='visit') f.push(h('div',{class:'form-row'},field('Visit date *',inp('on',{type:'date',min:td})),field('Time',inp('time',{type:'time'}))),field('Who goes *',who()),field('Purpose *',inp('purpose',{placeholder:'e.g. Check slab reinforcement before casting, level 3'})));
+  if(m==='oncall') f.push(field('Visit date *',inp('on',{type:'date',max:td})),field('Who went *',who()),field('Why the site called *',inp('purpose',{placeholder:'e.g. Column clash with a sewer line'})),field('What was decided',ta('note',{rows:2})));
+  if(m==='correction') f.push(field('Drawing or sheet *',inp('drawing',{placeholder:'e.g. A-201 Level 4 plan'})),field('What changes and why *',inp('purpose',{placeholder:'e.g. Shift kitchen window; site request'})),h('div',{class:'form-row'},field('Due *',inp('on',{type:'date',min:td})),field('Who corrects it *',who())));
+  if(m==='hand'){ f.push(field('Handed over on *',inp('handedOn',{type:'date',max:td})),field('Note',ta('note',{rows:2,placeholder:'e.g. Handed over to the owners’ association'})));
+    const open=supTasks(p.id).filter(t=>!t.doneAt);
+    f.push(h('div',{class:'card',style:'gap:4px;background:var(--group)'},h('b',{text:'What happens'}),h('span',{class:'f-hint',style:'margin:0',text:(open.length?`${open.length} open site task${open.length===1?' is':'s are'} dropped and not scored. `:'')+'The COO gets a task to check any as-built or handover payment in Finance.'}))); }
+  return [head(projLabel(p),T),h('p',{class:'lead',style:'margin:0',text:intro}),
+    h('form',{class:'form',onsubmit:e=>{ e.preventDefault();
+        if(m==='start'&&!d.from) return fail('Give the date construction started.');
+        if(['visit','oncall','correction'].includes(m)){ if(!d.on) return fail('Give the date.'); if(!d.who) return fail('Choose who.'); if(!(d.purpose||'').trim()) return fail(m==='correction'?'Say what changes.':'Give the purpose.'); if(m==='correction'&&!(d.drawing||'').trim()) return fail('Name the drawing.'); }
+        if(m==='hand'&&!d.handedOn) return fail('Give the handover date.');
+        run(()=>doSup(p.id,m,d),{start:'Construction support started',visit:'Site visit scheduled',oncall:'Site visit recorded',correction:'Drawing correction added',hand:'Marked handed over'}[m]).then(ok=>{ if(ok) back(); }); }},
+      f,S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:{start:'Start',visit:'Schedule visit',oncall:'Record visit',correction:'Add correction',hand:'Mark handed over'}[m]}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
+}
+async function doSup(pid,m,d){
+  const p=S.projects[pid], now=new Date().toISOString(), note=(d.note||'').trim(), s=p.support||{}, log=x=>[...(s.log||[]),{...x,at:now,by:S.uid}].slice(-40);
+  if(m==='start') return S.db.doc('projects/'+pid).update({support:{status:'active',from:d.from,by:S.uid,note,handedOn:null,handedBy:null,log:log({type:'started',on:d.from,note})}});
+  if(m==='hand'){
+    for(const t of supTasks(pid).filter(t=>!t.doneAt)) await taskUpdate(t.id,{archived:true,dropped:'handover'},[{type:'dropped',to:'handover',note:'Building handed over'}]);
+    const coo=cooUid();
+    if(coo&&!canAssignTo(coo)&&window.slateSupabase) await window.slateSupabase.rpc('send_message',{p_to:[coo],p_message:`${p.code||p.name} has been handed over (${fmtD(d.handedOn)}). Please check any as-built or handover payment in Finance.`}).then(()=>{},()=>{});
+    if(coo&&canAssignTo(coo)) await createTask({projectId:pid,title:`Check as-built / handover billing in Finance · ${p.code||p.name}`,kind:'Task',assignee:coo,phase:SUP_PHASE,...(amApprover()?{target:addDays(today(),3)}:{proposed:addDays(today(),3)}),site:{type:'billing'},unscored:true,note:'Building handed over '+fmtD(d.handedOn)});
+    return S.db.doc('projects/'+pid).update({support:{...s,status:'handover',from:s.from||closedOn(p)||d.handedOn,handedOn:d.handedOn,handedBy:S.uid,handNote:note,log:log({type:'handover',on:d.handedOn,note})}});
+  }
+  const purpose=d.purpose.trim(), title=m==='correction'?`Correction · ${d.drawing.trim()} · ${purpose}`:`${m==='oncall'?'On-call visit':'Site visit'} · ${purpose}`;
+  // the Principal and COO set dates; a POD leader proposes them and the COO approves (as for every task)
+  const when=amApprover()?{target:d.on}:{proposed:d.on};
+  const id=await createTask({projectId:pid,title,kind:'Task',assignee:d.who,phase:SUP_PHASE,...when,...(m==='visit'&&d.time?{time:d.time}:{}),site:{type:m,purpose,...(m==='correction'?{drawing:d.drawing.trim()}:{})},unscored:m!=='visit',note});
+  if(m==='oncall') await taskUpdate(id,{doneAt:d.on,doneBy:S.uid,stage:'done'},[{type:'done',to:d.on,note:note||'Visit recorded after the call'}]);
+}
 /* a closed project's live account (Principal and COO): what is left to bill and to collect */
 function acctBox(p){ if(!finOn()) return null; acctLoad(); if(!S.acct) return null; const a=acctOf(p);
   if(!a) return h('p',{class:'f-hint',style:'margin:8px 0 0',text:'Account settled in Finance.'});
@@ -6411,6 +6497,7 @@ function lifecycleActs(p){ const acts=[]; if(!S.canWrite) return acts;
       if(abCan(p)&&abOn(p)) acts.push(h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>stopAb(p.id),text:'Stop as-built work'}));
       if(S.isOwner) acts.push(h('button',{class:'btn',type:'button',onclick:()=>openReopenProject(p.id),text:'Reopen'})); }
   } else if(canAskClose(p)&&!p.closeReq) acts.push(h('button',{class:'btn',type:'button',onclick:()=>openCloseRequest(p.id),text:'Ask to close or pause'}));
+  acts.unshift(...supActs(p));
   return acts; }
 /* ---------- deleting a project: the Principal deletes; the COO asks and the Principal approves ---------- */
 function projTaskPaths(pid){ return Object.entries(S.tasks).filter(([k,t])=>t&&t.projectId===pid).map(([k])=>S.paths[k]||('tasks/'+k)); }
