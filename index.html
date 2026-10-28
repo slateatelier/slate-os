@@ -6144,15 +6144,17 @@ const OUTCOMES={
   cancelled:{l:'Cancelled',pill:'s-overdue',btn:'Cancel project',d:'The agreement was terminated, usually before meaningful delivery.'}};
 const CLOSE_REASONS=[['client','Client decision'],['funding','Funding'],['land','Land or legal'],['approvals','Approvals (RAJUK etc.)'],['fee','Fee dispute'],['scope','Scope change'],['complete','Work complete'],['other','Other']];
 const reasonLabel=k=>(CLOSE_REASONS.find(x=>x[0]===k)||['',k||'—'])[1];
-/* round "COMPLETED" rubber stamp for project cards: ring text, double border, date in the middle */
+/* round "COMPLETED" rubber stamp for project cards: ring text with the date, double border, the SLATE mark in the middle */
 function stampSVG(id,on){
   const k='st'+String(id).replace(/[^\w-]/g,''), M=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  const [y,m,d]=(on||'').split('-').map(Number), has=!!(y&&m&&d);
+  const [y,m,d]=(on||'').split('-').map(Number), date=y&&m&&d?`${d} ${M[m-1]} ${y}`:'SLATE';
+  // the SLATE mark (same geometry as the letterhead), scaled into the centre
+  const R=[[0,0,106,7],[0,0,8,44],[98,0,8,44],[74,37,32,7],[0,63,32,7],[0,63,8,45],[98,63,8,45],[0,101,106,7]], sc=34/106;
+  const mark=R.map(([x,yy,w,h])=>`<rect x="${(49+x*sc).toFixed(2)}" y="${(48.7+yy*sc).toFixed(2)}" width="${(w*sc).toFixed(2)}" height="${(h*sc).toFixed(2)}"/>`).join('');
   return `<svg viewBox="0 0 132 132" aria-hidden="true"><defs><path id="${k}" d="M66,110 a44,44 0 1,1 0,-88 a44,44 0 1,1 0,88"/></defs>
   <g fill="none" stroke="currentColor"><circle cx="66" cy="66" r="60" stroke-width="3"/><circle cx="66" cy="66" r="55" stroke-width="1"/><circle cx="66" cy="66" r="33" stroke-width="1.2"/></g>
-  <text fill="currentColor" font-size="13" font-weight="700" letter-spacing="3.2"><textPath href="#${k}" startOffset="0" textLength="272" lengthAdjust="spacing">COMPLETED ★ COMPLETED ★</textPath></text>
-  ${has?`<text x="66" y="62" fill="currentColor" text-anchor="middle" font-size="17" font-weight="700">${d}</text><text x="66" y="77" fill="currentColor" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1.5">${M[m-1]} ${y}</text>`
-    :`<path d="M52 67 l9 9 l18 -20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`}</svg>`;
+  <text fill="currentColor" font-size="12.5" font-weight="700" letter-spacing="3"><textPath href="#${k}" startOffset="0" textLength="272" lengthAdjust="spacing">COMPLETED ★ ${date} ★</textPath></text>
+  <g fill="currentColor">${mark}</g></svg>`;
 }
 function outcomeOf(p){ if(!p||!p.closed) return 'active'; if(p.outcome&&OUTCOMES[p.outcome]) return p.outcome; return p.entry==='completed'?'completed':'closed'; }
 const outcomeLabel=p=>{ const o=outcomeOf(p); return o==='active'?'Active':o==='closed'?'Closed':OUTCOMES[o].l; };
