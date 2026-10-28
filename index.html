@@ -519,6 +519,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;z-index:30;font-size:14px;font-weight:500;max-width:calc(100% - 32px);box-shadow:0 4px 12px rgba(0,0,0,.2)}
 @media (max-width:560px){.facts{grid-template-columns:minmax(0,1fr)}.h1{font-size:24px}.tab{padding-inline:8px}}
 /* ---- standard phases: gates and checklists ---- */
+.kpis.kpis5{grid-template-columns:repeat(5,minmax(0,1fr))}.kpis.kpis4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:640px){.kpis.kpis5{grid-template-columns:repeat(3,minmax(0,1fr))}.kpis.kpis4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pj-kind .seg button{white-space:nowrap}
 .tl-card{gap:10px}
 .tl-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
 .tl-sum div{display:grid;gap:2px}.tl-sum span{font-size:11.5px;color:var(--muted)}.tl-sum b{font-size:15px}
@@ -6563,9 +6566,11 @@ function viewProjects(){
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Studio list'}),h('h1',{class:'h1',text:'Projects'}),h('p',{class:'lead',text:'Every project, its agreement and its progress. New projects are approved by the COO before they join the list.'})),
     S.canWrite&&h('div',{class:'actions'},canChalkEdit()?h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New Chalk project'}):null,canProjReq()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:ap?'New project':'Request a project'}):null))];
   const hold=all.filter(p=>isOnHold(p));
-  out.push(h('div',{class:'bar',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work']],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })));
+  out.push(h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work']],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })));
   if(sv) out.push(h('div',{class:'kpis'},kpi('Studio areas',act.length),kpi('Open tasks',act.reduce((a,p)=>a+Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!t.doneAt).length,0))));
-  else out.push(h('div',{class:'kpis'},kpi('Total projects',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open'),hold.length?kpi('On hold',hold.length,'late'):null));
+  else out.push(h('div',{class:'kpis kpis5'},kpi('Total',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On hold',hold.length,'late'),kpi('Cancelled',clientAll.filter(p=>p.closed&&outcomeOf(p)==='cancelled').length,'overdue')),
+    h('div',{class:'lbl',style:'margin:-4px 0 -6px;text-transform:uppercase;letter-spacing:.05em',text:'Active projects'}),
+    h('div',{class:'kpis kpis4'},kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open')));
   if(!sv){ const ds=draftsSec(); if(ds) out.push(ds); }
   const crq=ap?closeReqCards():null; if(crq) out.push(crq);
   const pr=ap?projReqCards():null; if(pr) out.push(pr);
