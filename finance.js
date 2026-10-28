@@ -1263,7 +1263,7 @@ function calcLine(l, kind) {
 }
 function buildLines(kind, ym, opts = {}) {
   const end = monthEnd(ym), start = ym + '-01';
-  return activeStaff().filter(t => !t.joinDate || t.joinDate <= end).map(t => {
+  return activeStaff().filter(t => (!t.joinDate || t.joinDate <= end) && !!t.principalOnly === !!opts.priv).map(t => {
     const r = rateAt(t, ym) || curRate(t); if (!r) return null;
     const base = { staffId: t.id, name: t.name, designation: t.designation || '', method: t.payMethod || 'cash', bankAmt: t.payMethod === 'split' ? +t.bankPart || 0 : 0, basic: +r.basic || 0 };
     if (kind === 'bonus') return calcLine({ ...base, gross: Math.round((opts.basis === 'gross' ? grossOf(r) : +r.basic || 0) * (+opts.pct || 0) / 100), tax: 0, otherDed: 0 }, 'bonus');
@@ -1275,7 +1275,7 @@ function payrollView() {
   const st = activeStaff(), cm = today().slice(0, 7);
   const monthly = st.reduce((t, x) => t + grossOf(curRate(x)), 0);
   const outAdv = S.staff.reduce((t, x) => t + advOut(x.id), 0);
-  const cur = S.payruns.find(r => r.kind === 'salary' && r.month === cm);
+  const cur = S.payruns.find(r => r.kind === 'salary' && r.month === cm && !r.priv);
   const runs = S.payruns.slice().sort((a, b) => (b.month || '').localeCompare(a.month || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
   const advs = S.advances.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const advChip = a => (a.status || 'pending') === 'pending' ? chip('pending', 'Awaiting approval') : a.status === 'rejected' ? chip('rejected', 'Rejected') : !a.accountId ? chip('unpaid', 'Approved · unpaid') : advOut(a.staffId) < 1 ? chip('paid', 'Recovered') : chip('issued', 'Recovering');
@@ -1421,7 +1421,8 @@ function rejectAdvForm(a) {
 }
 function newRunForm(kind) {
   if (!activeStaff().length) { toast('Add staff first.'); return; }
-  const cm = today().slice(0, 7), taken = new Set(S.payruns.filter(r => r.kind === 'salary').map(r => r.month));
+  const cm = today().slice(0, 7), taken = new Set(S.payruns.filter(r => r.kind === 'salary' && !r.priv).map(r => r.month)), takenP = new Set(S.payruns.filter(r => r.kind === 'salary' && r.priv).map(r => r.month));
+  const hasPriv = isPrincipal() && activeStaff().some(t => t.principalOnly);
   let ym = cm; if (kind === 'salary' && taken.has(cm)) { const d = new Date(cm + '-01T00:00:00'); d.setMonth(d.getMonth() + 1); ym = iso(d).slice(0, 7); }
   openSheet(`${sheetHead(kind === 'bonus' ? 'Eid bonus' : 'New salary sheet', kind === 'bonus' ? 'Starts from each person’s salary; you can change any amount before submitting.' : 'Fills in every active staff member from their salary for that month, with advance recovery and tax. Adjust leave and allowances on the sheet.')}
   <form id="nr">
@@ -1431,18 +1432,19 @@ function newRunForm(kind) {
       ${kind === 'bonus' ? `<label class="f" for="n_b">Based on<select id="n_b" name="basis">${opt('basic', 'Basic salary', true)}${opt('gross', 'Gross salary')}</select></label>
       <label class="f" for="n_p">Percent of it<input id="n_p" name="pct" type="number" min="0" max="300" step="1" value="100"></label>` : ''}
     </div>
+    ${hasPriv ? `<label class="check" for="n_priv"><input id="n_priv" name="priv" type="checkbox"> Private sheet: only the salaries marked "only me" <span class="hint">(the COO can't see it)</span></label>` : ''}
     <p class="hint err" id="nHint"></p>
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">Prepare sheet</button></div>
   </form>`, root => {
     const f = $('#nr', root);
-    const upd = () => { $('#nHint', root).textContent = kind === 'salary' && taken.has(f.month.value) ? `${monthName(f.month.value)} already has a salary sheet. Open it from the list.` : locked(f.month.value + '-01') ? 'That financial year is closed.' : ''; };
+    const upd = () => { const pv = !!(f.priv && f.priv.checked); $('#nHint', root).textContent = kind === 'salary' && (pv ? takenP : taken).has(f.month.value) ? `${monthName(f.month.value)} already has a salary sheet. Open it from the list.` : locked(f.month.value + '-01') ? 'That financial year is closed.' : ''; };
     f.addEventListener('input', upd); upd();
     f.addEventListener('submit', async ev => { ev.preventDefault(); if ($('#nHint', root).textContent) { toast($('#nHint', root).textContent); return; }
-      const month = f.month.value, opts = kind === 'bonus' ? { basis: f.basis.value, pct: +f.pct.value || 0 } : {};
+      const pv = !!(f.priv && f.priv.checked), month = f.month.value, opts = kind === 'bonus' ? { basis: f.basis.value, pct: +f.pct.value || 0, priv: pv } : { priv: pv };
       const lines = buildLines(kind, month, opts);
       if (!lines.length) { toast('No active staff were on payroll in that month.'); return; }
-      const data = { kind, month, label: kind === 'bonus' ? f.label.value : '', basis: opts.basis || '', pct: opts.pct || 0, lines, status: 'draft' };
-      const id = kind === 'salary' ? 'S' + month.replace('-', '') : 'B' + newId().slice(0, 12);
+      const data = { kind, month, label: kind === 'bonus' ? f.label.value : '', basis: opts.basis || '', pct: opts.pct || 0, lines, status: 'draft', ...(pv ? { priv: true } : {}) };
+      const id = kind === 'salary' ? (pv ? 'P' : 'S') + month.replace('-', '') : 'B' + newId().slice(0, 12);
       if (await run(() => setDoc('payruns', id, data, false), 'Sheet prepared')) { const r = S.payruns.find(x => x.id === id); if (r) runSheet(r); } });
   });
 }

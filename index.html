@@ -4323,8 +4323,19 @@ function viewSetup(){
       h('li',{text:'Everyone can pick a profile icon from 30 options (tap your picture at the top left). Each icon belongs to one person at a time; the Principal can reset anyone’s.'}),
       h('li',{text:'A completed task is locked: only the Principal and the COO can reopen it, edit it or correct its completion date, and each needs a written reason kept in the history. Client feedback after completion is added with “+ Client revision”, which creates a linked revision task with its own submission date; the original on-time record stays.'}),
       h('li',{text:'Nothing is deleted. Archived tasks keep their full history and can be restored.'})))));
+  if(own&&finOn()) out.push(salPrivSec());
   return out;
 }
+/* Settings › Salaries only I see (Principal only): hidden from the COO in SLATE OS and Finance, enforced in the database */
+function salPrivSec(){ loadFeeFin(); const F=S.feeFin;
+  const body=!F||F.state!=='ok'?h('p',{class:'muted',style:'margin:0',text:F&&F.state==='err'?'Couldn’t load Finance.':'Loading…'}):(()=>{ const rows=hrRows().filter(r=>r.st);
+    if(!rows.length) return h('p',{class:'muted',style:'margin:0',text:'No salaries recorded yet. Set them in Business › HR first.'});
+    return h('div',{class:'list'},rows.map(r=>h('label',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;cursor:pointer'},
+      h('input',{type:'checkbox',style:'width:auto',checked:!!r.st.principalOnly,onchange:e=>{ const on=e.target.checked, st=r.st, {id,...rest}=st;
+        run(async()=>{ const {data:o,error}=await window.slateSupabase.from('fin_docs').update({data:{...rest,principalOnly:on}}).eq('path','staff/'+id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Not saved'); await loadFeeFin(true); },on?'Now only you see this salary':'The COO can see this salary again'); }}),
+      h('div',{},h('div',{style:'font-weight:500',text:r.name}),h('div',{class:'f-hint',style:'margin:0',text:[r.role||r.st.designation,r.gross?taka(r.gross)+' a month':''].filter(Boolean).join(' · ')})))));})();
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Salaries only I see'})),
+    h('p',{class:'f-hint',style:'margin:0 0 8px',text:'Tick a person to hide their salary from the COO everywhere: Business › HR, Finance staff, advances, salary sheets and the change log. Pay ticked people on a separate private salary sheet in Finance. The COO sees only that their salary is private, not the amount. Nobody is ticked unless you tick them.'}),body); }
 
 /* ---------- sheet ---------- */
 function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
@@ -6809,11 +6820,12 @@ const salRate=(st,ym)=>{ const rs=(st&&st.rates)||[]; ym=ym||today().slice(0,7);
 const ymLabel=ym=>ym?MON[+ym.slice(5,7)-1]+' '+ym.slice(0,4):'';
 const staffOfUser=uid=>{ const F=S.feeFin; return F&&F.state==='ok'?(F.staff||[]).find(x=>x.userId===uid)||null:null; };
 function hrRows(){ const F=S.feeFin, staff=(F&&F.staff)||[];
-  const os=people().filter(id=>S.members[id]||id===ownerId()).map(id=>({uid:id,name:nameOf(id),role:roleOf(id),team:id===ownerId()?'Principal':teamOf(id),st:staff.find(x=>x.userId===id)||null}));
-  const extra=staff.filter(x=>!x.userId||!os.some(o=>o.uid===x.userId)).map(x=>({uid:'',name:x.name,role:x.designation||'',team:x.userId?'Left SLATE OS':'Not in SLATE OS',st:x}));
+  const chalk=id=>isChalkP(id)||isChalkLead(id), priv=(F&&F.priv)||[];
+  const os=people().filter(id=>(S.members[id]||id===ownerId())&&!chalk(id)).map(id=>({uid:id,name:nameOf(id),role:roleOf(id),team:id===ownerId()?'Principal':teamOf(id),st:staff.find(x=>x.userId===id)||null,hid:priv.includes(id)&&!staff.some(x=>x.userId===id)}));
+  const extra=staff.filter(x=>(!x.userId||!os.some(o=>o.uid===x.userId))&&!(x.userId&&chalk(x.userId))).map(x=>({uid:'',name:x.name,role:x.designation||'',team:x.userId?'Left SLATE OS':'Not in SLATE OS',st:x}));
   return [...os,...extra].map(r=>({...r,rate:salRate(r.st),gross:salGross(salRate(r.st)),active:!r.st||r.st.active!==false})); }
 function viewHR(){
-  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'Salaries and HR details, set here. Finance payroll uses these numbers; edit them here, not in Finance.'})),
+  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'Salaries and HR details, set here. Finance payroll uses these numbers; edit them here, not in Finance. Chalk Create is kept separate.'})),
     S.canWrite?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openSal(null,''),text:'Add someone not in SLATE OS'})):null),bizSeg()];
   if(!finOn()){ out.push(h('p',{class:'muted',text:'Salaries need Finance access. Sign in again if you have just been given it.'})); return out; }
   loadFeeFin(); const F=S.feeFin;
@@ -6821,7 +6833,7 @@ function viewHR(){
   if(F.state==='err'){ out.push(h('p',{class:'err',text:'Couldn’t load Finance: '+F.err}),h('button',{class:'btn',type:'button',onclick:()=>loadFeeFin(true),text:'Try again'})); return out; }
   const rows=hrRows(), act=rows.filter(r=>r.st&&r.active&&r.gross), ym=today().slice(0,7), in30=addDays(today(),30);
   const total=act.reduce((a,r)=>a+r.gross,0), tax=act.reduce((a,r)=>a+(+((r.rate||{}).tax)||0),0);
-  const noSal=rows.filter(r=>r.uid&&r.uid!==ownerId()&&!r.gross), incDue=rows.filter(r=>r.st&&r.active&&r.st.incrementDue&&r.st.incrementDue<=ym), prob=rows.filter(r=>r.st&&r.active&&r.st.probationEnd&&r.st.probationEnd<=in30&&!r.st.confirmedOn);
+  const noSal=rows.filter(r=>r.uid&&r.uid!==ownerId()&&!r.gross&&!r.hid), incDue=rows.filter(r=>r.st&&r.active&&r.st.incrementDue&&r.st.incrementDue<=ym), prob=rows.filter(r=>r.st&&r.active&&r.st.probationEnd&&r.st.probationEnd<=in30&&!r.st.confirmedOn);
   out.push(h('div',{class:'kpis kpis5'},kpi('Monthly payroll',bdt(total)),kpi('People paid',act.length),kpi('Tax deducted',bdt(tax)),kpi('No salary set',noSal.length,noSal.length?'late':''),kpi('Increment or probation due',incDue.length+prob.length,incDue.length+prob.length?'overdue':'')));
   const teams=[...new Set(act.map(r=>r.team))].sort();
   if(teams.length) out.push(h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line);margin-bottom:12px'},h('table',{},h('thead',{},h('tr',{},['Team','People','Monthly gross','Share'].map((x,i)=>h('th',{style:i?'text-align:right':'',text:x})))),
@@ -6834,8 +6846,8 @@ function viewHR(){
   if(!list.length){ out.push(h('p',{class:'muted',text:'No one matches.'})); return out; }
   out.push(h('div',{class:'pgrid'},list.map(r=>{ const st=r.st, rs=((st&&st.rates)||[]).slice().sort((a,b)=>a.from.localeCompare(b.from)), last=rs[rs.length-1], prev=rs[rs.length-2];
     const flag=st&&st.incrementDue&&st.incrementDue<=ym?['Increment due','late']:st&&st.probationEnd&&st.probationEnd<=in30&&!st.confirmedOn?['Probation ends '+fmtD(st.probationEnd),'overdue']:null;
-    return h('button',{class:'pcard',type:'button',onclick:()=>openSal(st?st.id:null,r.uid)},
-      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:podLabel(r.team)||r.team}),flag?h('span',{class:'pill s-'+flag[1],text:flag[0]}):!r.active?h('span',{class:'pill s-open',text:'Inactive'}):!r.gross&&r.uid!==ownerId()?h('span',{class:'pill s-late',text:'No salary set'}):null),
+    return h('button',{class:'pcard',type:'button',onclick:()=>r.hid?toast('This salary is private to the Principal.'):openSal(st?st.id:null,r.uid)},
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:podLabel(r.team)||r.team}),r.hid?h('span',{class:'pill s-open',text:'Private to the Principal'}):st&&st.principalOnly?h('span',{class:'pill s-open',text:'Only you'}):flag?h('span',{class:'pill s-'+flag[1],text:flag[0]}):!r.active?h('span',{class:'pill s-open',text:'Inactive'}):!r.gross&&r.uid!==ownerId()?h('span',{class:'pill s-late',text:'No salary set'}):null),
       h('div',{class:'pc-name',text:r.name}),
       h('div',{class:'pc-meta',text:[r.role||(st&&st.designation),st&&st.joinDate?'joined '+fmtD(st.joinDate):''].filter(Boolean).join(' · ')}),
       h('div',{class:'pc-row'},h('b',{text:r.gross?taka(r.gross)+' a month':'—'}),h('span',{class:'muted',text:last&&prev?`+${taka(salGross(last)-salGross(prev))} from ${ymLabel(last.from)}`:last?'since '+ymLabel(last.from):''}))); })));
@@ -6934,7 +6946,8 @@ async function loadFeeFin(force){
     const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts','workorders','wopays','staff']);
     if(error) throw error;
     const fp={},inv=[],rec=[],wo=[],wp=[],staff=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else if(r.coll==='staff') staff.push(d); else wp.push(d); });
-    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,at:Date.now(),err:''});
+    let priv=[]; try{ const pr=await sb.rpc('fin_private_people'); if(!pr.error&&Array.isArray(pr.data)) priv=pr.data; }catch(e){}
+    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,at:Date.now(),err:''});
   }catch(e){ F.state='err'; F.err=(e&&e.message)||String(e); }
   if(S.view==='biz') render(true); if(S.sheet&&['fee','sal'].includes(S.sheet.type)) renderSheet(); }
 /* the Finance record for an OS project: linked by osId, else by the same code */
