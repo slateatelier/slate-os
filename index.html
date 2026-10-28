@@ -7277,7 +7277,8 @@ function pvCalc(per,R){
   const P={}; ids.forEach(id=>{ P[id]={id,name:nameOf(id),team:teamOf(id),role:roleOf(id),coo:id===coo,ctc:0,sal:0,bonus:0,oh:0,noSal:!stOf(id),pts:0,ptsC:0,ptsS:0,feeW:0,feeL:0,feeM:0,due:[]}; });
   for(const ym of months){ const on=ids.filter(id=>{ const st=stOf(id); if(!st||st.active===false) return false; if(st.joinDate&&st.joinDate.slice(0,7)>ym) return false; return salGross(salRate(st,ym))>0; });
     /* support staff left out of the matrix are a studio overhead: their cost is shared like running costs */
-    const sup=outIds.reduce((a,id)=>{ const st=stOf(id); if(!st||st.active===false||(st.joinDate&&st.joinDate.slice(0,7)>ym)) return a; const r=salRate(st,ym); return a+salGross(r)+(+((r||{}).basic)||0)*2/12; },0);
+    const supSt=[...outIds.map(stOf).filter(Boolean),...(F.staff||[]).filter(x=>!x.userId||!S.members[x.userId])]; /* + staff with no SLATE OS login (e.g. accounts, office) */
+    const sup=supSt.reduce((a,st)=>{ if(st.active===false||(st.joinDate&&st.joinDate.slice(0,7)>ym)) return a; const r=salRate(st,ym); return a+salGross(r)+(+((r||{}).basic)||0)*2/12; },0);
     const ohEach=R.oh&&on.length?(runOf(ym)+sup)/on.length:0;
     on.forEach(id=>{ const r=salRate(stOf(id),ym), g=salGross(r), b=(+r.basic||0)*2/12; const x=P[id]; x.sal+=g; x.bonus+=b; x.oh+=ohEach; x.ctc+=g+b+ohEach; }); }
   /* work */
@@ -7331,7 +7332,7 @@ function viewValue(){
         h('div',{class:'pv-who'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px',text:'Who is in the matrix'}),
           people().filter(pvBase).sort((a,b)=>Number(pvDefIn(b))-Number(pvDefIn(a))||nameOf(a).localeCompare(nameOf(b))).map(id=>h('label',{class:'pv-rule'},h('input',{type:'checkbox',checked:pvIn(id,R),onchange:e=>{ setR('pick',{...(R.pick||{}),[id]:e.target.checked}); }}),
             h('span',{text:nameOf(id)}),h('span',{class:'muted',style:'font-size:12px',text:(isCOO(id)?'COO':roleOf(id)||'')+(pvDefIn(id)?'':' · support staff')}))),
-          h('p',{class:'f-hint',style:'margin:2px 0 0',text:'Support staff are left out by default. When someone is left out, their salary is shared into everyone else’s cost, like rent.'})),
+          h('p',{class:'f-hint',style:'margin:2px 0 0',text:'Support staff are left out by default. When someone is left out, their salary is shared into everyone else’s cost, like rent. So are salaries in HR for people without a SLATE OS login.'})),
         h('p',{class:'f-hint',style:'margin:4px 0 0',text:'Cost to company = gross + Eid bonuses spread over the year (2 × basic ÷ 12) + an equal share of running costs. Fee = fee billed in the period, before VAT. Each project’s fee goes: POD leader share to its lead, COO share to the COO, the rest by work points (task weight × on-time credit) on that project. You and Chalk Create are left out. These rules are saved on this device.'}))));
   const rows=D.rows;
   if(!rows.length){ out.push(h('p',{class:'muted',text:'No salaries or finished work in this period yet. Enter salaries in HR and bill projects in Finance, and this fills in.'})); return out; }
