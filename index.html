@@ -6951,7 +6951,7 @@ const salRate=(st,ym)=>{ const rs=(st&&st.rates)||[]; ym=ym||today().slice(0,7);
 const ymLabel=ym=>ym?MON[+ym.slice(5,7)-1]+' '+ym.slice(0,4):'';
 const staffOfUser=uid=>{ const F=S.feeFin; return F&&F.state==='ok'?(F.staff||[]).find(x=>x.userId===uid)||null:null; };
 function hrRows(){ const F=S.feeFin, staff=(F&&F.staff)||[];
-  const chalk=id=>isChalkP(id)||isChalkLead(id), priv=(F&&F.priv)||[];
+  const chalk=id=>isChalkP(id), priv=(F&&F.priv)||[];
   const os=people().filter(id=>(S.members[id]||id===ownerId())&&!chalk(id)).map(id=>({uid:id,name:nameOf(id),role:roleOf(id),team:id===ownerId()?'Principal':teamOf(id),st:staff.find(x=>x.userId===id)||null,hid:priv.includes(id)&&!staff.some(x=>x.userId===id)}));
   const extra=staff.filter(x=>(!x.userId||!os.some(o=>o.uid===x.userId))&&!(x.userId&&chalk(x.userId))).map(x=>({uid:'',name:x.name,role:x.designation||'',team:x.userId?'Left SLATE OS':'Not in SLATE OS',st:x}));
   return [...os,...extra].map(r=>({...r,rate:salRate(r.st),gross:salGross(salRate(r.st)),active:!r.st||r.st.active!==false})); }
