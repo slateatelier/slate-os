@@ -549,6 +549,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .biz-sec{margin:20px 0 8px}.biz-sec .linkbtn{margin-left:auto;background:none;border:0;padding:0;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .biz-needs{display:grid;gap:8px}.biz-need{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font:inherit;color:inherit;cursor:pointer}
 .biz-need:hover{border-color:#C7C7CC}.biz-need .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--late)}.biz-need .dot.s-overdue{background:var(--overdue)}.biz-need .bn-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.biz-need .bn-t .muted{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-rules{display:grid;gap:10px;padding:10px 2px 4px}.pv-rule{display:flex;align-items:center;gap:8px;font-size:13.5px}.pv-rule input[type=number]{width:72px;padding:6px 8px}.pv-rule>span:first-child{flex:1}
+.pv-hls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pv-hl{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}.pv-hn{font-weight:600;font-size:17px;margin-top:6px}.pv-hv{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:2px 0}
+@media (max-width:640px){.pv-hls{grid-template-columns:1fr}}.pv-mx{width:100%;height:auto;display:block}.pv-tbl td.r{text-align:right}.pv-tbl td,.pv-tbl th{white-space:nowrap}.pv-tbl td:first-child{white-space:normal;min-width:150px}
 .biz-more{margin:10px 0 4px}.biz-more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 2px;list-style:none}.biz-more summary::-webkit-details-marker{display:none}.biz-more summary::before{content:'＋ '}.biz-more[open] summary::before{content:'− '}.biz-more .kpis{margin-top:8px}
 @media (max-width:640px){.biz-act .btn{padding-left:12px;padding-right:12px}.kpis.kpis5 .kpi .num{font-size:21px;letter-spacing:-.01em}}
 .tl-card{gap:10px}
@@ -7195,8 +7198,8 @@ function feeStats(fr){ const F=S.feeFin, fee=+((fr||{}).fee)||0; if(!fr||!F||F.s
   return {fee,billed,col,due:Math.max(0,billed-col),unb:Math.max(0,fee-billed)}; }
 const msLocked=(fr,m)=>!!fr&&!!S.feeFin&&S.feeFin.inv.some(i=>i.projectId===fr.id&&i.milestoneId===m.id&&i.status!=='void');
 function bizHead(lead,action){ const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl, ph=window.innerWidth<=640, d=n=>n?' · '+n+(ph?'':' due'):'';
-  const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'})),action?h('div',{class:'biz-act'},action):null),
-    h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['fees','Fees'],['hr','HR'],['admin','Admin']],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
+  const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:S.biz.tab==='value'?'Only you':'Only you and the COO'}),h('h1',{class:'h1',text:'Business'})),action?h('div',{class:'biz-act'},action):null),
+    h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['fees','Fees'],['hr','HR'],['admin','Admin'],...(S.uid===ownerId()?[['value',ph?'Value':'People value']]:[])],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
   if(lead) out.push(h('p',{class:'f-hint biz-lead',text:lead}));
   return out; }
 /* totals behind Fees and the Overview */
@@ -7241,10 +7244,150 @@ function viewBizOver(){
   if(money) out.push(...money);
   out.push(sec('Pipeline','open now',go('leads')),h('div',{class:'kpis kpis4'},kpi('Open leads',leads.length),kpi('Open proposals',props.length),kpi('Proposed value',propV?bdt(propV):'—',null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'lump-sum proposals'})),kpi('Win rate',won.length+lost.length?Math.round(won.length/(won.length+lost.length)*100)+'%':'—')));
   return out; }
+/* ---------- People value (Principal only): what each person costs SLATE against the fees their work earns ----------
+   Rules (Oct 2026):
+   · Cost to company (CTC) a month = gross + Eid bonus spread over the year (2 × basic ÷ 12) + an equal share of the studio's running costs.
+   · Fee = fee billed in the period (issued invoices, before VAT). Each project's billed fee is shared out:
+       POD leader share (default 15%) to the project lead, management share (default 5%) to the COO,
+       the rest by quality-adjusted work points (task weight × on-time credit) on that project in the period
+       (if no work was logged on it in the period, by the work logged on it before).
+   · The Principal and Chalk Create are left out. Studio work counts for points but earns no fee. */
+const PV_DEF={lead:15,coo:5,oh:true,bench:2.5};
+function pvRules(){ let r={}; try{ r=JSON.parse(localStorage.getItem('slate-pv')||'{}')||{}; }catch(e){} return {...PV_DEF,...r}; }
+function pvSave(r){ try{ localStorage.setItem('slate-pv',JSON.stringify(r)); }catch(e){} }
+function pvMonths(per){ const cur=today().slice(0,7), y=+cur.slice(0,4), m=+cur.slice(5,7), qs=ymAdd(cur,-((m-1)%3));
+  const rng=(a,b)=>{ const o=[]; for(let x=a;x<=b;x=ymAdd(x,1)) o.push(x); return o; };
+  if(per==='lq') return rng(ymAdd(qs,-3),ymAdd(qs,-1));
+  if(per==='6m') return rng(ymAdd(cur,-5),cur);
+  if(per==='12m') return rng(ymAdd(cur,-11),cur);
+  if(per==='fy') return rng((m>=7?y:y-1)+'-07',cur);
+  return rng(qs,cur); }
+function pvCalc(per,R){
+  const F=S.feeFin, months=pvMonths(per), s=months[0]+'-01', last=months[months.length-1], e=last===today().slice(0,7)?today():addDays(ymAdd(last,1)+'-01',-1);
+  const own=ownerId(), coo=people().find(id=>isCOO(id))||null;
+  const inTeam=id=>!!id&&id!==own&&!isChalkP(id)&&!!(S.members[id]);
+  const ids=people().filter(inTeam);
+  /* cost */
+  const stOf=id=>(F.staff||[]).find(x=>x.userId===id)||null;
+  const runOf=ym=>(F.rec2||[]).filter(x=>recOn(x,ym)).reduce((a,x)=>a+(x.kind==='rent'?rentPlan(x,ym).rent:recExpect(x,ym)),0);
+  const P={}; ids.forEach(id=>{ P[id]={id,name:nameOf(id),team:teamOf(id),role:roleOf(id),coo:id===coo,ctc:0,sal:0,bonus:0,oh:0,noSal:!stOf(id),pts:0,ptsC:0,ptsS:0,feeW:0,feeL:0,feeM:0,due:[]}; });
+  for(const ym of months){ const on=ids.filter(id=>{ const st=stOf(id); if(!st||st.active===false) return false; if(st.joinDate&&st.joinDate.slice(0,7)>ym) return false; return salGross(salRate(st,ym))>0; });
+    const ohEach=R.oh&&on.length?runOf(ym)/on.length:0;
+    on.forEach(id=>{ const r=salRate(stOf(id),ym), g=salGross(r), b=(+r.basic||0)*2/12; const x=P[id]; x.sal+=g; x.bonus+=b; x.oh+=ohEach; x.ctc+=g+b+ohEach; }); }
+  /* work */
+  const T=Object.entries(S.tasks||{}).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.unscored&&!isChalkTask(t)&&inTeam(t.assignee));
+  const earn=t=>{ const c=creditOf(t); return c==null?0:weightOf(t)*c; };
+  const done=T.filter(t=>t.doneAt&&t.doneAt>=s&&t.doneAt<=e&&!t.legacy);
+  done.forEach(t=>{ const p=S.projects[t.projectId], w=earn(t); P[t.assignee].pts+=w; if(isStudioWP(p)) P[t.assignee].ptsS+=w; else P[t.assignee].ptsC+=w; });
+  T.filter(t=>t.target&&t.target>=s&&t.target<=e&&!t.legacy).forEach(t=>P[t.assignee].due.push(t));
+  ids.forEach(id=>{ const ds=P[id].due.filter(t=>creditOf(t)!=null), ok=ds.filter(t=>['early','ontime'].includes(status(t))).length; P[id].rel=ds.length?ok/ds.length:null; P[id].nDue=ds.length; });
+  /* fee billed in the period, by OS project */
+  const fin2os={}; Object.entries(S.projects||{}).forEach(([pid,p])=>{ const fr=feeRecOf({...p,id:pid}); if(fr) fin2os[fr.id]=pid; });
+  const st=i=>i.status==='void'?'void':(i.status==='draft'||!i.status)?'draft':'issued';
+  const billed={}; let unlinked=0;
+  (F.inv||[]).filter(i=>st(i)==='issued'&&i.date&&i.date>=s&&i.date<=e).forEach(i=>{ const net=i.net!=null?+i.net:+i.amount||0, pid=fin2os[i.projectId];
+    if(pid&&!isChalkProj(S.projects[pid])) billed[pid]=(billed[pid]||0)+net; else unlinked+=net; });
+  const proj=[]; let unatt=0;
+  for(const [pid,B] of Object.entries(billed)){ const p=S.projects[pid];
+    const lead=(p.std&&p.std.lead)||personFor('lead',p.pod)||'';
+    const L=inTeam(lead)?B*R.lead/100:0, M=coo?B*R.coo/100:0, rest=B-L-M;
+    if(L) P[lead].feeL+=L; if(M) P[coo].feeM+=M;
+    let pool=done.filter(t=>t.projectId===pid), basis='period';
+    if(!pool.length){ pool=T.filter(t=>t.projectId===pid&&t.doneAt&&t.doneAt<=e); basis='earlier'; }
+    const tot=pool.reduce((a,t)=>a+earn(t),0), by={};
+    if(tot>0) pool.forEach(t=>{ const v=rest*earn(t)/tot; P[t.assignee].feeW+=v; by[t.assignee]=(by[t.assignee]||0)+v; }); else unatt+=rest;
+    proj.push({pid,p,B,lead,basis:tot>0?basis:'none',by}); }
+  /* labour cost of each client project: each person's cost × their share of points on it */
+  const cost={}; done.forEach(t=>{ const x=P[t.assignee]; if(!x.pts||!x.ctc) return; cost[t.projectId]=(cost[t.projectId]||0)+x.ctc*earn(t)/x.pts; });
+  const projRows=Object.keys({...billed,...cost}).map(pid=>({p:S.projects[pid],pid,B:billed[pid]||0,C:cost[pid]||0,info:proj.find(x=>x.pid===pid)})).filter(x=>x.p&&!isStudioWP(x.p));
+  const studioCost=Object.entries(cost).filter(([pid])=>isStudioWP(S.projects[pid])).reduce((a,[,v])=>a+v,0);
+  const idleCost=ids.reduce((a,id)=>a+(P[id].pts?0:P[id].ctc),0);
+  const rows=ids.map(id=>{ const x=P[id]; x.fee=x.feeW+x.feeL+x.feeM; x.mult=x.ctc?x.fee/x.ctc:null; x.contrib=x.fee-x.ctc; x.cpp=x.pts?x.ctc/(x.pts*10):null; return x; })
+    .filter(x=>x.ctc||x.pts||x.fee);
+  const totB=Object.values(billed).reduce((a,v)=>a+v,0)+unlinked, totC=rows.reduce((a,x)=>a+x.ctc,0);
+  return {months,s,e,rows,projRows,totB,totC,unlinked,unatt,studioCost,idleCost,coo}; }
+function viewValue(){
+  if(S.uid!==ownerId()){ S.biz.tab='over'; return viewBizOver(); }
+  const B=S.biz, R=pvRules(), out=[...bizHead('Only you see this. What each person costs SLATE against the fees their work earns: cost to company, fee earned, value multiple and project labour margins.',null)];
+  if(!finOn()){ out.push(h('p',{class:'muted',text:'This needs Finance access.'})); return out; }
+  loadFeeFin(); const F=S.feeFin;
+  if(!F||F.state!=='ok'){ out.push(h('p',{class:F&&F.state==='err'?'err':'muted',text:F&&F.state==='err'?'Couldn’t load Finance: '+F.err:'Loading…'})); return out; }
+  const per=B.pv||(B.pv='q'), D=pvCalc(per,R);
+  const tk=n=>n?bdt(n):'—', x2=v=>v==null?'—':(Math.round(v*10)/10).toFixed(1)+'×', pc=v=>v==null?'—':Math.round(v*100)+'%';
+  const setR=(k,v)=>{ const n={...R,[k]:v}; pvSave(n); render(true); };
+  const num=(k,lbl,max)=>h('label',{class:'pv-rule'},h('span',{text:lbl}),h('input',{type:'number',min:0,max,step:'1',inputmode:'numeric',value:R[k],onchange:e=>setR(k,Math.max(0,Math.min(max,+e.target.value||0)))}),h('span',{class:'muted',text:'%'}));
+  out.push(h('div',{class:'bar biz-bar'},h('div',{class:'biz-seg'},seg('Period',[['q','This quarter'],['lq','Last quarter'],['6m','6 months'],['12m','12 months'],['fy','This FY']],per,v=>{ B.pv=v; render(true); }))),
+    h('p',{class:'f-hint',style:'margin:-4px 2px 10px',text:`${ymLabel(D.months[0])} – ${ymLabel(D.months[D.months.length-1])}`}),
+    h('details',{class:'biz-more',open:!!B.pvRules,ontoggle:e=>{B.pvRules=e.target.open;}},h('summary',{text:'Rules'}),
+      h('div',{class:'pv-rules'},num('lead','POD leader share of each project’s fee',50),num('coo','COO management share of every fee',30),
+        h('label',{class:'pv-rule'},h('input',{type:'checkbox',checked:!!R.oh,onchange:e=>setR('oh',e.target.checked)}),h('span',{text:'Share the studio’s running costs into each person’s cost'})),
+        h('label',{class:'pv-rule'},h('span',{text:'Healthy value multiple'}),h('input',{type:'number',min:1,max:10,step:'0.1',value:R.bench,onchange:e=>setR('bench',Math.max(1,Math.min(10,+e.target.value||2.5)))}),h('span',{class:'muted',text:'×'})),
+        h('p',{class:'f-hint',style:'margin:4px 0 0',text:'Cost to company = gross + Eid bonuses spread over the year (2 × basic ÷ 12) + an equal share of running costs. Fee = fee billed in the period, before VAT. Each project’s fee goes: POD leader share to its lead, COO share to the COO, the rest by work points (task weight × on-time credit) on that project. You and Chalk Create are left out. These rules are saved on this device.'}))));
+  const rows=D.rows;
+  if(!rows.length){ out.push(h('p',{class:'muted',text:'No salaries or finished work in this period yet. Enter salaries in HR and bill projects in Finance, and this fills in.'})); return out; }
+  const team=rows.reduce((a,x)=>a+x.fee,0), mult=D.totC?team/D.totC:null, cli=D.projRows.reduce((a,x)=>a+x.C,0), marg=D.totB?(D.totB-D.totC)/D.totB:null;
+  out.push(h('div',{class:'kpis kpis5'},kpi('Fee billed',tk(D.totB),'early'),kpi('Team cost',tk(D.totC)),kpi('Team value multiple',x2(mult),mult==null?'':mult>=R.bench?'ontime':mult>=1.5?'late':'overdue'),kpi('Margin after team cost',pc(marg),marg==null?'':marg>0?'ontime':'overdue'),kpi('Fee not shared out',tk(D.unatt+D.unlinked),D.unatt+D.unlinked>1?'late':'')));
+  const notes=[]; if(D.unlinked>1) notes.push(`${bdt(D.unlinked)} was billed on Finance projects not linked to SLATE OS.`); if(D.unatt>1) notes.push(`${bdt(D.unatt)} was billed on projects with no finished work logged, so only the leader and COO shares were given out.`);
+  const noSal=rows.filter(x=>x.noSal); if(noSal.length) notes.push('No salary in HR yet: '+noSal.map(x=>x.name).join(', ')+'. Their cost shows as nothing, so their multiple can’t be judged.');
+  if(notes.length) out.push(h('p',{class:'f-hint',style:'margin:8px 2px 0',text:notes.join(' ')}));
+  /* highlights */
+  const ok=rows.filter(x=>x.ctc>0), best=(a,f)=>a.slice().sort((p,q)=>f(q)-f(p))[0];
+  const tp=best(ok,x=>x.contrib), tm=best(ok.filter(x=>x.fee>0),x=>x.mult), tf=best(rows.filter(x=>x.pts>0),x=>x.pts*(x.rel==null?1:0.5+0.5*x.rel));
+  const hl=(lbl,x,val,sub)=>h('div',{class:'pv-hl'},h('div',{class:'lbl',text:lbl}),h('div',{class:'pv-hn',text:x?x.name:'—'}),h('div',{class:'pv-hv',text:x?val(x):''}),h('div',{class:'muted',style:'font-size:12px',text:x?sub(x):'Not enough data yet'}));
+  out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Top of the team'})),h('div',{class:'pv-hls'},
+    hl('Most profitable',tp,x=>(x.contrib>=0?'+':'−')+bdt(Math.abs(x.contrib)),x=>`earned ${tk(x.fee)} · cost ${tk(x.ctc)}`),
+    hl('Best value multiple',tm,x=>x2(x.mult),x=>`${tk(x.fee)} earned on ${tk(x.ctc)} cost`),
+    hl('Top performer',tf,x=>(Math.round(x.pts*10)/10).toFixed(1)+' points',x=>pc(x.rel)+' on time'+(x.nDue?` · ${x.nDue} task${x.nDue>1?'s':''} due`:''))));
+  /* matrix */
+  out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Value matrix'}),h('span',{class:'cnt',text:'value multiple × on-time'})),pvMatrix(rows.filter(x=>x.ctc>0),R.bench));
+  /* ranking */
+  const sk=B.pvSort||'contrib', srt=rows.slice().sort((a,b)=>(b[sk]??-1e12)-(a[sk]??-1e12));
+  const th=(k,l)=>h('th',{style:'text-align:right;cursor:pointer;white-space:nowrap'+(sk===k?';color:var(--ink)':''),onclick:()=>{ B.pvSort=k; render(true); },text:l+(sk===k?' ↓':'')});
+  out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Everyone'}),h('span',{class:'cnt',text:'tap a column to sort'})),
+    h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'pv-tbl'},h('thead',{},h('tr',{},h('th',{text:'Person'}),th('ctc','Cost to company'),th('pts','Points'),th('rel','On time'),th('fee','Fee earned'),th('mult','Multiple'),th('contrib','Contribution'),th('cpp','Cost per 0.1 pt'))),
+      h('tbody',{},srt.map(x=>h('tr',{},h('td',{},h('b',{text:x.name}),h('div',{class:'muted',style:'font-size:12px',text:[x.coo?'COO':podLabel(x.team)||x.team,x.feeL?'lead share '+bdt(x.feeL):'',x.feeM?'management share '+bdt(x.feeM):''].filter(Boolean).join(' · ')})),
+        h('td',{class:'mono r',text:x.noSal?'no salary':tk(Math.round(x.ctc))}),h('td',{class:'mono r',text:x.pts?(Math.round(x.pts*10)/10).toFixed(1):'—'}),h('td',{class:'mono r',text:pc(x.rel)}),
+        h('td',{class:'mono r',text:tk(Math.round(x.fee))}),h('td',{class:'mono r',style:x.mult==null?'':'color:var('+(x.mult>=R.bench?'--ontime':x.mult>=1.5?'--late':'--overdue')+')',text:x2(x.mult)}),
+        h('td',{class:'mono r',text:x.ctc?(x.contrib>=0?'+':'−')+bdt(Math.abs(x.contrib)):'—'}),h('td',{class:'mono r',text:x.cpp?taka(Math.round(x.cpp)):'—'})))))));
+  /* projects */
+  const pr=D.projRows.slice().sort((a,b)=>((a.B?(a.B-a.C)/a.B:-9)-(b.B?(b.B-b.C)/b.B:-9)));
+  out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Project labour margin'}),h('span',{class:'cnt',text:'worst first'})));
+  if(!pr.length) out.push(h('p',{class:'muted',style:'margin:0 2px',text:'No client project was billed or worked on in this period.'}));
+  else out.push(h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'pv-tbl'},h('thead',{},h('tr',{},['Project','Fee billed','Team cost','Margin','Who earned most'].map((l,i)=>h('th',{style:i?'text-align:right':'',text:l})))),
+    h('tbody',{},pr.map(x=>{ const m=x.B?(x.B-x.C)/x.B:null, top=x.info?Object.entries(x.info.by).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([id])=>nameOf(id)).join(', '):'';
+      return h('tr',{},h('td',{},h('b',{text:x.p.name}),h('div',{class:'muted mono',style:'font-size:11.5px',text:(x.p.code||'')+(x.info&&x.info.basis==='earlier'?' · shared by earlier work':x.info&&x.info.basis==='none'?' · no work logged':'')})),
+        h('td',{class:'mono r',text:tk(Math.round(x.B))}),h('td',{class:'mono r',text:tk(Math.round(x.C))}),
+        h('td',{class:'mono r',style:m==null?'':'color:var('+(m>=0.5?'--ontime':m>=0?'--late':'--overdue')+')',text:x.B?pc(m):'not billed'}),h('td',{class:'r',style:'font-size:12.5px',text:top||'—'})); })))));
+  if(D.studioCost>1||D.idleCost>1) out.push(h('p',{class:'f-hint',style:'margin:8px 2px 0',text:[D.studioCost>1?`Studio work cost ${bdt(D.studioCost)} (no fee).`:'',D.idleCost>1?`${bdt(D.idleCost)} of cost had no finished work logged in the period.`:''].filter(Boolean).join(' ')}));
+  /* pods */
+  const pods=new Map(); rows.forEach(x=>{ const k=x.coo?'Principal’s Office':/^pod\b/i.test(x.team)?x.team:x.team||'Other'; if(!pods.has(k)) pods.set(k,{k,ctc:0,fee:0,pts:0,n:0}); const g=pods.get(k); g.ctc+=x.ctc; g.fee+=x.fee; g.pts+=x.pts; g.n++; });
+  const pl=[...pods.values()].sort((a,b)=>(b.fee-b.ctc)-(a.fee-a.ctc));
+  out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'By POD and team'})),h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'pv-tbl'},h('thead',{},h('tr',{},['Team','People','Cost','Fee earned','Multiple','Contribution'].map((l,i)=>h('th',{style:i?'text-align:right':'',text:l})))),
+    h('tbody',{},pl.map(g=>{ const m=g.ctc?g.fee/g.ctc:null; return h('tr',{},h('td',{text:podLabel(g.k)||g.k}),h('td',{class:'mono r',text:String(g.n)}),h('td',{class:'mono r',text:tk(Math.round(g.ctc))}),h('td',{class:'mono r',text:tk(Math.round(g.fee))}),
+      h('td',{class:'mono r',style:m==null?'':'color:var('+(m>=R.bench?'--ontime':m>=1.5?'--late':'--overdue')+')',text:x2(m)}),h('td',{class:'mono r',text:g.ctc?(g.fee>=g.ctc?'+':'−')+bdt(Math.abs(g.fee-g.ctc)):'—'})); })))));
+  out.push(h('p',{class:'f-hint',style:'margin:14px 2px 0',text:'Read with care: the figures are only as good as task weights and logged work. POD leaders’ coordination shows through the leader share, not points. Junior salaries are low, so their multiples run high; read the multiple with points. Use a full quarter or more before judging anyone.'}));
+  return out; }
+function pvMatrix(rows,bench){
+  const ph=window.innerWidth<=640, W=ph?380:640,H=ph?300:340,L=40,Rr=14,T=10,Bm=40, maxX=Math.max(bench*2,...rows.map(x=>x.mult||0))*1.08, X=v=>L+(Math.min(v,maxX)/maxX)*(W-L-Rr), Y=v=>T+22+(1-Math.min(v,1))*(H-T-22-Bm);
+  const NS='http://www.w3.org/2000/svg', el=(n,a,txt)=>{ const e=document.createElementNS(NS,n); for(const k in a) e.setAttribute(k,a[k]); if(txt!=null) e.textContent=txt; return e; };
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,class:'pv-mx',role:'img','aria-label':'Value matrix'});
+  const bx=X(bench), by=Y(0.9);
+  svg.append(el('rect',{x:bx,y:T,width:W-Rr-bx,height:by-T,fill:'rgba(52,199,89,.08)'}),el('rect',{x:L,y:by,width:bx-L,height:H-Bm-by,fill:'rgba(255,59,48,.06)'}));
+  svg.append(el('line',{x1:bx,y1:T,x2:bx,y2:H-Bm,stroke:'#C7C7CC','stroke-dasharray':'4 4'}),el('line',{x1:L,y1:by,x2:W-Rr,y2:by,stroke:'#C7C7CC','stroke-dasharray':'4 4'}),el('line',{x1:L,y1:H-Bm,x2:W-Rr,y2:H-Bm,stroke:'#E5E5EA'}),el('line',{x1:L,y1:T,x2:L,y2:H-Bm,stroke:'#E5E5EA'}));
+  const lab=(x,y,t,anc)=>svg.append(el('text',{x,y,'text-anchor':anc||'start','font-size':11,fill:'#8E8E93','font-weight':600,'letter-spacing':'.04em'},t));
+  lab(W-Rr-6,T+12,'STARS','end'); lab(L+6,T+12,ph?'RELIABLE, LOW':'RELIABLE, LOW VALUE'); lab(W-Rr-6,H-Bm-8,ph?'VALUE, LATE':'HIGH VALUE, LATE','end'); lab(L+6,H-Bm-8,'REVIEW');
+  for(let v=0;v<=maxX;v+=maxX>8?2:1){ svg.append(el('text',{x:X(v),y:H-Bm+16,'text-anchor':'middle','font-size':11,fill:'#8E8E93'},v+'×')); }
+  [0,0.5,0.9,1].forEach(v=>svg.append(el('text',{x:L-6,y:Y(v)+4,'text-anchor':'end','font-size':11,fill:'#8E8E93'},Math.round(v*100)+'%')));
+  svg.append(el('text',{x:(L+W-Rr)/2,y:H-6,'text-anchor':'middle','font-size':11,fill:'#8E8E93'},ph?'Value multiple · healthy '+bench+'×':'Value multiple (fee earned ÷ cost to company) · dashed line = healthy '+bench+'×'));
+  rows.forEach(x=>{ const cx=X(x.mult||0), cy=Y(x.rel==null?0:x.rel), good=(x.mult||0)>=bench&&(x.rel||0)>=0.9;
+    svg.append(el('circle',{cx,cy,r:6,fill:good?'#34C759':(x.mult||0)<1.5&&(x.rel||0)<0.9?'#FF3B30':'#000',stroke:'#fff','stroke-width':2}));
+    svg.append(el('text',{x:cx+(cx>W-120?-9:9),y:cy+4,'text-anchor':cx>W-120?'end':'start','font-size':12,fill:'#000'},x.name.split(' ')[0])); });
+  return h('div',{class:'w',style:'padding:10px'},svg,rows.length?null:h('p',{class:'muted',text:'Appears once people have a salary and earned fees.'})); }
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
   S.biz=S.biz||{tab:'over',q:'',st:'active'};
   if(S.biz.tab==='over') return viewBizOver();
+  if(S.biz.tab==='value') return viewValue();
   if(S.biz.tab==='leads') return viewLeads();
   if(S.biz.tab==='hr') return viewHR();
   if(S.biz.tab==='admin') return viewAdmin();
