@@ -6983,7 +6983,10 @@ async function doSup(pid,m,d){
   // the Principal and COO set dates; a POD leader proposes them and the COO approves (as for every task)
   const when=amApprover()?{target:d.on}:{proposed:d.on};
   const id=await createTask({projectId:pid,title,kind:'Task',assignee:d.who,phase:SUP_PHASE,...when,...(m==='visit'&&d.time?{time:d.time}:{}),site:{type:m,purpose,...(m==='correction'?{drawing:d.drawing.trim()}:{})},unscored:m!=='visit',note});
-  if(m==='oncall') await taskUpdate(id,{doneAt:d.on,doneBy:S.uid,stage:'done'},[{type:'done',to:d.on,note:note||'Visit recorded after the call'}]);
+  // an on-call visit is recorded as done; where verification is on it goes to the Principal or the COO like any finished work
+  if(m==='oncall'){ const t=S.tasks[id]||{projectId:pid,kind:'Task',assignee:d.who,site:{type:'oncall'},unscored:true,history:[]};
+    const r=await finishTask({...t,id},d.on,note||'Visit recorded after the call',{spawn:false});
+    if(r&&r.sent) toast('Visit recorded and sent to '+vfWho({...t,id})+' to verify'); }
 }
 /* a closed project's live account (Principal and COO): what is left to bill and to collect */
 function acctBox(p){ if(!finOn()) return null; acctLoad(); if(!S.acct) return null; const a=acctOf(p);
