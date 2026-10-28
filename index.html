@@ -381,6 +381,13 @@ main.wide{max-width:1160px}
 .chk{width:24px;height:24px;border-radius:50%;border:2px solid var(--faint);background:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;cursor:pointer;padding:0;align-self:center;flex:none}
 .chk:hover{border-color:var(--ontime);background:#EAF8EE}
 .chk.on{background:var(--ontime);border-color:var(--ontime);cursor:default}
+.chk.hold{position:relative;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.chk.hold .hold-ring{position:absolute;inset:-5px;width:calc(100% + 10px);height:calc(100% + 10px);transform:rotate(-90deg);pointer-events:none;overflow:visible}
+.chk.hold .hold-ring circle{fill:none;stroke:var(--ontime);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:66;stroke-dashoffset:66;transition:stroke-dashoffset .15s ease}
+.chk.hold.holding .hold-ring circle{stroke-dashoffset:0;transition:stroke-dashoffset 1.2s linear}
+.chk.hold.holding{background:#EAF8EE;border-color:var(--ontime)}
+.chk.hold.on .hold-ring circle{stroke:var(--overdue)}
+.chk.hold.on.holding{background:#FDECEB;border-color:var(--overdue)}
 .chk.off{border-style:dashed;cursor:default;background:transparent}
 .chk.vf{border-color:var(--early);color:var(--early);background:#fff;cursor:default;font-size:12px;line-height:1}
 .row:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
@@ -1288,6 +1295,23 @@ function celebrateDone(t,doneAt){
 }
 
 /* a tick on a row that is about to leave the list: show the tick first, then do it */
+/* press and hold to tick: a quick tap or click never marks anything done. A ring fills while held; letting go early cancels. */
+const HOLD_MS=1200; let holdHintAt=0;
+function holdTick(props,fn,label){
+  const ring=svgEl('svg',{class:'hold-ring',viewBox:'0 0 24 24','aria-hidden':'true'},svgEl('circle',{cx:12,cy:12,r:10.5}));
+  const b=h('button',{...props,class:(props.class||'chk')+' hold',type:'button',title:(label||'Press and hold')+' (press and hold)'},ring);
+  if(props.text) b.append(document.createTextNode(props.text));
+  let tm=null, fired=false;
+  const stop=()=>{ if(tm){ clearTimeout(tm); tm=null; } b.classList.remove('holding'); };
+  const start=e=>{ if(b.disabled||tm) return; if(e&&e.pointerType==='mouse'&&e.button!==0) return; fired=false; b.classList.add('holding');
+    tm=setTimeout(()=>{ tm=null; fired=true; b.classList.remove('holding'); if(navigator.vibrate) try{ navigator.vibrate(18); }catch(_){} fxTick({stopPropagation(){},currentTarget:b},fn); },HOLD_MS); };
+  b.addEventListener('pointerdown',e=>{ e.stopPropagation(); start(e); });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,stop));
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+  b.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); if(!e.repeat) start(); } });
+  b.addEventListener('keyup',e=>{ if(e.key==='Enter'||e.key===' '){ e.stopPropagation(); stop(); } });
+  b.addEventListener('click',e=>{ e.stopPropagation(); e.preventDefault(); if(!fired&&Date.now()-holdHintAt>2500){ holdHintAt=Date.now(); toast('Press and hold to '+(label||'tick').toLowerCase()); } });
+  return b; }
 function fxTick(e,fn){ e.stopPropagation(); const b=e.currentTarget; if(motionOff()||!b) return fn();
   b.disabled=true; b.classList.add('on','fx-done'); b.textContent='✓'; const r=b.closest('.row'); if(r) r.classList.add('fx-leave'); setTimeout(fn,260); }
 let toastT;
@@ -2283,7 +2307,7 @@ function row(t,o={}){
   const metaEls=meta.flatMap((x,i)=>i?[h('span',{'aria-hidden':'true',text:'·'}),x]:[x]);
   const can=canQuickDone(t);
   return h('div',fxA('task:'+t.id,['in','move'],{class:'row',role:'button',tabindex:'0',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); openTask(t.id); } }}),
-    t.doneAt?h('span',fxA('task:'+t.id,['done'],{class:'chk on','aria-label':'Completed',text:'✓'})):t.verify?h('span',{class:'chk vf',title:'Done '+fmtD(t.verify.at)+' · waiting for '+vfWho(t)+' to verify','aria-label':'Waiting for verification',text:'…'}):can?h('button',{class:'chk',type:'button','aria-label':'Mark “'+t.title+'” done',title:'Mark done',disabled:S.busy,onclick:e=>fxTick(e,()=>quickDone(t))}):h('span',{class:'chk off','aria-hidden':'true'}),
+    t.doneAt?h('span',fxA('task:'+t.id,['done'],{class:'chk on','aria-label':'Completed',text:'✓'})):t.verify?h('span',{class:'chk vf',title:'Done '+fmtD(t.verify.at)+' · waiting for '+vfWho(t)+' to verify','aria-label':'Waiting for verification',text:'…'}):can?holdTick({class:'chk','aria-label':'Press and hold to mark “'+t.title+'” done',disabled:S.busy},()=>quickDone(t),'Mark done'):h('span',{class:'chk off','aria-hidden':'true'}),
     h('div',{class:'row-main'},
       h('div',{class:'row-title'},h('span',{text:t.title}),
         t.gate?h('span',{class:'tag',text:'Gate'}):t.kind==='Deliverable'&&h('span',{class:'tag',text:'Deliverable'}),
@@ -4966,8 +4990,8 @@ function clSet(p,k,id,patch,msg){ const cur=clOf(p,k,id); if(patch&&patch.done) 
 function clWhoOpts(p){ const ps=podsOfProject(p); return [['','Owner: role'],...people().filter(id=>!isCOO(id)&&!isPriv(id)&&id!==ownerId()&&(ps.includes(teamOf(id))||(amApprover()&&isSupport(id)))).map(id=>[id,nameOf(id)])]; }
 function clRow(p,k,it,manage){
   const x=clOf(p,k,it.id), can=canTickCl(p,x), whoTxt=x.who?nameOf(x.who):CL_ROLES[it.r]||'';
-  const box=x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?(can?h('button',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',type:'button','aria-label':'Untick “'+it.t+'”',title:'Untick',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{done:null},'Unticked'),text:'✓'})):h('span',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',text:'✓'})))
-    :can?h('button',{class:'chk',type:'button','aria-label':'Tick “'+it.t+'”',title:'Tick when done and checked',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked')}):h('span',{class:'chk off','aria-hidden':'true'});
+  const box=x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?(can?holdTick(fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on','aria-label':'Press and hold to untick “'+it.t+'”',disabled:S.busy,text:'✓'}),()=>clSet(p,k,it.id,{done:null},'Unticked'),'Untick'):h('span',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',text:'✓'})))
+    :can?holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'):h('span',{class:'chk off','aria-hidden':'true'});
   let who=null; if(manage&&!x.done&&!x.na){ const opts=clWhoOpts(p); if(x.who&&!opts.some(o=>o[0]===x.who)) opts.push([x.who,nameOf(x.who)]); who=h('select',{id:`clw-${k}-${it.id}`,'aria-label':'Who does it',onchange:e=>clSet(p,k,it.id,{who:e.target.value},'Assigned')},opts.map(([v,l])=>h('option',{value:v,text:v?l:`Owner: ${CL_ROLES[it.r]}`}))); who.value=x.who||''; }
   return h('div',{class:'cl-row'+(x.na?' na':'')},box,
     h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),h('div',{class:'cl-m'},who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),x.done?h('span',{text:'· ticked '+fmtD(x.done)+(x.by&&x.by!==x.who?' by '+nameOf(x.by):'')}):null,x.na?h('span',{text:'· not applicable'}):null)),
@@ -5360,7 +5384,7 @@ function myChecklist(){ const out=[];
 function myChecklistSec(list){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
     h('div',{class:'list'},list.slice(0,40).map(({p,k,it})=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
-      h('button',{class:'chk',type:'button','aria-label':'Tick “'+it.t+'”',title:'Tick when done and checked',disabled:S.busy||!S.canWrite,onclick:e=>fxTick(e,()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'))}),
+      holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'),
       h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k,p)})),p.code?h('div',{class:'row-pn',text:p.name}):null),
       h('span'),h('span')))),
     list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
@@ -6115,7 +6139,7 @@ const HOWDO=[
  // ---- phases and checklist
  ['phases',['lead','boss'],'Set up a project’s phases',['Open the project › Set up phases.','Choose the pod lead who owns the gate deliverables and the pace.','Tick the phases this project needs.','Tap Set up N phases.'],'Gate deliverables and checklists are created, and Propose the timeline opens for the dates.','Land share or private client resuming later? Use Add phases when it restarts.'],
  ['phases',['lead','boss'],'Assign the checklist',['Open the project › a phase › Show checklist.','Pick who does each item, or tap N/A for items that don’t apply.'],'Each person sees their items on Home under My checklist.','Items are ticked, never dated, and never scored.'],
- ['phases','all','Tick my checklist items',['Home › My checklist (or the project’s checklist).','Tap the circle when the item is done and checked.'],'It shows ticked with the date and your name.','Tick only what is complete. You can tick only items assigned to you.'],
+ ['phases','all','Tick my checklist items',['Home › My checklist (or the project’s checklist).','Press and hold the circle for a moment when the item is done and checked; a quick tap does nothing.'],'It shows ticked with the date and your name.','Tick only what is complete. You can tick only items assigned to you.'],
  ['phases',['lead','boss'],'Close a phase gate',['Make sure every checklist item is ticked or N/A.','Mark the phase’s final gate deliverable done.'],'The phase shows Gate closed and the next phase becomes active.','Phase 4 runs alongside 5 and 6 once the design is frozen. Only the Principal or COO can close a gate with open items.'],
  ['phases',['lead','boss'],'Record when the client’s feedback is due',['Open the project › the phase card › Client feedback due.','Pick the date; it saves straight away.'],'It shows on the Calendar. It is for planning only and never counts against the pod.','Feedback received is recorded from a client meeting.'],
 
