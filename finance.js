@@ -70,7 +70,7 @@ const INTERNAL_TYPES = ['studioops', 'studiodev', 'studiomgmt', 'studiobd', 'stu
 const DEFAULT_WA_MSG = 'Dear {client},\n\nPlease find invoice {no} for {project}. Amount payable: BDT {amount}, due {due}.\n\nView and download: {link}\n\nThank you,\n{company}';
 const DEFAULT_SETTINGS = { vatPct: 15, aitPct: 10, bankTaxMode: 'added', termsDays: 15, woTerms: DEFAULT_WO_TERMS, prefix: 'SLATE', bank: '', invNote: 'The amount above is net to SLATE. VAT and AIT, where applicable, are borne by the client.', signName: 'Syed Mohammed Imran', signTitle: 'Principal Architect', bin: '', lockedFYs: [], waOn: false, waMsg: DEFAULT_WA_MSG };
 const S = {
-  role: null, uid: null, projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], links: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
+  role: null, uid: null, recurring: [], projects: [], invoices: [], receipts: [], accounts: [], moves: [], recons: [], expenses: [], workorders: [], wopays: [], staff: [], advances: [], payruns: [], budgets: [], profiles: [], links: [], settings: { ...DEFAULT_SETTINGS }, settingsRow: false,
   os: [], people: {}, audit: null, pick: { accounts: [], projects: [] }, intakes: [], ledger: [], loaded: false, fy: fyOf(today()), tab: 'overview',
   f: { inv: 'open', prj: 'active', q: '', exp: 'all', expCat: '', wo: 'open', rep: 'pl', basis: 'billed', bm: '', guide: '' }
 };
@@ -175,7 +175,7 @@ async function load() {
   S.projects = by('projects'); S.invoices = by('invoices'); S.receipts = by('receipts');
   S.accounts = by('accounts'); S.moves = by('moves'); S.recons = by('recons');
   S.expenses = by('expenses'); S.workorders = by('workorders'); S.wopays = by('wopays');
-  S.staff = by('staff'); S.advances = by('advances'); S.payruns = by('payruns'); S.budgets = by('budgets'); S.intakes = by('intakes');
+  S.recurring = by('recurring'); S.staff = by('staff'); S.advances = by('advances'); S.payruns = by('payruns'); S.budgets = by('budgets'); S.intakes = by('intakes');
   if (S.role === 'accountant') { await loadPick(); const { data: lg, error: le } = await sb.rpc('fin_ledger'); if (le) throw le; S.ledger = lg || []; }
   const st = rows.find(r => r.path === 'config/settings');
   S.settingsRow = !!st; S.settings = { ...DEFAULT_SETTINGS, ...(st ? st.data : {}) };
@@ -1955,8 +1955,15 @@ function forecastData() {
   // other costs: the budget if set, else the last three months' average; approved unpaid expenses this month
   const b = budgetOf(fyOf(t)), { R: P } = plData(fyOf(t), 'billed'), past = P.filter(r => r.k < cm).slice(-3);
   const avgOf = c => past.length ? past.reduce((v, r) => v + (r.cats[c] || 0), 0) / past.length : 0;
-  R.forEach(r => { const bb = budgetOf(fyOf(r.k + '-01'));
-    r.exp = EXP_CATS.filter(c => !NOT_COST.includes(c)).reduce((u, c) => u + (bb ? budgetFor(bb, c, r.k) : avgOf(c)), 0);
+  /* running costs set in SLATE OS › Business › Admin: their cash amount replaces the estimate for their categories (rent net of the advance adjusted) */
+  const recCash = (x, ym) => { if (x.kind === 'rent') { const st = x.advFrom || x.from, [y1, m1] = st.split('-').map(Number), [y2, m2] = ym.split('-').map(Number), n = (y2 - y1) * 12 + (m2 - m1) + 1, A = +x.advance || 0, X = +x.adjust || 0;
+      const before = n < 1 || !A || !X ? 0 : Math.max(0, A - X * (n - 1)); return (+x.rent || 0) - Math.min(X, before, +x.rent || 0); }
+    if (x.kind === 'variable') { const hs = S.expenses.filter(e => e.recurringId === x.id && e.month < ym && e.status !== 'rejected').sort((a, b) => b.month.localeCompare(a.month)).slice(0, 3); return hs.length ? hs.reduce((u, e) => u + (+e.amount || 0), 0) / hs.length : +x.amount || 0; }
+    return +x.amount || 0; };
+  const recFor = ym => { const out = {}; S.recurring.filter(x => x.active !== false && x.from && x.from <= ym && (!x.until || ym <= x.until)).forEach(x => {
+      const c = x.category || 'Other'; if (!(c in out)) out[c] = 0; if (!S.expenses.some(e => e.recurringId === x.id && e.month === ym && e.accountId && e.status !== 'rejected')) out[c] += recCash(x, ym); }); return out; };
+  R.forEach(r => { const bb = budgetOf(fyOf(r.k + '-01')), rc = recFor(r.k);
+    r.exp = EXP_CATS.filter(c => !NOT_COST.includes(c)).reduce((u, c) => u + (c in rc ? rc[c] : bb ? budgetFor(bb, c, r.k) : avgOf(c)), 0);
     if (bb && (bb.bonusMonths || []).includes(r.k) && !S.payruns.some(x => x.kind === 'bonus' && x.month === r.k)) r.pay += bonusEst(bb);
     if (bb) (bb.oneoffs || []).forEach(o => { if (o.month !== r.k) return; if (o.cat === 'Salaries & bonuses') r.pay += +o.amount || 0; if (o.cat === 'Consultants & vendors') r.wo += +o.amount || 0; }); });
   R[0].exp += S.expenses.filter(x => x.status === 'approved' && !x.accountId).reduce((u, x) => u + (+x.amount || 0), 0);

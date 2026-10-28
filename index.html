@@ -4385,7 +4385,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='sal'?sheetSal():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -6898,6 +6898,110 @@ function sheetSal(){
         h('div',{class:'list'},rs.map((x,i)=>{ const p=rs[i+1]; return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},
           h('div',{},h('b',{text:'From '+ymLabel(x.from)}),h('div',{class:'f-hint',style:'margin:0',text:[x.why||'',p?`${salGross(x)>=salGross(p)?'+':'−'}${taka(Math.abs(salGross(x)-salGross(p)))}`:'Starting salary'].filter(Boolean).join(' · ')})),h('span',{class:'mono',text:taka(salGross(x))})); }))):null,
       h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+/* ---------- Business › Admin: the studio's monthly running costs ----------
+   Kept in Finance as recurring/<id>; payments are Finance expenses tagged with the cost and month, and Finance's cash forecast
+   uses these amounts. Office rent can carry an advance adjusted each month and a security deposit (held, not a cost). */
+const ADM_CATS=['Office rent','Utilities','Internet & software','Repairs & maintenance','Staff welfare','Office supplies','Transport & site visits','Bank charges','Marketing','Other'];
+const ADM_KIND={fixed:'Same every month',variable:'Changes every month',rent:'Office rent with advance'};
+const ymAdd=(ym,n)=>{ const [y,m]=ym.split('-').map(Number), d=new Date(y,m-1+n,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+const ymDiff=(a,b)=>{ const [y1,m1]=a.split('-').map(Number),[y2,m2]=b.split('-').map(Number); return (y2-y1)*12+(m2-m1); };
+const recOn=(x,ym)=>x.active!==false&&x.from&&x.from<=ym&&(!x.until||ym<=x.until);
+/* rent: the advance is adjusted from advFrom at `adjust` a month until it runs out; the rest is paid in cash */
+function rentPlan(x,ym){ const R=+x.rent||0, A=+x.advance||0, X=+x.adjust||0, st=x.advFrom||x.from; const n=ymDiff(st,ym)+1;
+  if(n<1||!A||!X) return {rent:R,adj:0,cash:R,left:A,before:A}; const before=Math.max(0,A-X*(n-1)), adj=Math.min(X,before,R);
+  return {rent:R,adj,cash:R-adj,left:before-adj,before,endsIn:ym>=st?Math.ceil(before/X):null}; }
+const recPaid=(x,ym)=>(((S.feeFin||{}).exp)||[]).filter(e=>e.recurringId===x.id&&e.month===ym&&e.status!=='rejected');
+function recHist(x){ return (((S.feeFin||{}).exp)||[]).filter(e=>e.recurringId===x.id&&e.status!=='rejected').sort((a,b)=>(b.month||'').localeCompare(a.month||'')); }
+function recExpect(x,ym){ if(x.kind==='rent') return rentPlan(x,ym).cash; if(x.kind==='variable'){ const h=recHist(x).filter(e=>e.month<ym).slice(0,3); return h.length?Math.round(h.reduce((a,e)=>a+(+e.amount||0),0)/h.length):+x.amount||0; } return +x.amount||0; }
+function viewAdmin(){
+  const B=S.biz, out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO'}),h('h1',{class:'h1',text:'Business'}),h('p',{class:'lead',text:'The studio’s monthly running costs, set here. Payments go into Finance as expenses, and Finance’s cash forecast uses these amounts.'})),
+    S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openRec(null),text:'Add running cost'})):null),bizSeg()];
+  if(!finOn()){ out.push(h('p',{class:'muted',text:'Admin costs need Finance access.'})); return out; }
+  loadFeeFin(); const F=S.feeFin;
+  if(!F||F.state==='loading'||F.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading…'})); return out; }
+  if(F.state==='err'){ out.push(h('p',{class:'err',text:'Couldn’t load Finance: '+F.err}),h('button',{class:'btn',type:'button',onclick:()=>loadFeeFin(true),text:'Try again'})); return out; }
+  const ym=B.am||(B.am=today().slice(0,7)), all=(F.rec2||[]), on=all.filter(x=>recOn(x,ym));
+  const exp=on.reduce((a,x)=>a+recExpect(x,ym),0), paid=on.reduce((a,x)=>a+recPaid(x,ym).reduce((u,e)=>u+(+e.amount||0),0),0);
+  const rents=all.filter(x=>x.kind==='rent'&&x.active!==false), advLeft=rents.reduce((a,x)=>a+rentPlan(x,ym).left,0), dep=rents.reduce((a,x)=>a+(+x.deposit||0),0);
+  const full=on.reduce((a,x)=>a+(x.kind==='rent'?rentPlan(x,ym).rent:recExpect(x,ym)),0);
+  out.push(h('div',{class:'bar'},h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous month',onclick:()=>{ B.am=ymAdd(ym,-1); render(true); },text:'‹'}),h('b',{style:'min-width:110px;text-align:center',text:ymLabel(ym)}),h('button',{class:'btn btn-sm',type:'button','aria-label':'Next month',onclick:()=>{ B.am=ymAdd(ym,1); render(true); },text:'›'}),
+    ym!==today().slice(0,7)?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ B.am=today().slice(0,7); render(true); },text:'This month'}):null),
+    h('div',{class:'kpis kpis5'},kpi('Monthly cost',bdt(full)),kpi('Cash to pay',bdt(exp)),kpi('Paid',bdt(paid),'early'),kpi('Still to pay',bdt(Math.max(0,exp-paid)),exp-paid>1?'late':''),kpi('Rent advance left',advLeft?bdt(advLeft):'—')));
+  if(dep) out.push(h('p',{class:'f-hint',style:'margin:-6px 2px 10px',text:`Security deposit held by the landlord: ${taka(dep)}. It is refundable, so it is not counted as a cost.`}));
+  if(!all.length){ out.push(h('p',{class:'muted',text:'No running costs yet. Add office rent, electricity, internet, cleaning and the other monthly bills.'})); return out; }
+  const offL=all.filter(x=>!recOn(x,ym));
+  out.push(h('div',{class:'pgrid'},on.sort((a,b)=>(+a.dueDay||31)-(+b.dueDay||31)).map(x=>{ const ps=recPaid(x,ym), pd=ps.reduce((u,e)=>u+(+e.amount||0),0), ex=recExpect(x,ym), rp=x.kind==='rent'?rentPlan(x,ym):null;
+    const late=!ps.length&&x.dueDay&&ym===today().slice(0,7)&&+today().slice(8,10)>+x.dueDay;
+    return h('div',{class:'pcard',style:'cursor:default'},
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:x.category||''}),ps.length?h('span',{class:'pill s-ontime',text:'Paid '+fmtD(ps[0].paidOn||ps[0].date)}):h('span',{class:'pill s-'+(late?'overdue':'open'),text:x.dueDay?`Due on the ${x.dueDay}${['th','st','nd','rd'][(+x.dueDay%10>3||[11,12,13].includes(+x.dueDay))?0:+x.dueDay%10]}`:'To pay'})),
+      h('div',{class:'pc-name',text:x.name}),
+      h('div',{class:'pc-meta',text:[ADM_KIND[x.kind],x.payee].filter(Boolean).join(' · ')}),
+      rp?h('div',{class:'f-hint',style:'margin:0',text:rp.adj?`Rent ${taka(rp.rent)} − ${taka(rp.adj)} from the advance = ${taka(rp.cash)} in cash · advance left ${taka(rp.left)}`:`Rent ${taka(rp.rent)}`+(+x.advance?' · advance fully adjusted':'')}):null,
+      h('div',{class:'pc-row'},h('b',{text:ps.length?taka(pd):(x.kind==='variable'?'≈ ':'')+taka(ex)}),h('span',{class:'muted',text:ps.length&&pd!==ex?(x.kind==='variable'?`estimate ${taka(ex)}`:`expected ${taka(ex)}`):x.kind==='variable'&&!ps.length?'estimate from recent bills':''})),
+      S.canWrite?h('div',{class:'actions',style:'margin:0'},ps.length?null:h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openRecPay(x.id,ym),text:'Record payment'}),h('button',{class:'btn btn-sm',type:'button',onclick:()=>openRec(x.id),text:'Edit'})):null); })));
+  if(offL.length) out.push(h('p',{class:'f-hint',style:'margin:10px 2px 0',text:'Not running in '+ymLabel(ym)+': '+offL.map(x=>x.name).join(', ')+'.'}),h('div',{class:'chips'},offL.map(x=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>openRec(x.id),text:'Edit '+x.name}))));
+  return out; }
+function openRec(id){ const x=id?((S.feeFin||{}).rec2||[]).find(r=>r.id===id):null;
+  const d={name:'',category:'Utilities',kind:'fixed',amount:'',payee:'',dueDay:'',from:today().slice(0,7),until:'',rent:'',advance:'',adjust:'',advFrom:'',deposit:'',note:'',active:true,...(x?JSON.parse(JSON.stringify(x)):{})};
+  ['amount','rent','advance','adjust','deposit','dueDay'].forEach(k=>{ d[k]=d[k]?String(d[k]):''; });
+  S.sheet={type:'rec',id:id||null,d,err:''}; renderSheet(); }
+function sheetRec(){
+  const d=S.sheet.d, id=S.sheet.id, rent=d.kind==='rent';
+  const n=(k,ph)=>h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d[k],placeholder:ph||'',oninput:e=>{ d[k]=e.target.value; const t=document.getElementById('rent-sum'); if(t) t.textContent=rentTxt(); }});
+  const rentTxt=()=>{ if(!+d.rent) return ''; const p=rentPlan({rent:+d.rent,advance:+d.advance,adjust:+d.adjust,advFrom:d.advFrom||d.from,from:d.from},today().slice(0,7));
+    return +d.advance&&+d.adjust?`This month: ${taka(p.adj)} from the advance, ${taka(p.cash)} in cash. Advance left after this month ${taka(p.left)}`+(p.left>0?`, used up in about ${Math.ceil(p.left/(+d.adjust))} more months.`:'.'):`Paid in full in cash: ${taka(+d.rent)} a month.`; };
+  const save=async e=>{ e.preventDefault(); if(!canBiz()) return fail('Only the Principal or the COO sets running costs.');
+    if(!(d.name||'').trim()) return fail('Give it a name, e.g. Electricity.');
+    if(!/^\d{4}-\d{2}$/.test(d.from||'')) return fail('Choose the month it starts.');
+    if(rent&&!(+d.rent>0)) return fail('Enter the monthly rent.');
+    if(!rent&&d.kind==='fixed'&&!(+d.amount>0)) return fail('Enter the monthly amount.');
+    if(rent&&+d.advance&&!(+d.adjust>0)) return fail('How much of the advance is adjusted each month?');
+    if(rent&&+d.adjust>+d.rent) return fail('The monthly adjustment can’t be more than the rent.');
+    if(d.until&&d.until<d.from) return fail('The end month is before the start month.');
+    if(d.dueDay&&!(+d.dueDay>=1&&+d.dueDay<=31)) return fail('Due day is a day of the month, 1 to 31.');
+    const data={name:d.name.trim(),category:rent?'Office rent':d.category,kind:d.kind,amount:rent?0:+d.amount||0,payee:(d.payee||'').trim(),dueDay:d.dueDay?+d.dueDay:'',from:d.from,until:d.until||'',
+      rent:rent?+d.rent:0,advance:rent?+d.advance||0:0,adjust:rent?+d.adjust||0:0,advFrom:rent?(d.advFrom||d.from):'',deposit:rent?+d.deposit||0:0,note:(d.note||'').trim(),active:!!d.active,setBy:S.uid};
+    const sb=window.slateSupabase; const ok=await run(async()=>{
+      if(id){ const {data:o,error}=await sb.from('fin_docs').update({data}).eq('path','recurring/'+id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Run m_admin_costs.sql first.'); }
+      else { const nid=finId(); const {error}=await sb.from('fin_docs').insert({path:'recurring/'+nid,coll:'recurring',doc_id:nid,data}); if(error) throw /Unknown finance record type/.test(error.message||'')?new Error('Run m_admin_costs.sql in Supabase first.'):error; }
+    },'Saved'); if(ok){ await loadFeeFin(true); closeSheet(); } };
+  const x=id?((S.feeFin||{}).rec2||[]).find(r=>r.id===id):null, hist=x?recHist(x).slice(0,12):[];
+  return [head(id?'Running cost':'New running cost',id?d.name:'Monthly cost of running the studio'),
+    h('form',{class:'form',onsubmit:save},
+      field('Type',seg('Type',Object.entries(ADM_KIND),d.kind,v=>{ d.kind=v; if(v==='rent'){ d.category='Office rent'; if(!d.name) d.name='Office rent'; } renderSheet(); })),
+      h('div',{class:'form-row'},field('Name *',inp('name',{maxlength:80,placeholder:rent?'Office rent':'e.g. Electricity (DESCO)'})),rent?field('Category',h('input',{value:'Office rent',readonly:true,style:'color:var(--muted)'})):field('Category',sel('category',ADM_CATS.map(c=>[c,c])))),
+      rent?[h('div',{class:'form-row'},field('Monthly rent (Tk) *',n('rent')),field('Advance paid (Tk)',n('advance'),'Paid up front, adjusted against rent')),
+          h('div',{class:'form-row',style:'align-items:start'},field('Adjusted from the advance each month (Tk)',n('adjust')),field('Adjustment starts',h('input',{type:'month',value:d.advFrom||d.from,oninput:e=>{d.advFrom=e.target.value; const t=document.getElementById('rent-sum'); if(t) t.textContent=rentTxt();}}))),
+          field('Security deposit (Tk)',n('deposit'),'Refundable when you leave: shown, not counted as a cost'),
+          h('div',{id:'rent-sum',style:'font-weight:600;font-size:14px',text:rentTxt()})]
+        :field(d.kind==='variable'?'Usual amount (Tk), as an estimate':'Amount every month (Tk) *',n('amount'),d.kind==='variable'?'Each month you enter the actual bill; the estimate then follows the last three bills.':null),
+      h('div',{class:'form-row'},field(rent?'Landlord':'Paid to',inp('payee',{maxlength:80,placeholder:rent?'Landlord':'e.g. DESCO, Link3'})),field('Due day of the month',n('dueDay','e.g. 10'))),
+      h('div',{class:'form-row'},field('Starts *',inp('from',{type:'month'})),field('Ends (optional)',inp('until',{type:'month'}),'e.g. when the lease ends')),
+      field('Note',ta('note',{rows:2})),
+      id?h('div',{style:'display:flex;gap:10px;align-items:center'},h('input',{type:'checkbox',id:'rec-act',checked:d.active,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.active=e.target.checked}}),h('label',{for:'rec-act',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:'Running (untick to stop it; past payments stay)'})):null,
+      hist.length?h('div',{},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px',text:'Payments'}),
+        h('div',{class:'list'},hist.map(e=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},h('div',{},h('b',{text:ymLabel(e.month)}),h('div',{class:'f-hint',style:'margin:0',text:[e.paidOn?'paid '+fmtD(e.paidOn):'not paid yet',e.status==='pending'?'waiting for the Principal':''].filter(Boolean).join(' · ')})),h('span',{class:'mono',text:taka(e.amount)}))))):null,
+      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+function openRecPay(id,ym){ const x=((S.feeFin||{}).rec2||[]).find(r=>r.id===id); if(!x) return; const accts=((S.feeFin||{}).accts||[]).filter(a=>a.active!==false);
+  S.sheet={type:'recPay',id,ym,d:{amount:x.kind==='variable'?'':String(recExpect(x,ym)),paidOn:today(),acct:(accts.find(a=>a.kind==='bank')||accts[0]||{}).id||'',note:''},err:''}; renderSheet(); }
+function sheetRecPay(){
+  const {id,ym,d}=S.sheet, x=((S.feeFin||{}).rec2||[]).find(r=>r.id===id); if(!x) return [head('Payment','Not found')];
+  const accts=((S.feeFin||{}).accts||[]).filter(a=>a.active!==false), rp=x.kind==='rent'?rentPlan(x,ym):null;
+  const save=async e=>{ e.preventDefault(); if(!(+d.amount>0)) return fail(x.kind==='variable'?'Enter this month’s bill.':'Enter the amount paid.');
+    if(!accts.length) return fail('Add the cash and bank accounts in Finance first.'); if(!d.acct) return fail('Choose the account it was paid from.');
+    const own=S.isOwner, desc=`${x.name} · ${ymLabel(ym)}`+(rp&&rp.adj?` (rent ${rp.rent}, ${rp.adj} adjusted from the advance)`:'');
+    const data={date:d.paidOn,category:x.category||'Other',desc,amount:+d.amount,accountId:d.acct,paidOn:d.paidOn,method:'',ref:'',note:(d.note||'').trim(),recurringId:x.id,month:ym,status:own?'approved':'pending',...(own?{decidedBy:S.uid,decidedOn:today()}:{})};
+    const sb=window.slateSupabase, nid=finId();
+    const ok=await run(async()=>{ const {error}=await sb.from('fin_docs').insert({path:'expenses/'+nid,coll:'expenses',doc_id:nid,data}); if(error) throw error; },own?'Payment recorded in Finance':'Recorded in Finance; the Principal approves it');
+    if(ok){ await loadFeeFin(true); closeSheet(); } };
+  return [head(`${x.name} · ${ymLabel(ym)}`,'Record payment'),
+    rp?h('p',{class:'f-hint',style:'margin:0',text:rp.adj?`Rent ${taka(rp.rent)}: ${taka(rp.adj)} is adjusted from the advance, so ${taka(rp.cash)} is paid in cash. Advance left after this month: ${taka(rp.left)}.`:`Rent ${taka(rp.rent)}, paid in full.`}):null,
+    h('form',{class:'form',onsubmit:save},
+      h('div',{class:'form-row'},field(x.kind==='variable'?'This month’s bill (Tk) *':'Amount paid (Tk) *',h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d.amount,placeholder:x.kind==='variable'?'≈ '+recExpect(x,ym):'',oninput:e=>{d.amount=e.target.value}})),field('Paid on',h('input',{type:'date',value:d.paidOn,max:today(),oninput:e=>{d.paidOn=e.target.value}}))),
+      field('Paid from',(()=>{ const s2=h('select',{onchange:e=>{d.acct=e.target.value}},accts.length?accts.map(a=>h('option',{value:a.id,text:a.name})):[h('option',{value:'',text:'No accounts in Finance yet'})]); s2.value=d.acct; return s2; })()),
+      field('Note',h('input',{value:d.note,placeholder:'e.g. meter reading, bill no.',oninput:e=>{d.note=e.target.value}})),
+      h('p',{class:'f-hint',style:'margin:0',text:S.isOwner?'Saved in Finance as an approved expense.':'Saved in Finance as an expense waiting for the Principal’s approval.'}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Record payment'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
 function pjKindSeg(f){ return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work']],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })); }
 function viewProposals(f){
   const all=propList().filter(p=>!isLead(p)), q=(f.q||'').trim().toLowerCase(), ps=f.ps||'open', td=today();
@@ -6943,13 +7047,13 @@ async function loadFeeFin(force){
   if(F.state==='loading'||(!force&&F.state==='ok'&&Date.now()-F.at<60000)) return;
   F.state='loading';
   try{ const sb=window.slateSupabase; if(!sb) throw new Error('Not signed in');
-    const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts','workorders','wopays','staff']);
+    const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts','workorders','wopays','staff','recurring','expenses','accounts']);
     if(error) throw error;
-    const fp={},inv=[],rec=[],wo=[],wp=[],staff=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else if(r.coll==='staff') staff.push(d); else wp.push(d); });
+    const fp={},inv=[],rec=[],wo=[],wp=[],staff=[],rec2=[],exp=[],accts=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else if(r.coll==='staff') staff.push(d); else if(r.coll==='recurring') rec2.push(d); else if(r.coll==='expenses'){ if(d.recurringId) exp.push(d); } else if(r.coll==='accounts') accts.push(d); else wp.push(d); });
     let priv=[]; try{ const pr=await sb.rpc('fin_private_people'); if(!pr.error&&Array.isArray(pr.data)) priv=pr.data; }catch(e){}
-    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,at:Date.now(),err:''});
+    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,rec2,exp,accts,at:Date.now(),err:''});
   }catch(e){ F.state='err'; F.err=(e&&e.message)||String(e); }
-  if(S.view==='biz') render(true); if(S.sheet&&['fee','sal'].includes(S.sheet.type)) renderSheet(); }
+  if(S.view==='biz') render(true); if(S.sheet&&['fee','sal','rec','recPay'].includes(S.sheet.type)) renderSheet(); }
 /* the Finance record for an OS project: linked by osId, else by the same code */
 function feeRecOf(p){ const F=S.feeFin; if(!F||F.state!=='ok') return null; const all=Object.values(F.fp);
   return all.find(x=>x.osId===p.id)||(p.code?all.find(x=>!x.osId&&(x.code||'').toUpperCase()===p.code.toUpperCase()):null)||null; }
@@ -6961,12 +7065,13 @@ function feeStats(fr){ const F=S.feeFin, fee=+((fr||{}).fee)||0; if(!fr||!F||F.s
   return {fee,billed,col,due:Math.max(0,billed-col),unb:Math.max(0,fee-billed)}; }
 const msLocked=(fr,m)=>!!fr&&!!S.feeFin&&S.feeFin.inv.some(i=>i.projectId===fr.id&&i.milestoneId===m.id&&i.status!=='void');
 function bizSeg(){ const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
-  return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Business',[['leads','Leads'+(nl?' · '+nl+' due':'')],['proposed','Proposed'+(np?' · '+np+' due':'')],['fees','Fees'],['hr','HR']],S.biz.tab,v=>{ S.biz.tab=v; render(true); })); }
+  return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Business',[['leads','Leads'+(nl?' · '+nl+' due':'')],['proposed','Proposed'+(np?' · '+np+' due':'')],['fees','Fees'],['hr','HR'],['admin','Admin']],S.biz.tab,v=>{ S.biz.tab=v; render(true); })); }
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
   S.biz=S.biz||{tab:'leads',q:'',st:'active'};
   if(S.biz.tab==='leads') return viewLeads();
   if(S.biz.tab==='hr') return viewHR();
+  if(S.biz.tab==='admin') return viewAdmin();
   if(S.biz.tab==='proposed') return viewProposals(S.pf2||(S.pf2={q:'',ps:'open'}));
   return viewFees(); }
 function viewFees(){
