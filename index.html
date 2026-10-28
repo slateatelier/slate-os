@@ -6758,7 +6758,7 @@ function viewProposals(f){
 const canBiz=()=>canProps()&&finOn();
 const FEE_BASIS={lump:'Lump sum',sft:'Per sft'};
 const FEE_DEF_MS=[['Signing advance',25],['Final architectural design',25],['Authority (RAJUK) drawings',25],['Working drawings',25]];
-const COST_TYPES=[['str','Structural consultant'],['mep','MEP consultant'],['viz','3D visualization'],['land','Landscape consultant'],['int','Interior consultant'],['soil','Soil test or survey'],['inc','Team incentive'],['other','Other']];
+const COST_TYPES=[['str','Structural consultant'],['mep','MEP consultant'],['viz','3D visualization'],['land','Landscape consultant'],['int','Interior consultant'],['soil','Soil test or survey'],['inc','Sales or business development incentive'],['other','Other']];
 const costTypeL=k=>(COST_TYPES.find(x=>x[0]===k)||[])[1]||'Other';
 /* work orders raised in Finance against a cost line: committed (value) and paid */
 function costWO(fr,c){ const F=S.feeFin; if(!fr||!F||F.state!=='ok') return {n:0,val:0,paid:0,vendor:''};
@@ -6852,9 +6852,9 @@ function costSection(d,fr,p,feeNow){
       h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 30px;gap:6px'},ty,h('input',{value:c.label,placeholder:'Description','aria-label':'Description',oninput:e=>{c.label=e.target.value}}),
         w.n?h('span'):h('button',{class:'btn btn-sm',type:'button','aria-label':'Remove cost line',onclick:()=>{ d.costs.splice(i,1); renderSheet(); },text:'×'})),
       h('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:6px'},cap('Budget (Tk)',n('budget','Budget (Tk)')),cap('Closed at (Tk)',n('deal',w.val?String(w.val)+' (work order)':'Deal amount'))),
-      cap('Consultant or vendor',h('input',{value:c.vendor||'',placeholder:w.vendor||'Name','aria-label':'Consultant or vendor',oninput:e=>{c.vendor=e.target.value}})),
+      cap(c.type==='inc'?'Paid to (person or agent)':'Consultant or vendor',h('input',{value:c.vendor||'',placeholder:w.vendor||'Name','aria-label':'Consultant or vendor',oninput:e=>{c.vendor=e.target.value}})),
       h('div',{style:'display:flex;justify-content:space-between;gap:8px;font-size:12.5px;flex-wrap:wrap'},h('b',{id:'cv-'+c.id,style:vt?'color:'+vt[1]:'',text:vt?vt[0]:''}),
-        h('span',{class:'muted',text:w.n?`Work order${w.n>1?'s':''} ${taka(w.val)} · paid ${taka(w.paid)}`:c.type==='inc'?'Paid to the team':'No work order in Finance yet'}))); };
+        h('span',{class:'muted',text:w.n?`Work order${w.n>1?'s':''} ${taka(w.val)} · paid ${taka(w.paid)}`:c.type==='inc'?'Paid to whoever brought in the project':'No work order in Finance yet'}))); };
   const totTxt=()=>{ const B=d.costs.reduce((a,c)=>a+(+c.budget||0),0), A=d.costs.reduce((a,c)=>a+(+c.deal||costWO(fr,c).val||0),0), V=d.costs.reduce((a,c)=>{ const b=+c.budget||0, x=+c.deal||costWO(fr,c).val||0; return a+(b&&x?b-x:0); },0);
     const f=d.basis==='pb'?0:d.basis==='sft'?(+d.area&&+d.rate?Math.round(+d.area*+d.rate):0):+d.fee||0;
     return B||A?`Budget ${taka(B)} · closed ${taka(A)} · ${V>=0?'saved '+taka(V):'over by '+taka(-V)}`+(f?` · fee left after costs ${taka(f-Math.max(B,A))}`:''):'No costs budgeted'; };
