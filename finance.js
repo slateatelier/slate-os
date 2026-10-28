@@ -182,11 +182,14 @@ async function load() {
   S.loaded = true;
 }
 async function loadAux() {
-  const [os, ppl] = await Promise.all([
+  const [os, ppl, ags] = await Promise.all([
     sb.from('docs').select('doc_id,data').eq('coll', 'projects'),
-    sb.from('profiles').select('id,full_name,label,designation,team,active')
+    sb.from('profiles').select('id,full_name,label,designation,team,active'),
+    sb.from('docs').select('doc_id,data').eq('coll', 'agreements')
   ]);
-  S.os = (os.data || []).filter(r => !INTERNAL_TYPES.includes((r.data || {}).type) && (r.data || {}).pod !== 'Chalk Create').map(r => ({ id: r.doc_id, ...r.data }))
+  // pro bono is an agreement detail in SLATE OS (Principal and COO only)
+  const pb = new Set((ags.data || []).filter(r => (r.data || {}).proBono === 'yes').map(r => r.doc_id));
+  S.os = (os.data || []).filter(r => !INTERNAL_TYPES.includes((r.data || {}).type) && (r.data || {}).pod !== 'Chalk Create').map(r => ({ id: r.doc_id, ...r.data, proBono: pb.has(r.doc_id) }))
     .sort((a, b) => (a.code || '').localeCompare(b.code || ''));
   S.people = {}; (ppl.data || []).forEach(p => { S.people[p.id] = p.label || p.full_name || 'Someone'; });
   S.profiles = (ppl.data || []).filter(p => p.active && p.team !== 'Chalk Create');
@@ -386,7 +389,7 @@ function billing() {
   <div class="filters"><div class="seg">${[['active', 'Active'], ['on-hold', 'On hold'], ['closed', 'Closed'], ['all', 'All']].map(([k, l]) => `<button data-act="f-prj" data-v="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}</div>
     <span class="hint">${list.length} project${list.length === 1 ? '' : 's'} · fee ${compact(tot.fee)} · billed ${compact(tot.billed)} · collected ${compact(tot.col)}</span></div>
   <div class="panel">${list.length ? `<div class="rows">${list.map(p => { const s = projStats(p);
-    return `<button class="row r-prj" data-act="open-project" data-id="${p.id}"><div style="min-width:0"><div class="t">${esc(p.name)}</div><div class="sub"><span class="mono">${esc(p.code)}</span> · ${esc(p.client || '—')}${p.osId ? '' : ' · <span class="warnt">not linked to SLATE OS</span>'}</div></div>
+    return `<button class="row r-prj" data-act="open-project" data-id="${p.id}"><div style="min-width:0"><div class="t">${esc(p.name)}</div><div class="sub"><span class="mono">${esc(p.code)}</span> · ${esc(p.client || '—')}${p.osId ? ((S.os.find(o => o.id === p.osId) || {}).proBono ? ' · <b>Pro bono</b>' : '') : ' · <span class="warnt">not linked to SLATE OS</span>'}</div></div>
       <div class="c2" style="min-width:0"><div class="prog" title="Billed ${tk(s.billed)} · collected ${tk(s.collected)}"><i style="width:${s.fee ? Math.min(100, s.billed / s.fee * 100) : 0}%"></i><b style="width:${s.fee ? Math.min(100, s.collected / s.fee * 100) : 0}%"></b></div><div class="sub" style="margin-top:4px">${s.fee ? Math.round(s.billed / s.fee * 100) : 0}% billed · ${s.fee ? Math.round(s.collected / s.fee * 100) : 0}% collected</div></div>
       <div class="amt">${tk(s.fee)}<small>${s.outstanding > 0 ? `${compact(s.outstanding)} due` : 'nothing due'}</small></div></button>`; }).join('')}</div>`
     : `<div class="empty"><strong>No ${f === 'all' ? '' : f.replace('-', ' ') + ' '}projects</strong>Add a project's total fee and milestone split to start billing against it.</div>`}</div>`;
@@ -414,7 +417,7 @@ function projectForm(p) {
   const osList = S.os.filter(o => !linked.has(o.id) || o.id === src.osId);
   openSheet(`${sheetHead(p ? 'Edit project fee' : 'Add project fee', p ? `<span class="mono">${esc(p.code)}</span>` : 'Pick the project from SLATE OS so the code and name match. The fee stays here, never in SLATE OS.')}
   <form id="pf">
-    <label class="f" for="p_os">SLATE OS project<select id="p_os" name="osId"><option value="">Not in SLATE OS yet (enter below)</option>${osList.map(o => opt(o.id, `${o.code || '—'} · ${o.name || ''}${o.closed ? ' (completed)' : ''}`, o.id === src.osId)).join('')}</select></label>
+    <label class="f" for="p_os">SLATE OS project<select id="p_os" name="osId"><option value="">Not in SLATE OS yet (enter below)</option>${osList.map(o => opt(o.id, `${o.code || '—'} · ${o.name || ''}${o.closed ? ' (completed)' : ''}${o.proBono ? ' · pro bono' : ''}`, o.id === src.osId)).join('')}</select></label>
     <div class="fg">
       <label class="f" for="p_code">Project code<input id="p_code" name="code" required value="${esc(src.code)}" placeholder="e.g. RES-GUL-2601" style="text-transform:uppercase"></label>
       <label class="f" for="p_type">Type<select id="p_type" name="type">${PTYPES.map(t => opt(t, t, src.type === t)).join('')}</select></label>
@@ -450,7 +453,8 @@ function projectForm(p) {
     fillAcct(); f.entity.addEventListener('change', () => { f.payAcctId.value = ''; fillAcct(); });
     f.osId.addEventListener('change', () => { const o = S.os.find(x => x.id === f.osId.value); if (!o) return;
       f.code.value = o.code || ''; f.name.value = o.name || ''; if (o.client) f.client.value = o.client; const site = [o.plotNo ? 'Plot ' + o.plotNo : '', o.roadNo ? 'Road ' + o.roadNo : '', o.blockSector ? (/^[A-Z]{1,2}$/i.test(o.blockSector) ? 'Block ' + o.blockSector : /^\d+[A-Z]?$/i.test(o.blockSector) ? 'Sector ' + o.blockSector : o.blockSector) : '', o.location || ''].filter(Boolean).join(', ');
-      if (site) f.location.value = site; });
+      if (site) f.location.value = site;
+      if (o.proBono && !+f.fee.value) { f.fee.value = 0; f.fee.dispatchEvent(new Event('input', { bubbles: true })); toast('Pro bono project: fee set to 0'); } });
     const autoFee = () => { if (+f.areaSft.value && +f.rate.value) { f.fee.value = Math.round(f.areaSft.value * f.rate.value); f.fee.dispatchEvent(new Event('input', { bubbles: true })); } };
     f.areaSft.addEventListener('input', autoFee); f.rate.addEventListener('input', autoFee);
     f.addEventListener('submit', async ev => { ev.preventDefault();

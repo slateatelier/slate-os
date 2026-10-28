@@ -2890,12 +2890,14 @@ function clientRows(){
   Object.values(S.tasks).forEach(t=>{ const d=(t.createdAt||'').slice(0,10); if(t.projectId&&d&&(!first[t.projectId]||d<first[t.projectId])) first[t.projectId]=d; });
   projects().filter(p=>!isInternalP(p)&&p.pod!=='Studio'&&p.status!=='pending'&&p.status!=='declined').forEach(p=>{
     const name=(p.client||'').trim()||'Client not named', k=clKey(name);
-    const r=m[k]||(m[k]={k,name,ps:[],katha:0,fee:0,feeN:0,sft:0,rateFee:0,perSft:0,lump:0,active:0,done:0,prop:0,lost:0,last:'',types:{},wos:[],woN:0,woVal:0,mo:0,moN:0,feeMo:0,moFee:0,feeK:0,kFee:0,scope:{}});
+    const r=m[k]||(m[k]={k,name,ps:[],katha:0,fee:0,feeN:0,sft:0,rateFee:0,perSft:0,lump:0,active:0,done:0,prop:0,lost:0,pb:0,last:'',types:{},wos:[],woN:0,woVal:0,mo:0,moN:0,feeMo:0,moFee:0,feeK:0,kFee:0,scope:{}});
     r.ps.push(p); const t=(p.std&&p.std.type)||p.type||''; r.types[t]=(r.types[t]||0)+1;
     const o=outcomeOf(p), prop=t==='proposal';
     if(prop) r.prop++; else if(o==='active'||o==='onhold') r.active++; else if(o==='completed') r.done++; else r.lost++;
     if(!prop) r.katha+=parseFloat(p.katha)||0;
     const f=fp[p.id]||byCode[(p.code||'').toUpperCase()], fee=f?+f.fee||0:0, kt=parseFloat(p.katha)||0;
+    // a pro bono project has no fee by design: it counts as known (zero), never as a fee missing from Finance
+    if(p.proBono==='yes'&&!prop){ r.pb++; if(!f) r.feeN++; }
     if(f){ r.fee+=fee; r.feeN++; if(+f.rate>0&&+f.areaSft>0){ r.perSft++; r.sft+=+f.areaSft; r.rateFee+=fee; } else if(fee) r.lump++; }
     if(fee&&kt){ r.feeK+=fee; r.kFee+=kt; }
     (Array.isArray(p.scope)?p.scope:[]).forEach(x=>{ r.scope[x]=(r.scope[x]||0)+1; });
@@ -2936,7 +2938,7 @@ function clientMatrix(rows){
     ['std','Standard','One job, smaller value. Serve well, keep in touch.',r=>!hiV(r)&&!rep(r)],['loyal','Loyal','Smaller jobs, but they keep giving work. Look for bigger briefs.',r=>!hiV(r)&&rep(r)]];
   const card=r=>h('div',{class:'cm-card cm-'+r.pri,'data-tip':`${r.name}\n${clType(r.type)} · score ${r.score} · ${CL_PRI.find(x=>x[0]===r.pri)[1]} priority${r.manual?' (set by hand)':''}`},
     h('div',{class:'cm-n'},h('i'),h('span',{text:r.name})),
-    h('div',{class:'cm-m',text:[`${r.n||0} project${r.n===1?'':'s'}`+(r.prop?` + ${r.prop} proposal${r.prop===1?'':'s'}`:''),r.woN?`${r.woN} more order${r.woN===1?'':'s'}`:null,r.katha?`${+r.katha.toFixed(1)} katha`:null,r.money?bdt(r.money):null].filter(Boolean).join(' · ')}),
+    h('div',{class:'cm-m',text:[`${r.n||0} project${r.n===1?'':'s'}`+(r.prop?` + ${r.prop} proposal${r.prop===1?'':'s'}`:''),r.woN?`${r.woN} more order${r.woN===1?'':'s'}`:null,r.pb?`${r.pb} pro bono`:null,r.katha?`${+r.katha.toFixed(1)} katha`:null,r.money?bdt(r.money):null].filter(Boolean).join(' · ')}),
     h('div',{class:'cm-m',text:r.lastM?'Last work '+fmtYM(r.lastM):'No dated work yet'}),
     h('div',{class:'cm-bar'},h('b',{style:`width:${Math.max(4,r.score)}%`})));
   const cell=([k,t,d,f])=>{ const xs=rows.filter(f);
@@ -3003,7 +3005,7 @@ function clientsDash(){
       h('div',{class:'track','data-tip':`${x.l} priority\n${x.c} client${x.c===1?'':'s'} · ${x.n} project${x.n===1?'':'s'}\n${+x.kt.toFixed(1)} katha${x.f?` · fees ${bdt(x.f)}`:''}`},h('span',{style:`flex:0 0 ${x.kt/mx*100}%;background:${PRI_C[x.k]}`})),
       h('span',{class:'v',style:'white-space:nowrap',text:`${x.c} · ${Math.round(x.kt)} katha`}))))));
   }
-  const basis=r=>!r.feeN?'—':r.perSft&&!r.lump?`৳${Math.round(r.rateFee/Math.max(1,r.sft))}/sft`:r.lump&&!r.perSft?'Lump sum':`Mixed (${r.perSft} per sft, ${r.lump} lump)`;
+  const basis=r=>{ if(!r.feeN) return '—'; const xs=[r.perSft&&(r.lump||r.pb?`${r.perSft} per sft`:`৳${Math.round(r.rateFee/Math.max(1,r.sft))}/sft`),r.lump&&(r.perSft||r.pb?`${r.lump} lump sum`:'Lump sum'),r.pb&&(r.perSft||r.lump?`${r.pb} pro bono`:'Pro bono')].filter(Boolean); return xs.join(' · '); };
   const pick=(r,f,opts)=>{ const v=f==='type'?(r.type):(r.pri), x=h('select',{'aria-label':(f==='type'?'Type for ':'Priority for ')+r.name,style:'min-width:0;padding:4px 6px;font-size:13px'+(f==='priority'?`;color:${PRI_C[r.pri]};font-weight:600`:''),
       onchange:e=>{ const val=e.target.value; run(async()=>{ await saveClient(r.k,{name:r.name,[f]:val==='auto'?null:val});
         // a client's priority carries to their running projects, where it weighs their tasks (staff see the project's priority, never the client ranking)
@@ -3017,7 +3019,7 @@ function clientsDash(){
       h('td',{},h('div',{style:'font-weight:600',text:r.name}),h('div',{class:'sub2',text:[r.active&&`${r.active} running`,r.done&&`${r.done} completed`,r.lost&&`${r.lost} closed early`,r.prop&&`${r.prop} proposal${r.prop===1?'':'s'}`].filter(Boolean).join(' · ')||'—'})),
       h('td',{},S.canWrite&&st==='ok'?pick(r,'type',CL_TYPES):h('span',{text:clType(r.type)})),
       h('td',{class:'n',text:String(r.n)}),h('td',{class:'n'},h('div',{text:String(r.wos.length)}),r.lastM?h('div',{class:'sub2',text:'last '+fmtYM(r.lastM)}):null),h('td',{class:'n',text:r.katha?String(+r.katha.toFixed(1)):'—'}),
-      h('td',{class:'n',title:r.feeN&&r.feeN<r.n?`${r.feeN} of ${r.n} projects have a fee in Finance`:null,text:st==='ok'?bdt(r.fee)+(r.feeN&&r.feeN<r.n?' *':''):'…'}),
+      h('td',{class:'n',title:r.feeN&&r.feeN<r.n?`${r.feeN} of ${r.n} projects have a fee in Finance`:null,text:st==='ok'?(!r.fee&&r.pb?'Pro bono':bdt(r.fee))+(r.feeN&&r.feeN<r.n?' *':''):'…'}),
       h('td',{text:st==='ok'?basis(r):'…'}),h('td',{class:'n',text:String(r.score)}),
       h('td',{},S.canWrite&&st==='ok'?pick(r,'priority',CL_PRI):h('b',{style:`color:${PRI_C[r.pri]}`,text:CL_PRI.find(x=>x[0]===r.pri)[1]}))))))):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
   const ec=rows.filter(r=>r.n);
@@ -3025,7 +3027,7 @@ function clientsDash(){
     h('thead',{},h('tr',{},h('th',{text:'Client'}),h('th',{class:'n',text:'Avg size (katha)'}),h('th',{class:'n',text:'Rate ৳/sft'}),h('th',{class:'n',text:'Fee per katha'}),h('th',{class:'n',text:'Avg duration'}),h('th',{class:'n',text:'Fee per month'}),h('th',{text:'Scope of work'}))),
     h('tbody',{},ec.map(r=>h('tr',{},h('td',{style:'font-weight:600',text:r.name}),
       h('td',{class:'n',text:r.size?String(+r.size.toFixed(1)):'—'}),
-      h('td',{class:'n',text:st!=='ok'?'…':r.rate?String(Math.round(r.rate)):r.lump?'lump sum':'—'}),
+      h('td',{class:'n',text:st!=='ok'?'…':r.rate?String(Math.round(r.rate)):r.lump?'lump sum':r.pb?'pro bono':'—'}),
       h('td',{class:'n',text:st!=='ok'?'…':bdt(r.perK)}),
       h('td',{class:'n',title:r.moN?`${r.moN} project${r.moN===1?'':'s'}; running ones counted to today`:null,text:r.months?(r.months<1.5?'1 month':Math.round(r.months)+' months'):'—'}),
       h('td',{class:'n',text:st!=='ok'?'…':bdt(r.perMo)}),
@@ -4224,7 +4226,7 @@ const siteReq=(id,d)=>{ const p=id&&S.projects[id]; return p?!(p.closed||p.legac
 /* typed as "C" or "4": a letter reads as a block (Bashundhara), a number as a sector (Uttara); anything named in full stays as typed */
 const siteBlock=b=>!b?'':/^[A-Z]{1,2}$/i.test(b)?'Block '+b:/^\d+[A-Z]?$/i.test(b)?'Sector '+b:b.replace(/^(BLOCK|SECTOR|SECTION)\b/i,m=>m[0].toUpperCase()+m.slice(1).toLowerCase());
 const siteAddr=p=>!p?'':[p.plotNo?'Plot '+p.plotNo:'',p.roadNo?'Road '+p.roadNo:'',siteBlock(p.blockSector),p.location||''].filter(Boolean).join(', ');
-const PFIELDS=['entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','dueDate','docUrl','note'];
+const PFIELDS=['entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
 const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
 /* outsourced services: the consultant or vendor doing the work */
@@ -4666,12 +4668,13 @@ function sheetProject(){
           field(d.tech==='yes'?'Name and role (optional)':'Note (optional)',inp('techNote',{maxlength:80,placeholder:d.tech==='yes'?'e.g. Eng. Rahman, site engineer':d.tech==='no'?'e.g. Owner decides; no engineer on site':''}))),
         sec('Agreement'),
         h('div',{class:'form-row'},field('Agreement status *',(()=>{ const el=sel('agStatus',AGS); el.addEventListener('change',()=>renderSheet()); return el; })()),field(d.agStatus==='signed'?'Agreement date *':'Agreement date (optional)',inp('agDate',{type:'date'}))),
-        field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40,style:'text-transform:uppercase',autocapitalize:'characters'})),
+        h('div',{class:'form-row'},field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40,style:'text-transform:uppercase',autocapitalize:'characters'})),
+          field('Fee',sel('proBono',[['','Paid project'],['yes','Pro bono (no fee)']]),d.proBono==='yes'?'No fee is expected; Finance and the Clients dashboard won’t look for one.':null)),
         field('Scope of services *',scopeBox),
         h('div',{class:'form-row'},field('Contractual completion (optional)',inp('dueDate',{type:'date'}),'Used to flag a project whose plan runs past it.'),field('Agreement document link (optional)',inp('docUrl',{type:'url',placeholder:'https://…'})))],
       showPh?[sec('Phases'),h('div',{class:'f-hint',style:'margin-top:-4px',text:pSet?'Already set up. Changes here add or archive gate deliverables when you save.':'Set from the project type. The pod lead creates the gate deliverables and checklists when the phases are set up.'}),phaseEditor(d.ph,{type:phType,p:pSet?{...pSet,id}:null,idp:'pp',onGroup:true})]:null,
       field('Note (optional)',ta('note',{placeholder:!ap&&!id?'Anything the COO should know':''})),
-      h('div',{class:'f-hint',text:'No fees or payment figures are kept here. Agreement status, date, reference and document link are stored separately and only the Principal and the COO can read them.'}),
+      h('div',{class:'f-hint',text:'No fees or payment figures are kept here. Agreement status, date, reference, pro bono and document link are stored separately and only the Principal and the COO can read them.'}),
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
       h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save project':ap?'Add project':'Send for approval'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))];
 }
@@ -6363,7 +6366,7 @@ function sheetProjView(){
     if(dels.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Milestones'}),h('span',{class:'cnt',text:`${dels.filter(t=>t.doneAt).length}/${dels.length}`})),h('div',{class:'list'},dels.map(t=>row(t,{project:false}))))); }
   else out.push(h('p',{class:'f-hint',style:'margin:0',text:'Task details are visible to the project’s own pod, the drafting lead, the Principal and the COO.'}));
   if(ap&&p.pod!=='Studio'&&!isInternalP(p)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Agreement'}),h('span',{class:'cnt',text:'Principal and COO only'})),
-    h('div',{class:'facts'},fact('Status',(AGS.find(x=>x[0]===p.agStatus)||['',''])[1]||'—',({onhold:'Suspended',completed:'Completed',partial:'Terminated after '+((p.closure||{}).lastPhase||'a phase'),cancelled:'Terminated'})[outcomeOf(p)]||null),fact('Date',p.agDate?fmtD(p.agDate):''),fact('Reference',p.agRef),fact('Contractual completion',p.dueDate?fmtD(p.dueDate):''),
+    h('div',{class:'facts'},fact('Status',(AGS.find(x=>x[0]===p.agStatus)||['',''])[1]||'—',({onhold:'Suspended',completed:'Completed',partial:'Terminated after '+((p.closure||{}).lastPhase||'a phase'),cancelled:'Terminated'})[outcomeOf(p)]||null),fact('Date',p.agDate?fmtD(p.agDate):''),fact('Reference',p.agRef),fact('Fee',p.proBono==='yes'?'Pro bono':'Paid'),fact('Contractual completion',p.dueDate?fmtD(p.dueDate):''),
       p.scope&&p.scope.length?h('div',{style:'grid-column:1/-1'},h('div',{class:'lbl',text:'Scope'}),h('div',{class:'chips',style:'margin-top:4px'},p.scope.map(x=>h('span',{class:'chip',style:'padding-right:12px;background:#fff',text:scopeLabel(p,x)})))):null,
       p.docUrl?h('div',{style:'grid-column:1/-1'},h('a',{href:p.docUrl,target:'_blank',rel:'noopener',text:'Open agreement document ↗'})):null)));
   if(p.note&&(ap||det)) out.push(h('p',{class:'quote',text:p.note}));
