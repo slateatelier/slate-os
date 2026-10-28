@@ -298,6 +298,13 @@ main.wide{max-width:1160px}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px}
 .pcard{appearance:none;text-align:left;background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:grid;gap:7px;cursor:pointer;font:inherit;color:inherit;min-width:0}
 .pcard:hover{border-color:var(--faint)}
+/* completed projects: a quiet grey card with a red rubber stamp */
+.pcard.done{position:relative;overflow:hidden;background:#F3F3F1;border-color:#E3E3DF}
+.pcard.done:hover{border-color:#C9C9C4}
+.pcard.done .pc-name{color:#3d3d3b}
+.pcard.done .pc-bar span{background:#A3A39E}
+.pc-stamp{position:absolute;right:14px;top:12px;transform:rotate(-6deg);pointer-events:none;color:rgba(196,30,41,.78);border:2px solid currentColor;border-radius:5px;padding:4px 12px 3px;text-align:center;font-weight:700;font-size:12.5px;line-height:1.15;letter-spacing:.24em;text-transform:uppercase;box-shadow:inset 0 0 0 2px #F3F3F1,inset 0 0 0 3px currentColor;mix-blend-mode:multiply}
+.pc-stamp small{display:block;font-weight:600;font-size:8.5px;letter-spacing:.16em;margin-top:2px;opacity:.9}
 .pc-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .pc-top .pill{background:var(--group);font-size:12px}
 .pc-code{font-size:12.5px;color:var(--muted)}
@@ -6067,8 +6074,10 @@ function viewProjects(){
         h('div',{},h('span',{class:'pill '+(+a.overdue?'s-overdue':'s-late'),text:acctLine(a)+(+a.overdue?` · ${a.overdue} overdue`:'')}))); }))):null;
   if(!list.length){ out.push(h('p',{class:'muted',text:all.length?(f.st==='archive'?'Nothing in the archive matches these filters.':f.st==='acct'?(S.acct?'No open accounts. Every closed project is fully billed and collected.':'Checking Finance…'):f.st==='active'&&!f.q&&!f.pod?'No active projects.':'No projects match these filters.'):'No projects yet.'})); if(holdSec) out.push(holdSec); if(acctSec) out.push(acctSec); return out; }
   out.push(h('div',{class:'pgrid'},list.map(p=>{ const st=stats.get(p.id), [hl,hk]=HEALTH[st.health];
-    return h('button',{class:'pcard',type:'button',onclick:()=>openProjectView(p.id)},
-      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),abOn(p)?h('span',{class:'pill s-late',text:'As-built'}):null,noTech(p)?h('span',{class:'pill tech-pill',title:TECH_TIP,text:'⚠'}):null,acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
+    const done=outcomeOf(p)==='completed';
+    return h('button',{class:'pcard'+(done?' done':''),type:'button',onclick:()=>openProjectView(p.id)},
+      done?h('span',{class:'pc-stamp','aria-hidden':'true'},'Completed',closedOn(p)?h('small',{text:fmtD(closedOn(p))}):null):null,
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},done?null:h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),abOn(p)?h('span',{class:'pill s-late',text:'As-built'}):null,noTech(p)?h('span',{class:'pill tech-pill',title:TECH_TIP,text:'⚠'}):null,acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
       h('div',{class:'pc-name',text:p.name}),
       h('div',{class:'pc-meta',text:[p.client,podText(p),p.katha?p.katha+' katha':'',p.units?p.units+' units'+(p.type==='jv'&&p.loCount!=null?` (LO ${p.loCount} · Dev ${p.devCount})`:''):'',p.farApplies==='yes'&&p.farCalc?Math.round(p.farCalc.saleable/1000)+'k sft saleable':''].filter(Boolean).join(' · ')}),
       ...(()=>{ const pk=p.closed?projParkedTasks(p.id).length:0, dn=st.ts.filter(t=>t.doneAt).length, pc=pk?Math.round(dn/(dn+pk)*100):st.pct;
