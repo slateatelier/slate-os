@@ -202,6 +202,30 @@ main.wide{max-width:1160px}
 .widgets{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:12px}
 .w{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px 16px;display:grid;gap:12px;align-content:start;min-width:0}
 .w.span2{grid-column:span 2}
+/* clients matrix: a 2 × 2 board of client cards */
+.cm{display:grid;grid-template-columns:22px 1fr 1fr;grid-template-rows:auto auto auto;gap:8px}
+.cm-col{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 4px}
+.cm-row{display:flex;align-items:center;justify-content:center}
+.cm-row span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.cm-q{border-radius:12px;padding:12px;display:grid;gap:10px;align-content:start;min-height:120px;min-width:0;background:#FAFAF8;border:1px solid var(--border)}
+.cm-q-key{background:#FBF3F2;border-color:#F0D6D3}
+.cm-q-grow,.cm-q-loyal{background:#F7F6F2}
+.cm-qh{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cm-qt{font-size:14px;font-weight:700;letter-spacing:-.01em}
+.cm-q-key .cm-qt{color:#B3261E}
+.cm-qd{font-size:12px;color:var(--muted);margin-top:2px}
+.cm-qc{font-size:12px;font-weight:600;min-width:24px;height:24px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--border);padding:0 7px}
+.cm-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.cm-card{background:#fff;border:1px solid var(--border);border-left:3px solid var(--pc);border-radius:10px;padding:9px 10px 8px;display:grid;gap:3px;min-width:0;--pc:var(--faint)}
+.cm-card.cm-high{--pc:var(--overdue)} .cm-card.cm-medium{--pc:var(--late)} .cm-card.cm-low{--pc:var(--faint)}
+.cm-n{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;min-width:0}
+.cm-n i{flex:0 0 7px;height:7px;border-radius:50%;background:var(--pc)}
+.cm-n span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-m{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-bar{height:3px;border-radius:2px;background:var(--group);margin-top:4px;overflow:hidden}
+.cm-bar b{display:block;height:100%;background:var(--pc);border-radius:2px}
+.cm-empty{font-size:12px;color:var(--faint);padding:18px 0;text-align:center}
+@media (max-width:640px){.cm{grid-template-columns:1fr}.cm-corner,.cm-col,.cm-row{display:none}.cm-q{min-height:0}}
 @media (max-width:760px){.w.span2{grid-column:auto}}
 .w-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .w-t{font-size:14px;font-weight:600}
@@ -2872,7 +2896,8 @@ function clientRows(){
     r.autoType=dev?'developer':ty.private?'private':'other'; r.type=ov.type||r.autoType;
     // value: fee where Finance has it, land otherwise; relationship: repeat work and work running now; less for projects lost
     // value: total fee 45%, land 25%, rate per sft 15%, fee earned per month of work 15%; land alone until Finance has fees
-    r.value=hasFee?Math.sqrt(r.fee/mxF)*.45+Math.sqrt(r.katha/mxK)*.25+(r.rate/mxR)*.15+Math.sqrt(r.perMo/mxM)*.15:Math.sqrt(r.katha/mxK);
+    // a client whose fees aren't all in Finance yet is valued on land alone, so a missing fee never pushes them down
+    r.value=hasFee&&r.n&&r.feeN>=r.n?Math.sqrt(r.fee/mxF)*.45+Math.sqrt(r.katha/mxK)*.25+(r.rate/mxR)*.15+Math.sqrt(r.perMo/mxM)*.15:Math.sqrt(r.katha/mxK);
     r.rel=Math.min(1,Math.max(0,r.n-1)/3)*.7+(r.active?.3:0);
     r.score=Math.round(100*Math.max(0,r.value*.6+r.rel*.4-(r.n?r.lost/r.n*.15:0)));
     r.autoPri=r.score>=55?'high':r.score>=30?'medium':'low'; r.pri=ov.priority||r.autoPri; r.manual=!!ov.priority; r.note=ov.note||'';
@@ -2881,21 +2906,21 @@ function clientRows(){
 }
 const PRI_C={high:'var(--overdue)',medium:'var(--late)',low:'var(--muted)'};
 function clientMatrix(rows){
-  const W=640,H=340,L=46,B=34,T=12,R=12, pw=W-L-R, ph=H-T-B, mxN=Math.max(4,...rows.map(r=>r.n)), mxK=Math.max(1,...rows.map(r=>r.katha));
-  const X=n=>L+Math.min(n,mxN)/mxN*pw, Y=v=>T+(1-v)*ph, xs=X(1.5), ys=Y(.5);
-  const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',role:'img','aria-label':'Client priority matrix',style:'max-height:360px;font:11px var(--font,system-ui)'});
-  const q=(x,y,w,hh,t,fill)=>[svgEl('rect',{x,y,width:w,height:hh,fill}),svgEl('text',{x:x+8,y:y+16,fill:'#8A8A86','font-weight':600,'letter-spacing':'.04em'},t)];
-  svg.append(...q(L,T,xs-L,ys-T,'GROW · high value, new','#F7F4EE'),...q(xs,T,W-R-xs,ys-T,'KEY CLIENTS · high value, repeat','#F1EEE6'),...q(L,ys,xs-L,H-B-ys,'STANDARD','#FBFAF8'),...q(xs,ys,W-R-xs,H-B-ys,'LOYAL · repeat, smaller','#F7F4EE'));
-  for(let n=1;n<=mxN;n++) svg.append(svgEl('text',{x:X(n),y:H-B+16,'text-anchor':'middle',fill:'#8A8A86'},String(n)));
-  svg.append(svgEl('text',{x:L+pw/2,y:H-4,'text-anchor':'middle',fill:'#5C5C58'},'Projects with SLATE →'),
-    svgEl('text',{x:12,y:T+ph/2,'text-anchor':'middle',fill:'#5C5C58',transform:`rotate(-90 12 ${T+ph/2})`},'Value: fee and land →'));
-  const lab=new Set(rows.slice(0,10).map(r=>r.k));
-  rows.forEach((r,i)=>{ const jx=((i*37)%11-5)*1.6, cx=X(Math.max(r.n,r.prop&&!r.n?.35:r.n))+jx, cy=Y(Math.min(.86,Math.max(.04,r.value))), rad=5+Math.sqrt(r.katha/mxK)*11;
-    const g=svgEl('g',{'data-tip':`${r.name}\n${clType(r.type)} · ${CL_PRI.find(x=>x[0]===r.pri)[1]} priority (score ${r.score})\n${r.n} project${r.n===1?'':'s'}${r.prop?` + ${r.prop} proposal${r.prop===1?'':'s'}`:''} · ${+r.katha.toFixed(1)} katha${r.fee?`\nFee ${bdt(r.fee)}`:''}`});
-    g.append(svgEl('circle',{cx,cy,r:rad,fill:PRI_C[r.pri],'fill-opacity':.28,stroke:PRI_C[r.pri],'stroke-width':1.5}));
-    if(lab.has(r.k)) g.append(svgEl('text',{x:cx+rad+4,y:cy+4,fill:'#2B2B29','font-weight':500},r.name.length>22?r.name.slice(0,21)+'…':r.name));
-    svg.append(g); });
-  return svg;
+  // 2 × 2 board: across, one project or repeat client; down, higher or lower value (half the top client's value or more)
+  const top=Math.max(...rows.map(r=>r.value),0)||1, hiV=r=>r.value/top>=0.5, rep=r=>r.n>=2;
+  const Q=[['grow','Grow','High value, first project. Win the next one.',r=>hiV(r)&&!rep(r)],['key','Key clients','High value and coming back. Protect these.',r=>hiV(r)&&rep(r)],
+    ['std','Standard','One project, smaller value. Serve well, keep in touch.',r=>!hiV(r)&&!rep(r)],['loyal','Loyal','Smaller jobs, but they return. Look for bigger briefs.',r=>!hiV(r)&&rep(r)]];
+  const card=r=>h('div',{class:'cm-card cm-'+r.pri,'data-tip':`${r.name}\n${clType(r.type)} · score ${r.score} · ${CL_PRI.find(x=>x[0]===r.pri)[1]} priority${r.manual?' (set by hand)':''}`},
+    h('div',{class:'cm-n'},h('i'),h('span',{text:r.name})),
+    h('div',{class:'cm-m',text:[`${r.n||0} project${r.n===1?'':'s'}`+(r.prop?` + ${r.prop} proposal${r.prop===1?'':'s'}`:''),r.katha?`${+r.katha.toFixed(1)} katha`:null,r.fee?bdt(r.fee):null].filter(Boolean).join(' · ')}),
+    h('div',{class:'cm-bar'},h('b',{style:`width:${Math.max(4,r.score)}%`})));
+  const cell=([k,t,d,f])=>{ const xs=rows.filter(f);
+    return h('div',{class:'cm-q cm-q-'+k},h('div',{class:'cm-qh'},h('div',{},h('div',{class:'cm-qt',text:t}),h('div',{class:'cm-qd',text:d})),h('span',{class:'cm-qc',text:String(xs.length)})),
+      xs.length?h('div',{class:'cm-list'},xs.map(card)):h('div',{class:'cm-empty',text:'No clients here yet'})); };
+  return h('div',{class:'cm'},
+    h('div',{class:'cm-corner'}),h('div',{class:'cm-col',text:'One project'}),h('div',{class:'cm-col',text:'Repeat client'}),
+    h('div',{class:'cm-row'},h('span',{text:'Higher value'})),cell(Q[0]),cell(Q[1]),
+    h('div',{class:'cm-row'},h('span',{text:'Lower value'})),cell(Q[2]),cell(Q[3]));
 }
 function clientsDash(){
   const C=S.clientFin; if(!C||C.state==='idle'||(C.state==='ok'&&Date.now()-C.at>120000)) loadClientFin();
@@ -2907,14 +2932,19 @@ function clientsDash(){
     kpi('Projects',tot.n),kpi('Repeat clients',tot.rep),kpi('Land, katha',Math.round(tot.k))));
   if(st==='err') out.push(h('div',{class:'callout',role:'alert',text:'Fees could not be loaded from Finance: '+C.err}));
   const W=[];
-  W.push(widget('Client priority matrix','dot size = land area · colour = priority',rows.length?h('div',{},clientMatrix(rows),
+  W.push(widget('Client priority matrix','value against repeat business · bar = score',rows.length?h('div',{style:'display:grid;gap:10px'},clientMatrix(rows),
     h('div',{class:'legend',style:'justify-content:flex-start'},CL_PRI.map(([k,l])=>h('span',{style:`--c:${PRI_C[k]}`,text:l+' priority'}))),
-    h('p',{class:'f-hint',style:'margin:6px 0 0',text:(hasFee?'Value = 45% total fee + 25% land + 15% rate per sft + 15% fee per month of work.':'Value = land area (no fees linked in Finance yet).')+' Score = 60% value + 40% relationship (repeat projects, work running now), less up to 15 for projects cancelled or closed early. High ≥ 55, Medium ≥ 30. Set a client’s priority by hand in the table and it overrides the score; it also sets the priority of that client’s running projects (High, Normal or Low), which weighs their tasks.'})):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
+    h('p',{class:'f-hint',style:'margin:6px 0 0',text:'Value = 45% total fee + 25% land + 15% rate per sft + 15% fee per month of work; a client whose fees aren’t all in Finance yet is valued on land alone. Higher value = half the top client’s value or more.'+' Score = 60% value + 40% relationship (repeat projects, work running now), less up to 15 for projects cancelled or closed early. High ≥ 55, Medium ≥ 30. Set a client’s priority by hand in the table and it overrides the score; it also sets the priority of that client’s running projects (High, Normal or Low), which weighs their tasks.'})):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
   const types={}; rows.forEach(r=>{ const t=types[r.type]||(types[r.type]={c:0,n:0,k:0,f:0}); t.c++; t.n+=r.n; t.k+=r.katha; t.f+=r.fee; });
   const tl=Object.entries(types).sort((a,b)=>b[1].n-a[1].n), mx=Math.max(1,...tl.map(x=>x[1].n));
   W.push(widget('Clients by type','projects, land and fees',tl.length?h('div',{class:'hbars'},tl.map(([k,t])=>h('div',{class:'hb'},h('span',{class:'nm',text:clType(k)}),
     h('div',{class:'track','data-tip':`${clType(k)}\n${t.c} client${t.c===1?'':'s'} · ${t.n} project${t.n===1?'':'s'}\n${+t.k.toFixed(1)} katha${t.f?` · fees ${bdt(t.f)}`:''}`},h('span',{class:'s-ontime',style:`flex:0 0 ${t.n/mx*100}%`})),
     h('span',{class:'v',text:`${t.c} · ${t.n}p`})))):h('div',{class:'w-empty',text:'No clients yet.'})));
+  { const ps=CL_PRI.map(([k,l])=>{ const xs=rows.filter(r=>r.pri===k); return {k,l,c:xs.length,n:xs.reduce((a,r)=>a+r.n,0),kt:xs.reduce((a,r)=>a+r.katha,0),f:xs.reduce((a,r)=>a+r.fee,0)}; }), mx=Math.max(1,...ps.map(x=>x.kt));
+    W.push(widget('Priority split','clients, projects and land',h('div',{class:'hbars'},ps.map(x=>h('div',{class:'hb'},h('span',{class:'nm',text:x.l}),
+      h('div',{class:'track','data-tip':`${x.l} priority\n${x.c} client${x.c===1?'':'s'} · ${x.n} project${x.n===1?'':'s'}\n${+x.kt.toFixed(1)} katha${x.f?` · fees ${bdt(x.f)}`:''}`},h('span',{style:`flex:0 0 ${x.kt/mx*100}%;background:${PRI_C[x.k]}`})),
+      h('span',{class:'v',text:`${x.c} · ${Math.round(x.kt)}k`}))))));
+  }
   const basis=r=>!r.feeN?'—':r.perSft&&!r.lump?`৳${Math.round(r.rateFee/Math.max(1,r.sft))}/sft`:r.lump&&!r.perSft?'Lump sum':`Mixed (${r.perSft} per sft, ${r.lump} lump)`;
   const pick=(r,f,opts)=>{ const v=f==='type'?(r.type):(r.pri), x=h('select',{'aria-label':(f==='type'?'Type for ':'Priority for ')+r.name,style:'min-width:0;padding:4px 6px;font-size:13px'+(f==='priority'?`;color:${PRI_C[r.pri]};font-weight:600`:''),
       onchange:e=>{ const val=e.target.value; run(async()=>{ await saveClient(r.k,{name:r.name,[f]:val==='auto'?null:val});
@@ -2945,7 +2975,7 @@ function clientsDash(){
   W[W.length-1].append(h('p',{class:'f-hint',style:'margin:0',text:'Rate and fees come from Finance. Duration runs from a project’s first task to its completion, or to today while it runs. Fee per month = fees ÷ months of work, so it shows which clients pay well for the time the studio spends.'}));
   W[W.length-2].append(h('p',{class:'f-hint',style:'margin:0',text:'Clients are grouped by the client name on each project, so spell a client the same way on every project. Fees come from Finance; * means some of that client’s projects have no fee there yet. Only you and the COO can see this view.'}));
   // the two tables run the full width of the page
-  W.slice(2).forEach(w=>{ w.classList.remove('span2'); w.style.gridColumn='1 / -1'; });
+  [W[0],...W.slice(3)].forEach(w=>{ w.classList.remove('span2'); w.style.gridColumn='1 / -1'; });
   out.push(h('div',{class:'widgets'},W));
   return out;
 }
