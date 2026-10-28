@@ -1992,6 +1992,7 @@ function taskNear(n){ const t0=Date.parse(n.created_at)||0, body=n.body||''; let
 async function openNotice(id,kind){
   if(GO_INBOX.includes(kind)) return openNotifs();
   if(kind==='backup') return goView(amApprover()?'backup':'mine');
+  if(kind==='proposal'){ S.pf={...(S.pf||{q:'',pod:'',st:'active'}),kind:'proposed'}; return goView('projects'); }
   if(kind==='accounts'){ S.pf={...(S.pf||{q:'',pod:''}),st:'acct'}; acctLoad(true); return goView('projects'); }
   if(kind==='nudge') return goView('mine');
   if(kind==='issue_report') return goView('reports');
@@ -2039,6 +2040,7 @@ async function boot(){
   db.collection('tasklib').onSnapshot(q=>{ S.lib={}; q.docs.forEach(d=>{S.lib[d.id]=d.data()}); schedule(); },()=>{});
   db.collection('projects').onSnapshot(q=>{ S.projects={}; q.docs.forEach(d=>{S.projects[d.id]=d.data()}); schedule(); },onSubErr);
   db.doc(`data/users/${S.uid}/notif`).onSnapshot(snap=>{ S.nst=snap.exists?snap.data():{}; schedule(); },()=>{ S.nst={}; });
+  db.collection('proposals').onSnapshot(q=>{ S.props={}; q.docs.forEach(d=>{S.props[d.id]=d.data()}); schedule(); },()=>{ S.props={}; });
   db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
   db.collection('tasks').onSnapshot(q=>{ S.shared={}; q.docs.forEach(d=>{S.shared[d.id]=d.data()}); mergeTasks(); },onSubErr);
 
@@ -3986,6 +3988,11 @@ function buildNotifs(){
       Q({id:`hy:${r.pid}:${n}`,at,title:`History to approve: ${n} item${n===1?'':'s'} recorded before SLATE OS`,body:projLabel(p)}); });
     closeReqs().forEach(p=>Q({id:`cr:${p.id}:${p.closeReq.at||''}`,at:p.closeReq.at||nowIso,title:`${nameOf(p.closeReq.by)} asks to mark ${p.code||p.name} ${OUTCOMES[p.closeReq.outcome].l.toLowerCase()}`,body:reasonLabel(p.closeReq.reason)+(p.closeReq.note?`\n“${p.closeReq.note}”`:''),projId:p.id,view:null}));
     projects().filter(p=>isOnHold(p)&&p.closure&&p.closure.reviewOn&&p.closure.reviewOn<=td).forEach(p=>Q({id:`hr:${p.id}:${p.closure.reviewOn}`,at:atLocal(p.closure.reviewOn,9),title:`On-hold review due: ${projLabel(p)}`,body:`On hold since ${fmtD(closedOn(p))}`+(p.closure.reason?` · ${reasonLabel(p.closure.reason)}`:'')+'. Resume it or close it.',projId:p.id,view:null}));
+    if(canProps()) for(const p of propList()){
+      if(propDue(p)){ const l=propLast(p), dd=diff(p.next,td);
+        Q({id:`pf:${p.id}:${p.next}`,at:atLocal(p.next,9),title:`Follow up${dd>0?` (${dd} day${dd===1?'':'s'} overdue)`:' today'}: ${p.name} · ${p.client}`,body:l?`Last: ${fmtD(l.at.slice(0,10))} · ${propLine(l)||'Note'}`+(l.note?`\n“${l.note}”`:''):'No client response logged yet.',propId:p.id,view:null}); }
+      for(const e of (p.log||[])) if(e.by!==me&&e.at) add({id:`pl:${p.id}:${e.at}`,cat:'update',at:e.at,title:`${nameOf(e.by)} logged a client response: ${p.name}`,body:(propLine(e)||'Note')+(e.note?`\n“${e.note}”`:''),propId:p.id});
+      if(p.status==='won'&&p.wonAt&&p.closedBy!==me) add({id:`pw:${p.id}`,cat:'update',at:p.wonAt,title:`${nameOf(p.closedBy)} confirmed the proposal: ${p.name}`,body:'It is now a client project.',propId:p.id}); }
     extraReqs().forEach(x=>Q({id:`xr:${x.id}`,at:x.m.extra.at||nowIso,title:`${nameOf(x.m.extra.by)} raised an extra revision round`,body:projLabel(S.projects[x.m.projectId])}));
     if(S.isOwner){
       Object.entries(S.projects).filter(([k,p])=>p&&p.delReq&&p.delReq.by!==S.uid).forEach(([k,p])=>Q({id:`dl:${k}:${p.delReq.at||''}`,at:p.delReq.at||nowIso,title:`${nameOf(p.delReq.by)} asks to delete ${projLabel(p)}`,body:p.delReq.reason||'No reason given'}));
@@ -4071,6 +4078,7 @@ function openNotifs(){ S.sheet={type:'notif'}; nSave({openedAt:new Date().toISOS
 function nOpen(n){ const st=nst(); nSave({read:{...(st.read||{}),[n.id]:1}});
   if(n.taskId&&S.tasks[n.taskId]){ openTask(n.taskId); return; }
   if(n.projId&&S.projects[n.projId]){ openProjectView(n.projId); return; }
+  if(n.propId&&(S.props||{})[n.propId]){ openPropView(n.propId); return; }
   if(n.meetId&&S.pmeet[n.meetId]){ openPMeet(n.meetId); return; }
   if(n.view){ if(n.view==='meet') S.mhub='weekly'; S.view=n.view; closeSheet(); render(true); window.scrollTo(0,0); } }
 function nArchive(n,on){ const st=nst(); const a={...(st.archived||{})}, r={...(st.restored||{})}, rd={...(st.read||{}),[n.id]:1};
@@ -4366,7 +4374,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -4756,8 +4764,8 @@ function sheetProject(){
       else v.phasePlan={sel:phaseOrder(d.type,d.ph.sel),ed:edFull((id&&S.projects[id]&&S.projects[id].phasePlan&&S.projects[id].phasePlan.ed)||{},d.ph.ed,d.type)}; }
     const fn=id?async()=>{ await ref.update(v); if(phNow) await applyPhaseChanges(id,d.ph); }:()=>ref.set({...v,closed:v.entry==='completed',...(v.entry==='completed'?{legacy:true}:{}),createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
     const plan=!id&&ap&&v.type&&!internal&&v.entry!=='completed'?{pid:ref.id,type:v.type,pod:v.pod}:null;
-    const dft=!id&&S.sheet.draftId;
-    run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(dft) delProjDraft(dft).catch(()=>{}); if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
+    const dft=!id&&S.sheet.draftId, fp=!id&&S.sheet.fromProp;
+    run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(dft) delProjDraft(dft).catch(()=>{}); if(fp) propWon(fp,ref.id).catch(()=>{}); if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
   };
   return [head(id?'Edit project':ap?'New project':'Request a project',id?(d.name||'Project'):ap?'Add to the project list':'New project for the list'),
     !id&&!ap&&h('p',{class:'lead',style:'margin:0',text:'Projects come from one studio list. Fill in what you know; the COO checks it and approves it before it appears in the menus.'}),
@@ -6614,8 +6622,140 @@ const canSeeProjectDetail=p=>fullView()||inMyPodProject(p)||(!!myPod()&&p.pod===
 /* reading a project's details: also the drafting lead, on every active non-Chalk project (they check sets for every pod). Changing them still needs canSeeProjectDetail. */
 const canViewProjectDetail=p=>!!p&&(canSeeProjectDetail(p)||(!!myHeadTeam()&&!isChalkProj(p)&&!p.closed&&isLive(p)));
 const podText=p=>{ const ps=podsOfProject(p); return ps.length?ps.map(podLabel).join(' + '):isInternalP(p)?'Studio work':'Studio / internal'; };
+/* ---------- Proposed projects ----------
+   Projects SLATE has proposed but not yet won. Only the Principal and the COO see them (proposals/<id>, closed to everyone
+   else in the database too). Each one keeps a log of client responses and a next follow-up date; SLATE OS reminds both of them
+   on that date (then every 3 days while it is overdue) and tells the other one when a response is logged.
+   Confirming a proposal opens the new-project form filled in from it; once the project is added it is an ordinary client project. */
+const canProps=()=>!!S.uid&&(S.isOwner||isCOO(S.uid));
+const PROP_STAGE={prep:'Preparing',sent:'Proposal sent',talks:'In talks'};
+const PROP_OUT={won:'Confirmed',lost:'Lost',dropped:'Dropped'};
+const PROP_KIND=[['call','Phone call'],['meet','Meeting'],['email','Email'],['msg','WhatsApp or message'],['visit','Site visit'],['sent','Proposal sent'],['revised','Revised proposal sent'],['note','Note']];
+const PROP_RESP=[['','No response needed'],['pos','Positive'],['talks','Negotiating'],['wait','Waiting for their decision'],['none','No reply yet'],['neg','Not interested']];
+const PROP_RESP_S={pos:'ontime',talks:'late',wait:'open',none:'late',neg:'overdue'};
+const propList=()=>Object.entries(S.props||{}).filter(([k,p])=>p&&p.name).map(([id,p])=>({...p,id}));
+const propOpen=p=>(p.status||'open')==='open';
+const propLast=p=>{ const l=p.log||[]; return l.length?l[l.length-1]:null; };
+const propDue=p=>propOpen(p)&&!!p.next&&p.next<=today();
+const propFee=p=>{ const n=+p.fee||0; if(!n) return p.feeNote||''; return (p.feeBasis==='sft'?taka(n)+' per sft':bdt(n)+' lump sum')+(p.feeNote?' · '+p.feeNote:''); };
+const propTypeName=k=>k&&STD_DEF[k]?STD_DEF[k].name:'';
+const propLine=e=>e?[(PROP_KIND.find(x=>x[0]===e.kind)||[])[1]||'',(PROP_RESP.find(x=>x[0]===e.resp&&x[0])||[])[1]||''].filter(Boolean).join(' · '):'';
+const propWrite=(id,p)=>S.db.doc('proposals/'+id).set({...p,updatedAt:new Date().toISOString(),updatedBy:S.uid});
+function openPropView(id){ S.sheet={type:'propView',id,lg:{kind:'call',resp:'',note:'',next:''},err:''}; renderSheet(); }
+function openProp(id){ const p=id?(S.props||{})[id]:null;
+  const d={name:'',client:'',contact:'',phone:'',location:'',katha:'',type:'',scope:[],feeBasis:'lump',fee:'',feeNote:'',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:'',...(p?JSON.parse(JSON.stringify(p)):{})};
+  if(!Array.isArray(d.scope)) d.scope=[];
+  S.sheet={type:'prop',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-name'); el&&el.focus(); },30); }
+function sheetProp(){
+  const d=S.sheet.d, id=S.sheet.id;
+  const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
+  const submit=e=>{ e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds proposed projects.');
+    const name=(d.name||'').trim().toUpperCase(), client=(d.client||'').trim();
+    if(!name) return fail('Give the project a name.'); if(!client) return fail('Who is the client?');
+    if(d.katha!==''&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
+    if(d.fee!==''&&!(+d.fee>0)) return fail('Fee should be a number, or leave it empty.');
+    const now=new Date().toISOString(), pid=id||S.db.collection('proposals').doc().id, old=id?(S.props||{})[id]||{}:{};
+    const v={...old,name,client,contact:(d.contact||'').trim(),phone:(d.phone||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
+      scope:[...d.scope],feeBasis:d.feeBasis||'lump',fee:d.fee===''?'':String(+d.fee),feeNote:(d.feeNote||'').trim(),sentOn:d.sentOn||'',stage:d.stage||'prep',next:d.next||'',note:(d.note||'').trim(),
+      status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid})};
+    run(()=>propWrite(pid,v),id?'Proposal updated':'Proposed project added').then(ok=>{ if(ok) openPropView(pid); }); };
+  const chip=(x)=>{ const on=d.scope.includes(x); return h('button',{type:'button',class:'chip','aria-pressed':String(on),style:'border:0;cursor:pointer;padding:6px 12px;'+(on?'background:var(--ink);color:#fff':''),onclick:()=>{ d.scope=on?d.scope.filter(y=>y!==x):[...d.scope,x]; renderSheet(); },text:x}); };
+  return [head(id?'Edit proposal':'New proposed project',id?(d.name||'Proposal'):'Only you and the COO see this'),
+    h('p',{class:'lead',style:'margin:0',text:'Just what you need while proposing. When the client confirms, it becomes a client project and the team sees it.'}),
+    h('form',{class:'form',onsubmit:submit},
+      sec('Project'),
+      field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'})),
+      h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:120,placeholder:'Company or person'})),field('Contact person',inp('contact',{maxlength:80}))),
+      h('div',{class:'form-row'},field('Phone',inp('phone',{type:'tel',maxlength:40})),field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'}))),
+      h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Project type',sel('type',[['','Not decided'],...Object.entries(STD_DEF).filter(([k])=>k!=='proposal').map(([k,t])=>[k,t.name])]))),
+      field('Scope proposed',h('div',{class:'chips'},SCOPES.map(chip))),
+      sec('Fee proposed'),
+      h('div',{class:'form-row'},field('Basis',seg('Fee basis',[['lump','Lump sum'],['sft','Per sft']],d.feeBasis||'lump',v=>{ d.feeBasis=v; renderSheet(); })),
+        field(d.feeBasis==='sft'?'Rate (Tk per sft)':'Amount (Tk)',inp('fee',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
+      field('Fee note',inp('feeNote',{maxlength:160,placeholder:'e.g. plus VAT; 3D extra'})),
+      sec('Follow-up'),
+      h('div',{class:'form-row'},field('Stage',sel('stage',Object.entries(PROP_STAGE))),field('Proposal sent on',inp('sentOn',{type:'date',max:today()}))),
+      field('Next follow-up',inp('next',{type:'date'}),'You and the COO are reminded on this date, then every 3 days until a response is logged with a new date.'),
+      field('Note',ta('note',{rows:3,placeholder:'Anything worth remembering about this client or proposal'})),
+      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save proposal':'Add proposed project'}),
+        h('button',{class:'btn',type:'button',onclick:()=>id?openPropView(id):closeSheet(),text:'Cancel'})))]; }
+function sheetPropView(){
+  const id=S.sheet.id, p=(S.props||{})[id]?{...S.props[id],id}:null; if(!p) return [head('Proposed project','Not found')];
+  const lg=S.sheet.lg, open=propOpen(p), log=[...(p.log||[])].reverse(), pj=p.projectId&&S.projects[p.projectId];
+  const fact=(l,v,sub)=>v?h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v',text:v}),sub?h('div',{class:'s',text:sub}):null):null;
+  const save=(patch,msg)=>run(()=>propWrite(id,{...S.props[id],...patch}),msg);
+  const addLog=e=>{ e.preventDefault(); const note=(lg.note||'').trim(); if(!note&&!lg.resp) return fail('Write what the client said, or pick their response.');
+    if(lg.next&&lg.next<today()) return fail('The next follow-up can’t be in the past.');
+    const now=new Date().toISOString(), en={at:now,by:S.uid,kind:lg.kind,kindL:(PROP_KIND.find(x=>x[0]===lg.kind)||[])[1]||'',resp:lg.resp,respL:lg.resp?(PROP_RESP.find(x=>x[0]===lg.resp)||[])[1]:'',note};
+    const stage=['sent','revised'].includes(lg.kind)?(p.stage==='talks'?'talks':'sent'):lg.resp==='talks'?'talks':p.stage||'prep';
+    const patch={log:[...(p.log||[]),en],next:lg.next||'',stage,...(['sent','revised'].includes(lg.kind)&&!p.sentOn?{sentOn:today()}:{})};
+    save(patch,'Response logged'+(lg.next?' · follow-up '+fmtD(lg.next):'')).then(ok=>{ if(ok) S.sheet.lg={kind:'call',resp:'',note:'',next:''}; renderSheet(); }); };
+  const outcome=(st)=>{ const note=prompt(st==='lost'?'Why was it lost? (optional)':'Why is it dropped? (optional)',''); if(note===null) return;
+    save({status:st,closedAt:new Date().toISOString(),closedBy:S.uid,outcomeNote:note.trim(),next:''},st==='lost'?'Marked lost':'Marked dropped'); };
+  const confirmIt=()=>{ openProject(); const d=S.sheet.d; d.name=p.name||''; d.client=p.client||''; d.contact=p.contact||''; d.phone=p.phone||''; d.location=p.location||''; d.katha=p.katha||''; d.type=p.type||''; d.scope=[...(p.scope||[])]; d.note=p.note||'';
+    S.sheet.fromProp=id; renderSheet(); toast('Fill in the rest. Once the project is added, the proposal is marked confirmed.'); };
+  const out=[head('Proposed project · only you and the COO',p.name),
+    h('div',{class:'sh-status'},open?h('span',{class:'pill s-'+(propDue(p)?'overdue':'open'),text:PROP_STAGE[p.stage]||'Preparing'}):h('span',{class:'pill s-'+(p.status==='won'?'ontime':'overdue'),text:PROP_OUT[p.status]||p.status}),
+      open&&p.next?h('span',{class:'tag',style:propDue(p)?'color:var(--overdue)':'',text:(p.next<today()?'Follow-up was due ':p.next===today()?'Follow up today':'Next follow-up ')+(p.next===today()?'':fmtD(p.next))}):null,
+      p.type?h('span',{class:'tag',text:propTypeName(p.type)}):null),
+    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),fact('Fee proposed',propFee(p)),
+      fact('Proposal sent',p.sentOn?fmtD(p.sentOn):''),fact('Added',p.createdAt?fmtTs(p.createdAt):'',p.createdBy?'by '+nameOf(p.createdBy):'')),
+    (p.scope||[]).length?h('div',{},h('div',{class:'lbl',text:'Scope proposed'}),h('div',{class:'chips',style:'margin-top:4px'},p.scope.map(x=>h('span',{class:'chip',style:'padding-right:12px',text:x})))):null,
+    p.note?h('p',{class:'f-hint',style:'margin:0;white-space:pre-wrap',text:p.note}):null,
+    !open&&(p.outcomeNote||pj)?h('div',{class:'card',style:'gap:6px'},h('b',{text:PROP_OUT[p.status]+(p.closedAt||p.wonAt?' · '+fmtTs(p.wonAt||p.closedAt):'')}),p.outcomeNote?h('span',{class:'muted',text:p.outcomeNote}):null,
+      pj?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>openProjectView(p.projectId),text:'Open the project: '+(pj.code||pj.name)}):null):null];
+  if(open&&S.canWrite) out.push(h('form',{class:'form card',style:'gap:10px',onsubmit:addLog},
+    h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em',text:'Log a client response'}),
+    h('div',{class:'form-row'},field('How',(()=>{ const x=h('select',{onchange:e=>{lg.kind=e.target.value}},PROP_KIND.map(([v,l])=>h('option',{value:v,text:l}))); x.value=lg.kind; return x; })()),
+      field('Client response',(()=>{ const x=h('select',{onchange:e=>{lg.resp=e.target.value}},PROP_RESP.map(([v,l])=>h('option',{value:v,text:v?l:'—'}))); x.value=lg.resp; return x; })())),
+    field('What was said',(()=>{ const x=h('textarea',{rows:3,placeholder:'e.g. Wants the fee per sft; will decide after the board meeting',oninput:e=>{lg.note=e.target.value}}); x.value=lg.note; return x; })()),
+    h('div',{class:'form-row',style:'align-items:end'},field('Next follow-up',h('input',{type:'date',min:today(),value:lg.next,oninput:e=>{lg.next=e.target.value}}),'Empty means no reminder.'),
+      h('div',{class:'chips',style:'margin-bottom:6px'},[[2,'In 2 days'],[5,'In a week'],[10,'In 2 weeks']].map(([n,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>{ lg.next=addWorkDays(today(),n); renderSheet(); },text:l})))),
+    h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save response'}))));
+  out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Follow-up log'}),h('span',{class:'cnt',text:String(log.length)})),
+    log.length?h('div',{class:'list'},log.map(e=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},
+      h('div',{class:'row-meta'},h('b',{text:propLine(e)||'Note'}),e.resp&&PROP_RESP_S[e.resp]?h('span',{class:'pill s-'+PROP_RESP_S[e.resp],text:(PROP_RESP.find(x=>x[0]===e.resp)||[])[1]}):null),
+      e.note?h('div',{style:'white-space:pre-wrap',text:e.note}):null,
+      h('div',{class:'f-hint',style:'margin:0',text:`${fmtTs(e.at)} · ${nameOf(e.by)}`})))):h('p',{class:'muted',style:'margin:4px',text:'No responses logged yet. Log each call, meeting or message here; the other one of you is told.'})));
+  if(S.canWrite) out.push(h('div',{class:'actions'},
+    open?h('button',{class:'btn btn-primary',type:'button',onclick:confirmIt,text:'Client confirmed → make it a client project'}):null,
+    open?h('button',{class:'btn',type:'button',onclick:()=>openProp(id),text:'Edit'}):null,
+    open?h('button',{class:'btn',type:'button',onclick:()=>outcome('lost'),text:'Lost'}):null,
+    open?h('button',{class:'btn',type:'button',onclick:()=>outcome('dropped'),text:'Drop'}):null,
+    !open&&p.status!=='won'?h('button',{class:'btn',type:'button',onclick:()=>save({status:'open',closedAt:'',closedBy:'',outcomeNote:'',next:addWorkDays(today(),2)},'Reopened'),text:'Reopen'}):null,
+    h('button',{class:'btn btn-sm',type:'button',style:'margin-left:auto',onclick:()=>{ if(confirm('Delete this proposal and its log? This can’t be undone.')) run(()=>S.db.doc('proposals/'+id).delete(),'Proposal deleted').then(ok=>{ if(ok) closeSheet(); }); },text:'Delete'})));
+  return out; }
+/* after the confirmed proposal's project is saved */
+function propWon(id,pid){ const p=(S.props||{})[id]; if(!p) return Promise.resolve();
+  return propWrite(id,{...p,status:'won',wonAt:new Date().toISOString(),closedAt:new Date().toISOString(),closedBy:S.uid,projectId:pid,next:'',outcomeNote:p.outcomeNote||'Client confirmed. It is now a client project.'}); }
+function pjKindSeg(f){ const n=canProps()?propList().filter(propDue).length:0;
+  return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work'],...(canProps()?[['proposed','Proposed'+(n?' · '+n+' due':'')]]:[])],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })); }
+function viewProposals(f){
+  const all=propList(), q=(f.q||'').trim().toLowerCase(), ps=f.ps||'open', td=today();
+  const openL=all.filter(propOpen), due=openL.filter(propDue), won=all.filter(p=>p.status==='won'), lost=all.filter(p=>['lost','dropped'].includes(p.status));
+  const rate=won.length+lost.length?Math.round(won.length/(won.length+lost.length)*100)+'%':'—';
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Studio list'}),h('h1',{class:'h1',text:'Projects'}),h('p',{class:'lead',text:'Proposed projects: only you and the COO see these. Confirmed ones become client projects for the team.'})),
+    S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(),text:'New proposal'})):null),
+    pjKindSeg(f),
+    h('div',{class:'kpis kpis5'},kpi('Open',openL.length),kpi('Follow-up due',due.length,due.length?'overdue':''),kpi('Confirmed',won.length,'early'),kpi('Lost or dropped',lost.length,'late'),kpi('Win rate',rate))];
+  const stSel=h('select',{'aria-label':'Status',onchange:e=>{f.ps=e.target.value;render(true)}},[['open','Open'],['won','Confirmed'],['lost','Lost or dropped'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); stSel.value=ps;
+  out.push(h('div',{class:'bar'},h('input',{type:'search',placeholder:'Search name, client or site',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),stSel));
+  const list=all.filter(p=>(ps==='all'||(ps==='open'?propOpen(p):ps==='won'?p.status==='won':['lost','dropped'].includes(p.status)))&&(!q||`${p.name} ${p.client} ${p.location||''}`.toLowerCase().includes(q)))
+    .sort((a,b)=>propOpen(a)&&propOpen(b)?(a.next||'9999').localeCompare(b.next||'9999'):(b.closedAt||b.createdAt||'').localeCompare(a.closedAt||a.createdAt||''));
+  if(!list.length){ out.push(h('p',{class:'muted',text:all.length?'No proposals match.':'No proposed projects yet. Add one with New proposal; keep it light, you only need a name and the client.'})); return out; }
+  out.push(h('div',{class:'pgrid'},list.map(p=>{ const l=propLast(p), dueP=propDue(p);
+    return h('button',{class:'pcard',type:'button',onclick:()=>openPropView(p.id)},
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.client||''}),propOpen(p)?h('span',{class:'pill s-'+(p.stage==='talks'?'late':p.stage==='sent'?'open':'open'),text:PROP_STAGE[p.stage]||'Preparing'}):h('span',{class:'pill s-'+(p.status==='won'?'ontime':'overdue'),text:PROP_OUT[p.status]})),
+      h('div',{class:'pc-name pn',text:p.name}),
+      h('div',{class:'pc-meta',text:[p.location,p.katha?p.katha+' katha':'',propTypeName(p.type),propFee(p)].filter(Boolean).join(' · ')}),
+      l?h('div',{class:'f-hint',style:'margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${fmtD(l.at.slice(0,10))} · ${propLine(l)||'Note'}${l.note?' · “'+l.note+'”':''}`}):h('div',{class:'f-hint',style:'margin:0',text:'No response logged yet'}),
+      propOpen(p)?h('div',{class:'pc-row'},h('span',{text:(p.log||[]).length+' log entr'+((p.log||[]).length===1?'y':'ies')}),h('span',{class:'mono',style:dueP?'color:var(--overdue)':'',text:p.next?(p.next<td?'Overdue ':p.next===td?'Today ':'Next ')+fmtD(p.next):'No follow-up date'})):
+        h('div',{class:'pc-row muted'},h('span',{text:p.outcomeNote||''}),h('span',{class:'mono',text:fmtD((p.wonAt||p.closedAt||'').slice(0,10))}))); })));
+  return out; }
 function viewProjects(){
-  const f=S.pf||(S.pf={q:'',pod:'',st:'active',kind:'client'}), q=f.q.trim().toLowerCase(), ap=amApprover(); acctLoad(); if(!f.kind) f.kind='client';
+  const f=S.pf||(S.pf={q:'',pod:'',st:'active',kind:'client'}); if(!f.kind) f.kind='client';
+  if(f.kind==='proposed'){ if(canProps()) return viewProposals(f); f.kind='client'; }
+  const q=f.q.trim().toLowerCase(), ap=amApprover(); acctLoad();
   const isSt=p=>p.pod==='Studio'||isInternalP(p), sv=f.kind==='studio';
   const every=projects(), all=every.filter(p=>sv?isSt(p):!isSt(p)), act=all.filter(p=>!p.closed), stats=new Map(all.map(p=>[p.id,projStats(p)]));
   const clientAll=every.filter(p=>!isSt(p)), compN=clientAll.filter(p=>p.closed&&outcomeOf(p)==='completed').length;
@@ -6623,7 +6763,7 @@ function viewProjects(){
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Studio list'}),h('h1',{class:'h1',text:'Projects'}),h('p',{class:'lead',text:'Every project, its agreement and its progress. New projects are approved by the COO before they join the list.'})),
     S.canWrite&&h('div',{class:'actions'},canChalkEdit()?h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New Chalk project'}):null,canProjReq()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:ap?'New project':'Request a project'}):null))];
   const hold=all.filter(p=>isOnHold(p));
-  out.push(h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work']],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })));
+  out.push(pjKindSeg(f));
   if(sv) out.push(h('div',{class:'kpis'},kpi('Studio areas',act.length),kpi('Open tasks',act.reduce((a,p)=>a+Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!t.doneAt).length,0))));
   else out.push(h('div',{class:'kpis kpis5'},kpi('Total',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On hold',hold.length,'late'),kpi('Cancelled',clientAll.filter(p=>p.closed&&outcomeOf(p)==='cancelled').length,'overdue')),
     h('div',{class:'lbl',style:'margin:-4px 0 -6px;text-transform:uppercase;letter-spacing:.05em',text:'Active projects'}),
