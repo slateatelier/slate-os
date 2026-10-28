@@ -91,7 +91,7 @@ jobs:
           ls -lh out | tail -n +2 | awk '{print "- " $9 " (" $5 ")"}' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the encrypted backup for 90 days
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: slate-os-backup-${{ env.STAMP }}
           path: out/*.gpg
