@@ -1297,6 +1297,8 @@ function payrollView() {
   ${advs.length ? `<div class="panel"><div class="ph"><h3>Advances and loans</h3></div><div class="rows">${advs.map(a => `<button class="row r-inv" data-act="open-adv" data-id="${a.id}"><div style="min-width:0"><div class="t">${esc((staffOf(a.staffId) || {}).name || 'Staff')}</div><div class="sub">${tk(a.installment)} a month${a.note ? ' · ' + esc(a.note) : ''}</div></div><div class="c2 sub">${fmtDate(a.date)}</div>${advChip(a)}<div class="amt">${tk(a.amount)}</div></button>`).join('')}</div></div>` : ''}`;
 }
 function staffForm(t) {
+  /* salaries and staff details are set in SLATE OS › Business › HR; here they are shown read-only */
+  if (!t) { toast('Add staff and set salaries in SLATE OS › Business › HR.'); return; }
   const src = t || { payMethod: 'cash', joinDate: '' }, r = t ? curRate(t) || {} : {};
   const used = new Set(S.staff.map(x => x.userId).filter(Boolean));
   const ppl = S.profiles.filter(p => !used.has(p.id) || p.id === src.userId);
@@ -1321,6 +1323,9 @@ function staffForm(t) {
     <div class="foot"><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn pri" type="submit">${t ? 'Save' : 'Add staff member'}</button></div>
   </form>`, root => {
     const f = $('#sf', root);
+    f.querySelectorAll('input,select').forEach(x => { x.disabled = true; });
+    const sb = f.querySelector('button[type=submit]'); if (sb) sb.remove();
+    f.insertAdjacentHTML('afterbegin', '<p class="hint" style="margin:0 0 6px">Set in SLATE OS › Business › HR. Change salaries there; payroll here uses them.</p>');
     const upd = () => { $('#tBankWrap', root).hidden = f.payMethod.value === 'cash'; $('#tPartWrap', root).hidden = f.payMethod.value !== 'split'; const g = SAL_PARTS.reduce((a, [k]) => a + (+f[k].value || 0), 0);
       $('#tTot', root).innerHTML = `<dt class="tot">Gross a month</dt><dd class="tot">${tk(g)}</dd><dt>Take-home before deductions</dt><dd>${tk(g - (+f.tax.value || 0))}</dd>`; };
     f.addEventListener('input', upd); f.addEventListener('change', upd); upd();
