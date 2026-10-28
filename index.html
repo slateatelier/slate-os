@@ -5552,6 +5552,7 @@ function sheetPMeet(){
     }
     if(acts2.length) out.push(h('div',{class:'actions'},acts2));
     if(m.status==='final'&&pmOut(m)) out.push(h('div',{class:'f-hint',text:m.sentAt?(pmAccepted(m)?`Sent ${fmtD(m.sentAt)}. No objection within 3 working days, so the minutes stand as accepted.`:`Sent ${fmtD(m.sentAt)}. Accepted unless someone objects within 3 working days.`):canLeadPM(p)?'Email the minutes to every attendee, then mark them as sent.':'Email the minutes to every attendee, then ask your pod lead to mark them as sent.'}));
+    { const mv=moveMeetSec(sh,m); if(mv) out.push(mv); }
     out.push(h('div',{class:'f-hint',text:`Logged by ${nameOf(m.createdBy)} · last updated by ${nameOf(m.updatedBy)} · ${fmtTs(m.updatedAt)}`}));
     return out;
   }
@@ -5925,8 +5926,35 @@ function sheetSchedView(sh,m){
       h('button',{class:'btn',type:'button',onclick:()=>{ sh.mode='cancel'; sh.err=''; renderSheet(); },text:'Call off'})));
     if(held) out.push(h('div',{class:'f-hint',text:'Write the minutes within 24 hours. Decisions and action items go in them; actions become tasks when you finalise.'}));
   } else if(m.status==='scheduled') out.push(h('div',{class:'f-hint',text:`${nameOf(m.createdBy)} set this up and can change it. You get a reminder 30 minutes before; if you haven’t replied, a nudge comes 24 hours after the invite or 3 hours before the start.`}));
+  { const mv=moveMeetSec(sh,m); if(mv) out.push(mv); }
   out.push(h('div',{class:'f-hint',text:`Set up by ${nameOf(m.createdBy)} · last updated by ${nameOf(m.updatedBy)} · ${fmtTs(m.updatedAt)}`}));
   return out;
+}
+/* a studio meeting that turns out to be about one project moves to that project: the meeting, its minutes and its action tasks */
+function moveMeetSec(sh,m){
+  if(!m||mCat(m)==='project'||!S.canWrite||!amApprover()||m.status==='cancelled') return null;
+  const mv=sh.move;
+  if(!mv) return h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ sh.move={pid:'',type:'review',tasks:true}; renderSheet(); },text:'Move to a project'});
+  const opts=projects().filter(p=>p.pod!=='Studio'&&!isInternalP(p)&&isLive(p)).sort((a,b)=>(a.closed?1:0)-(b.closed?1:0)||(a.code||'').localeCompare(b.code||''));
+  const ps=h('select',{id:'mv-pid','aria-label':'Project',onchange:e=>{ mv.pid=e.target.value; }},h('option',{value:'',text:'Choose the project…'}),opts.map(p=>h('option',{value:p.id,text:`${p.code||'—'} · ${p.name}${p.closed?' (closed)':''}`}))); ps.value=mv.pid;
+  const ts=h('select',{id:'mv-type','aria-label':'Meeting type',onchange:e=>{ mv.type=e.target.value; }},Object.entries(PMT).map(([k,l])=>h('option',{value:k,text:l}))); ts.value=mv.type;
+  const acts=(m.actions||[]).filter(a=>a.taskId&&S.tasks[a.taskId]);
+  return h('div',{class:'callout',style:'display:grid;gap:8px'},h('b',{text:'Move this meeting to a project'}),
+    h('div',{class:'f-hint',style:'margin:0',text:`It becomes a meeting of the project you choose, with its minutes, attendees and replies. It leaves ${mCatName(mCat(m))}.`}),
+    field('Project *',ps),field('Meeting type',ts),
+    acts.length?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',checked:mv.tasks,onchange:e=>{ mv.tasks=e.target.checked; }}),`Move its ${acts.length} action task${acts.length===1?'':'s'} to the project too`):null,
+    sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
+    h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>moveMeeting(sh,m,acts)},'Move meeting'),h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ sh.move=null; sh.err=''; renderSheet(); },text:'Cancel'})));
+}
+function moveMeeting(sh,m,acts){
+  const mv=sh.move, p=S.projects[mv.pid]; if(!p){ sh.err='Choose the project.'; renderSheet(); return; }
+  const now=new Date().toISOString(), from=mCatName(mCat(m));
+  run(async()=>{
+    await S.db.doc('pmeetings/'+sh.id).update({projectId:mv.pid,cat:'project',type:mv.type,phase:'',movedFrom:{cat:mCat(m),projectId:m.projectId||'',by:S.uid,at:now},updatedAt:now,updatedBy:S.uid,
+      history:[...(m.history||[]),{at:now,by:S.uid,type:'moved',from,to:p.code||p.name}].slice(-20)});
+    if(mv.tasks) for(const a of acts){ const t=S.tasks[a.taskId]; if(!t||t.projectId===mv.pid) continue;
+      await taskUpdate(a.taskId,{projectId:mv.pid},[{type:'moved',from:t.projectId||'',to:mv.pid,note:'Meeting moved to the project'}]); }
+  },'Moved to '+(p.code||p.name)).then(ok=>{ if(ok){ sh.move=null; sh.err=''; sh.projectId=mv.pid; renderSheet(); } });
 }
 
 /* ---------- How to use: a visual guide, one role at a time ---------- */
