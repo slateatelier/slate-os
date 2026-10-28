@@ -5459,8 +5459,12 @@ function saveStdEdit(){
 
 
 /* ---------- project meetings: client, consultant, authority, site, internal design review ---------- */
-const PMT={client:'Client',consultant:'Consultant',authority:'Authority',site:'Site',review:'Internal design review'};
-const pmOut=x=>['client','consultant','authority'].includes(x.type);
+const PMT={client:'Client',presentation:'Design presentation to the client',landowner:'Landowner (JV)',consultant:'Consultant',coordination:'STR/MEP coordination',authority:'Authority',site:'Site',contractor:'Contractor',marketing:'Marketing and sales',kickoff:'Project kick-off',status:'Project status review',review:'Internal design review',handover:'Handover',other:'Other'};
+/* meetings with the client's side: changes requested and the client's feedback on a phase can be recorded */
+const CLIENT_MT=['client','presentation','landowner','handover'];
+const isClientMT=t=>CLIENT_MT.includes(t);
+/* meetings with people outside SLATE: the minutes are sent to them */
+const pmOut=x=>['client','presentation','landowner','consultant','coordination','authority','contractor','marketing','handover'].includes(x.type);
 const pmOf=pid=>Object.entries(S.pmeet).map(([id,m])=>({...m,id})).filter(m=>m.projectId===pid).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.createdAt||'').localeCompare(a.createdAt||''));
 /* support staff (drafting, visualizer, others) who work on a project can log a meeting they attended, even without the full project view */
 const workOn=p=>!!p&&activeTasks().some(t=>t.projectId===p.id&&(t.assignee===S.uid||(!!myHeadTeam()&&!!t.assignee&&teamOf(t.assignee)===myHeadTeam())));
@@ -5513,11 +5517,11 @@ function savePMeet(final){
   const isProj=d.cat==='project';
   run(async()=>{
     const pid=m?(m.projectId||null):await mResolveProject(d), p=pid&&S.projects[pid]?{...S.projects[pid],id:pid}:null;
-    const fbOk=isProj&&!!p&&canSeeProjectDetail(p), gotFb=final&&fbOk&&d.type==='client'&&d.phase&&d.fbGot&&p&&p.std;
+    const fbOk=isProj&&!!p&&canSeeProjectDetail(p), gotFb=final&&fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot&&p&&p.std;
     let extra=m&&m.extra||null; if(isProj&&d.extraAsk&&(d.changes||'').trim()&&!extra) extra={status:ap?'approved':'pending',by:S.uid,at:now,...(ap?{decidedBy:S.uid,decidedAt:now}:{})}; if(!d.extraAsk) extra=null;
     const title=(d.title||'').trim()||(isProj?`${PMT[d.type]||'Project'} meeting`:`${mCatName(d.cat)} meeting`), from=`From the ${isProj?(PMT[d.type]||'').toLowerCase()+' meeting':'“'+title+'”'} on ${fmtD(d.date)}`;
     if(final) for(const a of acts) if(!a.taskId){ a.taskId=await createTask({projectId:pid,title:a.text.trim(),kind:'Task',assignee:a.owner,phase:isProj&&d.phase?phLabel(d.phase):'Meeting actions',target:ap?(a.due||''):'',proposed:ap?'':(a.due||''),note:from}); }
-    await ref.set({projectId:pid,cat:d.cat,title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&d.type==='client'&&d.phase&&d.fbGot),
+    await ref.set({projectId:pid,cat:d.cat,title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot),
       actions:acts.map(a=>({text:a.text.trim(),owner:a.owner||'',due:a.due||'',taskId:a.taskId||''})),status:final?'final':(m&&m.status==='final'?'final':'draft'),sentAt:m&&m.sentAt||'',
       createdAt:m&&m.createdAt||now,createdBy:m&&m.createdBy||S.uid,updatedAt:now,updatedBy:S.uid,finalAt:final?(m&&m.finalAt||now):(m&&m.finalAt||''),
       ...(m&&m.schedAt?{schedAt:m.schedAt}:{}),history:[...((m&&m.history)||[]),{at:now,by:S.uid,type:final?'final':'draft'}].slice(-20)});
@@ -5583,12 +5587,12 @@ function sheetPMeet(){
       pick,!isProj||!m?titleF:null,
       h('div',{class:'form-row'},isProj?field('Type',typeSel):null,field('Date',h('input',{id:'pm-date',type:'date',max:today(),value:d.date,oninput:e=>{d.date=e.target.value}}))),
       ks.length?field('Phase',phSel):null,
-      isProj&&p&&d.type==='client'&&d.phase&&canSeeProjectDetail(p)?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pm-fb',checked:d.fbGot,onchange:e=>{d.fbGot=e.target.checked}}),`The client gave feedback on the phase ${PH[d.phase]?PH[d.phase].no:''} submission (records the feedback-received date)`):null,
+      isProj&&p&&isClientMT(d.type)&&d.phase&&canSeeProjectDetail(p)?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pm-fb',checked:d.fbGot,onchange:e=>{d.fbGot=e.target.checked}}),`The client gave feedback on the phase ${PH[d.phase]?PH[d.phase].no:''} submission (records the feedback-received date)`):null,
       invite,
       field('Other attendees',h('input',{id:'pm-ext',value:d.external,maxlength:200,placeholder:'e.g. Mr. Salam (client), Engr. Rahman (structural)',oninput:e=>{d.external=e.target.value}})),
       field('Discussion',ta('agenda',{placeholder:'Key points discussed',rows:3})),
       field('Decisions',ta('decisions',{placeholder:'One decision per line, e.g.\nUnit B kitchen moved to the east side\nGround floor lobby double height',rows:3})),
-      isProj&&d.type==='client'?[field('Changes requested by the client',ta('changes',{placeholder:'One change per line',rows:3})),
+      isProj&&isClientMT(d.type)?[field('Changes requested by the client',ta('changes',{placeholder:'One change per line',rows:3})),
         h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pm-extra',checked:d.extraAsk,onchange:e=>{d.extraAsk=e.target.checked}}),amApprover()?'These changes are an extra revision round beyond the agreement':'These changes are an extra revision round beyond the agreement (goes to the COO)')]:null,
       field('Issues raised',ta('issues',{placeholder:'Blockers, clashes, missing inputs: one per line',rows:2})),
       h('div',{class:'lbl',text:'Action items'}),

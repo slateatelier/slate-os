@@ -1,7 +1,7 @@
 /* SLATE OS service worker: lets the app open from the home screen.
    The page and its scripts are fetched fresh whenever online (so updates arrive at once);
    the saved copy is used only when the network is unavailable. Data calls are never cached. */
-const CACHE = 'slate-os-v68';
+const CACHE = 'slate-os-v69';
 const SHELL = ['/', '/slate-db.js', '/config.js', '/qr.js', '/manifest.webmanifest', '/icons/tile-black.png',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
