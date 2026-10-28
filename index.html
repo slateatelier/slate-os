@@ -551,7 +551,18 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .biz-need:hover{border-color:#C7C7CC}.biz-need .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--late)}.biz-need .dot.s-overdue{background:var(--overdue)}.biz-need .bn-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.biz-need .bn-t .muted{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pv-rules{display:grid;gap:10px;padding:10px 2px 4px}.pv-rule{display:flex;align-items:center;gap:8px;font-size:13.5px}.pv-rule input[type=number]{width:72px;padding:6px 8px}.pv-rule>span:first-child{flex:1}.pv-who .pv-rule>span:nth-child(2){flex:1}.pv-who{display:grid;gap:8px}
 .pv-hls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pv-hl{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}.pv-hn{font-weight:600;font-size:17px;margin-top:6px}.pv-hv{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:2px 0}
-@media (max-width:640px){.pv-hls{grid-template-columns:1fr}}.pv-mx{width:100%;height:auto;display:block}.pv-tbl td.r{text-align:right}.pv-tbl td,.pv-tbl th{white-space:nowrap}.pv-tbl td:first-child{white-space:normal;min-width:150px}
+@media (max-width:640px){.pv-hls{grid-template-columns:1fr}}.pv-board{background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 16px}
+.pv-legend{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:12px;color:var(--muted);padding:10px 0;border-bottom:1px solid var(--border)}.pv-legend>span{display:inline-flex;align-items:center;gap:6px}
+.pv-k{display:inline-block;width:14px;height:8px;border-radius:2px}.pv-k-e{background:#000}.pv-k-c{background:#E5E5EA}.pv-k-t{width:2px;height:12px;background:#000;border-radius:0}
+.pv-chips{margin-left:auto;gap:10px!important}.pv-chip{display:inline-flex;align-items:center;gap:5px;color:var(--ink)}.pv-chip .dot,.pv-row .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.s-ontime{background:var(--ontime)}.dot.s-early{background:var(--early)}.dot.s-late{background:var(--late)}.dot.s-overdue{background:var(--overdue)}.dot.s-open{background:#C7C7CC}
+.pv-row{padding:14px 0;border-bottom:1px solid var(--border)}.pv-row:last-child{border-bottom:0}
+.pv-rh{display:flex;align-items:center;gap:10px}.pv-rank{width:22px;height:22px;border-radius:50%;background:var(--group);font-size:12px;font-weight:600;display:grid;place-items:center;flex:none}
+.pv-nm{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.pv-nm .muted{font-size:12px}
+.pv-bar{position:relative;height:14px;margin:10px 0 8px 32px;background:var(--group);border-radius:4px}.pv-c{position:absolute;left:0;top:0;bottom:0;background:#D1D1D6;border-radius:4px}
+.pv-e{position:absolute;left:0;top:3px;bottom:3px;border-radius:3px;background:#000}.pv-e.s-ontime{background:var(--ontime)}.pv-e.s-overdue{background:var(--overdue)}.pv-e.s-late{background:var(--late)}
+.pv-t{position:absolute;top:-3px;bottom:-3px;width:2px;background:#000;margin-left:-1px}
+.pv-meta{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--muted);margin-left:32px}.pv-meta b{color:var(--ink);font-size:14px}.pv-tbl td.r{text-align:right}.pv-tbl td,.pv-tbl th{white-space:nowrap}.pv-tbl td:first-child{white-space:normal;min-width:150px}
 .biz-more{margin:10px 0 4px}.biz-more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 2px;list-style:none}.biz-more summary::-webkit-details-marker{display:none}.biz-more summary::before{content:'＋ '}.biz-more[open] summary::before{content:'− '}.biz-more .kpis{margin-top:8px}
 @media (max-width:640px){.biz-act .btn{padding-left:12px;padding-right:12px}.kpis.kpis5 .kpi .num{font-size:21px;letter-spacing:-.01em}}
 .tl-card{gap:10px}
@@ -7343,14 +7354,14 @@ function viewValue(){
   if(notes.length) out.push(h('p',{class:'f-hint',style:'margin:8px 2px 0',text:notes.join(' ')}));
   /* highlights */
   const ok=rows.filter(x=>x.ctc>0), best=(a,f)=>a.slice().sort((p,q)=>f(q)-f(p))[0];
-  const tp=best(ok,x=>x.contrib), tm=best(ok.filter(x=>x.fee>0),x=>x.mult), tf=best(rows.filter(x=>x.pts>0),x=>x.pts*(x.rel==null?1:0.5+0.5*x.rel));
+  const tp=best(ok.filter(x=>x.fee>0),x=>x.contrib), tm=best(ok.filter(x=>x.fee>0),x=>x.mult), tf=best(rows.filter(x=>x.pts>0),x=>x.pts*(x.rel==null?1:0.5+0.5*x.rel));
   const hl=(lbl,x,val,sub)=>h('div',{class:'pv-hl'},h('div',{class:'lbl',text:lbl}),h('div',{class:'pv-hn',text:x?x.name:'—'}),h('div',{class:'pv-hv',text:x?val(x):''}),h('div',{class:'muted',style:'font-size:12px',text:x?sub(x):'Not enough data yet'}));
   out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Top of the team'})),h('div',{class:'pv-hls'},
     hl('Most profitable',tp,x=>(x.contrib>=0?'+':'−')+bdt(Math.abs(x.contrib)),x=>`earned ${tk(x.fee)} · cost ${tk(x.ctc)}`),
     hl('Best value multiple',tm,x=>x2(x.mult),x=>`${tk(x.fee)} earned on ${tk(x.ctc)} cost`),
     hl('Top performer',tf,x=>(Math.round(x.pts*10)/10).toFixed(1)+' points',x=>pc(x.rel)+' on time'+(x.nDue?` · ${x.nDue} task${x.nDue>1?'s':''} due`:''))));
   /* matrix */
-  out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Value matrix'}),h('span',{class:'cnt',text:'value multiple × on-time'})),pvMatrix(rows.filter(x=>x.ctc>0),R.bench));
+  out.push(...pvBoard(rows,R.bench,D.totB));
   /* ranking */
   const sk=B.pvSort||'contrib', srt=rows.slice().sort((a,b)=>(b[sk]??-1e12)-(a[sk]??-1e12));
   const th=(k,l)=>h('th',{style:'text-align:right;cursor:pointer;white-space:nowrap'+(sk===k?';color:var(--ink)':''),onclick:()=>{ B.pvSort=k; render(true); },text:l+(sk===k?' ↓':'')});
@@ -7378,22 +7389,31 @@ function viewValue(){
       h('td',{class:'mono r',style:m==null?'':'color:var('+(m>=R.bench?'--ontime':m>=1.5?'--late':'--overdue')+')',text:x2(m)}),h('td',{class:'mono r',text:g.ctc?(g.fee>=g.ctc?'+':'−')+bdt(Math.abs(g.fee-g.ctc)):'—'})); })))));
   out.push(h('p',{class:'f-hint',style:'margin:14px 2px 0',text:'Read with care: the figures are only as good as task weights and logged work. POD leaders’ coordination shows through the leader share, not points. Junior salaries are low, so their multiples run high; read the multiple with points. Use a full quarter or more before judging anyone.'}));
   return out; }
-function pvMatrix(rows,bench){
-  const ph=window.innerWidth<=640, W=ph?380:640,H=ph?300:340,L=40,Rr=14,T=10,Bm=40, maxX=Math.max(bench*2,...rows.map(x=>x.mult||0))*1.08, X=v=>L+(Math.min(v,maxX)/maxX)*(W-L-Rr), Y=v=>T+22+(1-Math.min(v,1))*(H-T-22-Bm);
-  const NS='http://www.w3.org/2000/svg', el=(n,a,txt)=>{ const e=document.createElementNS(NS,n); for(const k in a) e.setAttribute(k,a[k]); if(txt!=null) e.textContent=txt; return e; };
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,class:'pv-mx',role:'img','aria-label':'Value matrix'});
-  const bx=X(bench), by=Y(0.9);
-  svg.append(el('rect',{x:bx,y:T,width:W-Rr-bx,height:by-T,fill:'rgba(52,199,89,.08)'}),el('rect',{x:L,y:by,width:bx-L,height:H-Bm-by,fill:'rgba(255,59,48,.06)'}));
-  svg.append(el('line',{x1:bx,y1:T,x2:bx,y2:H-Bm,stroke:'#C7C7CC','stroke-dasharray':'4 4'}),el('line',{x1:L,y1:by,x2:W-Rr,y2:by,stroke:'#C7C7CC','stroke-dasharray':'4 4'}),el('line',{x1:L,y1:H-Bm,x2:W-Rr,y2:H-Bm,stroke:'#E5E5EA'}),el('line',{x1:L,y1:T,x2:L,y2:H-Bm,stroke:'#E5E5EA'}));
-  const lab=(x,y,t,anc)=>svg.append(el('text',{x,y,'text-anchor':anc||'start','font-size':11,fill:'#8E8E93','font-weight':600,'letter-spacing':'.04em'},t));
-  lab(W-Rr-6,T+12,'STARS','end'); lab(L+6,T+12,ph?'RELIABLE, LOW':'RELIABLE, LOW VALUE'); lab(W-Rr-6,H-Bm-8,ph?'VALUE, LATE':'HIGH VALUE, LATE','end'); lab(L+6,H-Bm-8,'REVIEW');
-  for(let v=0;v<=maxX;v+=maxX>8?2:1){ svg.append(el('text',{x:X(v),y:H-Bm+16,'text-anchor':'middle','font-size':11,fill:'#8E8E93'},v+'×')); }
-  [0,0.5,0.9,1].forEach(v=>svg.append(el('text',{x:L-6,y:Y(v)+4,'text-anchor':'end','font-size':11,fill:'#8E8E93'},Math.round(v*100)+'%')));
-  svg.append(el('text',{x:(L+W-Rr)/2,y:H-6,'text-anchor':'middle','font-size':11,fill:'#8E8E93'},ph?'Value multiple · healthy '+bench+'×':'Value multiple (fee earned ÷ cost to company) · dashed line = healthy '+bench+'×'));
-  rows.forEach(x=>{ const cx=X(x.mult||0), cy=Y(x.rel==null?0:x.rel), good=(x.mult||0)>=bench&&(x.rel||0)>=0.9;
-    svg.append(el('circle',{cx,cy,r:6,fill:good?'#34C759':(x.mult||0)<1.5&&(x.rel||0)<0.9?'#FF3B30':'#000',stroke:'#fff','stroke-width':2}));
-    svg.append(el('text',{x:cx+(cx>W-120?-9:9),y:cy+4,'text-anchor':cx>W-120?'end':'start','font-size':12,fill:'#000'},x.name.split(' ')[0])); });
-  return h('div',{class:'w',style:'padding:10px'},svg,rows.length?null:h('p',{class:'muted',text:'Appears once people have a salary and earned fees.'})); }
+/* value board: one row per person — earned against cost, with the healthy target marked — and a plain verdict */
+function pvVerdict(x,bench){
+  if(!x.ctc) return ['No salary in HR','open'];
+  if(!x.fee&&!x.pts) return ['No work logged','open'];
+  if(!x.fee) return ['Working, not billed yet','open'];
+  if(x.mult>=bench&&(x.rel==null||x.rel>=0.9)) return ['Star','ontime'];
+  if(x.mult>=bench) return ['Earns well, often late','late'];
+  if(x.mult>=1) return ['Covers cost','early'];
+  return ['Below cost','overdue']; }
+function pvBoard(rows,bench,billed){
+  const tk=n=>n?bdt(Math.round(n)):'৳0', x2=v=>v==null?'—':(Math.round(v*10)/10).toFixed(1)+'×';
+  const anyFee=rows.some(x=>x.fee>0);
+  const list=rows.slice().sort((a,b)=>anyFee?(b.contrib-a.contrib)||(b.pts-a.pts):(b.pts-a.pts)||((b.rel??-1)-(a.rel??-1)));
+  const max=Math.max(1,...list.map(x=>Math.max(x.fee,x.ctc*bench)));
+  const V=list.map(x=>pvVerdict(x,bench)), cnt=new Map(); V.forEach(([l,c])=>{ const k=l+'|'+c; cnt.set(k,(cnt.get(k)||0)+1); });
+  const chips=[...cnt.entries()].map(([k,n])=>{ const [l,c]=k.split('|'); return h('span',{class:'pv-chip'},h('span',{class:'dot s-'+c}),l+' '+n); });
+  const out=[h('div',{class:'sec-h biz-sec'},h('h2',{text:'Value board'}),h('span',{class:'cnt',text:anyFee?'most profitable first':'by work, until fees are billed'}))];
+  if(!anyFee) out.push(h('p',{class:'f-hint',style:'margin:-2px 2px 10px',text:billed?'Fees were billed in this period, but none on projects with logged work yet.':'No fee billed in this period yet, so nobody has earned anything to compare against their cost. Ranked by work points until invoices go out.'}));
+  out.push(h('div',{class:'pv-board'},h('div',{class:'pv-legend'},h('span',{},h('i',{class:'pv-k pv-k-e'}),'Fee earned'),h('span',{},h('i',{class:'pv-k pv-k-c'}),'Cost to company'),h('span',{},h('i',{class:'pv-k pv-k-t'}),`Healthy target (${bench}× cost)`),h('span',{class:'pv-chips'},...chips)),
+    list.map((x,i)=>{ const [vl,vc]=V[i], pc=v=>Math.max(0,Math.min(100,v/max*100));
+      return h('div',{class:'pv-row'},
+        h('div',{class:'pv-rh'},h('span',{class:'pv-rank',text:String(i+1)}),h('div',{class:'pv-nm'},h('b',{text:x.name}),h('span',{class:'muted',text:x.coo?'COO':podLabel(x.team)||x.team})),h('span',{class:'pill s-'+vc,text:vl})),
+        h('div',{class:'pv-bar',title:`Earned ${tk(x.fee)} · cost ${tk(x.ctc)}`},h('div',{class:'pv-c',style:`width:${pc(x.ctc)}%`}),h('div',{class:'pv-e s-'+vc,style:`width:${pc(x.fee)}%`}),x.ctc?h('div',{class:'pv-t',style:`left:${pc(x.ctc*bench)}%`}):null),
+        h('div',{class:'pv-meta'},h('span',{},h('b',{text:x.fee?x2(x.mult):'—'}),' multiple'),h('span',{text:`earned ${tk(x.fee)} · cost ${tk(x.ctc)}`}),h('span',{text:(x.rel==null?'—':Math.round(x.rel*100)+'%')+' on time'}),h('span',{text:(Math.round(x.pts*10)/10).toFixed(1)+' points'}))); })));
+  return out; }
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
   S.biz=S.biz||{tab:'over',q:'',st:'active'};
