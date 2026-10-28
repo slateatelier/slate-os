@@ -2803,20 +2803,153 @@ function overallDash(r){
   out.push(h('div',{class:'widgets'},W));
   return out;
 }
+/* ---------- Clients (Principal and COO only): who SLATE works for, how much, and who comes first ----------
+   OS projects are grouped by client name. Fees come straight from Finance (its projects are linked by osId, or by code),
+   read with the viewer's own sign-in, so nobody else's session ever loads them. A client's type and priority, when
+   set by hand, are kept in Finance as clients/<key>, which only the Principal and the COO can read. */
+const canClients=()=>amApprover()&&!!window.slateFinanceRole;
+const CL_TYPES=[['developer','Developer'],['landowner','Landowner'],['private','Private owner'],['corporate','Corporate'],['institution','Institution / govt'],['other','Other']];
+const CL_PRI=[['high','High'],['medium','Medium'],['low','Low']];
+const clType=k=>(CL_TYPES.find(x=>x[0]===k)||['','—'])[1];
+const clKey=n=>(n||'').trim().toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60)||'unnamed';
+const bdt=n=>{ n=+n||0; if(!n) return '—'; if(n>=1e7) return '৳'+(n/1e7).toFixed(n>=1e8?1:2).replace(/\.?0+$/,'')+' Cr'; if(n>=1e5) return '৳'+(n/1e5).toFixed(1).replace(/\.0$/,'')+' L'; return '৳'+Math.round(n).toLocaleString('en-IN'); };
+async function loadClientFin(force){
+  const C=S.clientFin||(S.clientFin={state:'idle'});
+  if(C.state==='loading'||(!force&&C.state==='ok'&&Date.now()-C.at<120000)) return;
+  C.state='loading';
+  try{ const sb=window.slateSupabase; if(!sb) throw new Error('Not signed in');
+    const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','clients']);
+    if(error) throw error;
+    const fp={},code={},cl={};
+    (data||[]).forEach(r=>{ const d=r.data||{}; if(r.coll==='projects'){ if(d.osId) fp[d.osId]=d; else if(d.code) code[d.code.toUpperCase()]=d; } else if(r.coll==='clients') cl[r.doc_id]=d; });
+    Object.assign(C,{state:'ok',fp,code,cl,at:Date.now(),err:''});
+  }catch(e){ C.state='err'; C.err=(e&&e.message)||String(e); }
+  if(S.view==='dash'&&S.dash.scope==='clients') render(true);
+}
+async function saveClient(k,patch){
+  const C=S.clientFin, cur=(C.cl&&C.cl[k])||null, data={...(cur||{}),...patch,updatedAt:new Date().toISOString(),updatedBy:S.uid}, sb=window.slateSupabase;
+  if(cur){ const {data:o,error}=await sb.from('fin_docs').update({data}).eq('path','clients/'+k).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Not saved: only the Principal and the COO keep client records'); }
+  else { const {error}=await sb.from('fin_docs').insert({path:'clients/'+k,coll:'clients',doc_id:k,data}); if(error) throw error; }
+  C.cl={...(C.cl||{}),[k]:data};
+}
+function clientRows(){
+  const C=S.clientFin||{}, fp=C.fp||{}, byCode=C.code||{}, cl=C.cl||{}, m={}, td=today(), first={};
+  // a project's start: its first task or record (there is no separate start date); its end: completion, or today while running
+  Object.values(S.tasks).forEach(t=>{ const d=(t.createdAt||'').slice(0,10); if(t.projectId&&d&&(!first[t.projectId]||d<first[t.projectId])) first[t.projectId]=d; });
+  projects().filter(p=>!isInternalP(p)&&p.pod!=='Studio'&&p.status!=='pending'&&p.status!=='declined').forEach(p=>{
+    const name=(p.client||'').trim()||'Client not named', k=clKey(name);
+    const r=m[k]||(m[k]={k,name,ps:[],katha:0,fee:0,feeN:0,sft:0,rateFee:0,perSft:0,lump:0,active:0,done:0,prop:0,lost:0,last:'',types:{},mo:0,moN:0,feeMo:0,moFee:0,feeK:0,kFee:0,scope:{}});
+    r.ps.push(p); const t=(p.std&&p.std.type)||p.type||''; r.types[t]=(r.types[t]||0)+1;
+    const o=outcomeOf(p), prop=t==='proposal';
+    if(prop) r.prop++; else if(o==='active'||o==='onhold') r.active++; else if(o==='completed') r.done++; else r.lost++;
+    if(!prop) r.katha+=parseFloat(p.katha)||0;
+    const f=fp[p.id]||byCode[(p.code||'').toUpperCase()], fee=f?+f.fee||0:0, kt=parseFloat(p.katha)||0;
+    if(f){ r.fee+=fee; r.feeN++; if(+f.rate>0&&+f.areaSft>0){ r.perSft++; r.sft+=+f.areaSft; r.rateFee+=fee; } else if(fee) r.lump++; }
+    if(fee&&kt){ r.feeK+=fee; r.kFee+=kt; }
+    (Array.isArray(p.scope)?p.scope:[]).forEach(x=>{ r.scope[x]=(r.scope[x]||0)+1; });
+    if(!prop){ const a=[first[p.id],(p.createdAt||'').slice(0,10)].filter(Boolean).sort()[0], e=p.closed?closedOn(p):td;
+      if(a&&e&&e>a){ const mo=Math.max(.5,(new Date(e)-new Date(a))/2629800000); r.mo+=mo; r.moN++; if(fee){ r.feeMo+=fee; r.moFee+=mo; } } }
+    const d=(p.createdAt||closedOn(p)||'').slice(0,10); if(d>r.last) r.last=d;
+  });
+  const rows=Object.values(m), hasFee=rows.some(r=>r.fee>0);
+  rows.forEach(r=>{ r.rate=r.sft?r.rateFee/r.sft:0; r.perK=r.kFee?r.feeK/r.kFee:0; r.perMo=r.moFee?r.feeMo/r.moFee:0; r.months=r.moN?r.mo/r.moN:0; const nn=r.active+r.done+r.lost; r.size=nn?r.katha/nn:0; });
+  const mxF=Math.max(1,...rows.map(r=>r.fee)), mxK=Math.max(1,...rows.map(r=>r.katha)), mxR=Math.max(1,...rows.map(r=>r.rate)), mxM=Math.max(1,...rows.map(r=>r.perMo));
+  rows.forEach(r=>{ const ov=cl[r.k]||{};
+    r.n=r.active+r.done+r.lost;
+    const ty=r.types, dev=(ty.dev||0)+(ty.jv||0)+(ty.share||0);
+    r.autoType=dev?'developer':ty.private?'private':'other'; r.type=ov.type||r.autoType;
+    // value: fee where Finance has it, land otherwise; relationship: repeat work and work running now; less for projects lost
+    // value: total fee 45%, land 25%, rate per sft 15%, fee earned per month of work 15%; land alone until Finance has fees
+    r.value=hasFee?Math.sqrt(r.fee/mxF)*.45+Math.sqrt(r.katha/mxK)*.25+(r.rate/mxR)*.15+Math.sqrt(r.perMo/mxM)*.15:Math.sqrt(r.katha/mxK);
+    r.rel=Math.min(1,Math.max(0,r.n-1)/3)*.7+(r.active?.3:0);
+    r.score=Math.round(100*Math.max(0,r.value*.6+r.rel*.4-(r.n?r.lost/r.n*.15:0)));
+    r.autoPri=r.score>=55?'high':r.score>=30?'medium':'low'; r.pri=ov.priority||r.autoPri; r.manual=!!ov.priority; r.note=ov.note||'';
+  });
+  return {rows:rows.sort((a,b)=>b.score-a.score||b.n-a.n),hasFee};
+}
+const PRI_C={high:'var(--overdue)',medium:'var(--late)',low:'var(--muted)'};
+function clientMatrix(rows){
+  const W=640,H=340,L=46,B=34,T=12,R=12, pw=W-L-R, ph=H-T-B, mxN=Math.max(4,...rows.map(r=>r.n)), mxK=Math.max(1,...rows.map(r=>r.katha));
+  const X=n=>L+Math.min(n,mxN)/mxN*pw, Y=v=>T+(1-v)*ph, xs=X(1.5), ys=Y(.5);
+  const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',role:'img','aria-label':'Client priority matrix',style:'max-height:360px;font:11px var(--font,system-ui)'});
+  const q=(x,y,w,hh,t,fill)=>[svgEl('rect',{x,y,width:w,height:hh,fill}),svgEl('text',{x:x+8,y:y+16,fill:'#8A8A86','font-weight':600,'letter-spacing':'.04em'},t)];
+  svg.append(...q(L,T,xs-L,ys-T,'GROW · high value, new','#F7F4EE'),...q(xs,T,W-R-xs,ys-T,'KEY CLIENTS · high value, repeat','#F1EEE6'),...q(L,ys,xs-L,H-B-ys,'STANDARD','#FBFAF8'),...q(xs,ys,W-R-xs,H-B-ys,'LOYAL · repeat, smaller','#F7F4EE'));
+  for(let n=1;n<=mxN;n++) svg.append(svgEl('text',{x:X(n),y:H-B+16,'text-anchor':'middle',fill:'#8A8A86'},String(n)));
+  svg.append(svgEl('text',{x:L+pw/2,y:H-4,'text-anchor':'middle',fill:'#5C5C58'},'Projects with SLATE →'),
+    svgEl('text',{x:12,y:T+ph/2,'text-anchor':'middle',fill:'#5C5C58',transform:`rotate(-90 12 ${T+ph/2})`},'Value: fee and land →'));
+  const lab=new Set(rows.slice(0,10).map(r=>r.k));
+  rows.forEach((r,i)=>{ const jx=((i*37)%11-5)*1.6, cx=X(Math.max(r.n,r.prop&&!r.n?.35:r.n))+jx, cy=Y(Math.min(.86,Math.max(.04,r.value))), rad=5+Math.sqrt(r.katha/mxK)*11;
+    const g=svgEl('g',{'data-tip':`${r.name}\n${clType(r.type)} · ${CL_PRI.find(x=>x[0]===r.pri)[1]} priority (score ${r.score})\n${r.n} project${r.n===1?'':'s'}${r.prop?` + ${r.prop} proposal${r.prop===1?'':'s'}`:''} · ${+r.katha.toFixed(1)} katha${r.fee?`\nFee ${bdt(r.fee)}`:''}`});
+    g.append(svgEl('circle',{cx,cy,r:rad,fill:PRI_C[r.pri],'fill-opacity':.28,stroke:PRI_C[r.pri],'stroke-width':1.5}));
+    if(lab.has(r.k)) g.append(svgEl('text',{x:cx+rad+4,y:cy+4,fill:'#2B2B29','font-weight':500},r.name.length>22?r.name.slice(0,21)+'…':r.name));
+    svg.append(g); });
+  return svg;
+}
+function clientsDash(){
+  const C=S.clientFin; if(!C||C.state==='idle'||(C.state==='ok'&&Date.now()-C.at>120000)) loadClientFin();
+  const {rows,hasFee}=clientRows(), out=[], st=C&&C.state;
+  const tot=rows.reduce((a,r)=>{ a.n+=r.n; a.k+=r.katha; a.f+=r.fee; a.fn+=r.feeN; a.rep+=r.n>1?1:0; a.act+=r.active?1:0; return a; },{n:0,k:0,f:0,fn:0,rep:0,act:0});
+  out.push(h('div',{class:'kpis'},
+    h('div',{class:'kpi dark'},h('div',{class:'lbl',text:'Clients'}),h('div',{class:'num',text:String(rows.length)}),h('div',{class:'lbl',text:`${tot.act} with work running`})),
+    h('div',{class:'kpi dark'},h('div',{class:'lbl',text:'Fees on record'}),h('div',{class:'num',text:st==='ok'?bdt(tot.f):'…'}),h('div',{class:'lbl',text:st==='err'?'Finance not reachable':`${tot.fn} of ${tot.n} projects in Finance`})),
+    kpi('Projects',tot.n),kpi('Repeat clients',tot.rep),kpi('Land, katha',Math.round(tot.k))));
+  if(st==='err') out.push(h('div',{class:'callout',role:'alert',text:'Fees could not be loaded from Finance: '+C.err}));
+  const W=[];
+  W.push(widget('Client priority matrix','dot size = land area · colour = priority',rows.length?h('div',{},clientMatrix(rows),
+    h('div',{class:'legend',style:'justify-content:flex-start'},CL_PRI.map(([k,l])=>h('span',{style:`--c:${PRI_C[k]}`,text:l+' priority'}))),
+    h('p',{class:'f-hint',style:'margin:6px 0 0',text:(hasFee?'Value = 45% total fee + 25% land + 15% rate per sft + 15% fee per month of work.':'Value = land area (no fees linked in Finance yet).')+' Score = 60% value + 40% relationship (repeat projects, work running now), less up to 15 for projects cancelled or closed early. High ≥ 55, Medium ≥ 30. Set a client’s priority by hand in the table and it overrides the score.'})):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
+  const types={}; rows.forEach(r=>{ const t=types[r.type]||(types[r.type]={c:0,n:0,k:0,f:0}); t.c++; t.n+=r.n; t.k+=r.katha; t.f+=r.fee; });
+  const tl=Object.entries(types).sort((a,b)=>b[1].n-a[1].n), mx=Math.max(1,...tl.map(x=>x[1].n));
+  W.push(widget('Clients by type','projects, land and fees',tl.length?h('div',{class:'hbars'},tl.map(([k,t])=>h('div',{class:'hb'},h('span',{class:'nm',text:clType(k)}),
+    h('div',{class:'track','data-tip':`${clType(k)}\n${t.c} client${t.c===1?'':'s'} · ${t.n} project${t.n===1?'':'s'}\n${+t.k.toFixed(1)} katha${t.f?` · fees ${bdt(t.f)}`:''}`},h('span',{class:'s-ontime',style:`flex:0 0 ${t.n/mx*100}%`})),
+    h('span',{class:'v',text:`${t.c} · ${t.n}p`})))):h('div',{class:'w-empty',text:'No clients yet.'})));
+  const basis=r=>!r.feeN?'—':r.perSft&&!r.lump?`৳${Math.round(r.rateFee/Math.max(1,r.sft))}/sft`:r.lump&&!r.perSft?'Lump sum':`Mixed (${r.perSft} per sft, ${r.lump} lump)`;
+  const pick=(r,f,opts)=>{ const v=f==='type'?(r.type):(r.pri), x=h('select',{'aria-label':(f==='type'?'Type for ':'Priority for ')+r.name,style:'min-width:0;padding:4px 6px;font-size:13px'+(f==='priority'?`;color:${PRI_C[r.pri]};font-weight:600`:''),
+      onchange:e=>{ const val=e.target.value; run(()=>saveClient(r.k,{name:r.name,[f]:val==='auto'?null:val}),'Saved').then(()=>render(true)); }},
+      h('option',{value:'auto',text:'Auto · '+(f==='type'?clType(r.autoType):CL_PRI.find(y=>y[0]===r.autoPri)[1])}),opts.map(([k,l])=>h('option',{value:k,text:l})));
+    x.value=f==='type'?((C&&C.cl&&C.cl[r.k]&&C.cl[r.k].type)||'auto'):(r.manual?r.pri:'auto'); return x; };
+  W.push(widget('All clients',`${rows.length} · ranked by score`,rows.length?h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
+    h('thead',{},h('tr',{},h('th',{text:'Client'}),h('th',{text:'Type'}),h('th',{class:'n',text:'Projects'}),h('th',{class:'n',text:'Land (katha)'}),h('th',{class:'n',text:'Fee'}),h('th',{text:'Fee basis'}),h('th',{class:'n',text:'Score'}),h('th',{text:'Priority'}))),
+    h('tbody',{},rows.map(r=>h('tr',{},
+      h('td',{},h('div',{style:'font-weight:600',text:r.name}),h('div',{class:'sub2',text:[r.active&&`${r.active} running`,r.done&&`${r.done} completed`,r.lost&&`${r.lost} closed early`,r.prop&&`${r.prop} proposal${r.prop===1?'':'s'}`].filter(Boolean).join(' · ')||'—'})),
+      h('td',{},S.canWrite&&st==='ok'?pick(r,'type',CL_TYPES):h('span',{text:clType(r.type)})),
+      h('td',{class:'n',text:String(r.n)}),h('td',{class:'n',text:r.katha?String(+r.katha.toFixed(1)):'—'}),
+      h('td',{class:'n',title:r.feeN&&r.feeN<r.n?`${r.feeN} of ${r.n} projects have a fee in Finance`:null,text:st==='ok'?bdt(r.fee)+(r.feeN&&r.feeN<r.n?' *':''):'…'}),
+      h('td',{text:st==='ok'?basis(r):'…'}),h('td',{class:'n',text:String(r.score)}),
+      h('td',{},S.canWrite&&st==='ok'?pick(r,'priority',CL_PRI):h('b',{style:`color:${PRI_C[r.pri]}`,text:CL_PRI.find(x=>x[0]===r.pri)[1]}))))))):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
+  const ec=rows.filter(r=>r.n);
+  W.push(widget('Client economics','size, rate, duration and scope per client',ec.length?h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
+    h('thead',{},h('tr',{},h('th',{text:'Client'}),h('th',{class:'n',text:'Avg size (katha)'}),h('th',{class:'n',text:'Rate ৳/sft'}),h('th',{class:'n',text:'Fee per katha'}),h('th',{class:'n',text:'Avg duration'}),h('th',{class:'n',text:'Fee per month'}),h('th',{text:'Scope of work'}))),
+    h('tbody',{},ec.map(r=>h('tr',{},h('td',{style:'font-weight:600',text:r.name}),
+      h('td',{class:'n',text:r.size?String(+r.size.toFixed(1)):'—'}),
+      h('td',{class:'n',text:st!=='ok'?'…':r.rate?String(Math.round(r.rate)):r.lump?'lump sum':'—'}),
+      h('td',{class:'n',text:st!=='ok'?'…':bdt(r.perK)}),
+      h('td',{class:'n',title:r.moN?`${r.moN} project${r.moN===1?'':'s'}; running ones counted to today`:null,text:r.months?(r.months<1.5?'1 month':Math.round(r.months)+' months'):'—'}),
+      h('td',{class:'n',text:st!=='ok'?'…':bdt(r.perMo)}),
+      h('td',{class:'sub2',style:'white-space:normal',text:Object.entries(r.scope).sort((a,b)=>b[1]-a[1]).map(([x,c])=>c>1?`${x} ×${c}`:x).join(', ')||'—'})))))):h('div',{class:'w-empty',text:'No client projects yet.'}),true));
+  W[W.length-1].append(h('p',{class:'f-hint',style:'margin:0',text:'Rate and fees come from Finance. Duration runs from a project’s first task to its completion, or to today while it runs. Fee per month = fees ÷ months of work, so it shows which clients pay well for the time the studio spends.'}));
+  W[W.length-2].append(h('p',{class:'f-hint',style:'margin:0',text:'Clients are grouped by the client name on each project, so spell a client the same way on every project. Fees come from Finance; * means some of that client’s projects have no fee there yet. Only you and the COO can see this view.'}));
+  // the two tables run the full width of the page
+  W.slice(2).forEach(w=>{ w.classList.remove('span2'); w.style.gridColumn='1 / -1'; });
+  out.push(h('div',{class:'widgets'},W));
+  return out;
+}
 function viewDash(){
   const D=S.dash, r=range(D.kind,D.offset);
   if(D.person===undefined) D.person=fullView()||amPodLead()?'':S.uid;
   if(!D.scope) D.scope='detail';
-  const ov=D.scope==='overall', mp=myPod();
+  if(D.scope==='clients'&&!canClients()) D.scope='detail';
+  const ov=D.scope==='overall', cv=D.scope==='clients', mp=myPod();
   const inPod=t=>(!D.pod||(/^pod\b/i.test(D.pod)?podsOf(t).includes(D.pod):teamOf(t.assignee)===D.pod))&&(!D.person||t.assignee===D.person||(t.assignReq&&t.assignReq.to===D.person&&false));
   const items=inPeriod(r,'approved').filter(inPod), c=count(items,'approved'), rt=rate(c), tg=target();
   const podSel=h('select',{id:'d-pod','aria-label':'Pod',style:'flex:0 1 160px',onchange:e=>{D.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),h('optgroup',{label:'Pods'},pods().map(p=>h('option',{value:p,text:podLabel(p)}))),h('optgroup',{label:'Support teams'},teams().filter(t=>!/^pod\b/i.test(t)).map(p=>h('option',{value:p,text:p})))); podSel.value=D.pod||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:r.label}),h('h1',{class:'h1',text:'Dashboard'})),
-    h('div',{class:'bar'},seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall']],D.scope,v=>{D.scope=v;render(true)}),seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),fullView()&&!ov?podSel:null,ov?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&!isChalkP(id)&&(!isPriv(id)||seePriv())).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
+    h('div',{class:'bar'},seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall'],...(canClients()?[['clients','Clients']]:[])],D.scope,v=>{D.scope=v;render(true)}),cv?null:seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),fullView()&&!ov&&!cv?podSel:null,ov||cv?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&!isChalkP(id)&&(!isPriv(id)||seePriv())).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
         const el=h('select',{id:'d-person','aria-label':'Person',style:'flex:0 1 170px',onchange:e=>{ const v=e.target.value; if(hd){ D.pod=v==='@team'?hd:''; D.person=v==='@team'?'':v; } else D.person=v; render(true)}},opts.map(([v,l])=>h('option',{value:v,text:l}))); el.value=hd&&!D.person&&D.pod===hd?'@team':(D.person||''); return el; })(),
-      h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous period',onclick:()=>{D.offset--;render(true)},text:'‹'}),
-      D.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{D.offset=0;render(true)},text:'Today'}),
-      h('button',{class:'btn btn-sm',type:'button','aria-label':'Next period',onclick:()=>{D.offset++;render(true)},text:'›'})))];
+      cv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous period',onclick:()=>{D.offset--;render(true)},text:'‹'}),
+      !cv&&D.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{D.offset=0;render(true)},text:'Today'}),
+      cv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Next period',onclick:()=>{D.offset++;render(true)},text:'›'})))];
+  if(cv){ out[0].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(clientsDash()); }
   if(ov) return out.concat(overallDash(r));
 
   const pt=perfTable(r), mine=perf(items);

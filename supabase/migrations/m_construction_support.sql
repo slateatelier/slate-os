@@ -29,3 +29,16 @@ begin
     execute d;
   end if;
 end $mig$;
+
+-- 3. Clients dashboard: the Principal and the COO keep each client's type and priority in Finance (clients/<key>).
+do $mig$
+declare d text;
+  anchor text := $o$'budgets', 'intakes') then$o$;
+begin
+  d := pg_get_functiondef('private.fin_guard'::regproc);
+  if position($o$'intakes', 'clients')$o$ in d) = 0 then
+    if position(anchor in d) = 0 then raise exception 'fin_guard has changed; update this migration'; end if;
+    d := replace(d, anchor, $n$'budgets', 'intakes', 'clients') then$n$);
+    execute d;
+  end if;
+end $mig$;
