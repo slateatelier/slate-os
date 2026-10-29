@@ -4534,7 +4534,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -5372,6 +5372,64 @@ function clientCaused(p,live,k,step){ const ks=tlPhases(p), i=ks.indexOf(k); con
   return before.some(x=>live[x].lateC>0||live[x].lateK>0)||live[k].lateK>0||(step==='final'&&live[k].lateC>0); }
 const canPlanTl=p=>S.canWrite&&!p.closed&&(amApprover()||isProjLead(p));
 
+/* projects that started before SLATE OS: until scoring starts the POD leader (or the Principal or COO) sets where the project
+   really stands. Whatever is saved becomes the project's plan (R4 starts from it) and its gate dates; nothing counts until scoreFrom. */
+const preOS=p=>!!p&&(((p.createdAt||'')<goLive())||p.entry==='running'||p.entry==='completed'||gateTasks(p.id).some(t=>t.legacy));
+const canAdjTl=p=>canPlanTl(p)&&!!tlOf(p)&&today()<scoreFrom()&&preOS(p);
+function openTlAdj(pid){ const p={...S.projects[pid],id:pid}, t=tlOf(p)||{}, ks=tlPhases(p);
+  S.sheet={type:'tlAdj',id:pid,err:'',d:{from:t.from&&t.from>today()?t.from:maxD(today(),goLive()),close:{},
+    sd:Object.fromEntries(ks.map(k=>[k,String(slateDaysFor(p,k))])),cd:Object.fromEntries(ks.map(k=>[k,String(clientDaysOf(p,k))])),kd:Object.fromEntries(ks.filter(kwOf).map(k=>[k,String(consultDaysOf(p,k))]))}}; renderSheet(); }
+function tlAdjPlan(p,d){ const ks=tlPhases(p), t=tlOf(p)||{};
+  // phases ticked "already finished" count as done for the preview
+  const done=k=>stdState(p,k).done||!!d.close[k];
+  const pv={...p,std:{...p.std,dv:13,sd:Object.fromEntries(ks.map(k=>[k,+d.sd[k]||0])),cd:Object.fromEntries(ks.map(k=>[k,+d.cd[k]||0])),
+    kd:Object.fromEntries(ks.filter(kwOf).map(k=>[k,+d.kd[k]||0])),tl:{...t,from:d.from}}};
+  const ghost={}; ks.filter(k=>d.close[k]&&!stdState(p,k).done).forEach(k=>{ ghost[k]=true; });
+  const saveSS=stdState; let plan;
+  try{ stdState=(q,k)=>ghost[k]&&q.id===p.id?{...saveSS(q,k),done:true,sub:{doneAt:preLive()},fin:{doneAt:preLive()}}:saveSS(q,k); plan=tlCompute(pv,t.start||d.from,true); }
+  finally{ stdState=saveSS; }
+  return {pv,plan,done}; }
+function sheetTlAdj(){
+  const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
+  const d=D(), ks=tlPhases(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
+  const {plan,done}=tlAdjPlan(p,d), ord=ks.filter(k=>k!=='5');
+  const behind=k=>!stdState(p,k).done&&ord.slice(ord.indexOf(k)+1).some(x=>stdState(p,x).done);
+  const num=(f,k)=>h('input',{type:'number',min:'0',max:'120',value:d[f][k],style:'width:54px;padding:4px 6px;text-align:center',oninput:e=>{ d[f][k]=e.target.value; },onchange:()=>renderSheet()});
+  const numF=(f,k,l)=>h('label',{style:'display:grid;gap:2px;font-size:12px;color:var(--muted)'},l,h('input',{type:'number',min:'0',max:'120',value:d[f][k],style:'width:100%;padding:6px 8px;text-align:center;background:var(--group)',oninput:e=>{ d[f][k]=e.target.value; },onchange:()=>renderSheet()}));
+  const rows=ks.map(k=>{ const s=stdState(p,k), f=plan[k]||{}, fin=s.done, subDone=s.sub&&s.sub.doneAt, shut=fin||d.close[k];
+    return h('div',{style:'display:grid;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)'+(shut?';opacity:.6':'')},
+      h('div',{style:'display:flex;justify-content:space-between;gap:10px;align-items:baseline'},h('b',{style:'font-size:14px',text:`${PH[k].no} ${phName(k,p)}`}),
+        h('span',{class:'f-hint',style:'margin:0;white-space:nowrap',text:fin?'Finished'+(s.fin&&s.fin.doneAt&&!s.fin.legacyNoDate&&s.fin.doneAt.slice(0,10)!==preLive()?' '+fmtD(s.fin.doneAt.slice(0,10)):' before SLATE OS'):d.close[k]?'Closes as finished':f.fin?`Gate closes ${fmtD(f.fin)}`:f.none?'After resume':''})),
+      !fin?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:13px'},h('input',{type:'checkbox',style:'width:18px;height:18px;flex:none',checked:!!d.close[k],onchange:e=>{ d.close[k]=e.target.checked; renderSheet(); }}),behind(k)?'Already finished (a later phase is done)':'Already finished'):null,
+      !shut?h('div',{style:'display:grid;grid-template-columns:repeat(3,1fr);gap:8px'},
+        subDone?h('div',{style:'font-size:12px;color:var(--muted)',text:'SLATE: submitted '+fmtD(subDone.slice(0,10))}):numF('sd',k,'SLATE days (left)'),
+        kwOf(k)?numF('kd',k,'Consultant days'):h('span',{}),numF('cd',k,'Client days')):null,
+      !shut&&f.sub&&!subDone?h('div',{class:'f-hint',style:'margin:0',text:`Submit ${fmtD(f.sub)}`+(f.kd&&f.share?` · plans to consultants ${fmtD(f.share)}`:'')}):null); });
+  return [head(projLabel(p),'Adjust the timeline'),
+    h('p',{class:'lead',style:'margin:0',text:`This project started before SLATE OS. Set where it really stands today. What you save becomes its plan and its gate dates; scores count from ${fmtD(scoreFrom())}.`}),
+    h('ul',{class:'f-hint',style:'margin:0;padding-left:18px;display:grid;gap:3px'},
+      h('li',{text:'Tick phases that are already finished. They close with their gate deliverables and checklist, and never count in scores.'}),
+      h('li',{text:'For the phase you are in now, give the SLATE days left, not the full days.'}),
+      h('li',{text:'Client and consultant days are the review days agreed for this project.'})),
+    h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); if(!d.from) return fail('Give the day work resumes.');
+        run(async()=>{ const td=today(), now=new Date().toISOString(), t=tlOf(p)||{};
+          for(const k of ks.filter(k=>d.close[k]&&!stdState(p,k).done)){
+            for(const g of gateTasks(p.id).filter(g=>g.gate.k===k&&!g.doneAt)) await taskUpdate(g.id,{doneAt:preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:true,...(amApprover()?{legacyOk:true}:{}),request:null},[{type:'done',to:preLive(),note:'Finished before SLATE OS (date not recorded)'}]);
+            const m={}; clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(!x.done&&!x.na) m[it.id]={...x,done:preLive(),legacy:true}; });
+            if(Object.keys(m).length) await S.db.doc('projects/'+p.id).update({cl:{[k]:m}}); }
+          const q={...S.projects[p.id],id:p.id}, live=tlAdjPlan(q,d);
+          const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=a!==stdSlateDays(q,k)?a:''; cd[k]=b!==stdClientDays(q,k)?b:''; if(kwOf(k)){ const c=+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
+          const base={}; Object.values(live.plan).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd,...(x.kd?{kd:x.kd,share:x.share,kDue:x.kDue}:{})}; });
+          await S.db.doc('projects/'+p.id).update({std:{dv:13,sd,cd,kd,tl:{start:t.start||d.from,from:d.from,take:+(t.take??TAKE_IN),base,adj:{by:S.uid,at:now},prev:[...(t.prev||[]),...(t.base?[{base:t.base,at:t.at||'',by:t.by||''}]:[])]}}});
+          for(const k of ks){ const f=live.plan[k], s=stdState(q,k); if(!f||f.none||s.done||d.close[k]) continue;
+            for(const [g,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!g||g.doneAt||!date||g.target===date) continue;
+              await taskUpdate(g.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:'Timeline adjusted before scoring started'}]); } }
+        },'Timeline adjusted').then(ok=>{ if(ok) back(); }); }},
+      field('Work on the open phases resumes on',h('input',{type:'date',value:d.from,min:today(),oninput:e=>{ d.from=e.target.value; },onchange:()=>renderSheet()}),'Open phases are planned from this day; finished phases keep their dates.'),
+      h('div',{style:'background:#fff;border-radius:var(--r);overflow:hidden'},rows),
+      S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save the timeline'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
+}
 function tlSection(p){
   if(!p.std||p.closed||p.pod==='Studio'||isInternalP(p)) return null;
   const t=tlOf(p), can=canPlanTl(p), ap=amApprover()&&S.canWrite;
@@ -5407,6 +5465,9 @@ function tlSection(p){
     h('div',{class:'bar',style:'justify-content:space-between'},h('span',{class:'f-hint',style:'margin:0',text:`Started ${fmtD(t.start)} · working days, Sunday to Thursday`}),
       h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ S.sheet.tlLog=!open; renderSheet(); },text:open?'Hide project log':'Project log'}),
         can?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openTl(p.id),text:'Days'}):null)),
+    canAdjTl(p)?h('div',{class:'callout',style:'display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap'},
+      h('span',{style:'font-size:13.5px',text:`Started before SLATE OS? Set where this project really stands: close finished phases, give the days left and when work resumes. Open until ${fmtD(addDays(scoreFrom(),-1))}; scores count from ${fmtD(scoreFrom())}.`}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openTlAdj(p.id),text:'Adjust timeline'})):null,
     open?tlLog(p,live,base,ks):null);
 }
 function tlChart(p,live,base,ks){
@@ -6573,6 +6634,7 @@ const HOWDO=[
  // ---- added Oct 2026
  ['tasks','all','Add something quickly from Home',['On Home, tap the round + at the bottom right.','Pick what to add: New task, New project, New meeting, Site visit, FAR calculation (and for the Principal and COO: New lead, New proposal, New notice).'],'The same form opens as from its own page. Tap outside the menu or × to close it.','You only see what you are allowed to add.'],
  ['tasks',['lead','boss'],'Give one task to several people',['New task › choose the first person, then Add another person.','Choose One shared task (everyone finishes before it goes for approval) or Separate tasks (each is approved on their own).','Tap Add task.'],'Each person gets their own copy, tagged Joint · 1/3 done. A shared task reaches Approvals only when the last person has finished.','To send back one person’s part, open the shared item in Approvals and tap their name.'],
+ ['projects',['lead','boss'],'Adjust the timeline of a project that started before SLATE OS',['Open the project › Timeline › Adjust timeline (open until the day before scores start counting).','Tick the phases that are already finished.','For the phase you are in, give the SLATE days left; check the client and consultant days.','Pick the day work resumes and tap Save the timeline.'],'The dates you save become the project’s plan and its gate dates, with nothing counted as late or revised. After scores start counting, dates move only through a request to the COO.'],
  ['projects',['lead','boss'],'Track the structural and MEP consultants: start, submission and follow-up',['Open the project › Phases and gates › the phase (2, 3R, 4, WD-1 or WD-2).','Under Consultants, enter the day each one started: Structural and MEP are tracked apart. For authority drawings they start on the design freeze day.','The submission due day follows from their working days. On the due day it shows on your Home under Today; call them and tap Log follow-up with what they said.','When their drawings arrive, enter Received.'],'The timeline counts their days separately from SLATE and the client. If one runs late, a flag shows on the timeline with the follow-ups so far, and later dates move with it; the delay never counts against the team (R8).','Consultant days come from their work orders: set them per project under Timeline › Days (the same for structure and MEP).'],
  ['visit','all','Plan a site visit',['Home › + › Site visit (or the project › Project log › + Site visit).','Keep Plan a visit. Choose the project, what it is for, who goes and the date (and time).','Check the site address; paste a Google Maps link if you have one.','Tap Plan the visit.'],'It is a task for whoever goes, on the Calendar and in the Project log. Several people make it a shared visit.','Site visits count against the free visits in the project’s fee terms.'],
  ['visit','all','Record a visit while I’m at the site',['Home › + › Site visit › I’m on site now.','Choose the project and what it is for.','Tap 📍 I’m at the site and allow location when the phone asks.','Tap Record the visit.'],'It is recorded as done today with your location and goes to the Principal or the COO to verify.','Location blocked? Allow it for SLATE OS in the browser’s site settings or Settings › Privacy › Location, then try again.'],
