@@ -3574,9 +3574,9 @@ function sheetProfile(){
    5 New actions (each with people, area and a target date; they become tasks when the COO approves)
    6 Sharing session   7 Next meeting (worked out from the rotation).
    Standing rules (office hours, lateness, rotation…) live once in the Studio rules list, not in every set of minutes. */
-const rota=()=>{ const r=S.meetRota||{}; return {ids:r.ids||[],start:r.start||'',juniors:r.juniors||[],jstart:r.jstart||r.start||'',time:r.time||'10:30',venue:r.venue||'SLATE studio',firstNo:+r.firstNo||1}; };
+const rota=()=>{ const r=S.meetRota||{}; return {ids:r.ids||[],start:r.start||'',juniors:r.juniors||[],jstart:r.jstart||r.start||'',time:r.time||'11:00',venue:r.venue||'SLATE studio',firstNo:+r.firstNo||1}; };
 const meetTime=()=>rota().time;
-const fmtHM=t=>{ const [hh,mm]=(t||'10:30').split(':').map(Number); return `${((hh+11)%12)+1}:${pad(mm||0)} ${hh<12?'AM':'PM'}`; };
+const fmtHM=t=>{ const [hh,mm]=(t||'11:00').split(':').map(Number); return `${((hh+11)%12)+1}:${pad(mm||0)} ${hh<12?'AM':'PM'}`; };
 const upcomingSunday=()=>{ const td=today(), ws=weekStart(td); return td===ws?td:addDays(ws,7); };
 function guestFor(date){ const m=S.meetings[date]; if(m&&m.guest) return m.guest; const r=rota(); if(!r.juniors.length||!r.jstart||date<r.jstart) return null; const n=Math.round(diff(r.jstart,date)/7); return r.juniors[((n%r.juniors.length)+r.juniors.length)%r.juniors.length]; }
 const MSTAT={draft:'Draft',submitted:'Waiting for COO approval',returned:'Returned for changes',published:'Approved and published'};
@@ -3941,7 +3941,7 @@ function sheetRota(){
     sh.err&&h('div',{class:'err',text:sh.err}),
     h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>{ if(!d.ids.length) return fail('Add at least one person.'); if(!d.start||new Date(d.start+'T00:00').getDay()!==0) return fail('Choose a Sunday as the first date.');
         if(d.juniors.length&&(!d.jstart||new Date(d.jstart+'T00:00').getDay()!==0)) return fail('Choose a Sunday to start the junior rotation.');
-        run(()=>S.db.doc('meetcfg/rota').set({ids:d.ids,start:d.start,juniors:d.juniors,jstart:d.jstart,time:d.time||'10:30',venue:(d.venue||'').trim()||'SLATE studio',firstNo:Math.max(1,parseInt(d.firstNo)||1),by:S.uid,at:new Date().toISOString()}),'Rotation saved').then(ok=>ok&&closeSheet()); },text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))];
+        run(()=>S.db.doc('meetcfg/rota').set({ids:d.ids,start:d.start,juniors:d.juniors,jstart:d.jstart,time:d.time||'11:00',venue:(d.venue||'').trim()||'SLATE studio',firstNo:Math.max(1,parseInt(d.firstNo)||1),by:S.uid,at:new Date().toISOString()}),'Rotation saved').then(ok=>ok&&closeSheet()); },text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))];
 }
 
 /* ---------- team page: full team, by pod, by project ---------- */
