@@ -1665,14 +1665,15 @@ const slateDaysOf=k=>(PH[k]&&PH[k].d)?PH[k].d[0]:null;
    boundary takes the higher band (7 katha → 7–10). Developer-owned land has its own table and bands. As-built (9) is reference only:
    it runs alongside, like marketing, construction support and as-built, and is not in the total. Working drawing days include
    taking the NFC feedback in for the GFC set. */
-const DAYS_BANDS={std:[7,10,20,30,60],dev:[7,10,20,30,90]};
-const DAYS_LBL={std:['3–7','7–10','10–20','20–30','30–60','60+'],dev:['3–7','7–10','10–20','20–30','30–90','90+']};
+const DAYS_BANDS={std:[7,10,20,30,60],dev:[7,10,20,30,60]};
+const DAYS_LBL={std:['3–7','7–10','10–20','20–30','30–60','60+'],dev:['3–7','7–10','10–20','20–30','30–60','60+']};
+/* standard = the POD leaders' table (29 Oct 2026) + 15%; developer-owned land = the standard − 10%; whole days, rounded */
 const DAYS_T={
-  std:{'0':[3,[2,2,3,4,4,4]],'1':[3,[5,7,10,15,15,15]],'2':[5,[8,10,12,15,20,25]],'3':[2,[2,2,2,2,2,2]],'4':[10,[5,6,8,10,12,15]],'5':[3,[10,12,15,20,22,30]],
-       '6':[5,[5,7,10,14,15,20]],'7':[5,[11,13,16,20,25,30]],'8':[5,[14,18,20,25,25,30]],'9':[null,[4,5,7,7,11,15]]},
-  dev:{'0':[2,[3,4,4,5,6,7]],'1':[5,[6,7,8,10,12,15]],'2':[5,[8,10,12,15,20,30]],'3':[4,[1,2,2,2,2,2]],'4':[4,[5,7,8,10,14,20]],'5':[4,[9,10,12,14,20,25]],
-       '6':[4,[10,12,14,20,25,35]],'7':[5,[15,20,25,30,40,60]],'8':[5,[13,15,20,25,35,50]],'9':[null,[5,6,8,11,15,25]]}};
-const DAYS_NAME={std:'Standard (joint venture, land share, private client, design proposal)',dev:'Developer-owned land'};
+  std:{'0':[3,[2,2,3,5,5,5]],'1':[3,[6,8,12,17,17,17]],'2':[6,[9,12,14,17,23,29]],'3':[2,[2,2,2,2,2,2]],'4':[12,[6,7,9,12,14,17]],'5':[3,[12,14,17,23,25,35]],
+       '6':[6,[6,8,12,16,17,23]],'7':[6,[13,15,18,23,29,35]],'8':[6,[16,21,23,29,29,35]],'9':[null,[5,6,8,8,13,17]]},
+  dev:{'0':[3,[2,2,3,5,5,5]],'1':[3,[5,7,11,15,15,15]],'2':[5,[8,11,13,15,21,26]],'3':[2,[2,2,2,2,2,2]],'4':[11,[5,6,8,11,13,15]],'5':[3,[11,13,15,21,23,32]],
+       '6':[5,[5,7,11,14,15,21]],'7':[5,[12,14,16,21,26,32]],'8':[5,[14,19,21,26,26,32]],'9':[null,[5,5,7,7,12,15]]}};
+const DAYS_NAME={std:'Standard (joint venture, land share, private client, design proposal): the POD leaders’ table plus 15%',dev:'Developer-owned land: the standard less 10%'};
 const daysTbl=p=>(((p&&p.std&&p.std.type)||(p&&p.type))==='dev')?'dev':'std';
 const bandOf=(p,t)=>{ const kt=parseFloat(p&&p.katha)||0, b=DAYS_BANDS[t||daysTbl(p)]; let i=0; while(i<b.length&&kt>=b[i]) i++; return i; };
 const bandLbl=p=>{ const t=daysTbl(p); return DAYS_LBL[t][bandOf(p,t)]+' katha'+(t==='dev'?' · developer table':''); };
