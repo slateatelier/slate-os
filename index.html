@@ -2350,17 +2350,18 @@ function buildView(){
 
 function viewMore(){
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
-  /* grouped: Studio, Tools, Records, Admin, then Account; a group with nothing in it for this person is left out */
+  /* grouped: Daily, Reference, Tools, Records, Admin, then Account; a group with nothing in it for this person is left out */
   const grp=(title,...xs)=>{ const its=xs.filter(Boolean); return its.length?[h('div',{class:'more-g',text:title}),h('div',{class:'list'},...its)]:[]; };
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
-    ...grp('Studio',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
+    ...grp('Daily',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null),
+    ...grp('Reference',item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
     ...grp('Tools',item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
       window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
     ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
       item('reports','Issue reports',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
-    ...grp('Admin',amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null,
+    ...grp('Admin',amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
@@ -2836,15 +2837,23 @@ function podReview(){ const mp=myPod(); if(!mp||!S.canWrite) return null;
     h('div',{class:'list'},hMore('rv',xs,4,t=>h('div',{},row(t,{person:true}),h('div',{class:'actions',style:'padding:0 12px 10px;margin:0'},
       h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done'}),
       h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>moveStage(t.id,'doing'),text:'Send back'})))))); }
+function homeTour(){ const g=roleGroup(S.uid);
+  if(amApprover()||S.isOwner) return ['Your Home',['Today shows what waits on you first: approvals, date requests and anything late.','Meetings stay here from the invite until the minutes are published.','Tasks, Projects and the Dashboard show the whole studio.']];
+  if(amPodLead()) return ['Your Home as POD leader',['My POD shows each project’s status and its next gate. Projects that need you come first.','For your review lists work your POD moved to In review: mark it done or send it back.','POD deadlines shows gate deliverables in the next two weeks. Anything without a date waits under Needs a date.']];
+  if(g==='dhead') return ['Your Home as drafting lead',['The drafting queue lists drafting work in every live phase, earliest deadline first.','Give each item to someone: it becomes a task on their Home with the phase’s date. The numbers on top are tasks due in the next 7 days per person.','The checklist item ticks itself when the task is done.']];
+  if(g==='draft') return ['Your Home',['Drafting work from your Design Associate Lead lands here as tasks, each with its date.','Open a task and tap Start working, then ✓ Done today when it is issued.','Can’t make a date? Open the task › More options › Request new date, before the date passes.']];
+  return ['Your Home',['Start with Needs attention, then This week.','My checklist shows the items you own, with the date each phase needs them. Press and hold the circle to tick one.','Can’t make a date? Open the task › More options › Request new date, before the date passes.']]; }
 function viewMineBody(){
   const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const first=(nameOf(S.uid)||'').split(' ')[0];
   const out=[h('div',{class:'page-h home-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
     h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap)))];
-  if(!pref.helpSeen&&!amChalkMember()) out.push(h('div',{class:'h-tip'},h('span',{text:'New here? See how SLATE OS works for your role.'}),
-    h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'How to use'}),
-    h('button',{class:'h-x',type:'button','aria-label':'Dismiss',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'×'})));
+  /* first visit: three lines on how this Home works for their role, until they close it */
+  if(!pref.helpSeen&&!amChalkMember()){ const st=homeTour();
+    out.push(h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'pc-row'},h('b',{text:st[0]}),h('button',{class:'h-x',type:'button','aria-label':'Close',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'×'})),
+      h('ol',{style:'margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px;line-height:1.4'},st[1].map(x=>h('li',{text:x}))),
+      h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'Got it'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ savePref('helpSeen',1); S.view='help'; render(true); window.scrollTo(0,0); },text:'Full guide'})))); }
 
   if(leadWin()&&!amApprover()&&projects().some(p=>leadFree(p.id))) out.push(h('div',{class:'h-tip'},h('span',{text:`Until ${fmtD(leadUntil())} you run your POD’s project timelines yourself: set and change dates, add tasks, mark work done and adjust timelines without waiting for approval. Project information stays with the COO.`})));
   /* 2 · Today: one line each */
@@ -2898,7 +2907,7 @@ function viewMineBody(){
     if(!attn.length&&!week.length&&!next.length&&!podGate.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:later.length?'Nothing due in the next two weeks.':'Nothing open. Enjoy the clear desk.'}));
   }
   /* 6 · My checklist */
-  const mcl=myChecklist(); if(mcl.length){ const el=myChecklistSec(mcl); const lst=el.querySelector('.list'); if(lst&&mcl.length>5&&!(S.homeMore&&S.homeMore.cl)){ [...lst.children].slice(5).forEach(x=>x.remove()); }
+  const mcl=myChecklist(); if(mcl.length){ const all=!!(S.homeMore&&S.homeMore.cl), el=myChecklistSec(mcl,mcl.length>5?(all?{grouped:true}:{limit:5}):{});
     if(mcl.length>5){ el.querySelectorAll('.f-hint').forEach(x=>x.remove()); el.append(h('button',{class:'h-more',type:'button',style:'justify-self:start',onclick:()=>{ S.homeMore={...(S.homeMore||{}),cl:!(S.homeMore&&S.homeMore.cl)}; render(true); },text:S.homeMore&&S.homeMore.cl?'Show less':`Show all ${mcl.length}`})); }
     out.push(el); }
   if(!mine.length&&!mcl.length&&!tg&&!homeMeetRows(td,ap).length) out.push(onboarding());
@@ -3386,6 +3395,17 @@ function viewDash(){
   { const row=(name,sub,x,me)=>h('tr',{style:me?'font-weight:600':''},h('td',{},h('div',{text:name}),sub&&h('div',{class:'sub2',text:sub})),h('td',{class:'n',text:x.pos.toFixed(2)}),h('td',{class:'n',text:x.earn.toFixed(2)}),h('td',{class:'n',text:Math.round(x.q*100)+'%'}),h('td',{class:'n',text:x.bc?'+'+x.bc.toFixed(1):'—'}),h('td',{class:'n',text:x.bs?'+'+x.bs.toFixed(1):'—'}),h('td',{class:'n',style:'font-weight:600'+(x.idx!=null&&x.idx<100?';color:var(--overdue)':''),title:x.ns?'Interns and other staff are not scored':x.solo?'Only one person in this role: timeliness against the studio average':null,text:x.idx==null?(x.ns?'Not scored':'—'):String(x.idx)}));
     const hdT=myHeadTeam(), peopleRows=fullView()?pt.people.filter(x=>!isCOO(x.k)&&(!isPriv(x.k)||seePriv())):amPodLead()?pt.people.filter(x=>teamOf(x.k)===mp||x.k===S.uid):hdT?pt.people.filter(x=>teamOf(x.k)===hdT||x.k===S.uid):pt.people.filter(x=>x.k===S.uid);
     const podRowsT=fullView()?pt.pods:pt.pods.filter(x=>x.k===mp);
+    /* team members get plain sentences; the full table stays for leaders, the drafting lead and management */
+    const plain=!fullView()&&!amPodLead()&&!hdT&&!amMgr()&&(!D.person||D.person===S.uid);
+    if(plain){ const me=pt.people.find(x=>x.k===S.uid), pd=pt.pods.find(x=>x.k===mp), cm=count(inPeriod(r,'approved').filter(t=>t.assignee===S.uid&&!isChalkTask(t)),'approved');
+      const good=cm.early+cm.ontime, pl=(n,w)=>`${n} ${w}${n===1?'':'s'}`, P=(t,st)=>h('p',{style:'margin:0 0 8px;font-size:15px;line-height:1.45'+(st||''),text:t});
+      W.push(widget('How you’re doing',r.label,h('div',{},
+        cm.total?P(`${pl(cm.total,'task')} ${cm.total===1?'was':'were'} due ${D.kind==='week'?'this week':D.kind==='quarter'?'this quarter':'this month'} so far: ${good} on time or early`+(cm.late?`, ${cm.late} late`:'')+(cm.overdue?`, ${cm.overdue} still overdue`:'')+'.'):P('Nothing of yours was due in this period yet.'),
+        cm.overdue?P(`Finish the overdue ${cm.overdue===1?'one':'ones'} first: overdue work earns nothing until it is done.`,';color:var(--overdue)'):null,
+        me&&me.idx!=null?P(`Your index is ${me.idx}. 100 is the average for your role, so ${me.idx>=100?'you are at or above it':'you are below it for now'}.`):me&&me.ns?P('Your role is not scored.'):null,
+        pd&&pd.idx!=null?P(`${podLabel(mp)} is at ${pd.idx} against the studio average.`,';color:var(--muted)'):null,
+        h('p',{class:'f-hint',style:'margin:4px 0 0',text:'Only approved dates count. Finishing on the date earns the task in full, early earns a little more, and each late day earns a little less.'})),true));
+    } else
     W.push(widget('Performance index',`${r.label} · 100 = studio average`,
       (podRowsT.length||peopleRows.length)?h('div',{},h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
         h('thead',{},h('tr',{},h('th',{text:''}),h('th',{class:'n',text:'Workload'}),h('th',{class:'n',text:'Points'}),h('th',{class:'n',text:'Timeliness'}),h('th',{class:'n',text:'Pod support'}),h('th',{class:'n',text:'Studio'}),h('th',{class:'n',text:'Index'}))),
@@ -5886,13 +5906,19 @@ function draftQueueSec(){ const hd=myHeadTeam(); if(!hd||!S.canWrite) return nul
     h('div',{class:'h-stats'},team.map(id=>h('div',{class:'h-stat'},h('b',{text:String(load[id])}),h('span',{text:shortName(id)})))),
     h('div',{class:'f-hint',style:'margin:0 4px',text:'Drafting work in every live phase. Give each item to someone: it becomes a task on their Home, due by the phase’s deadline, and the checklist item ticks itself when the task is done. Numbers are tasks due in the next 7 days.'}),
     h('div',{class:'list'},hMore('dq',q,6,rowOf))); }
-function myChecklistSec(list){
-  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
-    h('div',{class:'list'},list.slice(0,40).map(({p,k,it,due})=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
+function myChecklistSec(list,o={}){
+  const one=({p,k,it,due},grp)=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
       holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'),
-      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k,p)}),...(due?[h('span',{text:'·'}),dueTxt(due)]:[])),p.code?h('div',{class:'row-pn',text:p.name}):null),
-      h('span'),h('span')))),
-    list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
+      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),
+        h('div',{class:'row-meta'},...(grp?[]:[h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'})]),h('span',{text:'Phase '+phLabel(k,p)}),...(due?[h('span',{text:'·'}),dueTxt(due)]:[])),!grp&&p.code?h('div',{class:'row-pn',text:p.name}):null),
+      h('span'),h('span'));
+  let body;
+  if(o.grouped){ const g=new Map(); list.forEach(x=>{ if(!g.has(x.p.id)) g.set(x.p.id,[]); g.get(x.p.id).push(x); });
+    body=[...g.values()].flatMap(xs=>[h('div',{class:'cl-h',style:'padding:10px 14px 4px;background:var(--group)',text:`${projLabel(xs[0].p)} · ${xs.length}`}),...xs.map(x=>one(x,true))]); }
+  else body=list.slice(0,o.limit||40).map(x=>one(x,false));
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
+    h('div',{class:'list'},body),
+    !o.grouped&&!o.limit&&list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
 }
 
 
