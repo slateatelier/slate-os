@@ -1206,7 +1206,7 @@ const preCut=(r,t)=>!!r&&r.e>=scoreFrom()&&preScore(t);
    dates, new tasks, done without verification, timeline days. Project information stays with the Principal and the COO. */
 const leadUntil=()=>(S.settings&&S.settings.leadUntil)||'2026-11-03';
 const leadWin=()=>today()<=leadUntil();
-const leadFree=pid=>{ const p=pid&&S.projects[pid]; return !!p&&leadWin()&&S.canWrite&&!p.closed&&p.pod!=='Studio'&&!isInternalP(p)&&isProjLead(p); };
+const leadFree=pid=>{ const p=pid&&S.projects[pid]; return !!p&&leadWin()&&r4on()&&S.canWrite&&!p.closed&&p.pod!=='Studio'&&!isInternalP(p)&&isProjLead(p); };
 function pill(t,basis='approved'){
   if(t.legacy) return h('span',{class:'pill '+(t.legacyOk?'s-open':'s-late'),title:'Finished before SLATE OS; not scored',text:t.legacyOk?'Before SLATE OS':'Before SLATE OS · COO to approve'});
   if(t.verify&&!t.doneAt){ const tm=vfTiming(t); return h('span',{class:'pill s-verify',title:'Marked done '+fmtD(t.verify.at)+'; waiting for '+vfWho(t)+' to verify',text:tm&&/late/.test(tm)?`To verify · ${tm}`:'Awaiting verification'}); }
@@ -1439,7 +1439,7 @@ const unscored=id=>['intern','other','boss'].includes(roleGroup(id));
 const myHeadTeam=()=>S.uid&&roleGroup(S.uid)==='dhead'?teamOf(S.uid):'';
 const isSupport=id=>!!id&&supportTeams().includes(teamOf(id));
 const isCrossPod=(id,pid)=>{ const tm=teamOf(id); if(!/^pod\b/i.test(tm)) return false; const ps=podsOfProject(S.projects[pid]); return ps.length>0&&!ps.includes(tm); };
-const needsAssignApproval=(id,pid)=>!!id&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(myHeadTeam()&&teamOf(id)===myHeadTeam());
+const needsAssignApproval=(id,pid)=>!!id&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(r4on()&&!S.dqAsk&&myHeadTeam()&&teamOf(id)===myHeadTeam());
 function loadOf(id,excl){
   const td=today(), wk=addDays(td,7);
   const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id))&&(!isChalkTask(t)||isChalkP(id)));
@@ -2375,7 +2375,9 @@ function vfCat(t){ if(isChalkTask(t)) return 'chalk'; if(t.repeat) return 'repea
 const vfCfg=()=>(S.settings&&S.settings.verify)||{};
 const vfMaster=()=>vfCfg().on!==false;
 const vfOn=k=>vfMaster()&&vfCfg()[k]!==false;
-const podVerifies=t=>!!t&&!isChalkTask(t)&&['task','repeat'].includes(vfCat(t))&&!!myPod()&&amPodLead()&&t.assignee!==S.uid&&teamOf(t.assignee)===myPod()&&inMyPodProject(S.projects[t.projectId]);
+/* Release 4 database rules in place (settings.r4): POD leaders check and verify. Until then the app keeps the old flow. */
+const r4on=()=>!!(S.settings&&S.settings.r4);
+const podVerifies=t=>r4on()&&!!t&&!isChalkTask(t)&&['task','repeat'].includes(vfCat(t))&&!!myPod()&&amPodLead()&&t.assignee!==S.uid&&teamOf(t.assignee)===myPod()&&inMyPodProject(S.projects[t.projectId]);
 const canVerify=t=>!!t&&S.canWrite&&(S.isOwner||(amApprover()&&!isChalkTask(t)&&t.assignee!==S.uid)||podVerifies(t));
 const mustVerify=t=>!t.legacy&&vfOn(vfCat(t))&&!canVerify(t)&&!(t.projectId&&leadFree(t.projectId)&&!isChalkTask(t));
 const podLeadOf=t=>{ const p=S.projects[t.projectId], pd=p&&podsOfProject(p).find(x=>x===teamOf(t.assignee)); return pd?people().find(id=>isPodLead(id,pd)&&id!==t.assignee):null; };
@@ -2439,7 +2441,7 @@ function vfJointCard(t){ const p=S.projects[t.projectId], ms=t._mates.slice().so
 const rootOf=t=>t.parentId&&S.tasks[t.parentId]?{...S.tasks[t.parentId],id:t.parentId}:t;
 const revsOf=id=>Object.entries(S.tasks).map(([k,x])=>({...x,id:k})).filter(x=>x.parentId===id&&!x.archived).sort((a,b)=>(a.revNo||0)-(b.revNo||0));
 const canQuickDone=t=>S.canWrite&&!t.archived&&!t.doneAt&&!t.verify&&!needsCheckin(t)&&(t.assignee===S.uid||leadsProj(t.projectId)||(isChalkTask(t)&&canChalkEdit()));
-const needsCheck=t=>!!t&&!!t.checker&&t.checker!==S.uid&&t.assignee===S.uid&&!t.doneAt&&!t.verify;
+const needsCheck=t=>r4on()&&!!t&&!!t.checker&&t.checker!==S.uid&&t.assignee===S.uid&&!t.doneAt&&!t.verify;
 function sendToCheck(t){ if(!t) return; { const gb=gateBlock(t); if(gb) return toast(gb); }
   const from=stageOf(t);
   return run(()=>taskUpdate(t.id,{stage:'review',sentCheck:{at:today(),by:S.uid}},[{type:'stage',from,to:'review',note:`Sent to ${nameOf(t.checker)} to check`}]),`Sent to ${nameOf(t.checker).split(' ')[0]} to check`); }
@@ -2923,8 +2925,8 @@ function viewMineBody(){
       h('div',{class:'h-stats'},stat(nOpen,'Open'),stat(nOver,'Overdue','var(--overdue)'),stat(c.early+c.ontime,'On time','var(--ontime)'),stat(c.late,'Late','var(--late)')),h('div',{class:'f-hint',style:'margin:0 4px',text:'On time and late count tasks due this month.'+(today()<scoreFrom()?` Scores count from ${fmtD(scoreFrom())}; work due before that is a trial run.`:'')})));
     [list('attn','Needs attention',attn,5),list('vf','Waiting for verification',vfl,3),list('wk','This week',week,5),
      lead&&podGate.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'POD deadlines · next 2 weeks'}),h('span',{class:'cnt',text:String(podGate.length)})),
-       h('div',{class:'f-hint',style:'margin:0 4px',text:'Gate deliverables of your POD’s projects. Give each one to the person doing the work: it goes on their Home and comes back to you to check before it goes on.'}),
-       h('div',{class:'list'},hMore('pg',podGate,6,t=>h('div',{},row(t,{person:t.assignee!==S.uid}),t.assignee===S.uid&&S.canWrite&&!t.verify?h('div',{style:'padding:0 12px 10px'},giveSel(t)):null)))):null,
+       h('div',{class:'f-hint',style:'margin:0 4px',text:r4on()?'Gate deliverables of your POD’s projects. Give each one to the person doing the work: it goes on their Home and comes back to you to check before it goes on.':'Gate deliverables of your POD’s projects. Your POD does the work; you make sure each one goes out on its date.'}),
+       h('div',{class:'list'},hMore('pg',podGate,6,t=>h('div',{},row(t,{person:t.assignee!==S.uid}),t.assignee===S.uid&&S.canWrite&&!t.verify&&r4on()?h('div',{style:'padding:0 12px 10px'},giveSel(t)):null)))):null,
      list('nx','Next week',next,3),list('nodate','Needs a date',nodate,3)].forEach(x=>{ if(x) out.push(x); });
     if(later.length) out.push(h('div',{class:'h-list'},hRow({dot:'var(--faint)',strong:`${later.length} more`,title:`due after ${fmtD(wk2)}`,meta:'Open them in Tasks',onclick:()=>{ S.fInit=1; S.f.person=S.uid; S.f.project=''; S.f.status='active'; S.f.q=''; goView('all'); }})));
     { const x=list('done','Recently completed',done,3); if(x) out.push(x); }
@@ -5914,15 +5916,16 @@ const shortName=id=>{ const w=nameOf(id).split(' ').filter(x=>!/^(md\.?|mohammad
 function draftAssign(q,who){ const {p,k,it}=q, due=q.due||addWorkDays(today(),3);
   return run(async()=>{
     if(q.t){ if(q.t.assignee===who) return; await taskUpdate(q.t.id,{assignee:who},[{type:'reassigned',from:q.t.assignee,to:who}]); }
-    else await createTask({projectId:p.id,title:it.t,assignee:who,target:due,phase:phLabel(k,p),clRef:{k,id:it.id},note:`Checklist item, phase ${phLabel(k,p)}`});
-    await S.db.doc('projects/'+p.id).update({cl:{[k]:{[it.id]:{...clOf(p,k,it.id),who,at:new Date().toISOString(),by:S.uid}}}});
-  },`Given to ${shortName(who)}`); }
+    else if(r4on()) await createTask({projectId:p.id,title:it.t,assignee:who,target:due,phase:phLabel(k,p),clRef:{k,id:it.id},note:`Checklist item, phase ${phLabel(k,p)}`});
+    else { S.dqAsk=true; try{ await createTask({projectId:p.id,title:it.t,assignee:who,proposed:due,phase:phLabel(k,p),clRef:{k,id:it.id},note:`Checklist item, phase ${phLabel(k,p)}`}); } finally{ S.dqAsk=false; } }
+    try{ await S.db.doc('projects/'+p.id).update({cl:{[k]:{[it.id]:{...clOf(p,k,it.id),who,at:new Date().toISOString(),by:S.uid}}}}); }catch(_){}
+  },r4on()?`Given to ${shortName(who)}`:`Sent to the COO to approve for ${shortName(who)}`); }
 function draftQueueSec(){ const hd=myHeadTeam(); if(!hd||!S.canWrite) return null; const q=draftQueue(); if(!q.length) return null;
   const team=people().filter(id=>teamOf(id)===hd&&(S.members[id]||{}).active!==false), wk=addDays(today(),7);
   const load=Object.fromEntries(team.map(id=>[id,activeTasks().filter(t=>t.assignee===id&&!t.doneAt&&t.target&&t.target<=wk).length]));
   const open=q.filter(x=>!x.t).length;
   const rowOf=x=>{ const sel=h('select',{class:'h-sel','aria-label':'Give to',style:'width:auto;max-width:100%',onchange:e=>{ if(e.target.value) draftAssign(x,e.target.value); }},
-      h('option',{value:'',text:x.t?shortName(x.t.assignee):'Give to…'}),team.filter(id=>!x.t||id!==x.t.assignee).map(id=>h('option',{value:id,text:`${shortName(id)} · ${load[id]} this week`})));
+      h('option',{value:'',text:x.t?(x.t.assignee?shortName(x.t.assignee):`${x.t.assignReq?shortName(x.t.assignReq.to):'Someone'} · COO to approve`):'Give to…'}),(x.t&&!x.t.assignee?[]:team).filter(id=>!x.t||id!==x.t.assignee).map(id=>h('option',{value:id,text:`${shortName(id)} · ${load[id]} this week`})));
     return h('div',{class:'row'},h('span',{class:'h-dot',style:`background:${x.t?'var(--ontime)':x.due&&x.due<today()?'var(--overdue)':'var(--faint)'}`,'aria-hidden':'true'}),
       h('div',{class:'row-main',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:x.p.id,openPh:x.k}; renderSheet(); }},h('div',{class:'row-title',text:x.it.t}),
         h('div',{class:'row-meta'},h('span',{class:'mono',text:x.p.code||x.p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(x.k,x.p)}),x.due?h('span',{text:'·'}):null,dueTxt(x.due)),
