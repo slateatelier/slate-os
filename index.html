@@ -400,6 +400,16 @@ main.wide{max-width:1160px}
 #toast{display:flex;align-items:center}#toast[hidden]{display:none}
 #fab{position:fixed;right:max(18px,env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;border:0;background:var(--ink);color:#fff;font-size:30px;line-height:1;cursor:pointer;z-index:15;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 #fab[hidden]{display:none}
+#fab{transition:transform .22s ease,background .2s}#fab.open{transform:rotate(45deg);z-index:41}
+#fab-menu{position:fixed;inset:0;z-index:40;background:rgba(255,255,255,0);transition:background .2s;-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}
+#fab-menu.in{background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.fm-list{position:absolute;right:max(18px,env(safe-area-inset-right,0px));bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.fm-item{display:flex;align-items:center;gap:12px;background:none;border:0;padding:0;font:inherit;color:var(--ink);cursor:pointer;opacity:0;transform:translateY(10px) scale(.96);transition:opacity .18s ease var(--d),transform .22s cubic-bezier(.2,.8,.2,1) var(--d)}
+#fab-menu.in .fm-item{opacity:1;transform:none}
+.fm-l{display:flex;flex-direction:column;align-items:flex-end;background:#fff;border:1px solid var(--border);border-radius:10px;padding:7px 12px;box-shadow:0 4px 14px rgba(0,0,0,.08);line-height:1.2}.fm-l b{font-size:14.5px;font-weight:600}.fm-l span{font-size:11.5px;color:var(--muted)}
+.fm-b{width:46px;height:46px;border-radius:50%;background:#fff;border:1px solid var(--border);display:grid;place-items:center;box-shadow:0 4px 14px rgba(0,0,0,.1);margin-right:5px}.fm-ic{width:20px;height:20px}
+.fm-item:hover .fm-b,.fm-item:focus-visible .fm-b{background:var(--ink);color:#fff;border-color:var(--ink)}.fm-item:focus-visible{outline:none}
+@media (prefers-reduced-motion:reduce){#fab,.fm-item,#fab-menu{transition:none}}
 body.locked #fab{display:none}
 .chip.qd{border:0;cursor:pointer;padding:6px 12px;display:grid;gap:0;text-align:left;border-radius:10px;background:#fff}
 .chip.qd b{font-size:13px}.chip.qd span{font-size:11.5px;color:var(--muted)}
@@ -2247,7 +2257,9 @@ function renderHeader(){
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
   tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
   try{ document.body.dataset.view=S.view; const fh=document.getElementById('far-host'); if(fh) fh.hidden=S.view!=='far'||!!(S.state!=='ready')||!!(S.far&&S.far.tab==='dash'&&canSeeScoring()); }catch(e){}
-  const fab=$('#fab'); fab.hidden=!(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view)); fab.onclick=()=>openNewTask();
+  const fab=$('#fab'), fm=S.view==='mine'?fabItems():[]; if(S.view!=='mine') fabClose();
+  fab.hidden=!(fm.length>1||(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view))); fab.onclick=()=>fm.length>1?fabToggle():openNewTask();
+  fab.setAttribute('aria-label',fm.length>1?'Add…':'New task'); if(fm.length>1) fab.setAttribute('aria-expanded',String(!!S.fabOpen)); else fab.removeAttribute('aria-expanded');
 }
 
 function buildView(){
@@ -7422,6 +7434,24 @@ function pvBoard(rows,bench,billed){
         h('div',{class:'pv-bar',title:`Earned ${tk(x.fee)} · cost ${tk(x.ctc)}`},h('div',{class:'pv-c',style:`width:${pc(x.ctc)}%`}),h('div',{class:'pv-e s-'+vc,style:`width:${pc(x.fee)}%`}),x.ctc?h('div',{class:'pv-t',style:`left:${pc(x.ctc*bench)}%`}):null),
         h('div',{class:'pv-meta'},h('span',{},h('b',{text:x.fee?x2(x.mult):'—'}),' multiple'),h('span',{text:`earned ${tk(x.fee)} · cost ${tk(x.ctc)}`}),h('span',{text:(x.rel==null?'—':Math.round(x.rel*100)+'%')+' on time'}),h('span',{text:(Math.round(x.pts*10)/10).toFixed(1)+' points'}))); })));
   return out; }
+/* Home: the + button opens a quick-add menu (task, project, meeting, lead, proposal, notice, FAR) */
+function fabItems(){ const w=!!S.canWrite, cm=amChalkMember();
+  return [canNewTask()?['check','New task','',()=>openNewTask()]:null,
+    canProjReq()?['layers',amApprover()?'New project':'Request a project','',()=>openProject()]:null,
+    w&&!cm?['meet','New meeting','',()=>openNewMeeting()]:null,
+    w&&canProps()?['flag','New lead','Business',()=>openLead()]:null,
+    w&&canProps()?['doc','New proposal','Business',()=>openProp()]:null,
+    w&&amApprover()?['bell','New notice','For everyone',()=>openNoticeEditor(null)]:null,
+    !cm?['gauge','FAR calculation','',()=>goView('far')]:null].filter(Boolean); }
+function fabClose(){ if(!S.fabOpen) return; S.fabOpen=false; const m=document.getElementById('fab-menu'); if(m) m.remove(); const f=$('#fab'); if(f){ f.classList.remove('open'); f.setAttribute('aria-expanded','false'); } }
+function fabToggle(){ if(S.fabOpen) return fabClose(); const items=fabItems(); if(!items.length) return;
+  S.fabOpen=true; const f=$('#fab'); f.classList.add('open'); f.setAttribute('aria-expanded','true');
+  const ico=i=>svgEl('svg',{viewBox:'0 0 24 24',class:'fm-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[i]}));
+  const m=h('div',{id:'fab-menu',onclick:e=>{ if(e.target.id==='fab-menu') fabClose(); }},
+    h('div',{class:'fm-list',role:'menu','aria-label':'Add'},items.slice().reverse().map(([i,l,sub,fn],n)=>h('button',{type:'button',role:'menuitem',class:'fm-item',style:`--d:${(items.length-1-n)*28}ms`,onclick:()=>{ fabClose(); fn(); }},h('span',{class:'fm-l'},h('b',{text:l}),sub?h('span',{text:sub}):null),h('span',{class:'fm-b'},ico(i))))));
+  document.body.appendChild(m); requestAnimationFrame(()=>m.classList.add('in'));
+  const first=[...m.querySelectorAll('.fm-item')].pop(); if(first) setTimeout(()=>first.focus({preventScroll:true}),60); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.fabOpen){ fabClose(); const f=$('#fab'); if(f) f.focus(); } });
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
   S.biz=S.biz||{tab:'over',q:'',st:'active'};
