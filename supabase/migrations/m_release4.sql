@@ -154,4 +154,7 @@ revoke all on function private.lead_window() from public, anon;
 select cron.schedule('slate-morning-brief', '0 3 * * 0-4', 'select private.morning_brief()');
 select cron.schedule('slate-day-wrap', '30 11 * * 0-4', 'select private.day_wrap()');
 
+-- switch the app over to the new flow
+update public.docs set data = data || '{"r4":true}'::jsonb where path = 'config/settings';
+
 commit;
