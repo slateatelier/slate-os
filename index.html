@@ -2505,6 +2505,7 @@ function queueGroups(){
     ['assign','Support assignments',areq.length,mn(areq.map(t=>t.assignReq.at)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Support assignments to approve'}),h('span',{class:'cnt',text:String(areq.length)})),h('div',{class:'list'},areq.map(t=>assignCard(t,false))))],
     ['minutes','Meeting minutes',ma.length,mn(ma.map(([d,m])=>m.submittedAt)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Meeting minutes to approve'}),h('span',{class:'cnt',text:String(ma.length)})),h('div',{class:'list'},ma.map(([d,m])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openMeeting(d)},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:`Meeting of ${wd(d)} ${fmtD(d)}`}),h('div',{class:'row-meta who'},avaEl(organiserFor(d),false,'sm'),`Submitted by ${nameOf(m.submittedBy||organiserFor(d))}`)),h('span',{class:'mi-a',text:'›'})))))],
     ['projects','New projects',projectReqs().filter(p=>p.status==='pending').length,mn(projectReqs().filter(p=>p.status==='pending').map(p=>p.requestedAt)),projReqCards],
+    ['timeline','Timelines',tlReqs().length,mn(tlReqs().map(p=>p.std.tlReq.at)),tlReqCards],
     ['phases','Phase dates',phaseReqs().length,mn(phaseReqs().map(r=>r.x.req.at)),phaseReqCards],
     ['closing','Close requests',closeReqs().length,mn(closeReqs().map(p=>p.closeReq.at)),closeReqCards],
     ['members','Project team',memberReqs().length,mn(memberReqs().map(x=>x.m.at)),memberReqCards],
@@ -5399,7 +5400,7 @@ async function saveTlAdj(pid,d){ const p={...S.projects[pid],id:pid}, ks=tlPhase
           const q={...S.projects[p.id],id:p.id}, live=tlAdjPlan(q,d);
           const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=a!==stdSlateDays(q,k)?a:''; cd[k]=b!==stdClientDays(q,k)?b:''; if(kwOf(k)){ const c=+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
           const base={}; Object.values(live.plan).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd,...(x.kd?{kd:x.kd,share:x.share,kDue:x.kDue}:{})}; });
-          await S.db.doc('projects/'+p.id).update({std:{dv:13,sd,cd,kd,tl:{start:t.start||d.from,from:d.from,take:+(t.take??TAKE_IN),base,adj:{by:S.uid,at:now},prev:[...(t.prev||[]),...(t.base?[{base:t.base,at:t.at||'',by:t.by||''}]:[])]}}});
+          await S.db.doc('projects/'+p.id).update({std:{dv:13,sd,cd,kd,...(amApprover()?{tlReq:null}:{}),tl:{start:t.start||d.from,from:d.from,take:+(t.take??TAKE_IN),base,adj:{by:S.uid,at:now},prev:[...(t.prev||[]),...(t.base?[{base:t.base,at:t.at||'',by:t.by||''}]:[])]}}});
           for(const k of ks){ const f=live.plan[k], s=stdState(q,k); if(!f||f.none||s.done||d.close[k]) continue;
             for(const [g,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!g||g.doneAt||!date||g.target===date) continue;
               await taskUpdate(g.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:'Timeline set to where the project stands'}]); } }
@@ -5439,6 +5440,23 @@ function viewTlStatus(){
         run(async()=>{ for(const p of ps) await tlsApply({...S.projects[p.id],id:p.id}); },`Standard days applied to ${ps.length} projects`).then(()=>render(true)); },text:`Apply standard days to all ${ps.length}`})),
     ...ps.map(card)];
 }
+/* a POD leader's timeline adjustment waits for the COO or the Principal */
+function tlReqs(){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>p.std&&p.std.tlReq&&!p.closed).sort((a,b)=>(a.std.tlReq.at||'').localeCompare(b.std.tlReq.at||'')); }
+function tlReqCards(){ const xs=tlReqs();
+  return h('section',{class:'sec','data-q':'timeline'},h('div',{class:'sec-h'},h('h2',{text:'Timeline adjustments to approve'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('div',{class:'list'},xs.map(p=>{ const r=p.std.tlReq, d=r.d||{}, ks=tlPhases(p);
+      let after='', before=''; try{ const pl=tlAdjPlan(p,d).plan; after=maxD(...ks.map(k=>pl[k]&&pl[k].fin)); const lv=tlCompute(p,tlOf(p).start,true); before=maxD(...ks.map(k=>lv[k]&&lv[k].fin)); }catch(_){}
+      const closed=ks.filter(k=>d.close&&d.close[k]).map(k=>`${PH[k].no}${k==='3r'?'R':''}`);
+      const days=ks.filter(k=>!(d.close&&d.close[k])&&!stdState(p,k).done).map(k=>{ const a=+((d.sd||{})[k]), b=stdSlateDays(p,k); return a!==b?`${PH[k].no}${k==='3r'?'R':''}: SLATE ${a} (standard ${b})`:''; }).filter(Boolean);
+      const cds=ks.filter(k=>!(d.close&&d.close[k])&&!stdState(p,k).done).map(k=>{ const a=+((d.cd||{})[k]), b=stdClientDays(p,k); return a!==b?`${PH[k].no}${k==='3r'?'R':''}: client ${a} (standard ${b})`:''; }).filter(Boolean);
+      return h('div',{class:'card',style:'display:grid;gap:8px'},
+        h('div',{style:'display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap'},h('b',{text:projLabel(p)}),h('span',{class:'f-hint',style:'margin:0',text:`${nameOf(r.by)} · ${ageTxt(ageOf(r.at))}`})),
+        h('div',{class:'sub2',text:[closed.length?`Close as finished: phase ${closed.join(', ')}`:'',`Work resumes ${fmtD(d.from)}`,...days,...cds,after?`Last gate ${before?fmtD(before)+' → ':''}${fmtD(after)}`:''].filter(Boolean).join(' · ')}),
+        S.canWrite?h('div',{class:'actions',style:'margin:0'},
+          h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{ await saveTlAdj(p.id,d); await S.db.doc('projects/'+p.id).update({std:{tlReq:null}}); },'Timeline adjustment approved').then(()=>render(true)),text:'Approve'}),
+          h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ S.sheet=null; openTlAdj(p.id); Object.assign(S.sheet.d,JSON.parse(JSON.stringify(d))); renderSheet(); },text:'Open and edit'}),
+          h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!confirm('Decline this timeline adjustment?')) return; run(()=>S.db.doc('projects/'+p.id).update({std:{tlReq:null}}),'Declined').then(()=>render(true)); },text:'Decline'})):null); })));
+}
 function sheetTlAdj(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
   const d=D(), ks=tlPhases(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
@@ -5459,14 +5477,17 @@ function sheetTlAdj(){
     h('p',{class:'lead',style:'margin:0',text:`This project started before SLATE OS. Set where it really stands today. What you save becomes its plan and its gate dates; scores count from ${fmtD(scoreFrom())}.`}),
     h('ul',{class:'f-hint',style:'margin:0;padding-left:18px;display:grid;gap:3px'},
       h('li',{text:'Tick phases that are already finished. They close with their gate deliverables and checklist, and never count in scores.'}),
+      amApprover()?null:h('li',{text:'The COO or the Principal approves your adjustment before it takes effect.'}),
       h('li',{text:'For the phase you are in now, give the SLATE days left, not the full days.'}),
       h('li',{text:'Client and consultant days are the review days agreed for this project.'})),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); if(!d.from) return fail('Give the day work resumes.');
-        run(()=>saveTlAdj(p.id,d),'Timeline adjusted').then(ok=>{ if(ok) back(); }); }},
+        if(amApprover()) run(()=>saveTlAdj(p.id,d),'Timeline adjusted').then(ok=>{ if(ok) back(); });
+        else run(()=>S.db.doc('projects/'+p.id).update({std:{tlReq:{d:JSON.parse(JSON.stringify(d)),by:S.uid,at:new Date().toISOString()}}}),'Sent to the COO for approval').then(ok=>{ if(ok) back(); }); }},
       field('Work on the open phases resumes on',h('input',{type:'date',value:d.from,min:today(),oninput:e=>{ d.from=e.target.value; },onchange:()=>renderSheet()}),'Open phases are planned from this day; finished phases keep their dates.'),
       h('div',{style:'background:#fff;border-radius:var(--r);overflow:hidden'},rows),
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
-      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save the timeline'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
+      (p.std.tlReq&&!amApprover())?h('div',{class:'callout',text:`Your adjustment from ${fmtD(p.std.tlReq.at.slice(0,10))} is waiting for the COO or the Principal. Sending again replaces it.`}):null,
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:amApprover()?'Save the timeline':'Send for approval'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
 }
 function tlSection(p){
   if(!p.std||p.closed||p.pod==='Studio'||isInternalP(p)) return null;
@@ -5505,7 +5526,7 @@ function tlSection(p){
         can?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openTl(p.id),text:'Days'}):null)),
     canAdjTl(p)?h('div',{class:'callout',style:'display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap'},
       h('span',{style:'font-size:13.5px',text:`Started before SLATE OS? Set where this project really stands: close finished phases, give the days left and when work resumes. Open until ${fmtD(adjUntil())}; scores count from ${fmtD(scoreFrom())}.`}),
-      h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openTlAdj(p.id),text:'Adjust timeline'})):null,
+      h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openTlAdj(p.id),text:p.std.tlReq?'Adjustment waiting · open':'Adjust timeline'})):null,
     open?tlLog(p,live,base,ks):null);
 }
 function tlChart(p,live,base,ks){
@@ -6672,7 +6693,7 @@ const HOWDO=[
  // ---- added Oct 2026
  ['tasks','all','Add something quickly from Home',['On Home, tap the round + at the bottom right.','Pick what to add: New task, New project, New meeting, Site visit, FAR calculation (and for the Principal and COO: New lead, New proposal, New notice).'],'The same form opens as from its own page. Tap outside the menu or × to close it.','You only see what you are allowed to add.'],
  ['tasks',['lead','boss'],'Give one task to several people',['New task › choose the first person, then Add another person.','Choose One shared task (everyone finishes before it goes for approval) or Separate tasks (each is approved on their own).','Tap Add task.'],'Each person gets their own copy, tagged Joint · 1/3 done. A shared task reaches Approvals only when the last person has finished.','To send back one person’s part, open the shared item in Approvals and tap their name.'],
- ['projects',['lead','boss'],'Adjust the timeline of a project that started before SLATE OS',['Open the project › Timeline › Adjust timeline (open for a short time after go-live, until 15 Nov).','Tick the phases that are already finished.','For the phase you are in, give the SLATE days left; check the client and consultant days.','Pick the day work resumes and tap Save the timeline.'],'The dates you save become the project’s plan and its gate dates, with nothing counted as late or revised. After the window closes, dates move only through a request to the COO.'],
+ ['projects',['lead','boss'],'Adjust the timeline of a project that started before SLATE OS',['Open the project › Timeline › Adjust timeline (open for a short time after go-live, until 15 Nov).','Tick the phases that are already finished.','For the phase you are in, give the SLATE days left; check the client and consultant days.','Pick the day work resumes and tap Send for approval (the Principal and the COO save it straight away).','The COO or the Principal approves it in Approvals › Timelines, or opens it to edit first.'],'Once approved, the dates become the project’s plan and its gate dates, with nothing counted as late or revised. After the window closes, dates move only through a request to the COO.'],
  ['projects','boss','Set where every project stands and apply the standard days',['More › Project status (until 15 Nov).','For each project pick where it is now and the SLATE days left for that phase.','Tap Apply standard days on one project, or Apply standard days to all.'],'Phases before the one you pick close as finished before SLATE OS. Every later phase takes the standard days for its plot size and type, and the gate dates follow, with nothing counted as late or revised.'],
  ['projects',['lead','boss'],'Track the structural and MEP consultants: start, submission and follow-up',['Open the project › Phases and gates › the phase (2, 3R, 4, WD-1 or WD-2).','Under Consultants, enter the day each one started: Structural and MEP are tracked apart. For authority drawings they start on the design freeze day.','The submission due day follows from their working days. On the due day it shows on your Home under Today; call them and tap Log follow-up with what they said.','When their drawings arrive, enter Received.'],'The timeline counts their days separately from SLATE and the client. If one runs late, a flag shows on the timeline with the follow-ups so far, and later dates move with it; the delay never counts against the team (R8).','Consultant days come from their work orders: set them per project under Timeline › Days (the same for structure and MEP).'],
  ['visit','all','Plan a site visit',['Home › + › Site visit (or the project › Project log › + Site visit).','Keep Plan a visit. Choose the project, what it is for, who goes and the date (and time).','Check the site address; paste a Google Maps link if you have one.','Tap Plan the visit.'],'It is a task for whoever goes, on the Calendar and in the Project log. Several people make it a shared visit.','Site visits count against the free visits in the project’s fee terms.'],
