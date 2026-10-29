@@ -592,6 +592,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .tl-track i{position:absolute;top:4px;height:8px;border-radius:2px}
 .tl-track .tl-base{top:1px;height:14px;background:transparent;box-shadow:inset 0 0 0 1px #C7C7CC}
 .tl-track .tl-s{background:#3A3A3C}.tl-track .tl-s.done{background:var(--ink)}
+.tl-track .tl-k{background:#7BA4D9}.tl-track .tl-k.late{background:var(--late)}.tl-track .tl-k.done{opacity:.75}
+.ph-k{display:grid;gap:4px;padding-top:6px;border-top:1px dashed var(--border)}
 .tl-track .tl-c{background:#A7A9AC}.tl-track .tl-c.late{background:var(--late)}.tl-track .tl-c.done{opacity:.75}
 .tl-track .tl-today{top:-2px;width:1.5px;height:20px;background:var(--overdue);border-radius:0}
 .tl-flags{display:grid;gap:6px}
@@ -1585,6 +1587,7 @@ const PH={
   '2':{no:'2',n:'Design development',d:[15,7],gate:'Design development approved by the client (and the landowner for JV)',steps:[['sub','Design development submitted'],['final','Design development approved']],items:[
     ['Feedback from phase 1 incorporated','L',0,'','2-0'],['All floor plans, basement to roof, with furniture and fixtures','J+L',0,'','2-1'],['Sections','J',0,'','2-4',0,'L'],
     ['STR/MEP coordination: column grid, shafts, ducts, substation, generator, water tank, STP, AC indoor and outdoor units, veranda and planter plumbing (land share: done at 3R when the project goes live again)','L',0,'','2-n1',['share']],
+    ['From the consultants: structural and MEP input on the shared design development layouts','L',0,'','2-n6',['share']],
     ['Slab outline details with spot sections','J/D',0,'','2-n2',0,'L'],['Area calculation chart and FAR calculation chart','J',0,'','2-3',0,'L+D'],['Complete detailed 3D model with good-quality renders','J+L',0,'','2-5'],
     ['Suggestive MEP layout','J',0,'','2-n4',0,'L/D'],['Fair-face wall layout','J',0,'','2-n5',0,'L'],
     ['From the client: material and finish choices; branding, project name and sales area format','L',0,'','2-n3'],['JV only: landowner presentation, feedback incorporated, signing','L',0,'','2-6'],
@@ -1593,17 +1596,17 @@ const PH={
   '3':{no:'3',n:'Design freeze',d:[7,5],gate:'Design freeze signed; later changes are extra revisions',steps:[['sub','Design freeze sheet submitted'],['final','Design freeze signed']],items:PH3},
   '3r':{no:'3',n:'Design freeze (resume)',d:[7,5],gate:'Design frozen again before authority drawings',steps:[['sub','Design freeze sheet submitted (resume)'],['final','Design freeze signed (resume)']],items:[['Launch design re-checked against current authority rules, client changes and consultant input','L',0,'','3r-0'],
     ['From the client: structural and MEP consultants appointed, with their work orders','C',0,'','3r-n3'],
-    ['STR/MEP coordination: column grid, shafts, ducts, substation, generator, water tank, STP, AC indoor and outdoor units, veranda and planter plumbing','L',0,'','3r-n2'],
+    ['STR/MEP coordination: column grid, shafts, ducts, substation, generator, water tank, STP, AC indoor and outdoor units, veranda and planter plumbing','L',0,'','3r-n2'],['From the consultants: structural and MEP input on the launch design','L',0,'','3r-n5'],
     ['Design freeze sheet prepared for signature','J',0,'','3r-n1',0,'L'],['Architecture, structure, MEP and 3D alignment checked and signed off by a peer POD leader','R',0,'','3r-9'],['Final coordination with the drafting team','L+J',0,'','3r-n4'],['Principal design review, then submit','P',0,'','3r-10'],
     ['Value engineering review with the consultants: structural system, slab type, member sizes','L',1,'','3r-11'],['Facade compared with a simpler alternative, cost per sft stated','L',1,'','3r-12'],['Material specification, best option','J',1,'','3r-13',0,'L'],['Passive measures checked: shading, cross-ventilation, daylight','L',1,'','3r-14'],['Final efficiency ratio recorded against the phase 0 target','J',1,'','3r-15']]},
   '4':{no:'4',n:'Authority drawings',d:[10,5],gate:'Signed set handed to the client’s team, who submit and follow up',steps:[['sub','Authority check print submitted'],['final','Signed authority set handed over']],items:[
     ['Modules switched on: Fire, PP, DTCA, RAJUK, Cantonment or Jolshiri, Bashundhara gate pass','L',0,'','4-0'],['Architect’s and engineer’s specimen signatures and documents collected','C+L',0,'','4-1'],
     ['Affidavits (ongikarnama) from the architect and the structural consultant; load bearing certificate','C+L',0,'','4-n1'],
     ['RAJUK set: location and site plan, all floor plans, elevations, sections; 2 sets for check print and 5 for submission','A',0,'','4-5',0,'L'],['FAR, MGC and parking calculation sheets (FAR sheet at A3)','A',0,'','4-n2',0,'L'],
-    ['Land use clearance drawings, where required','A',0,'','4-n3'],['Coordinated structural drawings and design certificate by the structural engineer; shore, pile, electrical and plumbing drawings through the coordination loop','L',0,'','4-6'],
+    ['Land use clearance drawings, where required','A',0,'','4-n3'],['From the consultants: coordinated structural authority drawings, design certificate and ETABS report; shore and pile drawings','L',0,'','4-6'],['From the consultants: MEP authority drawings (electrical and plumbing; fire where required)','L',0,'','4-n9'],
     ['Fire safety plan for the Fire Service NOC, where applicable: fire layout, 2 draft sets with CAD','A',0,'','4-2',0,'L'],['PP (block development): layout, 2 ammonia sets for check print and 7 for final; A3 plans and FAR calculation','A',0,'','4-3',0,'L'],['DTCA: layout, 2 ammonia sets for check print and 4 for submission','A',0,'','4-4',0,'L'],
     ['CAAB height and DoE clearance drawings, where applicable','A',0,'','4-n4',0,'L'],['Cantonment or Jolshiri: enlisted architect’s design, structural certification, ETABS report, entry ramp section and septic tank size from the MEP consultant (no MEP set for the Cantonment Board)','L+A',0,'','4-7'],
-    ['Bashundhara gate pass: RAJUK copy, architectural set, pile and shore protection details','A',0,'','4-8'],['Architectural presentation set as per the authority, for the authority only','A',0,'','4-n6'],['Final authority plans shared with the structural and MEP consultants','L',0,'','4-n7'],['Internal check against the frozen design','L',0,'','4-9'],['Technical cross-check by another pod’s lead','R',0,'','4-10'],
+    ['Bashundhara gate pass: RAJUK copy, architectural set, pile and shore protection details','A',0,'','4-8'],['Architectural presentation set as per the authority, for the authority only','A',0,'','4-n6'],['Final authority plans shared with the structural and MEP consultants','L',0,'','4-n7'],['Combined set (architecture, structure and MEP) checked together before the check print','L',0,'','4-n10'],['Internal check against the frozen design','L',0,'','4-9'],['Technical cross-check by another pod’s lead','R',0,'','4-10'],
     ['Set signed by the IAB-registered architect','L',0,'','4-n5'],['Signed sets handed over with a transmittal','L',0,'','4-11']]},
   '5':{no:'5',n:'Marketing materials',d:[15,5],gate:'Approved for print and launch',steps:[['sub','Draft marketing package submitted'],['final','Marketing package approved for print and launch']],items:[
     ['Exterior 3D renders, day and dusk; scene set by the POD leader','V',0,'','5-3',0,'L'],['Interior renders of key spaces','V',0,'','5-4',0,'L'],['3D detailing','L/J',0,'','5-n3'],['Brochure full floor plans as per RAJUK, with key plans, in the client’s format','J',0,'','5-0'],['Brochure unit plans with areas and key plans','J',0,'','5-1'],
@@ -1611,7 +1614,7 @@ const PH={
     ['Unit-wise CAD plans for client modifications, with AC and false ceiling','J',0,'','5-7'],['Draft submitted, feedback incorporated, final issued','L',0,'','5-8'],['Re-updated architectural presentation plans (optional)','J',0,'','5-n4']]},
   '6':{no:'6',n:'WD-1 Substructure',d:[15,7],gate:'WD-1 issued Good for Construction',steps:[['sub','WD-1 Not for Construction issued'],['final','WD-1 Good for Construction issued']],items:[
     ['General: cover, index, project information, general notes','D',0,'','6-0'],['Setting-out and centreline plan','D',0,'','6-n1'],['Architectural: column layout, all floor plans, all elevations, long section','D',0,'','6-1'],
-    ['Pile and foundation layout coordination; structural up to ground through the coordination loop','L',0,'','6-6'],['Basement (if applicable) and ground floor working plans: column layout, slab layout with beams, slab shutter details','D',0,'','6-2'],
+    ['Pile and foundation layout coordination; structural up to ground through the coordination loop','L',0,'','6-6'],['From the consultants: structural substructure drawings (pile, foundation, basement) and below-ground MEP','L',0,'','6-n7'],['Basement (if applicable) and ground floor working plans: column layout, slab layout with beams, slab shutter details','D',0,'','6-2'],
     ['Mat layout with plumbing details; wall layout; wall shutter details','D',0,'','6-3'],['Retaining wall (if applicable), sump and UGWR details','D',0,'','6-n2'],['Ramp, stair and lift pit details','D',0,'','6-n3'],['Long sections through ramps, stairs and lifts; spot sections','D',0,'','6-4'],
     ['Construction details as the site needs','D',0,'','6-5',0,'L'],['Electrical and plumbing working drawings through the coordination loop','L',0,'','6-7'],['Technical cross-check by another pod’s lead','R',0,'','6-8'],
     ['Internal check before NFC','L',0,'','6-9'],['Client and site feedback on the NFC set logged','J',0,'','6-n4'],['Feedback taken into the drawings','D',0,'','6-n5'],['Final check before GFC','L',0,'','6-n6'],
@@ -1619,7 +1622,7 @@ const PH={
   '7':{no:'7',n:'WD-2 Superstructure',d:[25,7],gate:'WD-2 issued Good for Construction',steps:[['sub','WD-2 Not for Construction issued'],['final','WD-2 Good for Construction issued']],items:[
     ['General and architectural set updated','D',0,'','7-0'],['Dimensioned floor plans and roof plan','D',0,'','7-n1'],['Column layout at every level where it changes; working plans','D',0,'','7-1'],['All slab layouts with beams and shutter details; wall layouts','D',0,'','7-2'],
     ['Long sections; spot sections at reservoirs, lift machine room and pool','D',0,'','7-3'],['Stair and lift details','D',0,'','7-n3'],['Door and window schedule with details','D',0,'','7-n4'],
-    ['Toilet and kitchen layouts','D',0,'','7-4'],['Presentation plan, working plan, slab layout; false slab, lintel and sunshade layout','D',0,'','8-1'],['All elevations, sections and blow-ups as needed','D',0,'','8-3'],['Fair-face details','D',0,'','7-n10'],['MEP-coordinated plans: shafts, sleeves, openings','L',0,'','7-n5'],['From the client: MEP layouts from the consultants','L',0,'','7-n6'],
+    ['Toilet and kitchen layouts','D',0,'','7-4'],['Presentation plan, working plan, slab layout; false slab, lintel and sunshade layout','D',0,'','8-1'],['All elevations, sections and blow-ups as needed','D',0,'','8-3'],['Fair-face details','D',0,'','7-n10'],['MEP-coordinated plans: shafts, sleeves, openings','L',0,'','7-n5'],['From the consultants: MEP layouts','L',0,'','7-n6'],['From the consultants: structural superstructure drawings to the roof','L',0,'','7-n11'],
     ['Structural to roof through the coordination loop','L',0,'','7-5'],['Internal check before NFC','L',0,'','7-6'],['Client and site feedback on the NFC set logged','J',0,'','7-n7'],['Feedback taken into the drawings','D',0,'','7-n8'],['Final check before GFC','L',0,'','7-n9'],
     ['Repeated floors drawn as typical floors; repetitive slab and shuttering layouts','D',1,'','7-7'],['Consultant member sizes checked against the phase 3 value engineering review','L',1,'','7-8']]},
   '8':{no:'8',n:'WD-3 Finishing',d:[20,7],gate:'WD-3 issued Good for Construction',steps:[['sub','WD-3 Not for Construction issued'],['final','WD-3 Good for Construction issued']],items:[
@@ -1634,16 +1637,22 @@ const PH={
 const phLabel=(k,p)=>PH[k]?`${PH[k].no} ${phName(k,p)}`:k;
 /* items become objects with stable ids, so the COO can edit the list without moving anyone's ticks */
 Object.keys(PH).forEach(k=>{ PH[k]={...PH[k],items:PH[k].items.map((x,i)=>({id:x[4]||k+'-'+i,t:x[0],r:x[1],c:x[2]?1:0,...(x[3]?{o:x[3]}:{}),...(x[5]?{x:x[5]}:{}),...(x[6]?{k:x[6]}:{})}))}; });
+/* consultant window (v1.3): [SLATE days before the plans go to the STR/MEP consultants, consultant working days]. The rest of the
+   phase's SLATE days come after their drawings are back. Consultant time is its own clock (R8), like the client's. */
+const KW={'2':[10,7],'3r':[4,7],'4':[7,10],'6':[10,10],'7':[18,10]};
+Object.entries(KW).forEach(([k,v])=>{ if(PH[k]) PH[k].kw=v; });
 const DEF_PH=JSON.parse(JSON.stringify(PH));
 /* working days: SLATE works Sunday to Thursday (Friday and Saturday off) */
 const isWorkDay=d=>{ const w=new Date(d+'T00:00:00').getDay(); return w!==5&&w!==6; };
 function addWorkDays(d,n){ let x=d, k=0; while(k<n){ x=addDays(x,1); if(isWorkDay(x)) k++; } return x; }
 /* a phase's standard days; the client's review days can be set per project (agreed in the fee proposal) */
 const slateDaysOf=k=>(PH[k]&&PH[k].d)?PH[k].d[0]:null;
+const kwOf=k=>(PH[k]&&PH[k].kw)||null;
+const consultDaysOf=(p,k)=>{ const w=kwOf(k); if(!w) return 0; const v=p&&p.std&&p.std.kd&&p.std.kd[k]; return v!=null&&v!==''?+v:w[1]; };
 const clientDaysOf=(p,k)=>{ const v=p&&p.std&&p.std.cd&&p.std.cd[k]; return v!=null&&v!==''?+v:((PH[k]&&PH[k].d)?PH[k].d[1]:null); };
 const CLIENT_RULES=[['R1','Review days are agreed up front in the fee proposal and set in SLATE OS at project start.'],['R2','The client always gets the full review days, counted from the actual submission date.'],
   ['R3','Comments are not approval; the client clock runs until approval. Extra rounds are flagged to the COO.'],['R4','The original plan is never edited; the project log keeps SLATE and client time, planned and used.'],
-  ['R5','Starting the next phase before approval is at risk and needs COO approval.'],['R6','Changes after the signed design freeze are extra revisions.'],['R7','Any client change after the design freeze is coordinated with the structural and MEP consultants.']];
+  ['R5','Starting the next phase before approval is at risk and needs COO approval.'],['R6','Changes after the signed design freeze are extra revisions.'],['R7','Any client change after the design freeze is coordinated with the structural and MEP consultants.'],['R8','Consultant time is its own clock. The structural and MEP consultants’ days are agreed in their work orders and set per project, the same for both. It runs from the day SLATE shares the plans until their drawings are back; consultant delays shift later dates and never count against the team. The POD leader chases on the due day.']];
 const STD_DECISIONS=['Ten phases, Brief & feasibility to as-built, as one standard for every building project type; construction support runs after completion until handover.','A separate Design freeze phase; client changes after it are extra revisions.',
   'Peer review by another POD leader for phases 1 to 3; at design freeze the peer signs off the architecture, structure, MEP and 3D alignment.','Marketing materials run alongside authority drawings, not after. The final 3D starts from the design freeze.','Working drawings split into WD-1 substructure, WD-2 superstructure and WD-3 finishing, each issued NFC then GFC, with client and site feedback days between.',
   'Client review days counted in working days and agreed in the fee proposal.','Deemed approval after 14 working days of no reply, confirmed by the COO.','Client delays shift later dates and never count against the team.'];
@@ -5180,6 +5189,7 @@ function stdSection(p){
         PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysOf(k)} working days`}),h('span',{text:'·'}),
           fbEdit&&!s.done?h('label',{class:'ph-cd'},'client',h('input',{id:'cd-'+k,type:'number',min:'0',max:'60',value:String(clientDaysOf(p,k)),'aria-label':'Client review days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); run(()=>S.db.doc('projects/'+p.id).update({std:{cd:{[k]:v===PH[k].d[1]?'':v}}}),'Client review days saved'); }}),'working days'):h('span',{text:`client ${clientDaysOf(p,k)} working days`}),
           clientDaysOf(p,k)!==PH[k].d[1]?h('span',{class:'muted',text:`(standard ${PH[k].d[1]})`}):null):null,
+        kwOf(k)&&s.created?kwRow(p,k,fbEdit&&!s.done):null,
         s.created?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>{ S.sheet.openPh=isOpen?null:k; renderSheet(); },text:isOpen?'Hide checklist':'Show checklist'}):null),
@@ -5188,6 +5198,19 @@ function stdSection(p){
         s.created&&!s.done&&manage&&today()<addDays(goLive(),60)?preBox(p,k):null); })),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Gate deliverables carry the dates and count on the dashboard. Checklist items are ticked, not dated. Client feedback dates are for planning and never count against the pod.'}),
     own&&amMgr()&&S.canWrite&&!p.closed?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>openPhEdit(p.id),text:'Edit phases'}):null);
+}
+/* the consultant clock on a phase (R8): when SLATE's plans went to the STR/MEP consultants, and when their drawings came back */
+function kwRow(p,k,can){ const st=p.std||{}, sh=(st.kShare||{})[k]||'', got=(st.kGot||{})[k]||'', kd=consultDaysOf(p,k), due=sh?addWorkDays(sh,kd):'';
+  const save=(f,v,msg)=>run(()=>S.db.doc('projects/'+p.id).update({std:{[f]:{[k]:v}}}),msg);
+  const dateBtn=(f,lbl,msg)=>can?h('input',{type:'date',max:today(),value:f==='kShare'?sh:got,'aria-label':lbl,style:'background:var(--group);padding:4px 6px;font-size:13px',onchange:e=>save(f,e.target.value||'',msg)}):null;
+  return h('div',{class:'ph-k'},
+    h('div',{class:'ph-days'},h('span',{text:'Consultants'}),h('span',{text:'·'}),
+      can?h('label',{class:'ph-cd'},h('input',{type:'number',min:'0',max:'60',value:String(kd),'aria-label':'Consultant days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); save('kd',v===kwOf(k)[1]?'':v,'Consultant days saved'); }}),'working days'):h('span',{text:`${kd} working days`}),
+      kd!==kwOf(k)[1]?h('span',{class:'muted',text:`(standard ${kwOf(k)[1]})`}):null),
+    h('div',{class:'ph-dates'},
+      h('div',{},h('span',{text:'Plans shared with STR/MEP'}),can?dateBtn('kShare','Plans shared on','Shared date saved'):h('b',{text:sh?fmtD(sh):'—'})),
+      h('div',{},h('span',{text:'Drawings back'}),can?dateBtn('kGot','Drawings back on','Received date saved'):h('b',{text:got?fmtD(got):'—'}),
+        !got&&due?h('span',{style:'font-weight:500'+(due<today()?';color:var(--late)':''),text:(due<today()?'overdue since ':'due ')+fmtD(due)}):null)));
 }
 /* ---------- project timeline: the client clock (SLATE standard process v1, rules D6–D8 and R1–R6) ----------
    p.std.tl = {start, at, by, take, base:{k:{s,sub,due,fin}}, prev:[…]}  the plan, frozen when it is set (R4)
@@ -5229,7 +5252,15 @@ function tlCompute(p,start,live){
     const st=live?stdState(p,k):{}, sd=slateDaysFor(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
     const subA=live&&st.sub&&st.sub.doneAt?st.sub.doneAt.slice(0,10):'', finA=live&&st.fin&&st.fin.doneAt?st.fin.doneAt.slice(0,10):'';
     const deem=live&&std.deemed&&std.deemed[k]?std.deemed[k].on:'';
-    const subPlan=spanWD(s,sd);
+    // consultant window: SLATE works `pre` days, the plans go to the STR/MEP consultants, their drawings come back after `kd`
+    // working days, then SLATE finishes the rest. Consultant delays move the submission and count as consultant time (R8).
+    const w=kwOf(k), kd=w?consultDaysOf(p,k):0, pre=w?Math.max(1,Math.min(w[0],sd-1)):0, post=w?Math.max(1,sd-pre):0;
+    let share='', kDue='', kEnd='', kShareA='', kGotA='', lateK=0, lateShare=0;
+    if(w&&kd>0){ const sharePlan=spanWD(s,pre); kShareA=live&&std.kShare&&std.kShare[k]||''; kGotA=live&&std.kGot&&std.kGot[k]||'';
+      share=kShareA||(live&&!subA&&!kGotA&&sharePlan<td?td:sharePlan); kDue=addWorkDays(share,kd);
+      kEnd=kGotA||(live&&!subA&&kDue<td?td:kDue); lateK=live?wdBetween(kDue,kGotA||(kDue<td&&!subA?td:kDue)):0; lateShare=live?wdBetween(sharePlan,share):0; }
+    // with a consultant window SLATE's own clock restarts when the drawings are back: SLATE is late only for sharing late or finishing slowly after
+    const subPlan=w&&kd>0?addWorkDays(kEnd,post):spanWD(s,sd);
     // SLATE's submission: done, or forecast (never before today while it is still open)
     let sub=subA||(live&&!finA&&subPlan<td?td:subPlan);
     if(!steps.includes('sub')&&finA) sub=finA;   // a one-step phase: the final is also the submission
@@ -5242,8 +5273,9 @@ function tlCompute(p,start,live){
     const submitted=!!subDone;
     const approved=!!finA||!!deem;
     const lateC=live&&submitted?wdBetween(due,approved?(finA||deem):(isWD(k)?(fb||td):td)):0;
-    const lateS=live?wdBetween(subPlan,subDone||(sub>subPlan?sub:subPlan)):0;
-    out[k]={k,s,sub,due,fin,clientEnd,sd,cd,subA,finA,deem,submitted,approved,lateC,lateS,
+    const lateS=(live?wdBetween(subPlan,subDone||(sub>subPlan?sub:subPlan)):0)+lateShare;
+    out[k]={k,s,sub,due,fin,clientEnd,sd,cd,subA,finA,deem,submitted,approved,lateC,lateS,kd,share,kDue,kEnd,kShareA,kGotA,lateK,
+      kUsed:live&&kd&&(kShareA||share<=td)?wdBetween(share,kGotA||(td>share?td:share)):0,
       sUsed:live?wdBetween(addDays(s,-1),subDone||(td<s?addDays(s,-1):td)):0,
       cUsed:live&&submitted?wdBetween(sub,approved?(finA||deem):(isWD(k)&&fb?fb:td)):0,
       deemDue:live&&submitted&&!approved&&!isWD(k)&&wdBetween(subDone,td)>=DEEMED_WD};
@@ -5251,7 +5283,7 @@ function tlCompute(p,start,live){
   return out;
 }
 const tlBase=p=>{ const t=tlOf(p); return t&&t.base&&Object.keys(t.base).length?t.base:null; };
-function tlPlanSnap(p,start){ const pl=tlCompute(p,start,false), base={}; Object.values(pl).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd}; }); return base; }
+function tlPlanSnap(p,start){ const pl=tlCompute(p,start,false), base={}; Object.values(pl).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd,...(x.kd?{kd:x.kd,share:x.share,kDue:x.kDue}:{})}; }); return base; }
 /* R5: work on a phase started before what it waits for was approved */
 function tlRisk(p){ const ks=tlPhases(p), out=[], st=k=>stdState(p,k), std=p.std||{};
   ks.forEach(k=>{ const dep=tlDep(p,k); if(dep.start||dep.resume||dep.prev||dep.at!=='fin') return; const d=dep.k; if(!ks.includes(d)) return;
@@ -5266,7 +5298,7 @@ function tlShiftable(p,live){ const out=[];
   return out; }
 /* a date moves for the client only if a client wait before it ran late */
 function clientCaused(p,live,k,step){ const ks=tlPhases(p), i=ks.indexOf(k); const before=ks.slice(0,i).filter(x=>live[x]&&!live[x].none);
-  return before.some(x=>live[x].lateC>0)||(step==='final'&&live[k].lateC>0); }
+  return before.some(x=>live[x].lateC>0||live[x].lateK>0)||live[k].lateK>0||(step==='final'&&live[k].lateC>0); }
 const canPlanTl=p=>S.canWrite&&!p.closed&&(amApprover()||isProjLead(p));
 
 function tlSection(p){
@@ -5277,24 +5309,26 @@ function tlSection(p){
     can?h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openTl(p.id),text:'Set the timeline'})):null);
   const live=tlCompute(p,t.start,true), base=tlBase(p)||{}, ks=tlPhases(p).filter(k=>live[k]&&!live[k].none);
   const lastF=maxD(...ks.map(k=>live[k].fin)), lastB=maxD(...ks.map(k=>base[k]&&base[k].fin));
-  const cLate=ks.reduce((a,k)=>a+live[k].lateC,0), sLate=ks.reduce((a,k)=>a+live[k].lateS,0), slip=lastB&&lastF?wdBetween(lastB,lastF):0;
+  const cLate=ks.reduce((a,k)=>a+live[k].lateC,0), kLate=ks.reduce((a,k)=>a+(live[k].lateK||0),0), sLate=ks.reduce((a,k)=>a+live[k].lateS,0), slip=lastB&&lastF?wdBetween(lastB,lastF):0;
   const deem=ks.filter(k=>live[k].deemDue), risk=tlRisk(p).filter(x=>!x.ok), shift=ap?tlShiftable(p,live):[];
   const waiting=ks.filter(k=>live[k].submitted&&!live[k].approved&&!isWD(k)), lateNow=waiting.filter(k=>today()>live[k].due);
   const flags=[];
+  ks.filter(k=>live[k].kd&&!live[k].kGotA&&!live[k].subA&&live[k].lateK>0).forEach(k=>flags.push(h('div',{class:'tl-flag'},h('b',{text:`Consultants late on phase ${PH[k].no} ${phName(k,p)}`}),h('span',{text:`Structural and MEP drawings were due ${fmtD(live[k].kDue)}; ${live[k].lateK} working day${live[k].lateK===1?'':'s'} over. Later dates move with it and count as consultant time (R8). Record the day they arrive on the phase.`}))));
   lateNow.forEach(k=>flags.push(h('div',{class:'tl-flag'},h('b',{text:`Client late on phase ${PH[k].no} ${phName(k,p)}`}),h('span',{text:`Review was due ${fmtD(live[k].due)}; ${live[k].lateC} working day${live[k].lateC===1?'':'s'} over. Later dates move with it and count as client time.`}))));
   deem.forEach(k=>flags.push(h('div',{class:'tl-flag'},h('b',{text:`Deemed approval: phase ${PH[k].no}`}),h('span',{text:`No reply for ${DEEMED_WD} working days since the submission on ${fmtD(live[k].subA||live[k].sub)}.`}),
     ap?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ if(!confirm(`Confirm deemed approval of phase ${PH[k].no} ${phName(k,p)} today?`)) return; run(()=>S.db.doc('projects/'+p.id).update({std:{deemed:{[k]:{on:today(),by:S.uid,at:new Date().toISOString()}}}}),'Deemed approval confirmed'); },text:'Confirm deemed approval'}):h('span',{class:'muted',text:'The COO confirms it.'}))));
   risk.forEach(x=>flags.push(h('div',{class:'tl-flag'},h('b',{text:`At risk: phase ${PH[x.k].no} started before phase ${PH[x.d].no} was approved`}),h('span',{text:'Starting the next phase before approval needs the COO’s approval (R5).'}),
     ap?h('button',{class:'btn btn-sm',type:'button',onclick:()=>run(()=>S.db.doc('projects/'+p.id).update({std:{risk:{[x.k]:{by:S.uid,at:new Date().toISOString()}}}}),'At-risk start approved'),text:'Approve at-risk start'}):h('span',{class:'muted',text:'Waiting for the COO.'}))));
-  if(shift.length) flags.push(h('div',{class:'tl-flag'},h('b',{text:`${shift.length} gate date${shift.length===1?'':'s'} behind the client delay`}),h('span',{text:'The client’s delay moves these dates (D8). Moving them keeps the delay off the team’s score.'}),
-    h('button',{class:'btn btn-sm',type:'button',onclick:()=>run(async()=>{ for(const x of shift) await taskUpdate(x.t.id,{target:x.date,clientShift:(x.t.clientShift||0)+wdBetween(x.t.target,x.date)},[{type:'target',from:x.t.target,to:x.date,note:'Moved for client delay (D8)'}]); },'Dates moved for the client delay'),text:'Move these dates'})));
+  if(shift.length) flags.push(h('div',{class:'tl-flag'},h('b',{text:`${shift.length} gate date${shift.length===1?'':'s'} behind a client or consultant delay`}),h('span',{text:'The client’s or the consultants’ delay moves these dates (D8, R8). Moving them keeps the delay off the team’s score.'}),
+    h('button',{class:'btn btn-sm',type:'button',onclick:()=>run(async()=>{ for(const x of shift) await taskUpdate(x.t.id,{target:x.date,clientShift:(x.t.clientShift||0)+wdBetween(x.t.target,x.date)},[{type:'target',from:x.t.target,to:x.date,note:'Moved for a client or consultant delay (D8, R8)'}]); },'Dates moved for the delay'),text:'Move these dates'})));
   const open=S.sheet&&S.sheet.tlLog;
   return h('div',{class:'card tl-card'},
-    h('div',{class:'pc-row'},h('b',{text:'Timeline'}),h('span',{class:'pill '+(cLate?'s-late':slip>0?'s-overdue':'s-ontime'),text:cLate?`Client +${cLate} days`:slip>0?`${slip} days behind plan`:'On plan'})),
+    h('div',{class:'pc-row'},h('b',{text:'Timeline'}),h('span',{class:'pill '+(cLate||kLate?'s-late':slip>0?'s-overdue':'s-ontime'),text:cLate||kLate?[cLate?`Client +${cLate}`:'',kLate?`Consultants +${kLate}`:''].filter(Boolean).join(' · ')+' days':slip>0?`${slip} days behind plan`:'On plan'})),
     h('div',{class:'tl-sum'},
       h('div',{},h('span',{text:'Planned finish'}),h('b',{text:lastB?fmtD(lastB):'—'})),
       h('div',{},h('span',{text:'Forecast finish'}),h('b',{style:slip>0?'color:var(--overdue)':'',text:lastF?fmtD(lastF):'—'})),
       h('div',{},h('span',{text:'Client time over'}),h('b',{text:`${cLate} days`})),
+      ks.some(k=>live[k].kd)?h('div',{},h('span',{text:'Consultant time over'}),h('b',{text:`${kLate} days`})):null,
       h('div',{},h('span',{text:'SLATE time over'}),h('b',{style:sLate?'color:var(--overdue)':'',text:`${sLate} days`}))),
     tlChart(p,live,base,ks),
     flags.length?h('div',{class:'tl-flags'},flags):null,
@@ -5309,43 +5343,47 @@ function tlChart(p,live,base,ks){
   const td=today(), tx=X(td), mos=[]; { let m=t0.slice(0,7)+'-01'; if(m<t0) m=addDays(m.slice(0,8)+'28',5).slice(0,7)+'-01'; while(m<=t1){ mos.push(m); m=addDays(m.slice(0,8)+'28',5).slice(0,7)+'-01'; } }
   const fmtShort=d=>{ const [y,mm,dd]=d.split('-'); return `${+dd} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mm-1]}${y!==td.slice(0,4)?" '"+y.slice(2):''}`; };
   return h('div',{class:'tl-chart'},h('div',{class:'tl-row'},h('span'),h('div',{class:'tl-mo'},mos.map(m=>h('span',{style:`left:${X(m)}%`,text:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m.slice(5,7)-1]}))),h('span')),ks.map(k=>{ const f=live[k], b=base[k];
-    const tip=`Phase ${PH[k].no} ${phName(k,p)}\nSLATE ${f.sd} days: ${fmtD(f.s)} → ${f.subA?'submitted ':''}${fmtD(f.sub)}\nClient ${f.cd} days: due ${fmtD(f.due)}${f.lateC?` · ${f.lateC} days late`:''}\n${isWD(k)?'GFC':'Approved'} ${f.finA||f.deem?'':'(forecast) '}${fmtD(f.fin)}`+(b?`\nPlanned ${fmtD(b.fin)}`:'');
+    const tip=`Phase ${PH[k].no} ${phName(k,p)}\nSLATE ${f.sd} days: ${fmtD(f.s)} → ${f.subA?'submitted ':''}${fmtD(f.sub)}\n`+(f.kd?`Consultants ${f.kd} days: plans shared ${fmtD(f.share)}, drawings ${f.kGotA?'back ':'due '}${fmtD(f.kGotA||f.kDue)}${f.lateK?` · ${f.lateK} days late`:''}\n`:'')+`Client ${f.cd} days: due ${fmtD(f.due)}${f.lateC?` · ${f.lateC} days late`:''}\n${isWD(k)?'GFC':'Approved'} ${f.finA||f.deem?'':'(forecast) '}${fmtD(f.fin)}`+(b?`\nPlanned ${fmtD(b.fin)}`:'');
     return h('div',{class:'tl-row'},h('span',{class:'tl-n',text:`${PH[k].no} ${phName(k,p)}`}),
       h('div',{class:'tl-track','data-tip':tip},
         b?h('i',{class:'tl-base',style:`left:${X(b.s)}%;width:${Wd(b.s,b.fin)}%`}):null,
-        h('i',{class:'tl-s'+(f.subA?' done':''),style:`left:${X(f.s)}%;width:${Wd(f.s,f.sub)}%`}),
+        ...(f.kd&&f.share?[h('i',{class:'tl-s'+(f.subA||f.kShareA?' done':''),style:`left:${X(f.s)}%;width:${Wd(f.s,f.share)}%`}),
+          h('i',{class:'tl-k'+(f.lateK?' late':'')+(f.kGotA?' done':''),style:`left:${X(nextWD(f.share))}%;width:${Wd(nextWD(f.share),f.kEnd)}%`}),
+          h('i',{class:'tl-s'+(f.subA?' done':''),style:`left:${X(nextWD(f.kEnd))}%;width:${Wd(nextWD(f.kEnd),f.sub)}%`})]
+          :[h('i',{class:'tl-s'+(f.subA?' done':''),style:`left:${X(f.s)}%;width:${Wd(f.s,f.sub)}%`})]),
         h('i',{class:'tl-c'+(f.lateC?' late':'')+(f.approved?' done':''),style:`left:${X(nextWD(f.sub))}%;width:${Wd(nextWD(f.sub),f.fin)}%`}),
         tx>=0&&tx<=100?h('i',{class:'tl-today',style:`left:${tx}%`}):null),
       h('span',{class:'tl-d',text:fmtShort(f.fin)})); }),
-    h('div',{class:'legend',style:'justify-content:flex-start;margin-top:6px'},h('span',{style:'--c:var(--ink)',text:'SLATE'}),h('span',{style:'--c:#A7A9AC',text:'Client'}),h('span',{style:'--c:var(--late)',text:'Client late'}),h('span',{style:'--c:var(--fill)',text:'Original plan'}),h('span',{style:'--c:var(--overdue)',text:'Today'})));
+    h('div',{class:'legend',style:'justify-content:flex-start;margin-top:6px'},h('span',{style:'--c:var(--ink)',text:'SLATE'}),h('span',{style:'--c:#A7A9AC',text:'Client'}),h('span',{style:'--c:#7BA4D9',text:'Consultants'}),h('span',{style:'--c:var(--late)',text:'Client or consultants late'}),h('span',{style:'--c:var(--fill)',text:'Original plan'}),h('span',{style:'--c:var(--overdue)',text:'Today'})));
 }
 function tlLog(p,live,base,ks){
   const row=k=>{ const f=live[k], b=base[k]||{};
     return h('tr',{},h('td',{text:`${PH[k].no} ${phName(k,p)}`}),h('td',{class:'n',text:String(f.sd)}),h('td',{class:'n',text:f.subA||f.s<=today()?String(f.sUsed):'—'}),
-      h('td',{class:'n',text:String(f.cd)}),h('td',{class:'n',text:f.submitted?String(f.cUsed):'—'}),
+      h('td',{class:'n',text:String(f.cd)}),h('td',{class:'n',text:f.submitted?String(f.cUsed):'—'}),h('td',{class:'n',text:f.kd?`${f.kd} / ${f.kUsed||(f.kShareA?0:'—')}`:'—'}),
       h('td',{class:'n',text:b.fin?fmtD(b.fin):'—'}),h('td',{class:'n',style:f.fin>(b.fin||f.fin)?'color:var(--overdue)':'',text:(f.finA||f.deem?'':'~')+fmtD(f.fin)}),
-      h('td',{class:'sub2',text:[f.lateS?`SLATE +${f.lateS}`:'',f.lateC?`client +${f.lateC}`:'',f.deem?'deemed':'',f.approved&&!f.deem?'approved':''].filter(Boolean).join(' · ')||''})); };
+      h('td',{class:'sub2',text:[f.lateS?`SLATE +${f.lateS}`:'',f.lateC?`client +${f.lateC}`:'',f.lateK?`consultants +${f.lateK}`:'',f.deem?'deemed':'',f.approved&&!f.deem?'approved':''].filter(Boolean).join(' · ')||''})); };
   const tot=ks.reduce((a,k)=>{ const f=live[k]; a.sd+=f.sd; a.su+=f.sUsed; a.cd+=f.cd; a.cu+=f.cUsed; return a; },{sd:0,su:0,cd:0,cu:0});
   return h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{},
-    h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'SLATE plan'}),h('th',{class:'n',text:'SLATE used'}),h('th',{class:'n',text:'Client plan'}),h('th',{class:'n',text:'Client used'}),h('th',{class:'n',text:'Planned'}),h('th',{class:'n',text:'Forecast'}),h('th',{text:''}))),
-    h('tbody',{},ks.map(row),h('tr',{style:'font-weight:600'},h('td',{text:'Total'}),h('td',{class:'n',text:String(tot.sd)}),h('td',{class:'n',text:String(tot.su)}),h('td',{class:'n',text:String(tot.cd)}),h('td',{class:'n',text:String(tot.cu)}),h('td'),h('td'),h('td')))),
-    h('p',{class:'f-hint',style:'margin:8px 10px',text:'Working days. The plan is never edited (R4): it is the timeline as first set. Client time runs from each actual submission until approval; comments are not approval (R3).'}));
+    h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'SLATE plan'}),h('th',{class:'n',text:'SLATE used'}),h('th',{class:'n',text:'Client plan'}),h('th',{class:'n',text:'Client used'}),h('th',{class:'n',text:'Consultants plan / used'}),h('th',{class:'n',text:'Planned'}),h('th',{class:'n',text:'Forecast'}),h('th',{text:''}))),
+    h('tbody',{},ks.map(row),h('tr',{style:'font-weight:600'},h('td',{text:'Total'}),h('td',{class:'n',text:String(tot.sd)}),h('td',{class:'n',text:String(tot.su)}),h('td',{class:'n',text:String(tot.cd)}),h('td',{class:'n',text:String(tot.cu)}),h('td'),h('td'),h('td'),h('td')))),
+    h('p',{class:'f-hint',style:'margin:8px 10px',text:'Working days. The plan is never edited (R4): it is the timeline as first set. Client time runs from each actual submission until approval; comments are not approval (R3). Consultant time runs from the day the plans are shared until their drawings are back (R8).'}));
 }
 /* set or change the timeline: start date, days per phase */
 function openTl(pid){ const p=S.projects[pid]; if(!p) return; const t=tlOf({...p})||{};
   S.sheet={type:'tl',id:pid,err:'',d:{start:t.start||(p.agDate&&p.agDate<=today()?p.agDate:today()),take:String(t.take??TAKE_IN),resume:(p.std&&p.std.resume)||'',
-    sd:Object.fromEntries(tlPhases(p).map(k=>[k,String(slateDaysFor(p,k))])),cd:Object.fromEntries(tlPhases(p).map(k=>[k,String(clientDaysOf(p,k))])),gates:true}}; renderSheet(); }
+    sd:Object.fromEntries(tlPhases(p).map(k=>[k,String(slateDaysFor(p,k))])),cd:Object.fromEntries(tlPhases(p).map(k=>[k,String(clientDaysOf(p,k))])),kd:Object.fromEntries(tlPhases(p).filter(kwOf).map(k=>[k,String(consultDaysOf(p,k))])),gates:true}}; renderSheet(); }
 function sheetTl(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
   const d=D(), ap=amApprover(), had=!!tlOf(p), ks=tlPhases(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
-  const pv={...p,std:{...p.std,sd:Object.fromEntries(ks.map(k=>[k,+d.sd[k]||0])),cd:Object.fromEntries(ks.map(k=>[k,+d.cd[k]||0])),resume:d.resume,tl:{take:+d.take||0}}};
+  d.kd=d.kd||{};
+  const pv={...p,std:{...p.std,sd:Object.fromEntries(ks.map(k=>[k,+d.sd[k]||0])),cd:Object.fromEntries(ks.map(k=>[k,+d.cd[k]||0])),kd:Object.fromEntries(ks.filter(kwOf).map(k=>[k,d.kd[k]===''||d.kd[k]==null?consultDaysOf(p,k):+d.kd[k]||0])),resume:d.resume,tl:{take:+d.take||0}}};
   const plan=d.start?tlCompute(pv,d.start,false):{};
   const num=(f,k,dis)=>h('input',{type:'number',min:'0',max:'120',value:d[f][k],disabled:dis,style:'width:58px;padding:4px 6px;text-align:center',oninput:e=>{ d[f][k]=e.target.value; },onchange:()=>renderSheet()});
   return [head(projLabel(p),had?'Timeline days':'Set the timeline'),
     h('p',{class:'lead',style:'margin:0',text:had?'Days changed here move the forecast. The original plan stays as it was first set (R4).':'The plan is saved as the project’s original timeline and never edited (R4). Client review days are the ones agreed in the fee proposal (R1).'}),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); if(!d.start) return fail('Give the start date.');
-        run(async()=>{ const sd={}, cd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=ap&&a!==slateDaysOf(k)?a:(p.std.sd&&p.std.sd[k])||''; cd[k]=b!==PH[k].d[1]?b:''; });
-          const upd={std:{...(ap?{sd}:{}),cd,resume:d.resume||''}};
+        run(async()=>{ const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=ap&&a!==slateDaysOf(k)?a:(p.std.sd&&p.std.sd[k])||''; cd[k]=b!==PH[k].d[1]?b:''; if(kwOf(k)){ const c=d.kd[k]===''?kwOf(k)[1]:+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
+          const upd={std:{...(ap?{sd}:{}),cd,kd,resume:d.resume||''}};
           if(!had) upd.std.tl={start:d.start,at:new Date().toISOString(),by:S.uid,take:+d.take||0,base:tlPlanSnap(pv,d.start)};
           else upd.std.tl={take:+d.take||0};
           await S.db.doc('projects/'+p.id).update(upd);
@@ -5357,9 +5395,10 @@ function sheetTl(){
       h('div',{class:'form-row'},field('Start *',h('input',{type:'date',value:d.start,disabled:had,oninput:e=>{ d.start=e.target.value; },onchange:()=>renderSheet()}),had?'Fixed once set; it starts the original plan.':'Usually the work order date.'),
         field('Days to take NFC feedback in before GFC',h('input',{type:'number',min:'0',max:'20',value:d.take,oninput:e=>{ d.take=e.target.value; },onchange:()=>renderSheet()}))),
       ks.includes('3r')?field('Land share: work resumes on',h('input',{type:'date',value:d.resume,oninput:e=>{ d.resume=e.target.value; },onchange:()=>renderSheet()}),'3R and the phases after it are planned from this date.'):null,
-      h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'SLATE days'}),h('th',{class:'n',text:'Client days'}),h('th',{class:'n',text:isWD('6')?'Submitted':'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
-        h('tbody',{},ks.map(k=>{ const f=plan[k]||{}; return h('tr',{},h('td',{text:`${PH[k].no} ${phName(k,p)}`}),h('td',{class:'n'},num('sd',k,!ap)),h('td',{class:'n'},num('cd',k,false)),
+      h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'SLATE days'}),h('th',{class:'n',text:'Consultant days'}),h('th',{class:'n',text:'Client days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
+        h('tbody',{},ks.map(k=>{ const f=plan[k]||{}; return h('tr',{},h('td',{text:`${PH[k].no} ${phName(k,p)}`}),h('td',{class:'n'},num('sd',k,!ap)),h('td',{class:'n'},kwOf(k)?num('kd',k,false):h('span',{class:'muted',text:'—'})),h('td',{class:'n'},num('cd',k,false)),
           h('td',{class:'n',text:f.sub?fmtD(f.sub):'—'}),h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):(f.none?'after resume':'—')})); })))),
+      h('div',{class:'f-hint',text:'Consultant days: how long the structural and MEP consultants take to return their drawings once SLATE shares the plans, as agreed in their work orders (R8). The same days apply to both.'}),
       ap?null:h('div',{class:'f-hint',text:'SLATE days are set by the Principal or the COO (fast track is agreed with the COO).'}),
       !had?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',checked:d.gates,onchange:e=>{ d.gates=e.target.checked; }}),ap?'Set these as the gate dates':'Propose these as the gate dates (the COO approves them)'):null,
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
@@ -5537,7 +5576,7 @@ const canEditStd=()=>S.canWrite&&(S.isOwner||amApprover());
 function viewStd(){
   const d=stdDoc(), ed=canEditStd();
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Settings'}),h('h1',{class:'h1',text:'SLATE standard process'}),
-    h('p',{class:'lead',text:'Version 1.2 (final): approved by the Principal on 27 Oct 2026, updated 28 Oct with the POD leaders’ feedback and adopted by the whole team on 29 Oct 2026. One spine of phases for every client project. Each phase closes at its gate deliverables; the work inside is a checklist, ticked off, never dated.'+(ed?' You can edit any phase; changes apply to every project straight away.':' The Principal and the COO keep this list up to date.')})))];
+    h('p',{class:'lead',text:'Version 1.3: approved by the Principal on 27 Oct 2026, updated 28 Oct with the POD leaders’ feedback, adopted by the whole team on 29 Oct 2026, and the same day given a consultant clock for the structural and MEP consultants (R8). One spine of phases for every client project. Each phase closes at its gate deliverables; the work inside is a checklist, ticked off, never dated.'+(ed?' You can edit any phase; changes apply to every project straight away.':' The Principal and the COO keep this list up to date.')})))];
   if(d) out.push(h('div',{class:'f-hint',style:'margin-top:-12px;padding:0 4px',text:`Last changed by ${nameOf(d.by)} · ${fmtTs(d.updatedAt)}`}));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project types'})),h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Type'}),h('th',{text:'Phases'}),h('th',{text:'How it differs'}))),
     h('tbody',{},Object.entries(STD_DEF).map(([k,t])=>h('tr',{},h('td',{style:'font-weight:500',text:t.name}),h('td',{class:'mono',text:t.phases.filter(x=>!(t.off||[]).includes(x)).map(x=>x==='3r'?'3R':x).join(' ')+(t.off&&t.off.length?` · later: ${t.off.map(x=>x==='3r'?'3R':x).join(' ')}`:'')}),h('td',{class:'sub2',text:t.note})))))),
@@ -6428,6 +6467,7 @@ const HOWDO=[
  // ---- added Oct 2026
  ['tasks','all','Add something quickly from Home',['On Home, tap the round + at the bottom right.','Pick what to add: New task, New project, New meeting, Site visit, FAR calculation (and for the Principal and COO: New lead, New proposal, New notice).'],'The same form opens as from its own page. Tap outside the menu or × to close it.','You only see what you are allowed to add.'],
  ['tasks',['lead','boss'],'Give one task to several people',['New task › choose the first person, then Add another person.','Choose One shared task (everyone finishes before it goes for approval) or Separate tasks (each is approved on their own).','Tap Add task.'],'Each person gets their own copy, tagged Joint · 1/3 done. A shared task reaches Approvals only when the last person has finished.','To send back one person’s part, open the shared item in Approvals and tap their name.'],
+ ['projects',['lead','boss'],'Record when the consultants get the plans and send their drawings back',['Open the project › Phases and gates › the phase (2, 3R, 4, WD-1 or WD-2).','Under Consultants, enter the day the plans were shared with the STR/MEP consultants.','When their drawings arrive, enter Drawings back.'],'The timeline counts their days separately from SLATE and the client. If they run late, a flag shows on the timeline and later dates move with it; the delay never counts against the team (R8).','Consultant days come from their work orders: set them per project under Timeline › Days (the same for structure and MEP).'],
  ['visit','all','Plan a site visit',['Home › + › Site visit (or the project › Project log › + Site visit).','Keep Plan a visit. Choose the project, what it is for, who goes and the date (and time).','Check the site address; paste a Google Maps link if you have one.','Tap Plan the visit.'],'It is a task for whoever goes, on the Calendar and in the Project log. Several people make it a shared visit.','Site visits count against the free visits in the project’s fee terms.'],
  ['visit','all','Record a visit while I’m at the site',['Home › + › Site visit › I’m on site now.','Choose the project and what it is for.','Tap 📍 I’m at the site and allow location when the phone asks.','Tap Record the visit.'],'It is recorded as done today with your location and goes to the Principal or the COO to verify.','Location blocked? Allow it for SLATE OS in the browser’s site settings or Settings › Privacy › Location, then try again.'],
  ['visit','all','Finish a planned site visit',['At the site, open the visit and tap Mark as done.','Tap 📍 I’m at the site, then Send for verification.'],'Your check-in time, accuracy and distance from the site pin go with it.','It can’t be marked done without a check-in, so do it on site.'],
