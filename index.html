@@ -1407,6 +1407,8 @@ async function taskUpdate(id,patch,entries){
   if(patch&&patch.doneAt&&!(t&&t.doneAt)) fxMark('task:'+id,'done'); else if(patch&&patch.stage&&t&&patch.stage!==t.stage) fxMark('task:'+id,'move');
   const hist=[...((t&&t.history)||[]),...entries.map(e=>({at:now,by:S.uid,...e}))];
   await S.db.doc(S.paths[id]||('tasks/'+id)).update({...patch,history:hist});
+  if(patch&&patch.doneAt&&t&&t.clRef&&!t.doneAt){ const p=S.projects[t.projectId], {k,id:ci}=t.clRef;
+    if(p&&!clOf(p,k,ci).done) try{ await S.db.doc('projects/'+t.projectId).update({cl:{[k]:{[ci]:{...clOf(p,k,ci),done:patch.doneAt.slice(0,10),na:false,at:now,by:S.uid}}}}); }catch(_){} }
 }
 async function createTask(d){
   if(d.assignee&&!(d.chalk?canChalkAssign():canAssignTo(d.assignee))&&!S.spawning) throw new Error('Only the Principal and the COO can assign tasks to the Principal’s Office.');
@@ -1419,7 +1421,7 @@ async function createTask(d){
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
-    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
+    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),...(d.clRef?{clRef:d.clRef}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
@@ -1437,7 +1439,7 @@ const unscored=id=>['intern','other','boss'].includes(roleGroup(id));
 const myHeadTeam=()=>S.uid&&roleGroup(S.uid)==='dhead'?teamOf(S.uid):'';
 const isSupport=id=>!!id&&supportTeams().includes(teamOf(id));
 const isCrossPod=(id,pid)=>{ const tm=teamOf(id); if(!/^pod\b/i.test(tm)) return false; const ps=podsOfProject(S.projects[pid]); return ps.length>0&&!ps.includes(tm); };
-const needsAssignApproval=(id,pid)=>!!id&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id);
+const needsAssignApproval=(id,pid)=>!!id&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(myHeadTeam()&&teamOf(id)===myHeadTeam());
 function loadOf(id,excl){
   const td=today(), wk=addDays(td,7);
   const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id))&&(!isChalkTask(t)||isChalkP(id)));
@@ -2499,7 +2501,9 @@ function onboarding(){
       h('li',{text:'Everyone with an account appears under More → Settings → People.'}),
       h('li',{text:'Set each person’s team and designation, then add your projects.'}),
       h('li',{text:'Add tasks and deliverables with a target date and an assignee.'}))
-    :h('p',{class:'muted',style:'margin:0',text:'When your pod leader or the COO gives you a task, it appears here. You can also add a task for yourself with New task.'}),
+    :h('p',{class:'muted',style:'margin:0',text:(()=>{ if(roleGroup(S.uid)!=='draft') return 'When your POD leader or the COO gives you a task, it appears here. You can also add a task for yourself with New task.';
+        const hd=people().find(id=>id!==S.uid&&teamOf(id)===teamOf(S.uid)&&roleGroup(id)==='dhead');
+        return `Drafting work comes from ${hd?nameOf(hd)+', your Design Associate Lead,':'your Design Associate Lead'} through the drafting queue: each item lands here as a task with its date. Nothing given yet? Ask ${hd?nameOf(hd).split(' ')[0]:'them'} for your next item.`; })()}),
     boss&&h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:'Add a project'}),h('button',{class:'btn',type:'button',onclick:()=>{S.view='setup';render(true)},text:'Set up the team'})));
 }
 /* ---------- Approvals: everything waiting on the Principal or the COO, in one place ----------
@@ -2847,17 +2851,30 @@ function viewMineBody(){
       out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notice board'}),h('button',{class:'linkish h-all',type:'button',onclick:go,text:'All'})),
         unseen.length?noticeCard(unseen[0],{clamp:true}):null,rows.length?h('div',{class:'h-list'},rows):null)); } }
 
+  /* 4b · Drafting queue (Design Associate Lead) */
+  { const dq=draftQueueSec(); if(dq) out.push(dq); }
   /* 5 · My work */
   if(mine.length){
     const r=range('month',0), c=count(mine.filter(t=>t.target>=r.s&&t.target<=r.e),'approved'), nOpen=mine.filter(t=>!t.doneAt).length, nOver=mine.filter(t=>status(t)==='overdue').length;
     const stat=(n,l,col)=>h('div',{class:'h-stat'},h('b',{style:col&&n?`color:${col}`:'',text:String(n)}),h('span',{text:l}));
-    const attn=mine.filter(t=>!t.doneAt&&!t.verify&&(['overdue','soon'].includes(status(t))||vfReturned(t))).sort(byTarget), nodate=mine.filter(t=>!t.doneAt&&!t.verify&&!t.target&&!vfReturned(t)).sort(byTarget), vfl=mine.filter(t=>t.verify&&!t.doneAt).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||''));
-    const prog=mine.filter(t=>!t.doneAt&&t.target&&status(t)==='open').sort(byTarget), done=mine.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,15);
-    const list=(key,title,xs,n)=>xs.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:title}),h('span',{class:'cnt',text:String(xs.length)})),h('div',{class:'list'},hMore(key,xs,n,t=>row(t,{person:false})))):null;
+    /* focus: what needs you now, this week and the week after; anything later is one line that opens Tasks */
+    const wk=addDays(td,7), wk2=addDays(td,14), lead=amPodLead()&&!ap;
+    const open_=mine.filter(t=>!t.doneAt&&!t.verify);
+    const attn=open_.filter(t=>['overdue','soon'].includes(status(t))||vfReturned(t)).sort(byTarget), aIds=new Set(attn.map(t=>t.id));
+    const nodate=open_.filter(t=>!t.target&&!vfReturned(t)).sort(byTarget), vfl=mine.filter(t=>t.verify&&!t.doneAt).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||''));
+    const rest=open_.filter(t=>!aIds.has(t.id)&&t.target), own=rest.filter(t=>!(lead&&t.gate));
+    const week=own.filter(t=>t.target<=wk).sort(byTarget), next=own.filter(t=>t.target>wk&&t.target<=wk2).sort(byTarget);
+    const podGate=lead?rest.filter(t=>t.gate&&t.target<=wk2).sort(byTarget):[], later=rest.filter(t=>t.target>wk2);
+    const done=mine.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,15);
+    const list=(key,title,xs,n,note)=>xs.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:title}),h('span',{class:'cnt',text:String(xs.length)})),note?h('div',{class:'f-hint',style:'margin:0 4px',text:note}):null,h('div',{class:'list'},hMore(key,xs,n,t=>row(t,{person:false})))):null;
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My work'})),
       h('div',{class:'h-stats'},stat(nOpen,'Open'),stat(nOver,'Overdue','var(--overdue)'),stat(c.early+c.ontime,'On time','var(--ontime)'),stat(c.late,'Late','var(--late)')),h('div',{class:'f-hint',style:'margin:0 4px',text:'On time and late count tasks due this month.'+(today()<scoreFrom()?` Scores count from ${fmtD(scoreFrom())}; work due before that is a trial run.`:'')})));
-    [list('attn','Needs attention',attn,5),list('vf','Waiting for verification',vfl,3),list('nodate','Waiting for a date',nodate,3),prog.length||attn.length||nodate.length?list('prog','In progress',prog,5):null,list('done','Recently completed',done,3)].forEach(x=>{ if(x) out.push(x); });
-    if(!attn.length&&!prog.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:'Nothing open. Enjoy the clear desk.'}));
+    [list('attn','Needs attention',attn,5),list('vf','Waiting for verification',vfl,3),list('wk','This week',week,5),
+     lead?list('pg','POD deadlines · next 2 weeks',podGate,5,'Gate deliverables of your POD’s projects. Your POD does the work; you make sure each one goes out on its date.'):null,
+     list('nx','Next week',next,3),list('nodate','Needs a date',nodate,3)].forEach(x=>{ if(x) out.push(x); });
+    if(later.length) out.push(h('div',{class:'h-list'},hRow({dot:'var(--faint)',strong:`${later.length} more`,title:`due after ${fmtD(wk2)}`,meta:'Open them in Tasks',onclick:()=>{ S.f.person=S.uid; S.f.project=''; S.f.status='active'; S.f.q=''; goView('all'); }})));
+    { const x=list('done','Recently completed',done,3); if(x) out.push(x); }
+    if(!attn.length&&!week.length&&!next.length&&!podGate.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:later.length?'Nothing due in the next two weeks.':'Nothing open. Enjoy the clear desk.'}));
   }
   /* 6 · My checklist */
   const mcl=myChecklist(); if(mcl.length){ const el=myChecklistSec(mcl); const lst=el.querySelector('.list'); if(lst&&mcl.length>5&&!(S.homeMore&&S.homeMore.cl)){ [...lst.children].slice(5).forEach(x=>x.remove()); }
@@ -5787,15 +5804,56 @@ function savePhEdit(){
   if(!phaseDiff({...p,id:pid},sh.m).keep.length) return fail('Keep at least one phase.');
   run(()=>applyPhaseChanges(pid,sh.m),'Phases updated').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } });
 }
-function myChecklist(){ const out=[];
+/* the date a phase's checklist is needed by: its first open gate deliverable (submission before sign-off) */
+function phDueMap(){ const m={};
+  Object.entries(S.tasks).forEach(([id,t])=>{ if(!t||t.archived||!t.gate||t.doneAt||!t.target) return; const key=t.projectId+'|'+t.gate.k; if(!m[key]||t.target<m[key]) m[key]=t.target; });
+  return (p,k)=>m[p.id+'|'+k]||''; }
+const byDue=(a,b)=>(a.due||'9999').localeCompare(b.due||'9999');
+function dueTxt(d){ if(!d) return null; const td=today(), n=diff(td,d);
+  return h('span',{style:d<td?'color:var(--overdue);font-weight:600':n<=3?'color:var(--late);font-weight:600':'',text:d<td?`Due ${fmtD(d)} · ${-n}d late`:n===0?'Due today':`Due ${fmtD(d)}`}); }
+/* checklist items handed to someone as a task (drafting queue): the task carries them */
+const clTaskKey=t=>t&&t.clRef?`${t.projectId}|${t.clRef.k}|${t.clRef.id}`:'';
+function clTasks(){ const m={}; Object.entries(S.tasks).forEach(([id,t])=>{ if(t&&!t.archived&&t.clRef) m[clTaskKey(t)]={...t,id}; }); return m; }
+function myChecklist(){ const out=[], due=phDueMap(), ct=clTasks();
   for(const p of projects()){ if(!p.std||!workable(p)) continue; for(const k of activePhases(p)){
-    clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(x.who===S.uid&&!x.done&&!x.na) out.push({p,k,it}); }); } }
-  return out; }
+    clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(x.who===S.uid&&!x.done&&!x.na){ const t=ct[`${p.id}|${k}|${it.id}`]; if(t&&t.assignee===S.uid&&!t.doneAt) return; out.push({p,k,it,due:due(p,k)}); } }); } }
+  return out.sort(byDue); }
+/* drafting queue (Design Associate Lead): every open drafting-pool and authority-drafter item in a live phase,
+   not yet with someone outside the drafting team. Assigning one makes it a dated task for that person. */
+const isDraftItem=it=>/[DA]/.test(it.r||'');
+function draftQueue(){ const hd=myHeadTeam(); if(!hd) return [];
+  const due=phDueMap(), ct=clTasks(), out=[];
+  for(const p of projects()){ if(!p.std||!workable(p)||isChalkProj(p)||p.pod==='Studio') continue; for(const k of activePhases(p)) clItems(k).forEach(it=>{
+    if(!isDraftItem(it)) return; const x=clOf(p,k,it.id); if(x.done||x.na) return; if(x.who&&teamOf(x.who)!==hd&&x.who!==S.uid) return;
+    const t=ct[`${p.id}|${k}|${it.id}`]; out.push({p,k,it,x,due:due(p,k),t:t&&!t.doneAt?t:null}); }); }
+  return out.sort((a,b)=>(!!a.t-!!b.t)||byDue(a,b)); }
+const shortName=id=>{ const w=nameOf(id).split(' ').filter(x=>!/^(md\.?|mohammad|muhammad|mohammed)$/i.test(x)); return w[0]||nameOf(id); };
+function draftAssign(q,who){ const {p,k,it}=q, due=q.due||addWorkDays(today(),3);
+  return run(async()=>{
+    if(q.t){ if(q.t.assignee===who) return; await taskUpdate(q.t.id,{assignee:who},[{type:'reassigned',from:q.t.assignee,to:who}]); }
+    else await createTask({projectId:p.id,title:it.t,assignee:who,target:due,phase:phLabel(k,p),clRef:{k,id:it.id},note:`Checklist item, phase ${phLabel(k,p)}`});
+    await S.db.doc('projects/'+p.id).update({cl:{[k]:{[it.id]:{...clOf(p,k,it.id),who,at:new Date().toISOString(),by:S.uid}}}});
+  },`Given to ${shortName(who)}`); }
+function draftQueueSec(){ const hd=myHeadTeam(); if(!hd||!S.canWrite) return null; const q=draftQueue(); if(!q.length) return null;
+  const team=people().filter(id=>teamOf(id)===hd&&(S.members[id]||{}).active!==false), wk=addDays(today(),7);
+  const load=Object.fromEntries(team.map(id=>[id,activeTasks().filter(t=>t.assignee===id&&!t.doneAt&&t.target&&t.target<=wk).length]));
+  const open=q.filter(x=>!x.t).length;
+  const rowOf=x=>{ const sel=h('select',{class:'h-sel','aria-label':'Give to',style:'width:auto;max-width:100%',onchange:e=>{ if(e.target.value) draftAssign(x,e.target.value); }},
+      h('option',{value:'',text:x.t?shortName(x.t.assignee):'Give to…'}),team.filter(id=>!x.t||id!==x.t.assignee).map(id=>h('option',{value:id,text:`${shortName(id)} · ${load[id]} this week`})));
+    return h('div',{class:'row'},h('span',{class:'h-dot',style:`background:${x.t?'var(--ontime)':x.due&&x.due<today()?'var(--overdue)':'var(--faint)'}`,'aria-hidden':'true'}),
+      h('div',{class:'row-main',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:x.p.id,openPh:x.k}; renderSheet(); }},h('div',{class:'row-title',text:x.it.t}),
+        h('div',{class:'row-meta'},h('span',{class:'mono',text:x.p.code||x.p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(x.k,x.p)}),x.due?h('span',{text:'·'}):null,dueTxt(x.due)),
+        h('div',{style:'margin-top:6px',onclick:e=>e.stopPropagation()},sel)),
+      h('span'),h('span')); };
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Drafting queue'}),h('span',{class:'cnt',text:open?(()=>{ const n=q.filter(x=>!x.t&&x.due&&x.due<=addDays(today(),14)).length; return `${n} due in 2 weeks · ${open} to give out`; })():'all given out'})),
+    h('div',{class:'h-stats'},team.map(id=>h('div',{class:'h-stat'},h('b',{text:String(load[id])}),h('span',{text:shortName(id)})))),
+    h('div',{class:'f-hint',style:'margin:0 4px',text:'Drafting work in every live phase. Give each item to someone: it becomes a task on their Home, due by the phase’s deadline, and the checklist item ticks itself when the task is done. Numbers are tasks due in the next 7 days.'}),
+    h('div',{class:'list'},hMore('dq',q,6,rowOf))); }
 function myChecklistSec(list){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
-    h('div',{class:'list'},list.slice(0,40).map(({p,k,it})=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
+    h('div',{class:'list'},list.slice(0,40).map(({p,k,it,due})=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
       holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'),
-      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k,p)})),p.code?h('div',{class:'row-pn',text:p.name}):null),
+      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),h('div',{class:'row-meta'},h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'}),h('span',{text:'Phase '+phLabel(k,p)}),...(due?[h('span',{text:'·'}),dueTxt(due)]:[])),p.code?h('div',{class:'row-pn',text:p.name}):null),
       h('span'),h('span')))),
     list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
 }

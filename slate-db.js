@@ -490,7 +490,10 @@
     let done = false;
     const place = () => {
       const k = installKind();
-      if (done || k === 'installed' || k === 'none' || ls.get('slate-install-later') || ls.get('slate-installed')) return;
+      const notNow = ls.get('slate-install-later'), onHome = (() => { try { return S.view === 'mine'; } catch (_) { return true; } })();
+      const old = document.getElementById('slate-install-banner'); if (old && !onHome) old.remove();
+      /* Home only; "Not now" hides it for 30 days (an older permanent "1" keeps it hidden) */
+      if (done || !onHome || k === 'installed' || k === 'none' || ls.get('slate-installed') || (notNow && (notNow === '1' || Date.now() - (+notNow || 0) < 30 * 864e5))) return;
       const main = document.querySelector('main'); if (!main || document.getElementById('slate-install-banner')) return;
       const text = k === 'ios' ? 'Add SLATE OS to your Home Screen: it opens like an app and can send you notifications.'
                  : 'Install SLATE OS on this device: it opens in its own window with its own icon.';
@@ -498,7 +501,7 @@
       const later = el('button', { class: 'btn btn-sm', type: 'button', style: 'background:#fff' }, 'Not now');
       const b = el('div', { id: 'slate-install-banner', class: 'banner' }, el('span', {}, text), el('div', { class: 'actions' }, go, later));
       go.addEventListener('click', async () => { if (await runInstall(installKind())) { done = true; b.remove(); } });
-      later.addEventListener('click', () => { done = true; ls.set('slate-install-later', '1'); b.remove(); });
+      later.addEventListener('click', () => { done = true; ls.set('slate-install-later', String(Date.now())); b.remove(); });
       main.prepend(b);
     };
     addDecorator(40, place);
