@@ -2317,8 +2317,11 @@ const jointLeft=t=>jointMates(t).filter(x=>!x.verify&&!x.doneAt);
 function vfQueue(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.verify&&!t.doneAt&&canVerify(t)&&(!jointOf(t)||jointReady(t))).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||'')); }
 /* the queue as the approver sees it: a joint task is one item */
 function vfGroups(){ const seen=new Set(), out=[]; for(const t of vfQueue()){ const j=jointOf(t); if(j){ if(seen.has(j.id)) continue; seen.add(j.id); out.push({...t,_mates:jointMates(t)}); } else out.push(t); } return out; }
-function verifyJoint(t){ const ms=(t._mates||[]).filter(x=>x.verify&&!x.doneAt);
-  return run(async()=>{ for(const m of ms){ const cur=S.tasks[m.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(m.id,vfPatch({...cur,id:m.id}),[{type:'verified',to:cur.verify.at,note:'Joint task: verified together'}]); } },'Verified for everyone'); }
+/* the day the joint task counts as finished: the last person's finish date */
+const jointLast=ms=>ms.map(m=>(m.verify&&m.verify.at)||m.ownDoneAt||m.doneAt||'').sort().pop()||'';
+async function verifyJointNow(ms){ const last=jointLast(ms);
+  for(const m of ms){ const cur=S.tasks[m.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(m.id,{...vfPatch({...cur,id:m.id}),doneAt:last,ownDoneAt:cur.verify.at},[{type:'verified',to:last,note:`Joint task: counts as finished ${fmtD(last)}, when the last person finished`+(cur.verify.at<last?`; own part done ${fmtD(cur.verify.at)}`:'')}]); } }
+function verifyJoint(t){ return run(()=>verifyJointNow(t._mates||jointMates(t)),'Verified for everyone'); }
 const vfPatch=t=>({doneAt:t.verify.at,doneBy:t.verify.by,verify:null,verifiedBy:S.uid,verifiedAt:new Date().toISOString()});
 async function undoSpawn(t,spawned){ if(!spawned) return; if(!S.paths[spawned]) S.paths[spawned]=isPriv(t.assignee)?`lead/${t.assignee}/tasks/${spawned}`:'tasks/'+spawned; await taskUpdate(spawned,{archived:true},[{type:'archived',note:'Undone'}]); }
 /* the one way to finish a task: done outright, or sent for verification */
@@ -2332,7 +2335,7 @@ async function finishTask(t,date,note,o={}){
   Object.assign(patch,{doneAt:date,doneBy:S.uid},vd?{verifiedBy:S.uid,verifiedAt:now}:{});
   await taskUpdate(t.id,patch,[{type:'done',to:date,note:note||''}]); return {sent:false,spawned,verified:vd};
 }
-function verifyTask(t){ if(!t||!t.verify) return; const note=(S.declineNote[t.id]||'').trim();
+function verifyTask(t){ if(!t||!t.verify) return; if(jointOf(t)){ const left=jointLeft(t); if(left.length){ toast('Joint task: waiting for '+left.map(x=>nameOf(x.assignee)).join(', ')+' to finish'); return; } return run(()=>verifyJointNow(jointMates(t)),'Verified for everyone'); } const note=(S.declineNote[t.id]||'').trim();
   return run(()=>taskUpdate(t.id,vfPatch(t),[{type:'verified',to:t.verify.at,note}]),'Verified').then(ok=>{ if(ok) delete S.declineNote[t.id]; return ok; }); }
 function returnTask(t){ if(!t||!t.verify) return; const note=(S.declineNote[t.id]||'').trim();
   if(!note){ toast('Write what needs fixing, then tap Return.'); const el=document.getElementById('sh-vn'); if(el) el.focus(); return; }
@@ -2349,10 +2352,10 @@ function vfCard(t){ if(t._mates) return vfJointCard(t); const v=t.verify, p=S.pr
 function vfJointCard(t){ const p=S.projects[t.projectId], ms=t._mates.slice().sort((a,b)=>nameOf(a.assignee).localeCompare(nameOf(b.assignee)));
   return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},
     h('div',{class:'row-title'},h('span',{text:t.title}),h('span',{class:'tag',text:'Joint · '+ms.length}),(t.gate||t.kind==='Deliverable')&&h('span',{class:'tag',text:t.gate?'Gate':'Deliverable'})),
-    h('div',{class:'row-meta',text:projLabel(p)+' · everyone has finished'}),
+    h('div',{class:'row-meta',text:projLabel(p)+` · counts as finished ${fmtD(jointLast(ms))}, when the last person finished`+(t.target?` · target ${fmtD(t.target)}`:'')}),
     h('div',{class:'jt-list'},ms.map(m=>{ const v=m.verify, tm=v?vfTiming(m):'', late=!!(v&&m.target&&v.at>m.target);
       return h('button',{type:'button',class:'jt-row',onclick:()=>openTask(m.id),title:'Open to return just this part'},avaEl(m.assignee,false,'sm'),h('span',{class:'jt-n',text:nameOf(m.assignee)}),
-        h('span',{class:'jt-d',style:late?'color:var(--late)':'',text:m.doneAt?'already verified':`done ${fmtD(v.at)}`+(tm?' · '+tm:'')}),v&&v.note?h('span',{class:'jt-q',text:'“'+v.note+'”'}):null); })),
+        h('span',{class:'jt-d',style:late?'color:var(--late)':'',text:m.doneAt?'already verified':`done ${fmtD(v.at)}`+(v.at<jointLast(ms)?` · ${diff(v.at,jointLast(ms))}d before the last, scores higher`:ms.length>1?' · last to finish':'')}),v&&v.note?h('span',{class:'jt-q',text:'“'+v.note+'”'}):null); })),
     S.canWrite&&h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>verifyJoint(t),text:'Verify for everyone'}),h('span',{class:'f-hint',style:'margin:0;align-self:center',text:'To return one person’s part, tap their name.'}))); }
 
 /* ---------- task row ---------- */
@@ -2477,7 +2480,7 @@ function quickItems(){
       fn:()=>taskUpdate(t.id,{assignee:r.to,assignReq:null},[{type:'assignApproved',from:r.to,to:r.to,note:''}])}); });
   vfGroups().forEach(t=>{ const v=t.verify, tm=vfTiming(t), ms=t._mates;
     out.push({id:'vf:'+t.id,def:true,at:v.ts,kind:ms?'Completed · joint':'Completed',title:t.title,meta:ms?`${projLabel(S.projects[t.projectId])} · ${ms.map(m=>nameOf(m.assignee)).join(', ')} · all done`:`${projLabel(S.projects[t.projectId])} · ${nameOf(v.by)} · done ${fmtD(v.at)}`+(tm?' · '+tm:''),quote:ms?'':v.note,warn:ms?ms.some(m=>m.target&&(m.verify||{}).at>m.target):!!(t.target&&v.at>t.target),
-      fn:async()=>{ for(const m of (ms||[t])){ const cur=S.tasks[m.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(m.id,vfPatch({...cur,id:m.id}),[{type:'verified',to:cur.verify.at,note:ms?'Joint task: verified together':''}]); } }}); });
+      fn:async()=>{ if(ms) return verifyJointNow(ms); const cur=S.tasks[t.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(t.id,vfPatch({...cur,id:t.id}),[{type:'verified',to:cur.verify.at,note:''}]); }}); });
   phaseReqs().forEach(r=>out.push({id:`ph:${r.pid}:${r.name}`,def:true,at:r.x.req.at,kind:'Phase date',title:`${r.name===FINISH?'Project finished':r.name+' completed'} ${fmtD(r.x.req.date)}`,meta:`${projLabel(r.p)} · recorded by ${nameOf(r.x.req.by)}`,
     fn:()=>phaseUpdate(r.pid,r.name,{done:r.x.req.date,approvedBy:S.uid,approvedAt:now(),req:null},{type:'approved',to:r.x.req.date,reqBy:r.x.req.by,note:''})}));
   libReqs().forEach(([id,x])=>out.push({id:'lb:'+id,def:true,at:x.requestedAt,kind:'Standard task',title:x.title,meta:`${x.cat||''} · requested by ${nameOf(x.requestedBy)}`,
@@ -2961,7 +2964,12 @@ function weightOf(t){ const p=t._p||S.projects[t.projectId], base=t.kind==='Deli
   if((t.target||'')<W2_FROM) return base*scaleOf(p)*(paceOf(p)==='fast'?1.25:1);
   if(isStudioWP(p)) return base*studioW(p);
   return base*scaleOf(p)*scopeW(p)*(paceOf(p)==='fast'?1.25:1)*PRIO[prioOf(p)].w; }
-function creditOf(t){ const s=status(t); if(s==='early') return paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; if(s==='ontime') return 1; if(s==='late') return Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); if(s==='overdue') return 0; return null; }
+function creditOf(t){ const s=status(t); let c=null;
+  if(s==='early') c=paceOf(t._p||S.projects[t.projectId])==='relaxed'?1:1.1; else if(s==='ontime') c=1; else if(s==='late') c=Math.max(0.4,1-0.05*diff(t.target,t.doneAt)); else if(s==='overdue') return 0; else return null;
+  return c+jointBonus(t); }
+/* joint task: the task counts as finished on the day the last person finished (doneAt); whoever finished their part
+   earlier (ownDoneAt) earns +0.02 per day ahead of the last person, up to +0.1 (one "early" step) */
+const jointBonus=t=>t&&t.ownDoneAt&&t.doneAt&&t.ownDoneAt<t.doneAt?Math.min(0.1,0.02*diff(t.ownDoneAt,t.doneAt)):0;
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
 /* team performance leaves out the Principal, the COO and Chalk Create */
 const notTeamPerf=id=>!!id&&(id===ownerId()||isCOO(id)||isChalkP(id));
