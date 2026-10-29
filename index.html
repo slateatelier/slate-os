@@ -400,6 +400,9 @@ main.wide{max-width:1160px}
 #toast{display:flex;align-items:center}#toast[hidden]{display:none}
 #fab{position:fixed;right:max(18px,env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;border:0;background:var(--ink);color:#fff;font-size:30px;line-height:1;cursor:pointer;z-index:15;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 #fab[hidden]{display:none}
+.jt-opt{display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer}.jt-opt input[type=radio]{width:18px;height:18px;min-width:0;flex:none;margin:2px 0 0;padding:0;appearance:auto;-webkit-appearance:radio;accent-color:#000;background:none;border:0;box-shadow:none}.jt-opt>span{display:flex;flex-direction:column;gap:2px}.jt-opt .muted{font-size:12.5px}
+.jt-list{display:grid;gap:4px;margin:6px 0 2px}.jt-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid var(--border);border-radius:10px;padding:7px 10px;font:inherit;font-size:13.5px;color:inherit;text-align:left;cursor:pointer}
+.jt-n{font-weight:600}.jt-d{color:var(--muted);font-size:12.5px}.jt-q{flex-basis:100%;font-size:12.5px;color:var(--muted);font-style:italic}
 #fab{transition:transform .22s ease,background .2s}#fab.open{transform:rotate(45deg);z-index:41}
 #fab-menu{position:fixed;inset:0;z-index:40;background:rgba(255,255,255,0);transition:background .2s;-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}
 #fab-menu.in{background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
@@ -1401,7 +1404,7 @@ async function createTask(d){
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
-    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
+    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
@@ -2306,7 +2309,16 @@ const mustVerify=t=>!t.legacy&&vfOn(vfCat(t))&&!canVerify(t);
 const vfWho=t=>isChalkTask(t)||isCOO(t.assignee)?'the Principal':'the Principal or the COO';
 const vfReturned=t=>!!t.lastReturn&&!t.verify&&!t.doneAt&&!t.archived;
 const vfTiming=t=>{ const v=t.verify; if(!v||!t.target) return ''; return v.at<t.target?`${diff(v.at,t.target)}d early`:v.at===t.target?'on time':`${diff(t.target,v.at)}d late`; };
-function vfQueue(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.verify&&!t.doneAt&&canVerify(t)).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||'')); }
+/* joint tasks: one copy per person, linked by joint.id; the group goes for verification only when every copy is finished */
+const jointOf=t=>t&&t.joint&&t.joint.id?t.joint:null;
+function jointMates(t){ const j=jointOf(t); if(!j) return []; return Object.entries(S.tasks).map(([id,x])=>({...x,id})).filter(x=>x.joint&&x.joint.id===j.id&&!x.archived); }
+const jointReady=t=>{ const m=jointMates(t); return m.length>0&&m.every(x=>x.verify||x.doneAt); };
+const jointLeft=t=>jointMates(t).filter(x=>!x.verify&&!x.doneAt);
+function vfQueue(){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&t.verify&&!t.doneAt&&canVerify(t)&&(!jointOf(t)||jointReady(t))).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||'')); }
+/* the queue as the approver sees it: a joint task is one item */
+function vfGroups(){ const seen=new Set(), out=[]; for(const t of vfQueue()){ const j=jointOf(t); if(j){ if(seen.has(j.id)) continue; seen.add(j.id); out.push({...t,_mates:jointMates(t)}); } else out.push(t); } return out; }
+function verifyJoint(t){ const ms=(t._mates||[]).filter(x=>x.verify&&!x.doneAt);
+  return run(async()=>{ for(const m of ms){ const cur=S.tasks[m.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(m.id,vfPatch({...cur,id:m.id}),[{type:'verified',to:cur.verify.at,note:'Joint task: verified together'}]); } },'Verified for everyone'); }
 const vfPatch=t=>({doneAt:t.verify.at,doneBy:t.verify.by,verify:null,verifiedBy:S.uid,verifiedAt:new Date().toISOString()});
 async function undoSpawn(t,spawned){ if(!spawned) return; if(!S.paths[spawned]) S.paths[spawned]=isPriv(t.assignee)?`lead/${t.assignee}/tasks/${spawned}`:'tasks/'+spawned; await taskUpdate(spawned,{archived:true},[{type:'archived',note:'Undone'}]); }
 /* the one way to finish a task: done outright, or sent for verification */
@@ -2326,13 +2338,22 @@ function returnTask(t){ if(!t||!t.verify) return; const note=(S.declineNote[t.id
   if(!note){ toast('Write what needs fixing, then tap Return.'); const el=document.getElementById('sh-vn'); if(el) el.focus(); return; }
   return run(()=>taskUpdate(t.id,{verify:null,stage:'doing',lastReturn:{by:S.uid,at:new Date().toISOString(),note,done:t.verify.at}},[{type:'returned',from:t.verify.at,note}]),'Returned with your note').then(ok=>{ if(ok) delete S.declineNote[t.id]; return ok; }); }
 function withdrawVerify(t){ if(!t||!t.verify) return; return run(()=>taskUpdate(t.id,{verify:null,stage:'doing'},[{type:'unsubmitted',to:t.verify.at,note:''}]),'Withdrawn. It’s open again'); }
-function vfCard(t){ const v=t.verify, p=S.projects[t.projectId], tm=vfTiming(t), late=!!(t.target&&v.at>t.target);
+function vfCard(t){ if(t._mates) return vfJointCard(t); const v=t.verify, p=S.projects[t.projectId], tm=vfTiming(t), late=!!(t.target&&v.at>t.target);
   return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},
     h('div',{class:'row-title',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.key==='Enter'){ e.preventDefault(); openTask(t.id); } }},h('span',{text:t.title}),(t.gate||t.kind==='Deliverable')&&h('span',{class:'tag',text:t.gate?'Gate':'Deliverable'})),
     h('div',{class:'row-meta who'},avaEl(v.by,false,'sm'),`${nameOf(v.by)} · ${projLabel(p)}`),
     h('div',{class:'row-meta',style:late?'color:var(--late)':'',text:`Done ${fmtD(v.at)}`+(tm?' · '+tm:'')+(t.target?` · target ${fmtD(t.target)}`:'')}),
     v.note&&h('p',{class:'quote',style:'margin:2px 0 0',text:v.note}),
     S.canWrite&&h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>verifyTask(t),text:'Verify'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>openTask(t.id),text:'Open to return'}))); }
+
+function vfJointCard(t){ const p=S.projects[t.projectId], ms=t._mates.slice().sort((a,b)=>nameOf(a.assignee).localeCompare(nameOf(b.assignee)));
+  return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},
+    h('div',{class:'row-title'},h('span',{text:t.title}),h('span',{class:'tag',text:'Joint · '+ms.length}),(t.gate||t.kind==='Deliverable')&&h('span',{class:'tag',text:t.gate?'Gate':'Deliverable'})),
+    h('div',{class:'row-meta',text:projLabel(p)+' · everyone has finished'}),
+    h('div',{class:'jt-list'},ms.map(m=>{ const v=m.verify, tm=v?vfTiming(m):'', late=!!(v&&m.target&&v.at>m.target);
+      return h('button',{type:'button',class:'jt-row',onclick:()=>openTask(m.id),title:'Open to return just this part'},avaEl(m.assignee,false,'sm'),h('span',{class:'jt-n',text:nameOf(m.assignee)}),
+        h('span',{class:'jt-d',style:late?'color:var(--late)':'',text:m.doneAt?'already verified':`done ${fmtD(v.at)}`+(tm?' · '+tm:'')}),v&&v.note?h('span',{class:'jt-q',text:'“'+v.note+'”'}):null); })),
+    S.canWrite&&h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>verifyJoint(t),text:'Verify for everyone'}),h('span',{class:'f-hint',style:'margin:0;align-self:center',text:'To return one person’s part, tap their name.'}))); }
 
 /* ---------- task row ---------- */
 const rootOf=t=>t.parentId&&S.tasks[t.parentId]?{...S.tasks[t.parentId],id:t.parentId}:t;
@@ -2369,6 +2390,7 @@ function row(t,o={}){
         t.repeat&&h('span',{class:'tag',text:'↻ '+(t.repeat==='weekly'?'Weekly':'Monthly')}),
         t.request&&h('span',{class:'tag tag-req',text:'Date request'}),
         vfReturned(t)&&h('span',{class:'tag tag-req',title:'Returned by '+nameOf(t.lastReturn.by),text:'Returned'}),
+        jointOf(t)&&!t.doneAt&&(()=>{ const ms=jointMates(t), n=(jointOf(t).with||[]).length||ms.length, dn=ms.filter(x=>x.verify||x.doneAt).length; return h('span',{class:'tag',title:'Joint task with '+(jointOf(t).with||[]).filter(id=>id!==t.assignee).map(nameOf).join(', ')+'. It goes for approval when everyone has finished.',text:`Joint · ${Math.min(dn,n)}/${n} done`}); })(),
         t.parentId&&h('span',{class:'tag',style:'color:var(--early)',text:'Client revision'}),
         t.revCount&&h('span',{class:'tag',text:`${t.revCount} revision${t.revCount>1?'s':''}`}),
         t.archived&&h('span',{class:'tag',text:t.held?'Frozen':t.dropped?'Dropped':'Archived'})),
@@ -2417,7 +2439,7 @@ function queueGroups(){
   const areq=ts.filter(t=>t.assignReq).sort((a,b)=>(a.assignReq.at||'').localeCompare(b.assignReq.at||''));
   const ma=minutesToApprove(), cr=S.isOwner?chalkReqs():[], rp=S.isOwner?roleProposals():[];
   const dels=S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid):[];
-  const hr=historyReqs(), vf=vfQueue();
+  const hr=historyReqs(), vf=vfGroups();
   const G=[
     ['verify','Completed work',vf.length,mn(vf.map(t=>t.verify.ts)),()=>h('section',{class:'sec','data-q':'verify'},h('div',{class:'sec-h'},h('h2',{text:'Completed work to verify'}),h('span',{class:'cnt',text:String(vf.length)})),h('div',{class:'list'},vf.map(vfCard)))],
     ['dates','Dates',reqs.length,mn(reqs.map(t=>t.request.at)),()=>h('section',{class:'sec','data-q':'dates'},h('div',{class:'sec-h'},h('h2',{text:'Dates to approve'}),h('span',{class:'cnt',text:String(reqs.length)})),approvalBlocks(reqs))],
@@ -2453,9 +2475,9 @@ function quickItems(){
   ts.filter(t=>t.assignReq).forEach(t=>{ const r=t.assignReq, c=loadOf(r.to,t.id);
     out.push({id:'as:'+t.id,def:true,at:r.at,kind:'Support',title:`${nameOf(r.to)} for “${t.title}”`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,
       fn:()=>taskUpdate(t.id,{assignee:r.to,assignReq:null},[{type:'assignApproved',from:r.to,to:r.to,note:''}])}); });
-  vfQueue().forEach(t=>{ const v=t.verify, tm=vfTiming(t);
-    out.push({id:'vf:'+t.id,def:true,at:v.ts,kind:'Completed',title:t.title,meta:`${projLabel(S.projects[t.projectId])} · ${nameOf(v.by)} · done ${fmtD(v.at)}`+(tm?' · '+tm:''),quote:v.note,warn:!!(t.target&&v.at>t.target),
-      fn:()=>{ const cur=S.tasks[t.id]; if(!cur||!cur.verify) return; return taskUpdate(t.id,vfPatch({...cur,id:t.id}),[{type:'verified',to:cur.verify.at,note:''}]); }}); });
+  vfGroups().forEach(t=>{ const v=t.verify, tm=vfTiming(t), ms=t._mates;
+    out.push({id:'vf:'+t.id,def:true,at:v.ts,kind:ms?'Completed · joint':'Completed',title:t.title,meta:ms?`${projLabel(S.projects[t.projectId])} · ${ms.map(m=>nameOf(m.assignee)).join(', ')} · all done`:`${projLabel(S.projects[t.projectId])} · ${nameOf(v.by)} · done ${fmtD(v.at)}`+(tm?' · '+tm:''),quote:ms?'':v.note,warn:ms?ms.some(m=>m.target&&(m.verify||{}).at>m.target):!!(t.target&&v.at>t.target),
+      fn:async()=>{ for(const m of (ms||[t])){ const cur=S.tasks[m.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(m.id,vfPatch({...cur,id:m.id}),[{type:'verified',to:cur.verify.at,note:ms?'Joint task: verified together':''}]); } }}); });
   phaseReqs().forEach(r=>out.push({id:`ph:${r.pid}:${r.name}`,def:true,at:r.x.req.at,kind:'Phase date',title:`${r.name===FINISH?'Project finished':r.name+' completed'} ${fmtD(r.x.req.date)}`,meta:`${projLabel(r.p)} · recorded by ${nameOf(r.x.req.by)}`,
     fn:()=>phaseUpdate(r.pid,r.name,{done:r.x.req.date,approvedBy:S.uid,approvedAt:now(),req:null},{type:'approved',to:r.x.req.date,reqBy:r.x.req.by,note:''})}));
   libReqs().forEach(([id,x])=>out.push({id:'lb:'+id,def:true,at:x.requestedAt,kind:'Standard task',title:x.title,meta:`${x.cat||''} · requested by ${nameOf(x.requestedBy)}`,
@@ -4324,7 +4346,7 @@ function viewSetup(){
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'On-time target'})),
     h('div',{class:'card'},own?h('div',{class:'bar'},h('input',{id:'tgt',type:'number',min:50,max:100,value:target(),style:'flex:0 0 100px;background:#fff',onchange:e=>{const v=Math.max(50,Math.min(100,Math.round(+e.target.value||90)));run(()=>settingsRef().update({target:v}),'Target updated')}}),h('span',{class:'f-hint',text:'% of milestones delivered on time or early. Shown on the dashboard; rates below it are marked red.'}))
       :h('div',{text:`${target()}% of milestones on time or early`}))));
-  { const ownSw=S.isOwner&&S.canWrite, on=vfMaster(), cfg=vfCfg(), n=vfQueue().length;
+  { const ownSw=S.isOwner&&S.canWrite, on=vfMaster(), cfg=vfCfg(), n=vfGroups().length;
     const sw=(val,label,desc,fn,dim)=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px'+(dim?';opacity:.55':'')},
       h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:label}),desc&&h('div',{class:'f-hint',text:desc})),
       ownSw?h('button',{class:'sw-btn',type:'button',role:'switch','aria-checked':String(val),'aria-label':label,disabled:S.busy||dim,onclick:fn},h('span',{class:'sw','aria-hidden':'true'}),h('span',{class:'f-hint',style:'min-width:24px',text:val?'On':'Off'}))
@@ -4487,7 +4509,9 @@ function sheetTask(){
 
   if(!t.doneAt&&!t.verify&&!t.archived&&canMove(t)&&!m) out.push(h('div',{class:'bar'},h('span',{class:'lbl',text:'Stage'}),seg('Stage',STAGES.filter(x=>x[0]!=='done'),stageOf(t),v=>moveStage(t.id,v))));
   if(t.verify&&!t.doneAt){ const v=t.verify, cv=canVerify(t)&&!t.archived, tm=vfTiming(t);
-    out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--early)'},h('div',{class:'lbl',text:'Waiting for verification'}),
+    const jl=jointOf(t)?jointLeft(t):[];
+    out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--early)'},h('div',{class:'lbl',text:jl.length?'Joint task: waiting for '+jl.map(x=>nameOf(x.assignee)).join(', '):'Waiting for verification'}),
+      jl.length?h('div',{class:'f-hint',text:'Your part is done. It goes to '+vfWho(t)+' to verify once everyone has finished.'}):null,
       h('div',{style:'font-weight:500',text:`Done ${fmtD(v.at)}`+(tm?' · '+tm:'')}),
       v.note&&h('p',{class:'quote',text:v.note}),
       h('div',{class:'f-hint',text:`Sent by ${nameOf(v.by)} · ${fmtTs(v.ts)}`}),
@@ -4537,7 +4561,7 @@ function sheetTask(){
       if(d.date>today()) return fail('The completion date can’t be in the future.');
       { const gb=gateBlock(t); if(gb) return fail(gb); }
       let res=null;
-      run(async()=>{ res=await finishTask(t,d.date,(d.note||'').trim()); },t.repeat&&!t.nextId?(sv?'Sent to verify. Next one created':'Done. Next one created'):(sv?`Sent to ${who} to verify`:'Marked as done')).then(ok=>{ if(ok){ setMode(null); if(res&&!res.sent) celebrateDone(t,d.date); } });
+      run(async()=>{ res=await finishTask(t,d.date,(d.note||'').trim()); },t.repeat&&!t.nextId?(sv?'Sent to verify. Next one created':'Done. Next one created'):(sv?(jointOf(t)&&jointLeft(t).some(x=>x.id!==t.id)?'Your part is done. It goes for verification when everyone has finished':`Sent to ${who} to verify`):'Marked as done')).then(ok=>{ if(ok){ setMode(null); if(res&&!res.sent) celebrateDone(t,d.date); } });
     })); }
   if(m==='request') out.push(form(t.target?'Request a revised date':'Propose a target date',[
     field('Proposed date',h('div',{style:'display:grid;gap:8px'},dateChips(d.date,x=>{ d.date=x; renderSheet(); },t.target&&t.target>today()?t.target:null),inp('date',{type:'date',min:today()}))),
@@ -4674,7 +4698,7 @@ function alsoPeople(d){
   return h('div',{style:'display:grid;gap:8px'},
     d.also.length?h('div',{class:'chips'},d.also.map(id=>h('span',{class:'chip',style:'background:#fff'},nameOf(id),h('button',{type:'button','aria-label':'Remove '+nameOf(id),onclick:()=>{ d.also=d.also.filter(x=>x!==id); renderSheet(); },text:'×'})))):null,
     add,
-    d.also.length?h('div',{class:'f-hint',text:`Each of the ${d.also.length+1} people gets their own copy of the task, tracked on its own.`}):null);
+    d.also.length?h('div',{class:'f-hint',text:`Each of the ${d.also.length+1} people gets their own copy, scored on when they finish it.`}):null);
 }
 function sheetNewTask(){
   const d=S.sheet.d;
@@ -4688,13 +4712,18 @@ function sheetNewTask(){
       if(!title) return fail('Write the task or deliverable.');
       if(!d.assignee) return fail('Choose who it’s assigned to.');
       if(d.start&&d.target&&d.start>d.target) return fail('The start date can’t be after the target date.');
-      /* several people: each gets their own copy of the task, tracked and scored on its own */
+      /* several people: each gets their own copy, scored on their own finish date. A joint task (the default) goes for
+         verification only when everyone has finished; separate tasks go one by one */
       const who=[d.assignee,...(d.also||[]).filter(id=>id&&id!==d.assignee)];
-      const ap=amApprover(); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:ap?d.target:'',proposed:ap?'':d.target}); },who.length>1?`Task added for ${who.length} people`:'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}${d.time?' '+fmtTime(d.time):''}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; d.time=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
+      const jt=who.length>1&&d.split!==true?{id:'J'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),with:who}:null;
+      const ap=amApprover(); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:ap?d.target:'',proposed:ap?'':d.target,joint:jt}); },who.length>1?(jt?`Joint task added for ${who.length} people`:`Task added for ${who.length} people`):'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}${d.time?' '+fmtTime(d.time):''}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; d.time=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
     }},
       (()=>{ const tf=titleField(d); return tf[0]; })(),
       h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',(()=>{ const el=sel('assignee',newTaskPeople()); el.addEventListener('change',()=>renderSheet()); return el; })())),
       alsoPeople(d),
+      (d.also||[]).filter(id=>id&&id!==d.assignee).length?field('Several people',h('div',{style:'display:grid;gap:8px'},
+        h('label',{class:'jt-opt'},h('input',{type:'radio',name:'jt',checked:d.split!==true,onchange:()=>{ d.split=false; renderSheet(); }}),h('span',{},h('b',{text:'One shared task'}),h('span',{class:'muted',text:'Everyone marks their part done; it goes for approval only when all have finished.'}))),
+        h('label',{class:'jt-opt'},h('input',{type:'radio',name:'jt',checked:d.split===true,onchange:()=>{ d.split=true; renderSheet(); }}),h('span',{},h('b',{text:'Separate tasks'}),h('span',{class:'muted',text:'Each person finishes and is approved on their own.'}))))):null,
       field(amApprover()?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
       field('Time (optional)',inp('time',{type:'time'}),'For meetings and visits: shows beside the date.'),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
