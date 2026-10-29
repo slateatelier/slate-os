@@ -2817,6 +2817,25 @@ function kFollow(td,ap){ const rows=[];
       rows.push(hRow({dot:x.due<td?'var(--overdue)':'var(--late)',strong:`${l} drawings ${x.due<td?`${x.late} day${x.late===1?'':'s'} late`:'due today'}`,title:projLabel(p),
         meta:`Phase ${PH[f.k].no} ${phName(f.k,p)} · ${x.fu.length?`followed up ${x.fu.length}×, last ${fmtD(x.fu[x.fu.length-1].on)}`:'follow up today'}`,onclick:()=>openProjectView(id)})); }); }); });
   return rows; }
+function podGlance(td){
+  const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&inMyPodProject(p)); if(!ps.length) return null;
+  const rows=ps.map(p=>{ const st=projStats(p), nx=gateTasks(p.id).filter(t=>!t.doneAt&&t.target).sort(byTarget)[0], cp=curPhase(p);
+    const hl=HEALTH[st.health]||HEALTH.ok, rank={off:0,risk:1,ok:2,none:3,done:4}[st.health];
+    return {p,rank,next:nx?nx.target:'9999',row:hRow({dot:`var(--${hl[1]})`,strong:p.code||p.name,title:hl[0]+(st.over?` · ${st.over} overdue`:''),
+      meta:[cp?'Phase '+phLabel(cp,p):'',nx?`next: ${nx.title} · ${fmtD(nx.target)}`:'no dated gate'].filter(Boolean).join(' · '),onclick:()=>openProjectView(p.id)})}; })
+    .sort((a,b)=>(a.rank-b.rank)||a.next.localeCompare(b.next));
+  const bad=rows.filter(r=>r.rank<2).length;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My POD'}),h('span',{class:'cnt',text:`${rows.length} project${rows.length===1?'':'s'}`+(bad?` · ${bad} need${bad===1?'s':''} you`:'')})),
+    h('div',{class:'h-list'},hMore('pod',rows,5,r=>r.row))); }
+/* tasks the POD has moved to In review: the POD leader checks them, then marks them done or sends them back */
+function podReview(){ const mp=myPod(); if(!mp||!S.canWrite) return null;
+  const xs=activeTasks().filter(t=>t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.verify&&!t.archived&&t.stage==='review'&&teamOf(t.assignee)===mp).sort(byTarget);
+  if(!xs.length) return null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'For your review'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('div',{class:'f-hint',style:'margin:0 4px',text:'Your POD moved these to In review. Check the work, then mark it done (it goes on for verification where that applies) or send it back.'}),
+    h('div',{class:'list'},hMore('rv',xs,4,t=>h('div',{},row(t,{person:true}),h('div',{class:'actions',style:'padding:0 12px 10px;margin:0'},
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done'}),
+      h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>moveStage(t.id,'doing'),text:'Send back'})))))); }
 function viewMineBody(){
   const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
@@ -2851,6 +2870,8 @@ function viewMineBody(){
       out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notice board'}),h('button',{class:'linkish h-all',type:'button',onclick:go,text:'All'})),
         unseen.length?noticeCard(unseen[0],{clamp:true}):null,rows.length?h('div',{class:'h-list'},rows):null)); } }
 
+  /* 4a · POD leader: the POD's projects at a glance, and work the team has put in review */
+  if(amPodLead()&&!ap){ const sec=podGlance(td); if(sec) out.push(sec); const rv=podReview(); if(rv) out.push(rv); }
   /* 4b · Drafting queue (Design Associate Lead) */
   { const dq=draftQueueSec(); if(dq) out.push(dq); }
   /* 5 · My work */
@@ -2872,7 +2893,7 @@ function viewMineBody(){
     [list('attn','Needs attention',attn,5),list('vf','Waiting for verification',vfl,3),list('wk','This week',week,5),
      lead?list('pg','POD deadlines · next 2 weeks',podGate,5,'Gate deliverables of your POD’s projects. Your POD does the work; you make sure each one goes out on its date.'):null,
      list('nx','Next week',next,3),list('nodate','Needs a date',nodate,3)].forEach(x=>{ if(x) out.push(x); });
-    if(later.length) out.push(h('div',{class:'h-list'},hRow({dot:'var(--faint)',strong:`${later.length} more`,title:`due after ${fmtD(wk2)}`,meta:'Open them in Tasks',onclick:()=>{ S.f.person=S.uid; S.f.project=''; S.f.status='active'; S.f.q=''; goView('all'); }})));
+    if(later.length) out.push(h('div',{class:'h-list'},hRow({dot:'var(--faint)',strong:`${later.length} more`,title:`due after ${fmtD(wk2)}`,meta:'Open them in Tasks',onclick:()=>{ S.fInit=1; S.f.person=S.uid; S.f.project=''; S.f.status='active'; S.f.q=''; goView('all'); }})));
     { const x=list('done','Recently completed',done,3); if(x) out.push(x); }
     if(!attn.length&&!week.length&&!next.length&&!podGate.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:later.length?'Nothing due in the next two weeks.':'Nothing open. Enjoy the clear desk.'}));
   }
@@ -2885,7 +2906,9 @@ function viewMineBody(){
 }
 
 function viewAll(){
-  const f=S.f, q=f.q.trim().toLowerCase();
+  const f=S.f, q=f.q.trim().toLowerCase(), wk=addDays(today(),7);
+  /* opens on this week's open work for people who don't see everything; the full list is one tap away */
+  if(!S.fInit){ S.fInit=1; if(!fullView()&&f.status==='active'&&!f.person&&!f.project&&!f.q) f.status='week'; }
   /* new tasks: the + button; new projects: the Projects tab */
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:fullView()?'All projects':'Your projects'}),h('h1',{class:'h1',text:'Tasks & deliverables'})))];
   if(!fullView()&&myPod()){ const pc=podTeamCard(); if(pc) out.push(pc); }
@@ -2894,19 +2917,24 @@ function viewAll(){
   const pSel=h('select',{id:'f-project','aria-label':'Project',onchange:e=>{f.project=e.target.value;render(true)}},h('option',{value:'',text:'All projects'}),projects().filter(p=>fullView()||inMyPodProject(p)).map(p=>h('option',{value:p.id,text:projLabel(p)})));pSel.value=f.project;
   const uSel=h('select',{id:'f-person','aria-label':'Person',onchange:e=>{f.person=e.target.value;render(true)}},h('option',{value:'',text:'Everyone'}),visiblePeople().map(id=>h('option',{value:id,text:nameOf(id)})));uSel.value=f.person;
   const sSel=h('select',{id:'f-status','aria-label':'Status',onchange:e=>{f.status=e.target.value;render(true)}},
-    [['active','Open tasks'],['overdue','Overdue'],['soon','Due soon'],['nodate','No date yet'],['requests','Date requests'],['done','Completed'],['early',ST.early],['ontime',ST.ontime],['late',ST.late],['all','Everything'],['archived','Archived']].map(([v,l])=>h('option',{value:v,text:l})));sSel.value=f.status;
+    [['week','Due this week'],['active','Open tasks'],['overdue','Overdue'],['soon','Due soon'],['nodate','No date yet'],['requests','Date requests'],['done','Completed'],['early',ST.early],['ontime',ST.ontime],['late',ST.late],['all','Everything'],['archived','Archived']].map(([v,l])=>h('option',{value:v,text:l})));sSel.value=f.status;
   /* one line of counts on top: tap one to see just those */
   { const base=allTasks().filter(t=>!t.archived&&!t.doneAt&&(!f.project||t.projectId===f.project)&&(!f.person||t.assignee===f.person));
-    const n={overdue:base.filter(t=>status(t)==='overdue').length,soon:base.filter(t=>status(t)==='soon').length,nodate:base.filter(t=>!t.target&&!t.ongoing).length,requests:base.filter(t=>t.request).length,active:base.length};
-    out.push(h('div',{class:'tsum',role:'group','aria-label':'Quick filters'},[['overdue','Overdue','s-overdue'],['soon','Due in 3 days','s-late'],['nodate','No date',''],['requests','Date requests',''],['active','All open','']].map(([k,l,c])=>
+    const n={week:base.filter(t=>t.target&&t.target<=wk).length,overdue:base.filter(t=>status(t)==='overdue').length,soon:base.filter(t=>status(t)==='soon').length,nodate:base.filter(t=>!t.target&&!t.ongoing).length,requests:base.filter(t=>t.request).length,active:base.length};
+    out.push(h('div',{class:'tsum',role:'group','aria-label':'Quick filters'},[['week','This week',''],['overdue','Overdue','s-overdue'],['soon','Due in 3 days','s-late'],['nodate','No date',''],['requests','Date requests',''],['active','All open','']].map(([k,l,c])=>
       h('button',{type:'button',class:c+(f.status===k?' on':''),'aria-pressed':String(f.status===k),onclick:()=>{ f.status=f.status===k&&k!=='active'?'active':k; render(true); }},h('b',{text:String(n[k])}),h('span',{text:l}))))); }
-  out.push(h('div',{class:'bar'},h('input',{id:'f-q',type:'search',placeholder:'Search tasks',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),pSel,uSel,sSel));
+  /* search and the three filters fold behind one button; they stay open while any of them is set */
+  { const set=[f.q,f.project,f.person].filter(Boolean).length, shown=f.open||set>0;
+    out.push(h('div',{class:'pc-row',style:'padding:0 4px'},h('span',{class:'f-hint',style:'margin:0',text:({week:'Open, due in the next 7 days or overdue',active:'Every open task',overdue:'Overdue',soon:'Due in the next 3 days',nodate:'Open, no date yet',requests:'Date requests',done:'Completed',archived:'Archived',all:'Everything'})[f.status]||ST[f.status]||''}),
+      h('button',{class:'linkish',type:'button',style:'font-size:13px','aria-expanded':String(shown),onclick:()=>{ if(shown&&set){ f.q='';f.project='';f.person=''; } f.open=!shown; render(true); },text:shown?(set?`Clear filters (${set})`:'Hide filters'):'Search and filter'})));
+    if(shown) out.push(h('div',{class:'bar'},h('input',{id:'f-q',type:'search',placeholder:'Search tasks',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),pSel,uSel,sSel)); }
   const match=t=>{
     if(f.status==='archived'){ if(!t.archived) return false; } else if(t.archived) return false;
     if(f.project&&t.projectId!==f.project) return false;
     if(f.person&&t.assignee!==f.person) return false;
     const s=status(t);
     if(f.status==='active'&&t.doneAt) return false;
+    if(f.status==='week'&&(t.doneAt||!t.target||t.target>wk)) return false;
     if(f.status==='done'&&!t.doneAt) return false;
     if(f.status==='requests'&&!t.request) return false;
     if(f.status==='nodate'&&(t.doneAt||t.target||t.ongoing)) return false;
@@ -2923,7 +2951,7 @@ function viewAll(){
   const stats=new Map([...groups].map(([k,v])=>[k,gst(v)]));
   const order=[...projects().map(p=>p.id),'_none'].filter(k=>groups.has(k)).sort((a,b)=>{ const x=stats.get(a), y=stats.get(b); return (y.over-x.over)||(y.soon-x.soon)||((x.next&&x.next.target)||'9999').localeCompare((y.next&&y.next.target)||'9999'); });
   if(!order.length){ out.push(h('p',{class:'muted',text:'No tasks match these filters.'})); return out; }
-  const narrowed=!!(q||f.person||f.project||f.status!=='active')||order.length<=2;
+  const narrowed=!!(q||f.person||f.project||!['active','week'].includes(f.status))||order.length<=2;
   const opened=new Set(pref.tgOpen||[]), folded=new Set(pref.tgFold||[]), foldDef=fullView();
   const isOpen=k=>narrowed||(foldDef?opened.has(k):!folded.has(k));
   const toggle=k=>{ const o=isOpen(k); if(foldDef){ o?opened.delete(k):opened.add(k); savePref('tgOpen',[...opened]); } else { o?folded.add(k):folded.delete(k); savePref('tgFold',[...folded]); } render(true); };
@@ -4619,7 +4647,7 @@ function sheetTask(){
       canSeeProjectDetail(p)&&h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:()=>{ S.sheet={type:'projView',id:t.projectId,openPh:k}; renderSheet(); },text:'Open the phase checklist'}))); }
 
   if(t.site&&t.site.type==='visit') out.push(siteBox(t));
-  if(!t.doneAt&&!t.verify&&!t.archived&&canMove(t)&&!m) out.push(h('div',{class:'bar'},h('span',{class:'lbl',text:'Stage'}),seg('Stage',STAGES.filter(x=>x[0]!=='done'),stageOf(t),v=>moveStage(t.id,v))));
+  const nextStage=!t.doneAt&&!t.verify&&!t.archived&&canMove(t)&&!m?({todo:['doing','Start working'],doing:['review','Move to in review'],review:['doing','Back to in progress']})[stageOf(t)]||null:null;
   if(t.verify&&!t.doneAt){ const v=t.verify, cv=canVerify(t)&&!t.archived, tm=vfTiming(t);
     const jl=jointOf(t)?jointLeft(t):[];
     out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--early)'},h('div',{class:'lbl',text:jl.length?'Joint task: waiting for '+jl.map(x=>nameOf(x.assignee)).join(', '):'Waiting for verification'}),
@@ -4646,23 +4674,27 @@ function sheetTask(){
 
   if(!m&&S.canWrite){
     const btns=[];
-    if(canAct&&!t.doneAt&&!t.verify) btns.push(h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:mustVerify(t)?'✓ Done today · send to verify':'✓ Done today'}),h('button',{class:'btn',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Done on another date'}));
+    /* the next step is one big button; everything else sits under More options */
+    const more=[];
+    if(canAct&&!t.doneAt&&!t.verify){ btns.push(h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:mustVerify(t)?'✓ Done today · send to verify':'✓ Done today'}));
+      more.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Done on another date'})); }
+    if(nextStage) btns.push(h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>moveStage(t.id,nextStage[0]),text:nextStage[1]}));
     if(false) btns.push(h('button',{class:'btn btn-primary',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Mark as done'}));
     if(S.canWrite&&!t.archived&&!t.doneAt&&!t.verify&&(mine||mgr)&&!ap&&!t.ongoing&&(t.target||mgr)){
-      if(!t.request) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:'',reason:''}),text:t.target?'Request new date':'Propose date'}));
-      else if(t.request.by===S.uid||mgr) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:t.request.date,reason:t.request.reason||''}),text:t.target?'Change my request':'Change proposed date'}),
+      if(!t.request) (t.target?more:btns).push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:'',reason:''}),text:t.target?'Request new date':'Propose date'}));
+      else if(t.request.by===S.uid||mgr) more.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('request',{date:t.request.date,reason:t.request.reason||''}),text:t.target?'Change my request':'Change proposed date'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>run(()=>taskUpdate(t.id,{request:null},[{type:'withdrawn',to:t.request.date}]),'Request withdrawn'),text:'Withdraw request'})); }
     if(mgr&&!t.archived){
-      if(!t.doneAt&&ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('target',{date:t.target||(t.request&&t.request.date)||'',reason:''}),text:t.target?'Change target date':'Set target date'}));
-      if(!t.doneAt||ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('rename',{title:t.title}),text:'Rename'}));
-      if(!t.doneAt||ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('edit',{title:t.title,phase:t.phase||'',kind:t.kind||'Task',projectId:t.projectId,assignee:t.assignee,repeat:t.repeat||'',start:t.start||'',time:t.time||''}),text:'Edit or reassign'}));
+      if(!t.doneAt&&ap) (t.target?more:btns).push(h('button',{class:'btn',type:'button',onclick:()=>setMode('target',{date:t.target||(t.request&&t.request.date)||'',reason:''}),text:t.target?'Change target date':'Set target date'}));
+      if(!t.doneAt||ap) more.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('edit',{title:t.title,phase:t.phase||'',kind:t.kind||'Task',projectId:t.projectId,assignee:t.assignee,repeat:t.repeat||'',start:t.start||'',time:t.time||''}),text:'Edit or reassign'}));
       // completed tasks are locked; only the Principal and the COO can reopen or correct them, with a reason
-      if(t.doneAt&&ap) btns.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('reopen',{note:''}),text:'Reopen'}),h('button',{class:'btn',type:'button',onclick:()=>setMode('donedate',{date:t.doneAt,note:''}),text:'Correct completion date'}));
-      btns.push(h('button',{class:'btn btn-danger',type:'button',onclick:()=>setMode('archive',{note:''}),text:'Archive'}));
+      if(t.doneAt&&ap) more.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('reopen',{note:''}),text:'Reopen'}),h('button',{class:'btn',type:'button',onclick:()=>setMode('donedate',{date:t.doneAt,note:''}),text:'Correct completion date'}));
+      more.push(h('button',{class:'btn btn-danger',type:'button',onclick:()=>setMode('archive',{note:''}),text:'Archive'}));
     }
     if(t.doneAt&&!t.archived&&S.canWrite&&(mine||leadsProj(t.projectId))) btns.unshift(h('button',{class:'btn btn-primary',type:'button',onclick:()=>setMode('revision',{feedback:'',received:today(),date:''}),text:'+ Client revision'}));
     if(mgr&&t.archived&&!((t.held||t.dropped)&&S.projects[t.projectId]&&S.projects[t.projectId].closed)) btns.push(h('button',{class:'btn',type:'button',onclick:()=>run(()=>taskUpdate(t.id,{archived:false},[{type:'restored'}]),'Task restored'),text:'Restore'}));
     if(btns.length) out.push(h('div',{class:'actions'},btns));
+    if(more.length) out.push(h('details',{class:'biz-more',open:!!S.sheet.more,ontoggle:e=>{ S.sheet.more=e.target.open; }},h('summary',{text:'More options'}),h('div',{class:'actions',style:'margin-top:8px'},more)));
   }
 
   if(m==='done'){ const sv=mustVerify(t), who=vfWho(t), ck=needsCheckin(t);
@@ -4755,13 +4787,13 @@ function sheetTask(){
     if(revs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Client revisions'}),h('span',{class:'cnt',text:String(revs.length)})),
       h('div',{class:'card',style:'gap:4px'},h('div',{class:'pc-row'},h('span',{text:'Original completed'}),h('b',{class:'mono',text:fmtD(root.doneAt)}))),
       h('div',{class:'list'},revs.map(r=>h('div',{class:'rev-item'},row(r,{project:false}),r.feedback?h('div',{class:'rev-fb',text:`“${r.feedback}” · received ${fmtD(r.feedbackAt)}`}):null))))); }
-  { const lg=dateLog(t); if(lg.length>1||lg.some(x=>x.state!=='set')) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Date log'}),h('span',{class:'cnt',text:String(lg.filter(x=>x.n).length)})),
+  { const lg=dateLog(t); if(lg.length>1||lg.some(x=>x.state!=='set')) out.push(h('details',{class:'biz-more',open:!!S.sheet.dlog,ontoggle:e=>{ S.sheet.dlog=e.target.open; }},h('summary',{text:`Date log · ${lg.filter(x=>x.n).length} date${lg.filter(x=>x.n).length===1?'':'s'}`}),
     h('div',{class:'list'},lg.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:72px minmax(0,1fr) auto;align-items:start;gap:10px'+(x.state==='set'?'':';opacity:.75')},
       h('span',{style:'font-weight:600',text:x.n?`Date ${x.n}`:x.state==='pending'?'Asked':'Not used'}),
       h('div',{style:'min-width:0'},h('div',{class:'f-hint',text:x.who}),x.reason?h('div',{class:'quote',style:'font-size:13.5px',text:x.reason}):null,x.note?h('div',{class:'f-hint',text:'Note: '+x.note}):null),
       h('div',{style:'text-align:right'},h('div',{class:'mono',style:x.cur?'font-weight:600':'',text:fmtD(x.date)}),x.cur?h('div',{class:'f-hint',text:'Current'}):x.state==='pending'?h('div',{class:'f-hint',text:'Waiting'}):x.state==='declined'?h('div',{class:'f-hint',text:'Returned'}):x.state==='withdrawn'?h('div',{class:'f-hint',text:'Withdrawn'}):x.state==='replaced'?h('div',{class:'f-hint',text:'Changed'}):null)))))); }
   const hist=(t.history||[]).slice().reverse();
-  out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'History'}),h('span',{class:'cnt',text:String(hist.length)})),
+  out.push(h('details',{class:'biz-more',open:!!S.sheet.hist,ontoggle:e=>{ S.sheet.hist=e.target.open; }},h('summary',{text:`History · ${hist.length}`}),
     h('div',{class:'tl'},hist.map(e=>h('div',{class:'tl-item'},h('time',{text:fmtTs(e.at)}),h('div',{text:histText(e)}),e.note&&h('div',{class:'tl-note',text:e.note}))))));
   return out;
 }
@@ -5269,13 +5301,18 @@ function stdSection(p){
       const stat=s.done?h('span',{class:'pill s-ontime',text:'Gate closed'}):!s.created?h('span',{class:'pill s-open',text:'Not set up'}):act.includes(k)?h('span',{class:'pill s-late',text:'In progress'}):h('span',{class:'pill s-open',text:'Not started'});
       const fbEl=fbEdit&&!s.done?h('input',{id:'fb-'+k,type:'date',value:fb,style:'background:var(--group);padding:4px 6px;font-size:13px','aria-label':'Client feedback due',onchange:e=>run(()=>S.db.doc('projects/'+p.id).update({std:{fb:{[k]:e.target.value||''}}}),'Client feedback date saved')}):h('b',{text:fb?fmtD(fb):'—'});
       const items=clItems(k), main=items.filter(i=>!i.cost), cost=items.filter(i=>i.cost);
+      /* a closed phase folds to one line; tap it to see its dates and checklist */
+      const unfold=!!(S.sheet&&S.sheet.phX&&S.sheet.phX[k]), tg=()=>{ S.sheet.phX={...(S.sheet.phX||{}),[k]:!unfold}; if(unfold&&isOpen) S.sheet.openPh=null; renderSheet(); };
+      if(s.done&&!unfold&&!isOpen){ const on=s.fin&&s.fin.doneAt?(s.fin.legacyNoDate?'before go-live':fmtD(s.fin.doneAt)):'';
+        return h('div',{class:'card',role:'button',tabindex:'0',style:'border-radius:0;border-bottom:1px solid var(--line);padding-block:10px;cursor:pointer',onclick:tg,onkeydown:e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); tg(); } }},
+          h('div',{class:'pc-row'},h('span',{style:'font-size:14px'},h('span',{style:'color:var(--ontime);font-weight:700',text:'✓ '}),'Phase '+phLabel(k,p)),h('span',{class:'f-hint',style:'margin:0',text:(on?'closed '+on:'closed')+' ›'}))); }
       return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
-        h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),stat),
+        h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),s.done?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:tg,text:'Fold ‹'}):stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
         PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysFor(p,k)} working days`}),h('span',{text:'·'}),
           fbEdit&&!s.done?h('label',{class:'ph-cd'},'client',h('input',{id:'cd-'+k,type:'number',min:'0',max:'60',value:String(clientDaysOf(p,k)),'aria-label':'Client review days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); run(()=>S.db.doc('projects/'+p.id).update({std:{cd:{[k]:v===stdClientDays(p,k)?'':v}}}),'Client review days saved'); }}),'working days'):h('span',{text:`client ${clientDaysOf(p,k)} working days`}),
           clientDaysOf(p,k)!==stdClientDays(p,k)?h('span',{class:'muted',text:`(standard ${stdClientDays(p,k)})`}):null):null,
-        kwOf(k)&&s.created?kwRow(p,k,fbEdit&&!s.done):null,
+        kwOf(k)&&s.created&&!s.done?kwRow(p,k,fbEdit):null,
         s.created?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>{ S.sheet.openPh=isOpen?null:k; renderSheet(); },text:isOpen?'Hide checklist':'Show checklist'}):null),
@@ -6676,28 +6713,28 @@ const HOWDO=[
  ['tasks','all','See what I have to do today',['Open Home.','Read Needs attention first: overdue work and anything due in the next 3 days.','Then My checklist, Waiting for an approved date and In progress.'],null,'Messages from the Principal or COO sit at the top of Home until you answer them.'],
  ['tasks','all','Add a task for myself',['On Home, tap the round + › New task (on Tasks and Projects the + opens New task straight away).','Type the task, or pick a suggestion.','Choose the Project and yourself under Assign to.','Pick a proposed date with the chips or the date box.','Tap Add task.'],'The task is yours at once. The date is a proposal until the COO approves it; only approved dates count.','Use More options for a category, note, start date or a weekly/monthly repeat.'],
  ['tasks',['lead','boss'],'Give a task to someone in my pod',['Tap New task.','Choose the Project, then the person under Assign to.','Pick a date: pod leads propose it, the COO and Principal set it directly.','Tick This is a deliverable if it is a submission.','Tap Add task. The sheet stays open for the next one.'],'The person is notified. A pod lead’s date waits for the COO.','Added just now lists what you created in this sheet.'],
- ['tasks',['lead','head','boss'],'Get help from the drafting pool or another pod',['Create the task (or open it › Edit or reassign).','Choose a drafter, visualiser or someone from another pod.','Save.'],'It becomes an assignment request: the task shows “awaiting approval” until the COO approves, picks someone else, or declines.','Drafting leads: leave the date as a proposal. Adding a person to the project team (Project › + Add people) avoids asking for every task.'],
+ ['tasks',['lead','head','boss'],'Get help from the drafting pool or another pod',['Create the task (or open it › More options › Edit or reassign).','Choose a drafter, visualiser or someone from another pod.','Save.'],'It becomes an assignment request: the task shows “awaiting approval” until the COO approves, picks someone else, or declines.','Drafting leads: leave the date as a proposal. Adding a person to the project team (Project › + Add people) avoids asking for every task.'],
  ['tasks','lead','Ask for a new standard task',['Tap New task.','Below the form, tap Can’t find the task? Request a new standard task.','Write a title that works for any project, pick the category, tick Deliverable if it is one.','Tap Send for approval.'],'The COO adds it to the standard list or declines it with a note. Once added, it appears in everyone’s suggestions.','You can withdraw it while it is waiting.'],
  ['tasks','all','Know a task from a deliverable',['A deliverable is a submission (a set, a presentation, a gate). Tick This is a deliverable when you create it.','Everything else is a task.'],'Deliverables carry a tag, a diamond on the Timeline and the Calendar, and weigh 0.3 points against 0.1 for a task.',null],
- ['tasks','all','Mark a task done',['Tap the circle on the task row, or open it and tap ✓ Done today.','Finished on an earlier day? Open it › Done on another date, pick the date, add a note if useful, tap Mark as done.'],'It is scored against the approved target: done in advance, on time or late. If verification is on for that kind of task, it goes to the Principal or the COO first and counts once verified, dated the day you finished. Undo is offered for a few seconds.','A phase’s final gate deliverable can’t be marked done while its checklist has open items. A site visit needs your location first: tap I’m at the site. On a shared task, your part is done and it waits for the others.'],
+ ['tasks','all','Mark a task done',['Tap the circle on the task row, or open it and tap ✓ Done today.','Finished on an earlier day? Open it › More options › Done on another date, pick the date, add a note if useful, tap Mark as done.'],'It is scored against the approved target: done in advance, on time or late. If verification is on for that kind of task, it goes to the Principal or the COO first and counts once verified, dated the day you finished. Undo is offered for a few seconds.','A phase’s final gate deliverable can’t be marked done while its checklist has open items. A site visit needs your location first: tap I’m at the site. On a shared task, your part is done and it waits for the others.'],
  ['tasks','all','Move my work across the Board',['Tasks › Board.','On a computer, drag the card to To do, In progress, In review or Done.','On a phone, use the ← Prev / Next → buttons on the card.'],'Dropping on Done asks for the completion date.','You can move only your own cards (managers can move their pod’s).'],
  ['tasks','all','Find a task',['Open Tasks.','Type in Search tasks: title, project, code or person.','Filter by Project, Person and Status (Open, Overdue, Due soon, Date requests, Completed, Archived…).'],null,'Switch between List, Board and Timeline at the top; the app remembers your choice.'],
  ['tasks','all','Plan on the Timeline',['Tasks › Timeline.','Choose 6 weeks, 3 months or 6 months; move with ‹ Today ›.','Filter by project or person.'],'Bars run from the start date to the target; late time shows in red.','Tasks without an approved date are not drawn. Set a Start date in Edit to give a bar its true length.'],
  ['tasks','all','The client sent changes after I finished',['Open the completed task.','Tap + Client revision.','Write what the client asked for, when the feedback came, and the (proposed) submission date.','Tap Add revision.'],'A new linked task “… · Revision 1” is created. The original stays done and on time.','Completed tasks are locked; this is the way to add more work to them.'],
- ['tasks',['lead','boss'],'Rename, reassign or change a task',['Open the task.','Tap Rename for the name, or Edit or reassign for type, project, person, start date and repeat.','Save.'],'Every change is kept in the task’s history; the old name too.','Once a task is done, only the Principal or COO can edit it.'],
- ['tasks',['lead','boss'],'Remove a task that is no longer needed',['Open the task › Archive.','Add a reason, e.g. Dropped from scope, and confirm.'],'It leaves the lists and the dashboard but keeps its history.','Nothing is deleted. To bring it back: Tasks › Status: Archived › open it › Restore.'],
+ ['tasks',['lead','boss'],'Rename, reassign or change a task',['Open the task.','Tap More options › Edit or reassign: name, type, project, person, start date and repeat.','Save.'],'Every change is kept in the task’s history; the old name too.','Once a task is done, only the Principal or COO can edit it.'],
+ ['tasks',['lead','boss'],'Remove a task that is no longer needed',['Open the task › More options › Archive.','Add a reason, e.g. Dropped from scope, and confirm.'],'It leaves the lists and the dashboard but keeps its history.','Nothing is deleted. To bring it back: Tasks › Status: Archived › open it › Restore.'],
  ['tasks','boss','Reopen a completed task or fix its completion date',['Open the task.','Tap Reopen, or Correct completion date.','Give the reason (required) and save.'],'The change and the reason stay in the history.','Use it for real mistakes only; client changes go in as + Client revision.'],
  ['tasks','all','Make a task repeat every week or month',['When creating it, open More options › Repeat (or Edit or reassign › Repeat).','Choose Repeats weekly or Repeats monthly.'],'When you mark it done, the next one is created for the same person with its date already set.','Choose Does not repeat to stop the series.'],
  ['tasks','all','Read a task’s history',['Open the task.','The top shows the current target and which date it is (Date 2, Date 3…).','The Date log lists every date in order, with who asked, the reason and who approved it; History has every change.'],'Date 1 is the first approved date; each approved change is Date 2, Date 3…',null],
  ['tasks','boss','Keep the Principal’s and COO’s tasks private',['Tasks for a private person are stored apart automatically.','The Principal can mark someone private in More › Settings › People › Private tasks.'],'Only the Principal and the COO see them. They never appear on the dashboard or in anyone else’s lists.','A private task can’t be reassigned; archive it and create a new one.'],
 
  // ---- dates
- ['dates',['member','lead','head'],'Ask for more time',['Open the task › Request new date.','Pick the new date (chips: +2 days, +1 week, +2 weeks, or any date).','Tap a reason chip, e.g. Waiting for client input, and add detail.','Tap Send for approval.'],'The COO approves or declines. Your current date stays until then; the row shows Date request.','Ask the day you know you will be late, not on the due date. If the client or a consultant caused the delay, say so in the reason.'],
+ ['dates',['member','lead','head'],'Ask for more time',['Open the task › More options › Request new date.','Pick the new date (chips: +2 days, +1 week, +2 weeks, or any date).','Tap a reason chip, e.g. Waiting for client input, and add detail.','Tap Send for approval.'],'The COO approves or declines. Your current date stays until then; the row shows Date request.','Ask the day you know you will be late, not on the due date. If the client or a consultant caused the delay, say so in the reason.'],
  ['dates',['lead','boss'],'Propose dates for a whole project',['Tasks › beside the project heading, tap Propose timeline (or Set timeline).','Enter a date for each task. You can leave some for later.','Tap Send for approval (or Set dates).'],'Pod leads’ dates go to the COO; the Principal’s and COO’s count at once.',null],
  ['dates','lead','Propose a date for a task that has none',['Open the task › Propose date.','Pick the date, add a note if useful.','Tap Send for approval.'],'It shows “Waiting for the COO’s approval” until decided.',null],
  ['dates','boss','Verify completed work',['Approvals › Completed work, or open the task from the notification.','Check the work, then tap Verify.','To send it back, write what needs fixing and tap Return.'],'Verified work counts as done on the day the person finished it, so a slow check never makes them late. Returned work reopens with your note. A shared task arrives once everyone has finished: Verify for everyone; it counts as finished on the last person’s day, and anyone who finished earlier scores a little more.','Routine ones can be ticked in Approve together. Settings › Completion verification sets which kinds of task need it.'],
  ['dates','boss','Approve dates and requests',['Approvals (the tab beside Home; Home shows how many are waiting).','Approve together: first timelines, support, phase dates and standard tasks start ticked; revised dates and people moves start unticked so you read each one.','Tap Approve N selected (tap twice). Anything that didn’t save stays ticked with the reason.','To add a note, decline or return, use the cards below: a project’s first timeline is one card; revised dates are approved or declined one by one.'],'Approved dates become the target; changes become Date 2, Date 3… and Date 1 stays on record.','Fast-track projects are listed first and marked “decide today”. A tapped notification about a request opens Approvals or the task itself.'],
- ['dates','boss','Change a target date directly',['Open the task › Change target date (or Set target date).','Enter the new date and the reason.','Tap Save date.'],'It becomes the next revision; the original target stays on record.',null],
+ ['dates','boss','Change a target date directly',['Open the task › More options › Change target date (or Set target date, shown straight away).','Enter the new date and the reason.','Tap Save date.'],'It becomes the next revision; the original target stays on record.',null],
 
  // ---- projects
  ['projects','boss','Add a new project',['Projects › New project.','Fill in the name, Stage (Upcoming, Running or Completed), type, pod, land size, FAR, client, site and agreement.','Tap Add project.'],'The code is made automatically from area, plot and size (e.g. GUL2-24A-10K-2603). The phase setup opens next.','Over 30 katha needs a second pod. Agreement details are seen only by the Principal and COO.'],
@@ -6950,7 +6987,8 @@ function viewHelp(){
 
 /* ---------- calendar: every visible task, gate, meeting and feedback date by day ---------- */
 const CALK={gate:'Gate deliverables',task:'Tasks',meet:'Meetings',fb:'Client feedback',remind:'My reminders',msg:'Messages'};
-function calState(){ if(!S.cal) S.cal={m:today().slice(0,7),sel:today(),who:'',proj:'',off:{}}; return S.cal; }
+/* people who run nothing open their calendar on their own items; leaders on everyone they can see */
+function calState(){ if(!S.cal) S.cal={m:today().slice(0,7),sel:today(),who:fullView()||amPodLead()||myHeadTeam()||amMgr()?'':S.uid,proj:'',off:{}}; return S.cal; }
 function calItems(from,to){
   const C=calState(), out=[], inR=d=>d&&d>=from&&d<=to;
   const projOk=pid=>!C.proj||pid===C.proj;
