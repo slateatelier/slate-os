@@ -1197,6 +1197,9 @@ function status(t,basis='approved'){
 /* SLATE OS go-live: work finished before it is history ("legacy") and never scored */
 const goLive=()=>(S.settings&&S.settings.goLive)||'2026-11-01';
 const preLive=()=>addDays(goLive(),-1);
+/* scores count from this day (settings.scoreFrom); work due before it is a trial run: shown, never scored */
+const scoreFrom=()=>(S.settings&&S.settings.scoreFrom)||'2026-11-10';
+const preScore=t=>!!(t&&t.target)&&t.target<scoreFrom();
 function pill(t,basis='approved'){
   if(t.legacy) return h('span',{class:'pill '+(t.legacyOk?'s-open':'s-late'),title:'Finished before SLATE OS; not scored',text:t.legacyOk?'Before SLATE OS':'Before SLATE OS · COO to approve'});
   if(t.verify&&!t.doneAt){ const tm=vfTiming(t); return h('span',{class:'pill s-verify',title:'Marked done '+fmtD(t.verify.at)+'; waiting for '+vfWho(t)+' to verify',text:tm&&/late/.test(tm)?`To verify · ${tm}`:'Awaiting verification'}); }
@@ -2834,7 +2837,7 @@ function viewMineBody(){
     const prog=mine.filter(t=>!t.doneAt&&t.target&&status(t)==='open').sort(byTarget), done=mine.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,15);
     const list=(key,title,xs,n)=>xs.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:title}),h('span',{class:'cnt',text:String(xs.length)})),h('div',{class:'list'},hMore(key,xs,n,t=>row(t,{person:false})))):null;
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My work'})),
-      h('div',{class:'h-stats'},stat(nOpen,'Open'),stat(nOver,'Overdue','var(--overdue)'),stat(c.early+c.ontime,'On time','var(--ontime)'),stat(c.late,'Late','var(--late)')),h('div',{class:'f-hint',style:'margin:0 4px',text:'On time and late count tasks due this month.'})));
+      h('div',{class:'h-stats'},stat(nOpen,'Open'),stat(nOver,'Overdue','var(--overdue)'),stat(c.early+c.ontime,'On time','var(--ontime)'),stat(c.late,'Late','var(--late)')),h('div',{class:'f-hint',style:'margin:0 4px',text:'On time and late count tasks due this month.'+(today()<scoreFrom()?` Scores count from ${fmtD(scoreFrom())}; work due before that is a trial run.`:'')})));
     [list('attn','Needs attention',attn,5),list('vf','Waiting for verification',vfl,3),list('nodate','Waiting for a date',nodate,3),prog.length||attn.length||nodate.length?list('prog','In progress',prog,5):null,list('done','Recently completed',done,3)].forEach(x=>{ if(x) out.push(x); });
     if(!attn.length&&!prog.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:'Nothing open. Enjoy the clear desk.'}));
   }
@@ -2975,7 +2978,7 @@ function range(kind,offset){
 }
 function count(items,basis){
   const c={early:0,ontime:0,late:0,overdue:0,open:0,total:0,slip:0,slipN:0};
-  for(const t of items){ if(t.legacy||t.unscored||(t.ongoing&&!t.target)) continue; let k=status(t,basis); if(k==='soon'||k==='verify') k='open'; c[k]++; c.total++;
+  for(const t of items){ if(t.legacy||t.unscored||(t.ongoing&&!t.target)||preScore(t)) continue; let k=status(t,basis); if(k==='soon'||k==='verify') k='open'; c[k]++; c.total++;
     const g=tgt(t,basis); if(k==='late'){c.slip+=diff(g,t.doneAt);c.slipN++} if(k==='overdue'){c.slip+=diff(g,today());c.slipN++} }
   return c;
 }
@@ -3035,7 +3038,7 @@ const jointBonus=t=>t&&t.ownDoneAt&&t.doneAt&&t.ownDoneAt<t.doneAt?Math.min(0.1,
 function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
 /* team performance leaves out the Principal, the COO and Chalk Create */
 const notTeamPerf=id=>!!id&&(id===ownerId()||isCOO(id)||isChalkP(id));
-function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!isPriv(t.assignee)&&!isChalkTask(t)&&!notTeamPerf(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id))).filter(t=>!notTeamPerf(t.assignee))); }
+function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!preScore(t)&&!isPriv(t.assignee)&&!isChalkTask(t)&&!notTeamPerf(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id))).filter(t=>!notTeamPerf(t.assignee))); }
 /* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
 S.dashAnon={}; S.anonInfo={};
 function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
@@ -6371,7 +6374,7 @@ const HOWTO=[
    ['key','Look after accounts','More › People › Accounts and passwords: reset a forgotten password or add a new person.','Accounts and passwords'],
    ['brief','Run the business','Business: Overview (what needs you, money in and out, pipeline), Leads, Proposed, Fees, HR and Admin. Only the two of you see it.','Business'],
    ['shield','Check the record','More › Activity log shows every change, notification and message. Nothing in it can be edited.','Activity log']],
-  rules:['Only approved dates count on the dashboard.',`Work finished before ${fmtD(goLive())} is history: you approve it, and it is never scored.`,'Standing guidelines go in Weekly meeting › Studio rules once, not in every set of minutes.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
+  rules:['Only approved dates count on the dashboard.',`Work finished before ${fmtD(goLive())} is history: you approve it, and it is never scored. Scores count work due from ${fmtD(scoreFrom())}; until then it is a trial run.`,'Standing guidelines go in Weekly meeting › Studio rules once, not in every set of minutes.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
 /* scoring is explained only to the Principal and the COO */
 const canSeeScoring=()=>S.isOwner||isCOO(S.uid);
 const myGuide=()=>amApprover()||S.isOwner?'boss':(amMgr()||amPodLead())?'lead':myHeadTeam()?'head':'member';
@@ -7594,7 +7597,7 @@ function pvCalc(per,R){
     const ohEach=R.oh&&on.length?(runOf(ym)+sup)/on.length:0;
     on.forEach(id=>{ const r=salRate(stOf(id),ym), g=salGross(r), b=(+r.basic||0)*2/12; const x=P[id]; x.sal+=g; x.bonus+=b; x.oh+=ohEach; x.ctc+=g+b+ohEach; }); }
   /* work */
-  const T=Object.entries(S.tasks||{}).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.unscored&&!isChalkTask(t)&&inTeam(t.assignee));
+  const T=Object.entries(S.tasks||{}).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.unscored&&!preScore(t)&&!isChalkTask(t)&&inTeam(t.assignee));
   const earn=t=>{ const c=creditOf(t); return c==null?0:weightOf(t)*c; };
   const done=T.filter(t=>t.doneAt&&t.doneAt>=s&&t.doneAt<=e&&!t.legacy);
   done.forEach(t=>{ const p=S.projects[t.projectId], w=earn(t); P[t.assignee].pts+=w; if(isStudioWP(p)) P[t.assignee].ptsS+=w; else P[t.assignee].ptsC+=w; });
