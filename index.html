@@ -2114,7 +2114,7 @@ async function openNotice(id,kind){
   if(kind==='backup') return goView(amApprover()?'backup':'mine');
   if(kind==='proposal'){ S.biz={...(S.biz||{q:'',st:'active'}),tab:'proposed'}; return goView(canProps()?'biz':'mine'); }
   if(kind==='accounts'){ S.pf={...(S.pf||{q:'',pod:''}),st:'acct'}; acctLoad(true); return goView('projects'); }
-  if(kind==='nudge') return goView('mine');
+  if(kind==='nudge'||kind==='brief'||kind==='daywrap') return goView('mine');
   if(kind==='issue_report') return goView('reports');
   if(/^minutes_/.test(kind)){ S.mhub='weekly'; return goView('meet'); }
   if(/^meeting_/.test(kind)){ S.mhub='up'; return goView('meet'); }
@@ -2375,9 +2375,11 @@ function vfCat(t){ if(isChalkTask(t)) return 'chalk'; if(t.repeat) return 'repea
 const vfCfg=()=>(S.settings&&S.settings.verify)||{};
 const vfMaster=()=>vfCfg().on!==false;
 const vfOn=k=>vfMaster()&&vfCfg()[k]!==false;
-const canVerify=t=>!!t&&S.canWrite&&(S.isOwner||(amApprover()&&!isChalkTask(t)&&t.assignee!==S.uid));
+const podVerifies=t=>!!t&&!isChalkTask(t)&&['task','repeat'].includes(vfCat(t))&&!!myPod()&&amPodLead()&&t.assignee!==S.uid&&teamOf(t.assignee)===myPod()&&inMyPodProject(S.projects[t.projectId]);
+const canVerify=t=>!!t&&S.canWrite&&(S.isOwner||(amApprover()&&!isChalkTask(t)&&t.assignee!==S.uid)||podVerifies(t));
 const mustVerify=t=>!t.legacy&&vfOn(vfCat(t))&&!canVerify(t)&&!(t.projectId&&leadFree(t.projectId)&&!isChalkTask(t));
-const vfWho=t=>isChalkTask(t)||isCOO(t.assignee)?'the Principal':'the Principal or the COO';
+const podLeadOf=t=>{ const p=S.projects[t.projectId], pd=p&&podsOfProject(p).find(x=>x===teamOf(t.assignee)); return pd?people().find(id=>isPodLead(id,pd)&&id!==t.assignee):null; };
+const vfWho=t=>isChalkTask(t)||isCOO(t.assignee)?'the Principal':['task','repeat'].includes(vfCat(t))&&podLeadOf(t)?`${nameOf(podLeadOf(t)).split(' ')[0]} (your POD leader) or the COO`:'the Principal or the COO';
 const vfReturned=t=>!!t.lastReturn&&!t.verify&&!t.doneAt&&!t.archived;
 const vfTiming=t=>{ const v=t.verify; if(!v||!t.target) return ''; return v.at<t.target?`${diff(v.at,t.target)}d early`:v.at===t.target?'on time':`${diff(t.target,v.at)}d late`; };
 /* joint tasks: one copy per person, linked by joint.id; the group goes for verification only when every copy is finished */
@@ -2437,7 +2439,16 @@ function vfJointCard(t){ const p=S.projects[t.projectId], ms=t._mates.slice().so
 const rootOf=t=>t.parentId&&S.tasks[t.parentId]?{...S.tasks[t.parentId],id:t.parentId}:t;
 const revsOf=id=>Object.entries(S.tasks).map(([k,x])=>({...x,id:k})).filter(x=>x.parentId===id&&!x.archived).sort((a,b)=>(a.revNo||0)-(b.revNo||0));
 const canQuickDone=t=>S.canWrite&&!t.archived&&!t.doneAt&&!t.verify&&!needsCheckin(t)&&(t.assignee===S.uid||leadsProj(t.projectId)||(isChalkTask(t)&&canChalkEdit()));
+const needsCheck=t=>!!t&&!!t.checker&&t.checker!==S.uid&&t.assignee===S.uid&&!t.doneAt&&!t.verify;
+function sendToCheck(t){ if(!t) return; { const gb=gateBlock(t); if(gb) return toast(gb); }
+  const from=stageOf(t);
+  return run(()=>taskUpdate(t.id,{stage:'review',sentCheck:{at:today(),by:S.uid}},[{type:'stage',from,to:'review',note:`Sent to ${nameOf(t.checker)} to check`}]),`Sent to ${nameOf(t.checker).split(' ')[0]} to check`); }
+/* the POD leader checks it: done (or on to verification) dated the day it was sent */
+function checkDone(t){ if(!t) return; { const gb=gateBlock(t); if(gb) return toast(gb); }
+  const d=(t.sentCheck&&t.sentCheck.at)||today(); let res=null;
+  return run(async()=>{ res=await finishTask(t,d,''); },'').then(ok=>{ if(ok&&res) toast(res.sent?`Checked. Sent to ${vfWho(t)} to verify`:'Checked and done'); }); }
 function quickDone(t){
+  if(needsCheck(t)) return sendToCheck(t);
   if(!canQuickDone(t)) return;
   { const gb=gateBlock(t); if(gb) return toast(gb); }
   const td=today(), st0=t.stage||'todo'; let res=null;
@@ -2818,6 +2829,11 @@ function kFollow(td,ap){ const rows=[];
       rows.push(hRow({dot:x.due<td?'var(--overdue)':'var(--late)',strong:`${l} drawings ${x.due<td?`${x.late} day${x.late===1?'':'s'} late`:'due today'}`,title:projLabel(p),
         meta:`Phase ${PH[f.k].no} ${phName(f.k,p)} · ${x.fu.length?`followed up ${x.fu.length}×, last ${fmtD(x.fu[x.fu.length-1].on)}`:'follow up today'}`,onclick:()=>openProjectView(id)})); }); }); });
   return rows; }
+function giveSel(t){ const team=people().filter(id=>id!==S.uid&&teamOf(id)===myPod()&&(S.members[id]||{}).active!==false);
+  const el=h('select',{class:'h-sel','aria-label':'Give to',style:'width:auto;max-width:100%',onchange:e=>{ const to=e.target.value; if(!to) return;
+      run(()=>taskUpdate(t.id,{assignee:to,checker:S.uid,assignReq:null},[{type:'reassigned',from:t.assignee,to,note:`${nameOf(S.uid)} checks it before it goes on`}]),`Given to ${shortName(to)}. It comes back to you to check`); }},
+    h('option',{value:'',text:'Give to…'}),team.map(id=>h('option',{value:id,text:`${shortName(id)} · ${activeTasks().filter(x=>x.assignee===id&&!x.doneAt&&x.target&&x.target<=addDays(today(),7)).length} this week`})));
+  return el; }
 function podGlance(td){
   const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&inMyPodProject(p)); if(!ps.length) return null;
   const rows=ps.map(p=>{ const st=projStats(p), nx=gateTasks(p.id).filter(t=>!t.doneAt&&t.target).sort(byTarget)[0], cp=curPhase(p);
@@ -2828,18 +2844,21 @@ function podGlance(td){
   const bad=rows.filter(r=>r.rank<2).length;
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My POD'}),h('span',{class:'cnt',text:`${rows.length} project${rows.length===1?'':'s'}`+(bad?` · ${bad} need${bad===1?'s':''} you`:'')})),
     h('div',{class:'h-list'},hMore('pod',rows,5,r=>r.row))); }
-/* tasks the POD has moved to In review: the POD leader checks them, then marks them done or sends them back */
+/* the POD leader's checks: work the POD sent to be checked (or moved to In review), and everyday tasks waiting for verification */
 function podReview(){ const mp=myPod(); if(!mp||!S.canWrite) return null;
-  const xs=activeTasks().filter(t=>t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.verify&&!t.archived&&t.stage==='review'&&teamOf(t.assignee)===mp).sort(byTarget);
-  if(!xs.length) return null;
-  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'For your review'}),h('span',{class:'cnt',text:String(xs.length)})),
-    h('div',{class:'f-hint',style:'margin:0 4px',text:'Your POD moved these to In review. Check the work, then mark it done (it goes on for verification where that applies) or send it back.'}),
-    h('div',{class:'list'},hMore('rv',xs,4,t=>h('div',{},row(t,{person:true}),h('div',{class:'actions',style:'padding:0 12px 10px;margin:0'},
-      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done'}),
-      h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>moveStage(t.id,'doing'),text:'Send back'})))))); }
+  const xs=activeTasks().filter(t=>t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.verify&&!t.archived&&t.stage==='review'&&(t.checker===S.uid||teamOf(t.assignee)===mp)).sort(byTarget);
+  const vs=activeTasks().filter(t=>t.verify&&!t.doneAt&&!t.archived&&podVerifies(t)&&!jointOf(t)).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||''));
+  if(!xs.length&&!vs.length) return null;
+  const back=t=>run(()=>taskUpdate(t.id,{stage:'doing',sentCheck:null},[{type:'stage',from:'review',to:'doing',note:'Sent back by '+nameOf(S.uid)}]),'Sent back');
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'For your review'}),h('span',{class:'cnt',text:String(xs.length+vs.length)})),
+    h('div',{class:'f-hint',style:'margin:0 4px',text:'Work your POD sent you to check, and everyday tasks waiting for verification. Gates and client deliverables you mark done go on to the Principal or the COO; done counts from the day it was sent to you.'}),
+    xs.length?h('div',{class:'list'},hMore('rv',xs,4,t=>h('div',{},row(t,{person:true}),h('div',{class:'actions',style:'padding:0 12px 10px;margin:0'},
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>checkDone(t),text:t.gate||t.kind==='Deliverable'?'✓ Checked · send on':'✓ Checked · done'}),
+      h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>back(t),text:'Send back'}))))):null,
+    vs.length?h('div',{class:'list'},hMore('rvv',vs,4,vfCard)):null); }
 function homeTour(){ const g=roleGroup(S.uid);
   if(amApprover()||S.isOwner) return ['Your Home',['Today shows what waits on you first: approvals, date requests and anything late.','Meetings stay here from the invite until the minutes are published.','Tasks, Projects and the Dashboard show the whole studio.']];
-  if(amPodLead()) return ['Your Home as POD leader',['My POD shows each project’s status and its next gate. Projects that need you come first.','For your review lists work your POD moved to In review: mark it done or send it back.','POD deadlines shows gate deliverables in the next two weeks. Anything without a date waits under Needs a date.']];
+  if(amPodLead()) return ['Your Home as POD leader',['My POD shows each project’s status and its next gate. Projects that need you come first.','For your review lists work your POD sent you to check and everyday tasks to verify: mark it done or send it back.','POD deadlines shows gate deliverables in the next two weeks. Give each one to the person doing it: it comes back to you to check before it goes on.']];
   if(g==='dhead') return ['Your Home as drafting lead',['The drafting queue lists drafting work in every live phase, earliest deadline first.','Give each item to someone: it becomes a task on their Home with the phase’s date. The numbers on top are tasks due in the next 7 days per person.','The checklist item ticks itself when the task is done.']];
   if(g==='draft') return ['Your Home',['Drafting work from your Design Associate Lead lands here as tasks, each with its date.','Open a task and tap Start working, then ✓ Done today when it is issued.','Can’t make a date? Open the task › More options › Request new date, before the date passes.']];
   return ['Your Home',['Start with Needs attention, then This week.','My checklist shows the items you own, with the date each phase needs them. Press and hold the circle to tick one.','Can’t make a date? Open the task › More options › Request new date, before the date passes.']]; }
@@ -2866,6 +2885,9 @@ function viewMineBody(){
   if(S.isOwner){ const xs=Object.entries(S.projects).filter(([k,p])=>p&&p.delReq&&p.delReq.by!==S.uid);
     xs.forEach(([k,p])=>today_.push(hRow({dot:'var(--overdue)',strong:'Delete project?',title:projLabel(p),meta:`${nameOf(p.delReq.by)} · ${p.delReq.reason||'No reason given'}`,onclick:()=>openProjectView(k)}))); }
   kFollow(td,ap).forEach(r=>today_.push(r));
+  /* end of the day (from 17:00 on a working day): what was due today and is still open, with the two answers */
+  if(new Date().getHours()>=17&&isWorkDay(td)&&S.canWrite) mine.filter(t=>!t.doneAt&&!t.verify&&!t.archived&&t.target===td&&stageOf(t)!=='review'&&!t.request).forEach(t=>today_.push(hRow({dot:'var(--late)',strong:'Before you leave',title:t.title,meta:projLabel(S.projects[t.projectId])+' · due today',onclick:()=>openTask(t.id),
+    right:h('div',{style:'display:flex;gap:6px'},h('button',{class:'btn btn-sm btn-primary h-btn',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done'}),h('button',{class:'btn btn-sm h-btn',type:'button',onclick:()=>{ openTask(t.id); setMode('request',{date:'',reason:''}); },text:'New date'}))})));
   const tg=hGroup('Today',today_); if(tg) out.push(tg);
 
   /* 3 · Meetings: each one stays here from the invite until its minutes are published */
@@ -2890,24 +2912,26 @@ function viewMineBody(){
     /* focus: what needs you now, this week and the week after; anything later is one line that opens Tasks */
     const wk=addDays(td,7), wk2=addDays(td,14), lead=amPodLead()&&!ap;
     const open_=mine.filter(t=>!t.doneAt&&!t.verify);
-    const attn=open_.filter(t=>['overdue','soon'].includes(status(t))||vfReturned(t)).sort(byTarget), aIds=new Set(attn.map(t=>t.id));
+    const attn=open_.filter(t=>(['overdue','soon'].includes(status(t))||vfReturned(t))&&!(lead&&t.gate)).sort(byTarget), aIds=new Set(attn.map(t=>t.id));
     const nodate=open_.filter(t=>!t.target&&!vfReturned(t)).sort(byTarget), vfl=mine.filter(t=>t.verify&&!t.doneAt).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||''));
     const rest=open_.filter(t=>!aIds.has(t.id)&&t.target), own=rest.filter(t=>!(lead&&t.gate));
     const week=own.filter(t=>t.target<=wk).sort(byTarget), next=own.filter(t=>t.target>wk&&t.target<=wk2).sort(byTarget);
-    const podGate=lead?rest.filter(t=>t.gate&&t.target<=wk2).sort(byTarget):[], later=rest.filter(t=>t.target>wk2);
+    const later=rest.filter(t=>t.target>wk2&&!(lead&&t.gate)), podGate=lead?activeTasks().filter(t=>t.gate&&!t.doneAt&&!t.archived&&t.target&&t.target<=wk2&&inMyPodProject(S.projects[t.projectId])&&(t.assignee===S.uid||teamOf(t.assignee)===myPod())).sort(byTarget):[];
     const done=mine.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,15);
     const list=(key,title,xs,n,note)=>xs.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:title}),h('span',{class:'cnt',text:String(xs.length)})),note?h('div',{class:'f-hint',style:'margin:0 4px',text:note}):null,h('div',{class:'list'},hMore(key,xs,n,t=>row(t,{person:false})))):null;
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My work'})),
       h('div',{class:'h-stats'},stat(nOpen,'Open'),stat(nOver,'Overdue','var(--overdue)'),stat(c.early+c.ontime,'On time','var(--ontime)'),stat(c.late,'Late','var(--late)')),h('div',{class:'f-hint',style:'margin:0 4px',text:'On time and late count tasks due this month.'+(today()<scoreFrom()?` Scores count from ${fmtD(scoreFrom())}; work due before that is a trial run.`:'')})));
     [list('attn','Needs attention',attn,5),list('vf','Waiting for verification',vfl,3),list('wk','This week',week,5),
-     lead?list('pg','POD deadlines · next 2 weeks',podGate,5,'Gate deliverables of your POD’s projects. Your POD does the work; you make sure each one goes out on its date.'):null,
+     lead&&podGate.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'POD deadlines · next 2 weeks'}),h('span',{class:'cnt',text:String(podGate.length)})),
+       h('div',{class:'f-hint',style:'margin:0 4px',text:'Gate deliverables of your POD’s projects. Give each one to the person doing the work: it goes on their Home and comes back to you to check before it goes on.'}),
+       h('div',{class:'list'},hMore('pg',podGate,6,t=>h('div',{},row(t,{person:t.assignee!==S.uid}),t.assignee===S.uid&&S.canWrite&&!t.verify?h('div',{style:'padding:0 12px 10px'},giveSel(t)):null)))):null,
      list('nx','Next week',next,3),list('nodate','Needs a date',nodate,3)].forEach(x=>{ if(x) out.push(x); });
     if(later.length) out.push(h('div',{class:'h-list'},hRow({dot:'var(--faint)',strong:`${later.length} more`,title:`due after ${fmtD(wk2)}`,meta:'Open them in Tasks',onclick:()=>{ S.fInit=1; S.f.person=S.uid; S.f.project=''; S.f.status='active'; S.f.q=''; goView('all'); }})));
     { const x=list('done','Recently completed',done,3); if(x) out.push(x); }
     if(!attn.length&&!week.length&&!next.length&&!podGate.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:later.length?'Nothing due in the next two weeks.':'Nothing open. Enjoy the clear desk.'}));
   }
   /* 6 · My checklist */
-  const mcl=myChecklist(); if(mcl.length){ const all=!!(S.homeMore&&S.homeMore.cl), el=myChecklistSec(mcl,mcl.length>5?(all?{grouped:true}:{limit:5}):{});
+  const mcl=myChecklist(); if(mcl.length){ const all=!!(S.homeMore&&S.homeMore.cl), el=myChecklistSec(mcl,mcl.length>5?(all||S.clSel?{grouped:true}:{limit:5}):{});
     if(mcl.length>5){ el.querySelectorAll('.f-hint').forEach(x=>x.remove()); el.append(h('button',{class:'h-more',type:'button',style:'justify-self:start',onclick:()=>{ S.homeMore={...(S.homeMore||{}),cl:!(S.homeMore&&S.homeMore.cl)}; render(true); },text:S.homeMore&&S.homeMore.cl?'Show less':`Show all ${mcl.length}`})); }
     out.push(el); }
   if(!mine.length&&!mcl.length&&!tg&&!homeMeetRows(td,ap).length) out.push(onboarding());
@@ -4667,7 +4691,7 @@ function sheetTask(){
       canSeeProjectDetail(p)&&h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:()=>{ S.sheet={type:'projView',id:t.projectId,openPh:k}; renderSheet(); },text:'Open the phase checklist'}))); }
 
   if(t.site&&t.site.type==='visit') out.push(siteBox(t));
-  const nextStage=!t.doneAt&&!t.verify&&!t.archived&&canMove(t)&&!m?({todo:['doing','Start working'],doing:['review','Move to in review'],review:['doing','Back to in progress']})[stageOf(t)]||null:null;
+  const nextStage=!t.doneAt&&!t.verify&&!t.archived&&canMove(t)&&!m&&!(needsCheck(t)&&stageOf(t)!=='todo')?({todo:['doing','Start working'],doing:['review','Move to in review'],review:['doing','Back to in progress']})[stageOf(t)]||null:null;
   if(t.verify&&!t.doneAt){ const v=t.verify, cv=canVerify(t)&&!t.archived, tm=vfTiming(t);
     const jl=jointOf(t)?jointLeft(t):[];
     out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--early)'},h('div',{class:'lbl',text:jl.length?'Joint task: waiting for '+jl.map(x=>nameOf(x.assignee)).join(', '):'Waiting for verification'}),
@@ -4696,8 +4720,9 @@ function sheetTask(){
     const btns=[];
     /* the next step is one big button; everything else sits under More options */
     const more=[];
-    if(canAct&&!t.doneAt&&!t.verify){ btns.push(h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:mustVerify(t)?'✓ Done today · send to verify':'✓ Done today'}));
-      more.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Done on another date'})); }
+    if(canAct&&!t.doneAt&&!t.verify){ btns.push(needsCheck(t)?(stageOf(t)==='review'?h('div',{class:'f-hint',text:`With ${nameOf(t.checker)} to check since ${fmtD((t.sentCheck&&t.sentCheck.at)||today())}. It counts from that day.`}):h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>sendToCheck(t),text:`✓ Done · send to ${nameOf(t.checker).split(' ')[0]} to check`}))
+        :h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:mustVerify(t)?'✓ Done today · send to verify':'✓ Done today'}));
+      if(!needsCheck(t)) more.push(h('button',{class:'btn',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Done on another date'})); }
     if(nextStage) btns.push(h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>moveStage(t.id,nextStage[0]),text:nextStage[1]}));
     if(false) btns.push(h('button',{class:'btn btn-primary',type:'button',onclick:()=>setMode('done',{date:today(),note:''}),text:'Mark as done'}));
     if(S.canWrite&&!t.archived&&!t.doneAt&&!t.verify&&(mine||mgr)&&!ap&&!t.ongoing&&(t.target||mgr)){
@@ -4773,7 +4798,8 @@ function sheetTask(){
       if(d.assignee!==t.assignee&&!(ck?canChalkAssign():canAssignTo(d.assignee))) return fail(ck?'Only the Principal and the Chalk Create lead assign Chalk work.':'Only the Principal and the COO can assign tasks to the Principal’s Office.');
       if(d.assignee!==t.assignee&&(isPriv(d.assignee)||isPriv(t.assignee))) return fail('Private tasks stay with their person. Archive this one and create a new task instead.');
       if(d.assignee!==t.assignee&&needsAssignApproval(d.assignee,d.projectId)){patch.assignReq={to:d.assignee,by:S.uid,at:new Date().toISOString()};ev.push({type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''})}
-      else if(d.assignee!==t.assignee){patch.assignee=d.assignee;patch.assignReq=null;ev.push({type:'reassigned',from:t.assignee,to:d.assignee})}
+      else if(d.assignee!==t.assignee){patch.assignee=d.assignee;patch.assignReq=null;ev.push({type:'reassigned',from:t.assignee,to:d.assignee});
+        if(t.gate&&amPodLead()&&!amApprover()) patch.checker=d.assignee===S.uid?null:S.uid; }
       if(!ev.length) return setMode(null);
       run(()=>taskUpdate(t.id,patch,ev),'Changes saved').then(ok=>ok&&setMode(null));
     }));
@@ -5906,9 +5932,15 @@ function draftQueueSec(){ const hd=myHeadTeam(); if(!hd||!S.canWrite) return nul
     h('div',{class:'h-stats'},team.map(id=>h('div',{class:'h-stat'},h('b',{text:String(load[id])}),h('span',{text:shortName(id)})))),
     h('div',{class:'f-hint',style:'margin:0 4px',text:'Drafting work in every live phase. Give each item to someone: it becomes a task on their Home, due by the phase’s deadline, and the checklist item ticks itself when the task is done. Numbers are tasks due in the next 7 days.'}),
     h('div',{class:'list'},hMore('dq',q,6,rowOf))); }
+/* several checklist items ticked in one go: one save per project */
+function tickMany(xs){ if(!xs.length) return; const by=new Map(), now=new Date().toISOString(), td=today();
+  xs.forEach(({p,k,it})=>{ if(!by.has(p.id)) by.set(p.id,{p,cl:{}}); const b=by.get(p.id); b.cl[k]={...(b.cl[k]||{}),[it.id]:{...clOf(p,k,it.id),done:td,na:false,at:now,by:S.uid}}; });
+  return run(async()=>{ for(const {p,cl} of by.values()) await S.db.doc('projects/'+p.id).update({cl}); },`${xs.length} item${xs.length===1?'':'s'} ticked`).then(ok=>{ if(ok){ S.clSel=null; render(true); } }); }
 function myChecklistSec(list,o={}){
-  const one=({p,k,it,due},grp)=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
-      holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'),
+  const sel=S.clSel, key=(p,k,it)=>`${p.id}|${k}|${it.id}`;
+  const pick=(p,k,it)=>{ const x=key(p,k,it); sel.has(x)?sel.delete(x):sel.add(x); render(true); };
+  const one=({p,k,it,due},grp)=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
+      sel?h('span',{class:'chk'+(sel.has(key(p,k,it))?' on':''),'aria-hidden':'true',text:sel.has(key(p,k,it))?'✓':''}):holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'),
       h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),
         h('div',{class:'row-meta'},...(grp?[]:[h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'})]),h('span',{text:'Phase '+phLabel(k,p)}),...(due?[h('span',{text:'·'}),dueTxt(due)]:[])),!grp&&p.code?h('div',{class:'row-pn',text:p.name}):null),
       h('span'),h('span'));
@@ -5916,7 +5948,10 @@ function myChecklistSec(list,o={}){
   if(o.grouped){ const g=new Map(); list.forEach(x=>{ if(!g.has(x.p.id)) g.set(x.p.id,[]); g.get(x.p.id).push(x); });
     body=[...g.values()].flatMap(xs=>[h('div',{class:'cl-h',style:'padding:10px 14px 4px;background:var(--group)',text:`${projLabel(xs[0].p)} · ${xs.length}`}),...xs.map(x=>one(x,true))]); }
   else body=list.slice(0,o.limit||40).map(x=>one(x,false));
-  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),h('span',{class:'cnt',text:String(list.length)})),
+  const multi=S.canWrite&&list.length>1?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ S.clSel=sel?null:new Set(); render(true); },text:sel?'Cancel':'Tick several'}):null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My checklist'}),multi||h('span',{class:'cnt',text:String(list.length)})),
+    sel?h('div',{class:'callout',style:'display:flex;gap:10px;align-items:center;justify-content:space-between;position:sticky;top:8px;z-index:3'},h('span',{text:sel.size?`${sel.size} selected`:'Tap the items you have finished'}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy||!sel.size,onclick:()=>tickMany(list.filter(x=>sel.has(key(x.p,x.k,x.it)))),text:`✓ Tick ${sel.size||''}`.trim()})):null,
     h('div',{class:'list'},body),
     !o.grouped&&!o.limit&&list.length>40?h('div',{class:'f-hint',style:'padding:0 4px',text:`and ${list.length-40} more`}):null);
 }
