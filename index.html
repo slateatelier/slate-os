@@ -576,6 +576,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pv-e{position:absolute;left:0;top:3px;bottom:3px;border-radius:3px;background:#000}.pv-e.s-ontime{background:var(--ontime)}.pv-e.s-overdue{background:var(--overdue)}.pv-e.s-late{background:var(--late)}
 .pv-t{position:absolute;top:-3px;bottom:-3px;width:2px;background:#000;margin-left:-1px}
 .pv-meta{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--muted);margin-left:32px}.pv-meta b{color:var(--ink);font-size:14px}.pv-tbl td.r{text-align:right}.pv-tbl td,.pv-tbl th{white-space:nowrap}.pv-tbl td:first-child{white-space:normal;min-width:150px}
+.pl-kpis{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}.pl-kpis .num{font-size:22px}
+.pl-row{grid-template-columns:auto 1fr auto!important;display:grid;align-items:center;gap:10px}.pl-k{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none}.pl-v{background:#E8F7EC;color:#1E7B34}.pl-m{background:#E8F0FD;color:#0A5BD8}.pl-ic{width:16px;height:16px}
 .biz-more{margin:10px 0 4px}.biz-more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 2px;list-style:none}.biz-more summary::-webkit-details-marker{display:none}.biz-more summary::before{content:'＋ '}.biz-more[open] summary::before{content:'− '}.biz-more .kpis{margin-top:8px}
 @media (max-width:640px){.biz-act .btn{padding-left:12px;padding-right:12px}.kpis.kpis5 .kpi .num{font-size:21px;letter-spacing:-.01em}}
 .tl-card{gap:10px}
@@ -2350,6 +2352,7 @@ function vfCard(t){ if(t._mates) return vfJointCard(t); const v=t.verify, p=S.pr
     h('div',{class:'row-meta who'},avaEl(v.by,false,'sm'),`${nameOf(v.by)} · ${projLabel(p)}`),
     h('div',{class:'row-meta',style:late?'color:var(--late)':'',text:`Done ${fmtD(v.at)}`+(tm?' · '+tm:'')+(t.target?` · target ${fmtD(t.target)}`:'')}),
     v.note&&h('p',{class:'quote',style:'margin:2px 0 0',text:v.note}),
+    t.site&&t.site.checkin?h('a',{class:'row-meta',href:mapUrl(t.site.checkin.lat,t.site.checkin.lng),target:'_blank',rel:'noopener',style:((t.site.place||{}).lat!=null&&distM(t.site.checkin,t.site.place)>500)?'color:var(--late)':'',text:'📍 '+locLine(t.site.checkin,t.site.place)+' ↗'}):null,
     S.canWrite&&h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>verifyTask(t),text:'Verify'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>openTask(t.id),text:'Open to return'}))); }
 
 function vfJointCard(t){ const p=S.projects[t.projectId], ms=t._mates.slice().sort((a,b)=>nameOf(a.assignee).localeCompare(nameOf(b.assignee)));
@@ -2364,7 +2367,7 @@ function vfJointCard(t){ const p=S.projects[t.projectId], ms=t._mates.slice().so
 /* ---------- task row ---------- */
 const rootOf=t=>t.parentId&&S.tasks[t.parentId]?{...S.tasks[t.parentId],id:t.parentId}:t;
 const revsOf=id=>Object.entries(S.tasks).map(([k,x])=>({...x,id:k})).filter(x=>x.parentId===id&&!x.archived).sort((a,b)=>(a.revNo||0)-(b.revNo||0));
-const canQuickDone=t=>S.canWrite&&!t.archived&&!t.doneAt&&!t.verify&&(t.assignee===S.uid||leadsProj(t.projectId)||(isChalkTask(t)&&canChalkEdit()));
+const canQuickDone=t=>S.canWrite&&!t.archived&&!t.doneAt&&!t.verify&&!needsCheckin(t)&&(t.assignee===S.uid||leadsProj(t.projectId)||(isChalkTask(t)&&canChalkEdit()));
 function quickDone(t){
   if(!canQuickDone(t)) return;
   { const gb=gateBlock(t); if(gb) return toast(gb); }
@@ -4472,7 +4475,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -4518,6 +4521,7 @@ function sheetTask(){
       h('div',{class:'f-hint',text:`Checklist ${tot-left} of ${tot} done`+(t.gate.step==='final'&&left?'. This gate closes once every item is ticked or marked N/A.':'')}),
       canSeeProjectDetail(p)&&h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:()=>{ S.sheet={type:'projView',id:t.projectId,openPh:k}; renderSheet(); },text:'Open the phase checklist'}))); }
 
+  if(t.site&&t.site.type==='visit') out.push(siteBox(t));
   if(!t.doneAt&&!t.verify&&!t.archived&&canMove(t)&&!m) out.push(h('div',{class:'bar'},h('span',{class:'lbl',text:'Stage'}),seg('Stage',STAGES.filter(x=>x[0]!=='done'),stageOf(t),v=>moveStage(t.id,v))));
   if(t.verify&&!t.doneAt){ const v=t.verify, cv=canVerify(t)&&!t.archived, tm=vfTiming(t);
     const jl=jointOf(t)?jointLeft(t):[];
@@ -4564,15 +4568,17 @@ function sheetTask(){
     if(btns.length) out.push(h('div',{class:'actions'},btns));
   }
 
-  if(m==='done'){ const sv=mustVerify(t), who=vfWho(t);
+  if(m==='done'){ const sv=mustVerify(t), who=vfWho(t), ck=needsCheckin(t);
     out.push(form(sv?'Mark as done and send to verify':'Mark as done',[
+    ck?checkinField(d,t.site.place):null,
     field('Completion date',inp('date',{type:'date',max:today()}),sv?`${who[0].toUpperCase()+who.slice(1)} verifies it. Once verified it counts as done on this date.`:'The completion date and the moment you record it are both logged.'),
     field('Note (optional)',ta('note',{placeholder:sv?'e.g. Issued to client by email; drawings in the project folder':'e.g. Issued to client by email'}))],sv?'Send for verification':'Mark as done',()=>{
       if(!d.date) return fail('Choose the completion date.');
       if(d.date>today()) return fail('The completion date can’t be in the future.');
+      if(ck&&!d.loc) return fail('Check in at the site first: tap “I’m at the site”. A site visit needs your location.');
       { const gb=gateBlock(t); if(gb) return fail(gb); }
       let res=null;
-      run(async()=>{ res=await finishTask(t,d.date,(d.note||'').trim()); },t.repeat&&!t.nextId?(sv?'Sent to verify. Next one created':'Done. Next one created'):(sv?(jointOf(t)&&jointLeft(t).some(x=>x.id!==t.id)?'Your part is done. It goes for verification when everyone has finished':`Sent to ${who} to verify`):'Marked as done')).then(ok=>{ if(ok){ setMode(null); if(res&&!res.sent) celebrateDone(t,d.date); } });
+      run(async()=>{ if(ck&&d.loc) await taskUpdate(t.id,{site:{...t.site,checkin:d.loc}},[{type:'checkin',note:locLine(d.loc,t.site.place)}]); res=await finishTask(ck?{...t,site:{...t.site,checkin:d.loc}}:t,d.date,(d.note||'').trim()); },t.repeat&&!t.nextId?(sv?'Sent to verify. Next one created':'Done. Next one created'):(sv?(jointOf(t)&&jointLeft(t).some(x=>x.id!==t.id)?'Your part is done. It goes for verification when everyone has finished':`Sent to ${who} to verify`):'Marked as done')).then(ok=>{ if(ok){ setMode(null); if(res&&!res.sent) celebrateDone(t,d.date); } });
     })); }
   if(m==='request') out.push(form(t.target?'Request a revised date':'Propose a target date',[
     field('Proposed date',h('div',{style:'display:grid;gap:8px'},dateChips(d.date,x=>{ d.date=x; renderSheet(); },t.target&&t.target>today()?t.target:null),inp('date',{type:'date',min:today()}))),
@@ -5618,6 +5624,48 @@ function pmStateTag(m){ if(m.status==='cancelled') return h('span',{class:'tag',
   if(m.status!=='final') return h('span',{class:'tag tag-req',text:'Minutes to finish'});
   if(pmOut(m)) return m.sentAt?h('span',{class:'tag',style:pmAccepted(m)?'color:var(--ontime)':'',text:pmAccepted(m)?'Accepted':'Sent '+fmtD(m.sentAt)}):h('span',{class:'tag',style:'color:var(--late)',text:'Not sent'});
   return h('span',{class:'tag',text:'Recorded'}); }
+/* ---------- project log: every site visit and meeting of a project, with a small dashboard ---------- */
+function projLog(p){
+  if(!canViewProjectDetail(p)||p.pod==='Studio'||isInternalP(p)) return null;
+  const ms=pmOf(p.id), vs=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.projectId===p.id&&t.site&&['visit','oncall'].includes(t.site.type)&&!t.archived);
+  const td=today(), vDone=vs.filter(t=>t.doneAt||t.verify), vPlan=vs.filter(t=>!t.doneAt&&!t.verify).sort((a,b)=>(a.target||'9').localeCompare(b.target||'9'));
+  const mHeld=ms.filter(m=>m.status!=='cancelled'&&m.status!=='scheduled'), mUp=ms.filter(m=>m.status==='scheduled'&&m.date>=td), mDue=ms.filter(m=>m.status==='scheduled'&&m.date<td);
+  const lastV=vDone.map(t=>t.doneAt||t.verify.at).sort().pop(), lastC=mHeld.filter(m=>isClientMT(m.type)).map(m=>m.date).sort().pop();
+  const fr=canBiz()&&finOn()?(loadFeeFin(),feeRecOf(p)):null, free=fr&&fr.visits&&fr.visits.free!=null?+fr.visits.free:null;
+  const f=(S.sheet&&S.sheet.plf)||'';
+  const rows=[...vs.map(t=>({k:'visit',d:t.doneAt||(t.verify&&t.verify.at)||t.target||'',t})),...ms.map(m=>({k:'meet',d:m.date||'',m}))]
+    .filter(x=>!f||(f==='visit'?x.k==='visit':f==='meet'?x.k==='meet':x.k==='meet'&&x.m.type===f)).sort((a,b)=>b.d.localeCompare(a.d));
+  const ico=i=>svgEl('svg',{viewBox:'0 0 24 24',class:'pl-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[i]}));
+  const vRow=t=>{ const ck=t.site.checkin, done=!!(t.doneAt||t.verify), late=!done&&t.target&&t.target<td;
+    return h('div',{class:'mt-row pl-row',role:'button',tabindex:'0',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.key==='Enter') openTask(t.id); }},h('span',{class:'pl-k pl-v'},ico('pin')),
+      h('div',{style:'min-width:0'},h('div',{class:'row-title'},h('span',{text:`${(t.site.purpose||t.title.replace(/^Site visit · /,''))} · ${t.target||done?fmtD(t.doneAt||(t.verify&&t.verify.at)||t.target):'no date'}`+(t.time&&!done?' · '+fmtTime(t.time):'')}),
+          h('span',{class:'pill s-'+(t.doneAt?'ontime':t.verify?'verify':late?'overdue':'open'),text:t.doneAt?'Visited':t.verify?'To verify':late?'Overdue':'Planned'})),
+        h('div',{class:'row-meta',text:[t.site.type==='oncall'?'On-call visit':'Site visit',nameOf(t.assignee),ck?('checked in'+((t.site.place||{}).lat!=null?' '+fmtDist(distM(ck,t.site.place))+' from the pin':'')):done?'':(t.site.place&&t.site.place.address)||''].filter(Boolean).join(' · ')})),
+      h('span',{class:'mi-a',text:'›'})); };
+  const mRow=m=>h('div',{class:'mt-row pl-row',role:'button',tabindex:'0',onclick:()=>openPMeet(m.id),onkeydown:e=>{ if(e.key==='Enter') openPMeet(m.id); }},h('span',{class:'pl-k pl-m'},ico('meet')),
+    h('div',{style:'min-width:0'},h('div',{class:'row-title'},h('span',{text:`${mTitle(m)} · ${wd(m.date)} ${fmtD(m.date)}`+(m.status==='scheduled'&&m.time?' · '+fmtTime(m.time):'')}),pmStateTag(m)),
+      h('div',{class:'row-meta',text:[PMT[m.type]||'Meeting',m.phase?'Phase '+phLabel(m.phase):'',m.status!=='scheduled'?`${(m.decisions||'').split('\n').filter(Boolean).length} decisions · ${(m.actions||[]).filter(a=>a.text).length} actions`:''].filter(Boolean).join(' · ')})),
+    h('span',{class:'mi-a',text:'›'}));
+  const k=(l,v,sub,s)=>h('div',{class:'kpi'+(s?' s-'+s:'')},h('div',{class:'lbl',text:l}),h('div',{class:'num',text:String(v)}),sub?h('div',{class:'f-hint',style:'margin:2px 0 0',text:sub}):null);
+  const chips=[['','All'],['visit','Site visits'],['meet','Meetings'],...Object.entries(PMT).filter(([t])=>ms.some(m=>m.type===t))];
+  const can=canPM(p);
+  return h('section',{class:'sec'},
+    h('div',{class:'sec-h'},h('h2',{text:'Project log'}),h('span',{class:'cnt',text:'site visits and meetings'})),
+    h('div',{class:'kpis pl-kpis'},
+      k('Site visits',vDone.length,lastV?'last '+fmtD(lastV):'none yet'),
+      k('Planned visits',vPlan.length,vPlan[0]&&vPlan[0].target?'next '+fmtD(vPlan[0].target):'',vPlan.some(t=>t.target&&t.target<td)?'overdue':''),
+      free!=null?k('Free visits left',Math.max(0,free-visitsUsed(p.id)),visitsUsed(p.id)>free?`${visitsUsed(p.id)-free} extra to bill`:`of ${free} in the fee terms`,visitsUsed(p.id)>free?'late':''):null,
+      k('Meetings held',mHeld.length,lastC?'last client meeting '+fmtD(lastC):''),
+      k('Upcoming meetings',mUp.length,mUp.length?'next '+fmtD(mUp.slice().sort((a,b)=>a.date.localeCompare(b.date))[0].date):''),
+      mDue.length?k('Minutes due',mDue.length,'held, not written up','overdue'):null),
+    can?h('div',{class:'actions',style:'margin:10px 0 6px'},
+      canNewTask()?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openSiteVisit(p.id),text:'+ Site visit'}):null,
+      h('button',{class:'btn btn-sm',type:'button',onclick:()=>openNewMeeting({projectId:p.id,mode:'sched',back:p.id}),text:'+ Schedule meeting'}),
+      h('button',{class:'btn btn-sm',type:'button',onclick:()=>openNewMeeting({projectId:p.id,mode:'log',back:p.id}),text:'+ Log meeting'})):null,
+    vs.length+ms.length>2?h('div',{class:'chips',style:'margin-bottom:6px'},chips.map(([v,l])=>h('button',{type:'button',class:'chip'+(f===v?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ S.sheet.plf=v; renderSheet(); },text:l}))):null,
+    rows.length?h('div',{class:'list'},rows.slice(0,S.sheet&&S.sheet.plAll?999:15).map(x=>x.k==='visit'?vRow(x.t):mRow(x.m))):h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Nothing logged yet. Plan site visits and log client, consultant, authority and site meetings here.'}),
+    rows.length>15&&!(S.sheet&&S.sheet.plAll)?h('button',{class:'linkish',type:'button',style:'font-size:13px;padding:6px 4px',onclick:()=>{ S.sheet.plAll=true; renderSheet(); },text:`Show all ${rows.length}`}):null);
+}
 function pmSection(p){
   if(!canViewProjectDetail(p)||p.pod==='Studio') return null;
   const ms=pmOf(p.id), f=(S.sheet&&S.sheet.pmf)||'', list=f?ms.filter(m=>m.type===f):ms;
@@ -6102,7 +6150,7 @@ function moveMeeting(sh,m,acts){
 }
 
 /* ---------- How to use: a visual guide, one role at a time ---------- */
-const HX_ICO={
+const HX_ICO={pin:'M12 21s-6.5-5.8-6.5-11.2a6.5 6.5 0 1 1 13 0C18.5 15.2 12 21 12 21z M12 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2',
  home:'M3 11l9-7 9 7M5 10v10h14V10M10 20v-5h4v5',
  check:'M20 6 9 17l-5-5',
  circle:'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
@@ -7494,6 +7542,7 @@ function fabItems(){ const w=!!S.canWrite, cm=amChalkMember();
   return [canNewTask()?['check','New task','',()=>openNewTask()]:null,
     canProjReq()?['layers',amApprover()?'New project':'Request a project','',()=>openProject()]:null,
     w&&!cm?['meet','New meeting','',()=>openNewMeeting()]:null,
+    canNewTask()?['pin','Site visit','Plan one, or record it from the site',()=>openSiteVisit()]:null,
     w&&canProps()?['flag','New lead','Business',()=>openLead()]:null,
     w&&canProps()?['doc','New proposal','Business',()=>openProp()]:null,
     w&&amApprover()?['bell','New notice','For everyone',()=>openNoticeEditor(null)]:null,
@@ -7507,6 +7556,67 @@ function fabToggle(){ if(S.fabOpen) return fabClose(); const items=fabItems(); i
   document.body.appendChild(m); requestAnimationFrame(()=>m.classList.add('in'));
   const first=[...m.querySelectorAll('.fm-item')].pop(); if(first) setTimeout(()=>first.focus({preventScroll:true}),60); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.fabOpen){ fabClose(); const f=$('#fab'); if(f) f.focus(); } });
+function siteBox(t){ const pl=t.site.place||{}, ck=t.site.checkin, dm=ck&&pl.lat!=null?distM(ck,pl):null;
+  return h('div',{class:'callout',style:'gap:4px;box-shadow:inset 3px 0 0 '+(ck?'var(--ontime)':'var(--early)')},h('div',{class:'lbl',text:'Site visit'}),
+    pl.address?h('div',{text:pl.address}):null,
+    pl.map||pl.lat!=null?h('a',{href:pl.map||mapUrl(pl.lat,pl.lng),target:'_blank',rel:'noopener',style:'font-size:13px',text:'Site on the map ↗'}):null,
+    ck?h('div',{style:'font-weight:500;'+(dm!=null&&dm>500?'color:var(--late)':''),text:locLine(ck,pl)}):h('div',{class:'f-hint',style:'margin:0',text:t.doneAt?'Recorded before check-ins were needed.':'Check in from the site when you mark it done.'}),
+    ck?h('a',{href:mapUrl(ck.lat,ck.lng),target:'_blank',rel:'noopener',style:'font-size:13px',text:'Where the check-in was ↗'}):null); }
+/* ---------- site visits ----------
+   A site visit is a task on its project (site.type 'visit'), so it is assigned, dated, verified and scored like other work and
+   counts against the free site visits in the project's fee terms. It needs location: the site's address or map pin when it is
+   planned, and the person's own location (a check-in from the phone) when it is done. */
+const needsCheckin=t=>!!(t&&t.site&&t.site.type==='visit'&&!t.site.checkin&&!t.doneAt&&!t.legacy);
+function getLoc(){ return new Promise((res,rej)=>{ if(!navigator.geolocation) return rej(new Error('This device can’t share its location.'));
+  navigator.geolocation.getCurrentPosition(p=>res({lat:+p.coords.latitude.toFixed(6),lng:+p.coords.longitude.toFixed(6),acc:Math.round(p.coords.accuracy||0),at:new Date().toISOString()}),
+    e=>rej(new Error(e&&e.code===1?'Location is blocked. Allow location for SLATE OS (in the browser’s site settings, or Settings › Privacy › Location on the phone), then try again.':'Couldn’t get your location. Step outside or near a window and try again.')),
+    {enableHighAccuracy:true,timeout:20000,maximumAge:0}); }); }
+const mapUrl=(lat,lng)=>`https://www.google.com/maps?q=${lat},${lng}`;
+const pinFrom=x=>{ const m=String(x||'').match(/(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/); return m?{lat:+m[1],lng:+m[2]}:null; };
+function distM(a,b){ if(!a||!b) return null; const r=Math.PI/180, dLa=(b.lat-a.lat)*r, dLo=(b.lng-a.lng)*r, x=Math.sin(dLa/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLo/2)**2; return Math.round(6371000*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))); }
+const fmtDist=m=>m==null?'':m<1000?m+' m':(m/1000).toFixed(1)+' km';
+function locLine(loc,place){ if(!loc) return ''; const dm=place&&place.lat!=null?distM(loc,place):null; return `Checked in ${fmtTs(loc.at)} (±${loc.acc} m)`+(dm!=null?` · ${fmtDist(dm)} from the site pin`:''); }
+function checkinField(d,place){ const busy=!!d._locBusy;
+  return field('Location at the site *',h('div',{style:'display:grid;gap:6px'},
+    d.loc?h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--ontime);gap:4px'},h('b',{text:locLine(d.loc,place)}),h('a',{href:mapUrl(d.loc.lat,d.loc.lng),target:'_blank',rel:'noopener',style:'font-size:13px',text:'See it on the map ↗'}),
+      (()=>{ const dm=place&&place.lat!=null?distM(d.loc,place):null; return dm!=null&&dm>500?h('span',{style:'color:var(--late);font-size:12.5px',text:'That’s more than 500 m from the site pin. It is recorded as it is; the approver sees the distance.'}):null; })()):null,
+    h('button',{class:'btn'+(d.loc?'':' btn-primary'),type:'button',disabled:busy,style:'justify-self:start',onclick:async()=>{ d._locBusy=true; S.sheet.err=''; renderSheet();
+      try{ d.loc=await getLoc(); }catch(e){ S.sheet.err=e.message; } d._locBusy=false; renderSheet(); },text:busy?'Finding you…':d.loc?'Check in again':'📍 I’m at the site'})),
+    'Records where your phone is now. It is shown to whoever verifies the visit.'); }
+function openSiteVisit(pid,mode){ const p=pid&&S.projects[pid];
+  S.sheet={type:'siteVisit',err:'',d:{mode:mode||'plan',projectId:pid||'',assignee:S.uid,also:[],date:'',time:'',purpose:'',address:p?siteAddr(p):'',map:'',pin:null,loc:null,note:''}}; renderSheet(); }
+function sheetSiteVisit(){ const d=S.sheet.d, ap=amApprover(), now=d.mode==='now', p=d.projectId&&S.projects[d.projectId];
+  const opts=[['',''],...projects().filter(q=>!isStudioWP(q)&&(workable(q)||(q.closed&&q.support&&q.support.status==='active')||q.id===d.projectId)).map(q=>[q.id,projLabel(q)+(q.closed?' · construction support':'')])];
+  const pSel=(()=>{ const x=h('select',{id:'sv-proj',onchange:e=>{ d.projectId=e.target.value; const q=S.projects[d.projectId]; d.address=q?siteAddr(q):''; renderSheet(); }},opts.map(([v,l])=>h('option',{value:v,text:v?l:'Select project…'}))); x.value=d.projectId; return x; })();
+  const who=(()=>{ const x=h('select',{onchange:e=>{ d.assignee=e.target.value; renderSheet(); }},newTaskPeople().map(([v,l])=>h('option',{value:v,text:l}))); x.value=d.assignee; return x; })();
+  const save=e=>{ e.preventDefault(); const purpose=(d.purpose||'').trim();
+    if(!d.projectId) return fail('Choose the project.'); if(!purpose) return fail('Write what the visit is for, e.g. Slab casting check.');
+    const place={address:(d.address||'').trim(),map:(d.map||'').trim(),...(d.pin||pinFrom(d.map)||{})};
+    const pr=S.projects[d.projectId], phase=pr&&pr.closed?SUP_PHASE:'Site visits', title=`Site visit · ${purpose}`;
+    if(now){ if(!d.loc) return fail('Tap “I’m at the site” so the visit has your location.');
+      let res=null; return run(async()=>{ const id=await createTask({projectId:d.projectId,title,kind:'Task',assignee:S.uid,phase,...(ap?{target:today()}:{proposed:today()}),site:{type:'visit',purpose,place,checkin:d.loc},unscored:!ap,note:(d.note||'').trim()});
+        const t=S.tasks[id]||{projectId:d.projectId,kind:'Task',assignee:S.uid,site:{type:'visit',checkin:d.loc},history:[]}; res=await finishTask({...t,id},today(),(d.note||'').trim(),{spawn:false}); },'Site visit recorded').then(ok=>{ if(ok){ if(res&&res.sent) toast('Site visit recorded and sent to verify'); closeSheet(); } }); }
+    if(!d.date) return fail('Choose the visit date.'); if(d.date<today()) return fail('A planned visit is today or later. For one that happened, use “I’m on site now” at the site.');
+    if(!place.address&&place.lat==null) return fail('Give the site location: the address, a Google Maps link, or pin it from the site.');
+    const ids=[d.assignee,...(d.also||[]).filter(x=>x&&x!==d.assignee)], jt=ids.length>1?{id:'J'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),with:ids}:null;
+    return run(async()=>{ for(const id of ids) await createTask({projectId:d.projectId,title,kind:'Task',assignee:id,phase,...(ap?{target:d.date}:{proposed:d.date}),...(d.time?{time:d.time}:{}),site:{type:'visit',purpose,place},joint:jt,note:(d.note||'').trim()}); },
+      ids.length>1?`Site visit planned for ${ids.length} people`:'Site visit planned').then(ok=>{ if(ok) closeSheet(); }); };
+  return [head('Quick add','Site visit'),
+    h('div',{class:'bar',style:'margin:0 0 4px'},seg('Site visit',[['plan','Plan a visit'],['now','I’m on site now']],d.mode,v=>{ d.mode=v; S.sheet.err=''; renderSheet(); })),
+    h('form',{class:'form',onsubmit:save},
+      field('Project *',pSel),
+      field('What the visit is for *',h('input',{maxlength:120,value:d.purpose,placeholder:'e.g. Slab casting check, column layout, client walk-through',oninput:e=>{d.purpose=e.target.value}})),
+      now?checkinField(d,p&&{...(pinFrom(d.map)||{})}):[
+        h('div',{class:'form-row'},field('Who goes',who),field('Date *',h('input',{type:'date',min:today(),value:d.date,oninput:e=>{d.date=e.target.value}}))),
+        alsoPeople(d),
+        field('Time',h('input',{type:'time',value:d.time,oninput:e=>{d.time=e.target.value}})),
+        field('Site address *',h('input',{maxlength:200,value:d.address,placeholder:'e.g. Plot 24A, Road 7, Gulshan 2',oninput:e=>{d.address=e.target.value}}),'Filled from the project; correct it if needed.'),
+        field('Google Maps link (optional)',h('input',{type:'url',value:d.map,placeholder:'Paste the site’s map link or pin',oninput:e=>{d.map=e.target.value}}),'With a pin, the check-in shows how far the visitor was from the site.'),
+        (d.also||[]).filter(x=>x&&x!==d.assignee).length?h('p',{class:'f-hint',style:'margin:0',text:'Everyone checks in at the site; it goes for approval when all have done it.'}):null],
+      field('Note (optional)',h('textarea',{rows:2,value:d.note,placeholder:now?'What you found, what was agreed':'Anything the visitor should know',oninput:e=>{d.note=e.target.value}})),
+      S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy||!!d._locBusy,text:now?'Record the visit':'Plan the visit'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})),
+      h('p',{class:'f-hint',style:'margin:0',text:now?'Recorded as done today with your location, then verified like other finished work. It counts as a site visit for the project’s fee terms.':'The visitor checks in from the site when marking it done. Site visits count against the free visits in the project’s fee terms.'}))]; }
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
   S.biz=S.biz||{tab:'over',q:'',st:'active'};
@@ -7723,7 +7833,7 @@ function sheetProjView(){
   { const tm=teamSection(p); if(tm) out.push(tm); }
   { const sb=subsSection(p); if(sb) out.push(sb); }
   { const ss=stdSection(p); if(ss) out.push(ss); }
-  { const ms=pmSection(p); if(ms) out.push(ms); }
+  { const ms=projLog(p); if(ms) out.push(ms); }
   { const ps=phaseSection(p); if(ps) out.push(ps); }
   if(st.phases.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Task progress by category'})),
     h('div',{class:'card',style:'gap:10px'},st.phases.map(x=>h('div',{class:'hb',style:'grid-template-columns:minmax(0,150px) minmax(0,1fr) 44px'},h('span',{class:'nm',text:x.name}),h('div',{class:'track'},h('span',{class:'s-ontime',style:`flex:0 0 ${Math.round(x.done/x.tot*100)}%`})),h('span',{class:'v',text:Math.round(x.done/x.tot*100)+'%'}))))));
