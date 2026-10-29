@@ -5634,7 +5634,7 @@ function openPMeet(id,pid){
   if(!m) return openNewMeeting({projectId:pid||'',mode:'log',back});
   const p=mProj(m), cur=p&&p.std?curPhase(p):'', c=mCat(m);
   S.sheet={type:'pmeet',id,projectId:m.projectId||'',back,edit:false,mode:null,err:'',
-    d:{cat:c,projectId:c==='project'?m.projectId:'',title:m.title||'',type:m.type||'client',date:m.date,time:m.time||'',venue:m.venue||'',phase:m.phase||(m.status==='scheduled'?cur||'':''),attendees:[...(m.attendees||[])],external:m.external||'',agenda:m.agenda||'',decisions:m.decisions||'',changes:m.changes||'',extraAsk:!!m.extra,issues:m.issues||'',fbGot:m.status==='scheduled'?true:!!m.fbGot,actions:(m.actions||[]).map(a=>({...a})),cancelNote:''}};
+    d:{cat:c,leadId:m.leadId||'',projectId:c==='project'?m.projectId:'',title:m.title||'',type:m.type||'client',date:m.date,time:m.time||'',venue:m.venue||'',phase:m.phase||(m.status==='scheduled'?cur||'':''),attendees:[...(m.attendees||[])],external:m.external||'',agenda:m.agenda||'',decisions:m.decisions||'',changes:m.changes||'',extraAsk:!!m.extra,issues:m.issues||'',fbGot:m.status==='scheduled'?true:!!m.fbGot,actions:(m.actions||[]).map(a=>({...a})),cancelNote:''}};
   renderSheet();
 }
 function backToProject(){ const b=S.sheet&&S.sheet.back; if(b) openProjectView(b); else closeSheet(); }
@@ -5653,13 +5653,16 @@ function savePMeet(final){
     let extra=m&&m.extra||null; if(isProj&&d.extraAsk&&(d.changes||'').trim()&&!extra) extra={status:ap?'approved':'pending',by:S.uid,at:now,...(ap?{decidedBy:S.uid,decidedAt:now}:{})}; if(!d.extraAsk) extra=null;
     const title=(d.title||'').trim()||(isProj?`${PMT[d.type]||'Project'} meeting`:`${mCatName(d.cat)} meeting`), from=`From the ${isProj?(PMT[d.type]||'').toLowerCase()+' meeting':'“'+title+'”'} on ${fmtD(d.date)}`;
     if(final) for(const a of acts) if(!a.taskId){ a.taskId=await createTask({projectId:pid,title:a.text.trim(),kind:'Task',assignee:a.owner,phase:isProj&&d.phase?phLabel(d.phase):'Meeting actions',target:ap?(a.due||''):'',proposed:ap?'':(a.due||''),note:from}); }
-    await ref.set({projectId:pid,cat:d.cat,title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot),
+    await ref.set({projectId:pid,cat:d.cat,leadId:canProps()?(d.leadId||''):((m&&m.leadId)||''),title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot),
       actions:acts.map(a=>({text:a.text.trim(),owner:a.owner||'',due:a.due||'',taskId:a.taskId||''})),status:final?'final':(m&&m.status==='final'?'final':'draft'),sentAt:m&&m.sentAt||'',
       createdAt:m&&m.createdAt||now,createdBy:m&&m.createdBy||S.uid,updatedAt:now,updatedBy:S.uid,finalAt:final?(m&&m.finalAt||now):(m&&m.finalAt||''),
       ...(m&&m.schedAt?{schedAt:m.schedAt}:{}),history:[...((m&&m.history)||[]),{at:now,by:S.uid,type:final?'final':'draft'}].slice(-20)});
     if(gotFb){ const prev=((p.std.fbGot)||{})[d.phase]; if(!prev||d.date>prev) await S.db.doc('projects/'+pid).update({std:{fbGot:{[d.phase]:d.date}}}); }
   },final?(isProj&&pmOut(d)?'Minutes finalised. Send them to the attendees':'Minutes finalised'):'Draft saved').then(ok=>{ if(ok){ if(!sh.id) sh.id=ref.id; sh.projectId=(S.pmeet[sh.id]||{}).projectId||sh.projectId; sh.edit=false; sh.mode=null; renderSheet(); } });
 }
+/* a meeting linked to a lead or proposal: the link shows only to the Principal and the COO */
+function pmLeadLink(m){ const lp=m&&m.leadId&&canProps()&&(S.props||{})[m.leadId]; if(!lp) return null;
+  return h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:()=>openPropView(m.leadId),text:(isLead(lp)?'Lead: ':'Proposal: ')+[lp.client,lp.name].filter(Boolean).join(' · ')+' ›'}); }
 function sheetPMeet(){
   const sh=S.sheet, d=sh.d, m=sh.id?S.pmeet[sh.id]:null;
   const pid=m?(m.projectId||''):d.cat==='project'?d.projectId:d.cat==='other'?'':((areaProject(d.cat)||{}).id||''), p=pid&&S.projects[pid]?{...S.projects[pid],id:pid}:null, isProj=d.cat==='project';
@@ -5669,6 +5672,7 @@ function sheetPMeet(){
   if(!sh.edit&&m){
     const sec=(t,body)=>body?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:t})),body):null, lines=x=>(x||'').split('\n').filter(Boolean);
     const out=[head(eye,`${mTitle(m)} · ${wd(m.date)} ${fmtD(m.date)}`),back,
+      pmLeadLink(m),
       h('div',{class:'sh-status'},pmStateTag(m),m.phase?h('span',{class:'tag',text:'Phase '+phLabel(m.phase)}):null,m.fbGot?h('span',{class:'tag',style:'color:var(--ontime)',text:'Client feedback received'}):null),
       sec('Attended',h('div',{class:'chips'},(m.attendees||[]).map(id=>h('span',{class:'chip who',style:'padding-right:12px'},avaEl(id,false,'sm'),nameOf(id))),m.external?h('span',{class:'chip',style:'padding-right:12px',text:m.external}):null)),
       sec('Discussion',m.agenda?h('div',{class:'card',style:'white-space:pre-line',text:m.agenda}):null),
@@ -5701,9 +5705,12 @@ function sheetPMeet(){
     h('div',{class:'form-row'},field('Kind',(()=>{ const x=h('select',{id:'pm-cat',onchange:e=>{ d.cat=e.target.value; d.phase=''; renderSheet(); }},mCatsFor().map(([k,l])=>h('option',{value:k,text:k==='project'?'Project meeting':k==='other'?'Other meeting':l+' (studio)'}))); x.value=d.cat; return x; })()),
       isProj?field('Project',(()=>{ const x=h('select',{id:'pm-proj',onchange:e=>{ d.projectId=e.target.value; const q=S.projects[d.projectId]; d.phase=q&&q.std?(curPhase({...q,id:d.projectId})||''):''; renderSheet(); }},h('option',{value:'',text:'Select project…'}),projects().filter(q=>!q.closed&&!isInternalP(q)&&q.pod!=='Studio'&&canPM(q)).map(q=>h('option',{value:q.id,text:projLabel(q)}))); x.value=d.projectId||''; return x; })()):null)]:null;
   const invite=field(sched?'Invite':'SLATE attendees',h('div',{class:'chips'},team.map(id=>h('button',{type:'button',class:'chip who'+(set.has(id)?' on':''),style:'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ set.has(id)?set.delete(id):set.add(id); d.attendees=[...set]; renderSheet(); }},avaEl(id,false,'sm'),nameOf(id).split(' ')[0]))),sched?'Everyone you invite must Accept, Tentative or Decline. Moving the date or time asks them to reply again.':undefined);
+  const leadOpts=()=>{ const ps=Object.entries(S.props||{}).map(([k,x])=>({...x,id:k})).filter(x=>propOpen(x)||x.id===d.leadId).sort((a,b)=>(a.client||a.name||'').localeCompare(b.client||b.name||''));
+    return [['','Not linked'],...ps.map(x=>[x.id,(isLead(x)?'Lead · ':'Proposal · ')+[x.client,x.name].filter(Boolean).join(' · ')])]; };
+  const leadF=canProps()&&(d.cat==='studiobd'||d.cat==='other'||d.leadId)?field('Lead or proposal (optional)',(()=>{ const x=h('select',{id:'pm-lead',onchange:e=>{ d.leadId=e.target.value; renderSheet(); }},leadOpts().map(([v,l])=>h('option',{value:v,text:l}))); x.value=d.leadId||''; return x; })(),'Only you and the COO see which lead it is. The meeting shows on the lead.'):null;
   const titleF=field(isProj?'Title (optional)':'Title *',h('input',{id:'pm-title',maxlength:120,value:d.title||'',placeholder:isProj?`e.g. ${PMT[d.type]||'Client'} meeting: layout sign-off`:'e.g. Monthly HR review',oninput:e=>{d.title=e.target.value}}));
   if(sched) return [head(eye,m?'Reschedule or edit':'Schedule a meeting'),back,
-    h('form',{class:'form',onsubmit:e=>{e.preventDefault();saveSchedule()}},pick,titleF,
+    h('form',{class:'form',onsubmit:e=>{e.preventDefault();saveSchedule()}},pick,leadF,titleF,
       isProj?field('Type',typeSel):null,
       h('div',{class:'form-row'},field('Date *',h('input',{id:'pm-date',type:'date',min:today(),value:d.date,oninput:e=>{d.date=e.target.value}})),field('Start time *',h('input',{id:'pm-time',type:'time',value:d.time||'',oninput:e=>{d.time=e.target.value}}))),
       field('Venue or link',h('input',{id:'pm-venue',maxlength:200,value:d.venue||'',placeholder:'e.g. SLATE studio, site, client office, Google Meet link',oninput:e=>{d.venue=e.target.value}})),
@@ -5716,7 +5723,7 @@ function sheetPMeet(){
   return [head(eye,fromSched?'Write the minutes':m?'Edit meeting minutes':'Log a meeting'),back,
     h('p',{class:'lead',style:'margin:0',text:'Write the minutes within 24 hours. Decisions are what protect SLATE later, so write each one on its own line. Action items become tasks when you finalise.'}),
     h('form',{class:'form',onsubmit:e=>{e.preventDefault();savePMeet(false)}},
-      pick,!isProj||!m?titleF:null,
+      pick,leadF,!isProj||!m?titleF:null,
       h('div',{class:'form-row'},isProj?field('Type',typeSel):null,field('Date',h('input',{id:'pm-date',type:'date',max:today(),value:d.date,oninput:e=>{d.date=e.target.value}}))),
       ks.length?field('Phase',phSel):null,
       isProj&&p&&isClientMT(d.type)&&d.phase&&canSeeProjectDetail(p)?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pm-fb',checked:d.fbGot,onchange:e=>{d.fbGot=e.target.checked}}),`The client gave feedback on the phase ${PH[d.phase]?PH[d.phase].no:''} submission (records the feedback-received date)`):null,
@@ -5984,9 +5991,9 @@ function viewMeetHub(){
 }
 /* + New meeting: schedule ahead, or log the minutes of one already held */
 function openNewMeeting(pre={}){
-  const cats=mCatsFor(), cat=pre.cat||(pre.projectId?(isInternalP(S.projects[pre.projectId])?S.projects[pre.projectId].type:'project'):'project');
+  const cats=mCatsFor(), lp=pre.leadId&&(S.props||{})[pre.leadId], cat=pre.cat||(lp?(cats.some(x=>x[0]==='studiobd')?'studiobd':'other'):pre.projectId?(isInternalP(S.projects[pre.projectId])?S.projects[pre.projectId].type:'project'):'project');
   S.sheet={type:'pmeet',id:null,projectId:pre.projectId||'',back:pre.back||null,edit:true,mode:pre.mode||'sched',err:'',
-    d:{cat:cats.some(x=>x[0]===cat)?cat:'project',projectId:pre.projectId&&!isInternalP(S.projects[pre.projectId])?pre.projectId:'',title:'',type:'client',date:pre.mode==='log'?today():'',time:'',venue:'',phase:'',attendees:[S.uid],external:'',agenda:'',decisions:'',changes:'',extraAsk:false,issues:'',fbGot:true,actions:[],cancelNote:''}};
+    d:{cat:cats.some(x=>x[0]===cat)?cat:'project',projectId:pre.projectId&&!isInternalP(S.projects[pre.projectId])?pre.projectId:'',title:lp?'Meeting with '+(lp.client||lp.name||'the client'):'',type:'client',date:pre.mode==='log'?today():'',time:'',venue:'',phase:'',attendees:[S.uid],external:lp?[lp.contact,lp.client].filter(Boolean).join(', '):'',leadId:pre.leadId||'',agenda:'',decisions:'',changes:'',extraAsk:false,issues:'',fbGot:true,actions:[],cancelNote:''}};
   renderSheet();
 }
 /* the project a new or edited meeting belongs to: a client project, a studio area, or none */
@@ -6003,9 +6010,10 @@ function saveSchedule(){
   const ref=sh.id?S.db.doc('pmeetings/'+sh.id):S.db.collection('pmeetings').doc();
   run(async()=>{ const pid=await mResolveProject(d);
     const title=(d.title||'').trim()||(d.cat==='project'?`${PMT[d.type]||'Project'} meeting`:`${mCatName(d.cat)} meeting`);
-    const base={projectId:pid,cat:d.cat,title,type:d.cat==='project'?d.type:'studio',date:d.date,time:d.time,venue:(d.venue||'').trim(),attendees:d.attendees,external:(d.external||'').trim(),agenda:d.agenda||'',status:'scheduled',updatedAt:now,updatedBy:S.uid};
+    const base={projectId:pid,cat:d.cat,leadId:canProps()?(d.leadId||''):((m&&m.leadId)||''),title,type:d.cat==='project'?d.type:'studio',date:d.date,time:d.time,venue:(d.venue||'').trim(),attendees:d.attendees,external:(d.external||'').trim(),agenda:d.agenda||'',status:'scheduled',updatedAt:now,updatedBy:S.uid};
     if(m) await ref.update({...base,history:[...(m.history||[]),{at:now,by:S.uid,type:'moved',from:m.date+' '+(m.time||''),to:d.date+' '+d.time}].slice(-20)});
     else await ref.set({...base,phase:'',decisions:'',changes:'',extra:null,issues:'',fbGot:false,actions:[],sentAt:'',createdAt:now,createdBy:S.uid,schedAt:now,history:[{at:now,by:S.uid,type:'scheduled'}]});
+    if(canProps()&&d.leadId&&(S.props||{})[d.leadId]){ const lp=S.props[d.leadId]; if(propOpen(lp)&&(!lp.next||lp.next>d.date||lp.next<today())) await propWrite(d.leadId,{...lp,next:d.date}); }
   },m?'Meeting updated. Attendees are told':`Meeting scheduled. ${d.attendees.filter(x=>x!==S.uid).length} invited`).then(ok=>{ if(ok){ if(!sh.id) sh.id=ref.id; sh.edit=false; sh.mode=null; renderSheet(); } });
 }
 function cancelMeeting(){ const sh=S.sheet, m=S.pmeet[sh.id], note=(sh.d.cancelNote||'').trim(); if(!note) return fail('Say why it’s called off; attendees see it.');
@@ -6046,7 +6054,7 @@ function mReplyCard(sh,m){
 function sheetSchedView(sh,m){
   const p=mProj(m), c=mCat(m), can=canEditM(m), held=mHeld(m), back=sh.back?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:backToProject,text:'‹ Back to the project'}):null;
   const fact=(l,v)=>v?h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v',text:v})):null;
-  const out=[head(c==='project'?(p?projLabel(p):'Project meeting'):mCatName(c)+' meeting',mTitle(m)),back,
+  const out=[head(c==='project'?(p?projLabel(p):'Project meeting'):mCatName(c)+' meeting',mTitle(m)),back,pmLeadLink(m),
     h('div',{class:'sh-status'},pmStateTag(m),c==='project'&&m.type?h('span',{class:'tag',text:PMT[m.type]}):null),
     h('div',{class:'facts'},fact('When',mWhen(m)),fact('Where',m.venue),fact('Set up by',nameOf(m.createdBy)),m.status==='cancelled'?fact('Called off by',nameOf(m.cancelledBy)):null),
     mReplyCard(sh,m),
@@ -6929,6 +6937,13 @@ function sheetPropView(){
       h('div',{class:'row-meta'},h('b',{text:propLine(e)||'Note'}),e.resp&&PROP_RESP_S[e.resp]?h('span',{class:'pill s-'+PROP_RESP_S[e.resp],text:(PROP_RESP.find(x=>x[0]===e.resp)||[])[1]}):null),
       e.note?h('div',{style:'white-space:pre-wrap',text:e.note}):null,
       h('div',{class:'f-hint',style:'margin:0',text:`${fmtTs(e.at)} · ${nameOf(e.by)}`})))):h('p',{class:'muted',style:'margin:4px',text:'No responses logged yet. Log each call, meeting or message here; the other one of you is told.'})));
+  { const ms=Object.entries(S.pmeet||{}).map(([k,m])=>({...m,id:k})).filter(m=>m.leadId===id).sort((a,b)=>(b.date+(b.time||'')).localeCompare(a.date+(a.time||'')));
+    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Meetings'}),open&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openNewMeeting({leadId:id}),text:'+ Schedule a meeting'}):h('span',{class:'cnt',text:String(ms.length)})),
+      ms.length?h('div',{class:'list'},ms.map(m=>{ const up=m.status==='scheduled'&&m.date>=today();
+        return h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openPMeet(m.id),onkeydown:e=>{ if(e.key==='Enter'){ e.preventDefault(); openPMeet(m.id); } }},
+          h('div',{style:'min-width:0'},h('div',{class:'row-title',text:m.title||'Meeting'}),h('div',{class:'row-meta',text:`${fmtD(m.date)}${m.time?' · '+m.time:''}${m.venue?' · '+m.venue:''}`})),
+          h('span',{class:'pill s-'+(m.status==='cancelled'?'open':up?'early':m.status==='final'?'ontime':'late'),text:m.status==='cancelled'?'Called off':up?'Upcoming':m.status==='final'?'Minutes done':m.status==='draft'?'Minutes draft':'Minutes due'})); })):
+        h('p',{class:'muted',style:'margin:4px',text:open?'No meetings yet. Schedule one here and it shows on the calendar and in Meetings; the lead’s next follow-up moves to that day.':'No meetings.'}))); }
   if(S.canWrite) out.push(h('div',{class:'actions'},
     open&&ld?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(id,true),text:'Make a proposal →'}):null,
     open&&!ld?h('button',{class:'btn btn-primary',type:'button',onclick:confirmIt,text:'Client confirmed → make it a client project'}):null,
