@@ -1641,15 +1641,37 @@ Object.keys(PH).forEach(k=>{ PH[k]={...PH[k],items:PH[k].items.map((x,i)=>({id:x
    phase's SLATE days come after their drawings are back. Consultant time is its own clock (R8), like the client's. */
 const KW={'2':[10,7],'3r':[4,7],'4':[7,10],'6':[10,10],'7':[18,10]};
 Object.entries(KW).forEach(([k,v])=>{ if(PH[k]) PH[k].kw=v; });
+/* share of the SLATE days before the plans go out, used when the days come from the plot-size table */
+const KW_R=Object.fromEntries(Object.entries(KW).map(([k,v])=>[k,v[0]/((PH[k]&&PH[k].d&&PH[k].d[0])||v[0]+1)]));
 const DEF_PH=JSON.parse(JSON.stringify(PH));
 /* working days: SLATE works Sunday to Thursday (Friday and Saturday off) */
 const isWorkDay=d=>{ const w=new Date(d+'T00:00:00').getDay(); return w!==5&&w!==6; };
 function addWorkDays(d,n){ let x=d, k=0; while(k<n){ x=addDays(x,1); if(isWorkDay(x)) k++; } return x; }
 /* a phase's standard days; the client's review days can be set per project (agreed in the fee proposal) */
 const slateDaysOf=k=>(PH[k]&&PH[k].d)?PH[k].d[0]:null;
+/* v1.3 days by plot size (SLATE_Phase_Days_STANDARD_291026): [client review days, SLATE days per plot band]. A plot on a band
+   boundary takes the higher band (7 katha → 7–10). Developer-owned land has its own table and bands. As-built (9) is reference only:
+   it runs alongside, like marketing, construction support and as-built, and is not in the total. Working drawing days include
+   taking the NFC feedback in for the GFC set. */
+const DAYS_BANDS={std:[7,10,20,30,60],dev:[7,10,20,30,90]};
+const DAYS_LBL={std:['3–7','7–10','10–20','20–30','30–60','60+'],dev:['3–7','7–10','10–20','20–30','30–90','90+']};
+const DAYS_T={
+  std:{'0':[3,[2,2,3,4,4,4]],'1':[3,[5,7,10,15,15,15]],'2':[5,[8,10,12,15,20,25]],'3':[2,[2,2,2,2,2,2]],'4':[10,[5,6,8,10,12,15]],'5':[3,[10,12,15,20,22,30]],
+       '6':[5,[5,7,10,14,15,20]],'7':[5,[11,13,16,20,25,30]],'8':[5,[14,18,20,25,25,30]],'9':[null,[4,5,7,7,11,15]]},
+  dev:{'0':[2,[3,4,4,5,6,7]],'1':[5,[6,7,8,10,12,15]],'2':[5,[8,10,12,15,20,30]],'3':[4,[1,2,2,2,2,2]],'4':[4,[5,7,8,10,14,20]],'5':[4,[9,10,12,14,20,25]],
+       '6':[4,[10,12,14,20,25,35]],'7':[5,[15,20,25,30,40,60]],'8':[5,[13,15,20,25,35,50]],'9':[null,[5,6,8,11,15,25]]}};
+const DAYS_NAME={std:'Standard (joint venture, land share, private client, design proposal)',dev:'Developer-owned land'};
+const daysTbl=p=>(((p&&p.std&&p.std.type)||(p&&p.type))==='dev')?'dev':'std';
+const bandOf=(p,t)=>{ const kt=parseFloat(p&&p.katha)||0, b=DAYS_BANDS[t||daysTbl(p)]; let i=0; while(i<b.length&&kt>=b[i]) i++; return i; };
+const bandLbl=p=>{ const t=daysTbl(p); return DAYS_LBL[t][bandOf(p,t)]+' katha'+(t==='dev'?' · developer table':''); };
+/* projects whose timeline was set before v1.3 keep the days they were planned on; the rest use the plot-size table */
+const useBand=p=>!!(p&&p.std&&(p.std.dv===13||!(p.std.tl&&p.std.tl.start)));
+const bandRow=(p,k)=>{ const t=daysTbl(p); return DAYS_T[t][k==='3r'?'3':k]||null; };
+const stdSlateDays=(p,k)=>{ if(useBand(p)){ const r=bandRow(p,k); if(r) return r[1][bandOf(p)]; } return slateDaysOf(k); };
+const stdClientDays=(p,k)=>{ if(useBand(p)){ const r=bandRow(p,k); if(r&&r[0]!=null) return r[0]; } return (PH[k]&&PH[k].d)?PH[k].d[1]:null; };
 const kwOf=k=>(PH[k]&&PH[k].kw)||null;
 const consultDaysOf=(p,k)=>{ const w=kwOf(k); if(!w) return 0; const v=p&&p.std&&p.std.kd&&p.std.kd[k]; return v!=null&&v!==''?+v:w[1]; };
-const clientDaysOf=(p,k)=>{ const v=p&&p.std&&p.std.cd&&p.std.cd[k]; return v!=null&&v!==''?+v:((PH[k]&&PH[k].d)?PH[k].d[1]:null); };
+const clientDaysOf=(p,k)=>{ const v=p&&p.std&&p.std.cd&&p.std.cd[k]; return v!=null&&v!==''?+v:stdClientDays(p,k); };
 const CLIENT_RULES=[['R1','Review days are agreed up front in the fee proposal and set in SLATE OS at project start.'],['R2','The client always gets the full review days, counted from the actual submission date.'],
   ['R3','Comments are not approval; the client clock runs until approval. Extra rounds are flagged to the COO.'],['R4','The original plan is never edited; the project log keeps SLATE and client time, planned and used.'],
   ['R5','Starting the next phase before approval is at risk and needs COO approval.'],['R6','Changes after the signed design freeze are extra revisions.'],['R7','Any client change after the design freeze is coordinated with the structural and MEP consultants.'],['R8','Consultant time is its own clock. The structural and MEP consultants’ days are agreed in their work orders and set per project, the same for both. It runs from the day SLATE shares the plans until their drawings are back; consultant delays shift later dates and never count against the team. The POD leader chases on the due day.']];
@@ -1661,7 +1683,7 @@ const clRole=c=>!c?'':/[+\/]/.test(c)?c.split(/[+\/]/).map(x=>CL_ROLES[x]||x).jo
 const clItems=k=>((PH[k]&&PH[k].items)||[]).map(x=>({id:x.id,t:x.t,r:x.r,cost:!!x.c,only:x.o||'',not:x.x||[],chk:x.k||''}));
 const STD_DEF={
   jv:{name:'Joint venture with landowner',note:'All ten phases; landowner presentation and signing sit inside phase 2',phases:['0','1','2','3','4','5','6','7','8','9']},
-  dev:{name:'Developer-owned land',note:'All ten phases on the shortest durations; interest is running from day one',phases:['0','1','2','3','4','5','6','7','8','9']},
+  dev:{name:'Developer-owned land',note:'All ten phases on the developer days table; interest is running from day one',phases:['0','1','2','3','4','5','6','7','8','9']},
   share:{name:'Land share',note:'Launch: phases 0 to 3 and 5, without STR/MEP consultants or coordination. Resume 6 to 10 months later: consultants appointed and phase 3 again with STR/MEP coordination, then 4 and 6 to 9',phases:['0','1','2','3','5','3r','4','6','7','8','9'],off:['3r','4','6','7','8','9'],offNote:'Resume phase: switch on when the project resumes'},
   private:{name:'Private client',note:'No marketing phase; 3D for the client sits inside phase 2; as-built drawings (phase 9) only if agreed',phases:['0','1','2','3','4','6','7','8','9'],off:['9'],offNote:'Only if agreed with the client'},
   proposal:{name:'Design proposal (R&D)',note:'Pre-contract design proposal, also called R&D. Phases 0 and 1 only; phase 1 closes when the proposal is presented. If won, create the real project',phases:['0','1']}};
@@ -5186,9 +5208,9 @@ function stdSection(p){
       return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
         h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
-        PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysOf(k)} working days`}),h('span',{text:'·'}),
-          fbEdit&&!s.done?h('label',{class:'ph-cd'},'client',h('input',{id:'cd-'+k,type:'number',min:'0',max:'60',value:String(clientDaysOf(p,k)),'aria-label':'Client review days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); run(()=>S.db.doc('projects/'+p.id).update({std:{cd:{[k]:v===PH[k].d[1]?'':v}}}),'Client review days saved'); }}),'working days'):h('span',{text:`client ${clientDaysOf(p,k)} working days`}),
-          clientDaysOf(p,k)!==PH[k].d[1]?h('span',{class:'muted',text:`(standard ${PH[k].d[1]})`}):null):null,
+        PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysFor(p,k)} working days`}),h('span',{text:'·'}),
+          fbEdit&&!s.done?h('label',{class:'ph-cd'},'client',h('input',{id:'cd-'+k,type:'number',min:'0',max:'60',value:String(clientDaysOf(p,k)),'aria-label':'Client review days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); run(()=>S.db.doc('projects/'+p.id).update({std:{cd:{[k]:v===stdClientDays(p,k)?'':v}}}),'Client review days saved'); }}),'working days'):h('span',{text:`client ${clientDaysOf(p,k)} working days`}),
+          clientDaysOf(p,k)!==stdClientDays(p,k)?h('span',{class:'muted',text:`(standard ${stdClientDays(p,k)})`}):null):null,
         kwOf(k)&&s.created?kwRow(p,k,fbEdit&&!s.done):null,
         s.created?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
@@ -5225,7 +5247,7 @@ const spanWD=(s,n)=>{ let x=firstWD(s); for(let i=1;i<n;i++) x=nextWD(x); return
 /* working days after a and up to b */
 const wdBetween=(a,b)=>{ if(!a||!b||b<=a) return 0; let n=0,x=a; while(x<b){ x=addDays(x,1); if(isWorkDay(x)) n++; } return n; };
 const maxD=(...a)=>a.filter(Boolean).sort().pop()||'';
-const slateDaysFor=(p,k)=>{ const v=p&&p.std&&p.std.sd&&p.std.sd[k]; return v!=null&&v!==''?+v:slateDaysOf(k); };
+const slateDaysFor=(p,k)=>{ const v=p&&p.std&&p.std.sd&&p.std.sd[k]; return v!=null&&v!==''?+v:stdSlateDays(p,k); };
 const tlOf=p=>(p&&p.std&&p.std.tl&&p.std.tl.start)?p.std.tl:null;
 const tlPhases=p=>stdPhases(p).filter(k=>PH[k]&&PH[k].d);
 const isWD=k=>['6','7','8'].includes(k);
@@ -5254,20 +5276,21 @@ function tlCompute(p,start,live){
     const deem=live&&std.deemed&&std.deemed[k]?std.deemed[k].on:'';
     // consultant window: SLATE works `pre` days, the plans go to the STR/MEP consultants, their drawings come back after `kd`
     // working days, then SLATE finishes the rest. Consultant delays move the submission and count as consultant time (R8).
-    const w=kwOf(k), kd=w?consultDaysOf(p,k):0, pre=w?Math.max(1,Math.min(w[0],sd-1)):0, post=w?Math.max(1,sd-pre):0;
+    const v13=useBand(p), wd=v13&&isWD(k)?Math.max(1,sd-take):sd;   // v1.3: WD days include taking the NFC feedback in
+    const w=kwOf(k), kd=w?consultDaysOf(p,k):0, pre=w?Math.max(1,Math.min(v13?Math.round(wd*KW_R[k]):w[0],wd-1)):0, post=w?Math.max(1,wd-pre):0;
     let share='', kDue='', kEnd='', kShareA='', kGotA='', lateK=0, lateShare=0;
     if(w&&kd>0){ const sharePlan=spanWD(s,pre); kShareA=live&&std.kShare&&std.kShare[k]||''; kGotA=live&&std.kGot&&std.kGot[k]||'';
       share=kShareA||(live&&!subA&&!kGotA&&sharePlan<td?td:sharePlan); kDue=addWorkDays(share,kd);
       kEnd=kGotA||(live&&!subA&&kDue<td?td:kDue); lateK=live?wdBetween(kDue,kGotA||(kDue<td&&!subA?td:kDue)):0; lateShare=live?wdBetween(sharePlan,share):0; }
     // with a consultant window SLATE's own clock restarts when the drawings are back: SLATE is late only for sharing late or finishing slowly after
-    const subPlan=w&&kd>0?addWorkDays(kEnd,post):spanWD(s,sd);
+    const subPlan=w&&kd>0?addWorkDays(kEnd,post):spanWD(s,wd);
     // SLATE's submission: done, or forecast (never before today while it is still open)
     let sub=subA||(live&&!finA&&subPlan<td?td:subPlan);
     if(!steps.includes('sub')&&finA) sub=finA;   // a one-step phase: the final is also the submission
     const due=addWorkDays(sub,cd);
     const fb=live&&std.fbGot&&std.fbGot[k]?std.fbGot[k]:'';
     let fin, clientEnd;
-    if(isWD(k)){ clientEnd=fb||(live&&due<td&&!finA?td:due); fin=finA||(live&&spanWD(nextWD(clientEnd),take)<td&&!finA?td:spanWD(nextWD(clientEnd),take)); }
+    if(isWD(k)){ const tk=v13?Math.max(0,sd-wd):take; clientEnd=fb||(live&&due<td&&!finA?td:due); fin=finA||(live&&spanWD(nextWD(clientEnd),tk)<td&&!finA?td:spanWD(nextWD(clientEnd),tk)); }
     else { clientEnd=finA||deem||(live&&due<td&&(subA||sub===td)?td:due); fin=clientEnd; }
     const subDone=subA||(!steps.includes('sub')&&finA?finA:'');
     const submitted=!!subDone;
@@ -5381,9 +5404,10 @@ function sheetTl(){
   const num=(f,k,dis)=>h('input',{type:'number',min:'0',max:'120',value:d[f][k],disabled:dis,style:'width:58px;padding:4px 6px;text-align:center',oninput:e=>{ d[f][k]=e.target.value; },onchange:()=>renderSheet()});
   return [head(projLabel(p),had?'Timeline days':'Set the timeline'),
     h('p',{class:'lead',style:'margin:0',text:had?'Days changed here move the forecast. The original plan stays as it was first set (R4).':'The plan is saved as the project’s original timeline and never edited (R4). Client review days are the ones agreed in the fee proposal (R1).'}),
+    useBand(p)?h('div',{class:'f-hint',style:'margin:0',text:`Standard days for ${p.katha?p.katha+' katha, ':''}band ${bandLbl(p)} (SLATE standard v1.3).${p.katha?'':' Add the land size to get the right band.'}`}):h('div',{class:'f-hint',style:'margin:0',text:'This timeline was set before v1.3 and keeps the days it was planned on.'}),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); if(!d.start) return fail('Give the start date.');
-        run(async()=>{ const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=ap&&a!==slateDaysOf(k)?a:(p.std.sd&&p.std.sd[k])||''; cd[k]=b!==PH[k].d[1]?b:''; if(kwOf(k)){ const c=d.kd[k]===''?kwOf(k)[1]:+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
-          const upd={std:{...(ap?{sd}:{}),cd,kd,resume:d.resume||''}};
+        run(async()=>{ const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=ap&&a!==stdSlateDays(p,k)?a:(p.std.sd&&p.std.sd[k])||''; cd[k]=b!==stdClientDays(p,k)?b:''; if(kwOf(k)){ const c=d.kd[k]===''?kwOf(k)[1]:+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
+          const upd={std:{...(ap?{sd}:{}),cd,kd,resume:d.resume||'',...(!had?{dv:13}:{})}};
           if(!had) upd.std.tl={start:d.start,at:new Date().toISOString(),by:S.uid,take:+d.take||0,base:tlPlanSnap(pv,d.start)};
           else upd.std.tl={take:+d.take||0};
           await S.db.doc('projects/'+p.id).update(upd);
@@ -5393,7 +5417,7 @@ function sheetTl(){
               else await taskUpdate(t.id,{request:{date,reason:'From the project timeline',by:S.uid,at:new Date().toISOString(),initial:true}},[{type:'proposed',to:date,note:'From the project timeline'}]); } } }
         },had?'Timeline updated':'Timeline set').then(ok=>{ if(ok) back(); }); }},
       h('div',{class:'form-row'},field('Start *',h('input',{type:'date',value:d.start,disabled:had,oninput:e=>{ d.start=e.target.value; },onchange:()=>renderSheet()}),had?'Fixed once set; it starts the original plan.':'Usually the work order date.'),
-        field('Days to take NFC feedback in before GFC',h('input',{type:'number',min:'0',max:'20',value:d.take,oninput:e=>{ d.take=e.target.value; },onchange:()=>renderSheet()}))),
+        field(useBand(p)?'Of the WD days, days to take the NFC feedback in for GFC':'Days to take NFC feedback in before GFC',h('input',{type:'number',min:'0',max:'20',value:d.take,oninput:e=>{ d.take=e.target.value; },onchange:()=>renderSheet()}))),
       ks.includes('3r')?field('Land share: work resumes on',h('input',{type:'date',value:d.resume,oninput:e=>{ d.resume=e.target.value; },onchange:()=>renderSheet()}),'3R and the phases after it are planned from this date.'):null,
       h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'SLATE days'}),h('th',{class:'n',text:'Consultant days'}),h('th',{class:'n',text:'Client days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
         h('tbody',{},ks.map(k=>{ const f=plan[k]||{}; return h('tr',{},h('td',{text:`${PH[k].no} ${phName(k,p)}`}),h('td',{class:'n'},num('sd',k,!ap)),h('td',{class:'n'},kwOf(k)?num('kd',k,false):h('span',{class:'muted',text:'—'})),h('td',{class:'n'},num('cd',k,false)),
@@ -5456,7 +5480,7 @@ function createStdPlan(){
   const ed=edFull((p.phasePlan&&p.phasePlan.ed)||{},sh.m.ed,sh.tpl), np={...p,id:pid,std:{type:sh.tpl,ed}};
   run(async()=>{
     const cl=await createGates(np,sh.tpl,ks,{lead:sh.lead,pod:sh.pod,pace:sh.pace,pre:sh.pre});
-    await S.db.doc('projects/'+pid).update({type:sh.tpl,std:{v:1,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed},cl});
+    await S.db.doc('projects/'+pid).update({type:sh.tpl,std:{v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed},cl});
   },`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(ok) openTimeline(pid); });
 }
 /* gate deliverables and checklist for the phases being added to a project */
@@ -5573,10 +5597,26 @@ function myChecklistSec(list){
 /* ---------- SLATE standard process page (More): read by everyone, edited by the Principal and the COO ---------- */
 const STD_ORDER=['0','1','2','3','3r','4','5','6','7','8','9'];
 const canEditStd=()=>S.canWrite&&(S.isOwner||amApprover());
+const dayRange=k=>{ const r=DAYS_T.std[k==='3r'?'3':k], v=DAYS_T.dev[k==='3r'?'3':k]; if(!r) return ''; const xs=[...r[1],...v[1]], lo=Math.min(...xs), hi=Math.max(...xs); return lo===hi?String(lo):`${lo}–${hi}`; };
+const dayClient=k=>{ const a=DAYS_T.std[k==='3r'?'3':k][0], b=DAYS_T.dev[k==='3r'?'3':k][0]; return a===b?String(a):`${a} (developer ${b})`; };
+/* totals to GFC: everything on the path in a row, without marketing and as-built, which run alongside */
+const DAYS_PATH=['0','1','2','3','4','6','7','8'];
+const daysTot=(t,i)=>DAYS_PATH.reduce((a,k)=>a+DAYS_T[t][k][1][i]+DAYS_T[t][k][0],0);
+function daysSection(){ const t=S.stdDays||'std', T=DAYS_T[t], L=DAYS_LBL[t];
+  const nm={'0':'Brief & feasibility','1':'Concept design','2':'Design development','3':'Design freeze (and 3R)','4':'Authority drawings','5':'Marketing materials','6':'WD-1 Substructure','7':'WD-2 Superstructure','8':'WD-3 Finishing','9':'As-built drawings'};
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Days by plot size'}),
+      seg('Days table',[['std','Standard'],['dev','Developer']],t,v=>{ S.stdDays=v; render(true); })),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:`${DAYS_NAME[t]}. Working days at standard pace. A plot on a band boundary takes the higher band (7 katha → 7–10). Working drawing days include taking the NFC feedback in for the GFC set.`}),
+    h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'Client'}),L.map(x=>h('th',{class:'n',text:x})))),
+      h('tbody',{},Object.keys(T).map(k=>h('tr',{class:k==='5'||k==='9'?'muted':''},h('td',{text:`${k} ${nm[k]}`+(k==='5'||k==='9'?' · alongside':'')}),h('td',{class:'n',text:T[k][0]==null?'—':String(T[k][0])}),T[k][1].map(v=>h('td',{class:'n',text:String(v)})))),
+        h('tr',{style:'font-weight:600'},h('td',{text:'Total to GFC'}),h('td',{}),L.map((x,i)=>h('td',{class:'n',text:String(daysTot(t,i))}))),
+        h('tr',{class:'muted'},h('td',{text:'≈ months'}),h('td',{}),L.map((x,i)=>h('td',{class:'n',text:(daysTot(t,i)/22).toFixed(1)})))))),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Columns are plot size in katha. The total adds SLATE and client days from phase 0 to WD-3 in a row; marketing and as-built run alongside and are not in it. Consultant days (R8) are their own clock on top. In a project timeline WD-2 and WD-3 start once the set before is submitted, so a real timeline is usually shorter. Projects whose timeline was set before v1.3 keep their days; new timelines take these.'}));
+}
 function viewStd(){
   const d=stdDoc(), ed=canEditStd();
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Settings'}),h('h1',{class:'h1',text:'SLATE standard process'}),
-    h('p',{class:'lead',text:'Version 1.3: approved by the Principal on 27 Oct 2026, updated 28 Oct with the POD leaders’ feedback, adopted by the whole team on 29 Oct 2026, and the same day given a consultant clock for the structural and MEP consultants (R8). One spine of phases for every client project. Each phase closes at its gate deliverables; the work inside is a checklist, ticked off, never dated.'+(ed?' You can edit any phase; changes apply to every project straight away.':' The Principal and the COO keep this list up to date.')})))];
+    h('p',{class:'lead',text:'Version 1.3: approved by the Principal on 27 Oct 2026, updated 28 Oct with the POD leaders’ feedback, adopted by the whole team on 29 Oct 2026, and the same day given a consultant clock for the structural and MEP consultants (R8) and phase days by plot size. One spine of phases for every client project. Each phase closes at its gate deliverables; the work inside is a checklist, ticked off, never dated.'+(ed?' You can edit any phase; changes apply to every project straight away.':' The Principal and the COO keep this list up to date.')})))];
   if(d) out.push(h('div',{class:'f-hint',style:'margin-top:-12px;padding:0 4px',text:`Last changed by ${nameOf(d.by)} · ${fmtTs(d.updatedAt)}`}));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project types'})),h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Type'}),h('th',{text:'Phases'}),h('th',{text:'How it differs'}))),
     h('tbody',{},Object.entries(STD_DEF).map(([k,t])=>h('tr',{},h('td',{style:'font-weight:500',text:t.name}),h('td',{class:'mono',text:t.phases.filter(x=>!(t.off||[]).includes(x)).map(x=>x==='3r'?'3R':x).join(' ')+(t.off&&t.off.length?` · later: ${t.off.map(x=>x==='3r'?'3R':x).join(' ')}`:'')}),h('td',{class:'sub2',text:t.note})))))),
@@ -5584,6 +5624,7 @@ function viewStd(){
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Pace'})),h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Pace'}),h('th',{text:'What changes'}))),
     h('tbody',{},[['Fast track',paceNote('fast')],['Standard',paceNote('std')],['Relaxed',paceNote('relaxed')],['Proposal sprint',PACE_NOTE.sprint]].map(([a,b])=>h('tr',{},h('td',{style:'font-weight:500',text:a}),h('td',{class:'sub2',text:b})))))),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'The pod lead chooses Standard or Relaxed at phase setup. Only the Principal or the COO can set fast track or a proposal sprint, and they can change the pace at any time.'})));
+  out.push(daysSection());
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Key decisions'}),h('span',{class:'cnt',text:'agreed in the team review'})),
     h('div',{class:'card'},h('ol',{style:'margin:0;padding-left:20px;display:grid;gap:4px'},STD_DECISIONS.map(x=>h('li',{text:x}))))));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Client review rules'})),
@@ -5593,7 +5634,7 @@ function viewStd(){
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phase '+(k==='3r'?'3R':ph.no)+' · '+ph.n}),ed?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openStdEdit(k),text:'Edit'}):h('span',{class:'cnt',text:`${items.length} items`})),
       h('div',{class:'card',style:'gap:8px'},
         h('div',{},h('div',{class:'lbl',text:'Gate'}),h('div',{style:'font-weight:500',text:ph.gate})),
-        h('div',{},h('div',{class:'lbl',text:'Days'}),h('div',{text:ph.d?`SLATE ${ph.d[0]} working days · client ${ph.d[1]} working days`+(['1','2','3','3r'].includes(k)?' · peer review':''):'Until handover, where in scope'})),
+        h('div',{},h('div',{class:'lbl',text:'Days'}),h('div',{text:ph.d?`SLATE ${dayRange(k)} working days by plot size · client ${dayClient(k)} working days`+(kwOf(k)?` · consultants ${kwOf(k)[1]} working days`:'')+(['1','2','3','3r'].includes(k)?' · peer review':''):`Until handover, where in scope · as-built ${dayRange('9')} working days by plot size, alongside other work`})),
         h('div',{},h('div',{class:'lbl',text:'Gate deliverables (dated)'}),h('ol',{style:'margin:4px 0 0;padding-left:20px'},ph.steps.map(([s,t])=>h('li',{text:t+(s==='sub'?' (submission)':' (final)')})))),
         h('div',{},h('div',{class:'lbl',text:`Checklist · ${main.length} items`}),h('ul',{style:'margin:4px 0 0;padding-left:20px;display:grid;gap:3px'},main.map(i=>h('li',{},i.t,h('span',{class:'muted',style:'font-size:12.5px',text:' · '+(clRole(i.r)||i.r)+(i.chk?' · checked by '+(clRole(i.chk)||i.chk):'')+(i.not&&i.not.length?' · not for '+i.not.map(x=>(STD_DEF[x]||{}).name||x).join(', '):'')}))))),
         cost.length?h('div',{},h('div',{class:'lbl',text:`Cost checks · ${cost.length}`}),h('ul',{style:'margin:4px 0 0;padding-left:20px;display:grid;gap:3px'},cost.map(i=>h('li',{},i.t,h('span',{class:'muted',style:'font-size:12.5px',text:' · '+(clRole(i.r)||i.r)}))))):null,
