@@ -5303,6 +5303,8 @@ function tlCompute(p,start,live){
     else if(dep.resume) s=std.resume?firstWD(std.resume):'';
     else { const ref=dep.prev?out[ks[i-1]]:out[dep.k]; const at=dep.prev?'fin':dep.at; if(ref&&ref[at]) s=nextWD(ref[at]); }
     if(!s){ out[k]={k,none:true}; return; }
+    // re-planned on the SLATE standard (tl.from): a phase not started by then starts no earlier than that day
+    if(std.tl&&std.tl.from){ const s0=stdState(p,k); if(!(s0.sub&&s0.sub.doneAt)&&!(s0.fin&&s0.fin.doneAt)){ const f0=firstWD(std.tl.from); if(s<f0) s=f0; } }
     const st=live?stdState(p,k):{}, sd=slateDaysFor(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
     const subA=live&&st.sub&&st.sub.doneAt?st.sub.doneAt.slice(0,10):'', finA=live&&st.fin&&st.fin.doneAt?st.fin.doneAt.slice(0,10):'';
     const deem=live&&std.deemed&&std.deemed[k]?std.deemed[k].on:'';
@@ -5349,7 +5351,7 @@ function tlCompute(p,start,live){
   return out;
 }
 const tlBase=p=>{ const t=tlOf(p); return t&&t.base&&Object.keys(t.base).length?t.base:null; };
-function tlPlanSnap(p,start){ const pl=tlCompute(p,start,false), base={}; Object.values(pl).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd,...(x.kd?{kd:x.kd,share:x.share,kDue:x.kDue}:{})}; }); return base; }
+function tlPlanSnap(p,start,live){ const pl=tlCompute(p,start,!!live), base={}; Object.values(pl).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd,...(x.kd?{kd:x.kd,share:x.share,kDue:x.kDue}:{})}; }); return base; }
 /* R5: work on a phase started before what it waits for was approved */
 function tlRisk(p){ const ks=tlPhases(p), out=[], st=k=>stdState(p,k), std=p.std||{};
   ks.forEach(k=>{ const dep=tlDep(p,k); if(dep.start||dep.resume||dep.prev||dep.at!=='fin') return; const d=dep.k; if(!ks.includes(d)) return;
@@ -5441,6 +5443,20 @@ function tlLog(p,live,base,ks){
 function openTl(pid){ const p=S.projects[pid]; if(!p) return; const t=tlOf({...p})||{};
   S.sheet={type:'tl',id:pid,err:'',d:{start:t.start||(p.agDate&&p.agDate<=today()?p.agDate:today()),take:String(t.take??TAKE_IN),resume:(p.std&&p.std.resume)||'',
     sd:Object.fromEntries(tlPhases(p).map(k=>[k,String(slateDaysFor(p,k))])),cd:Object.fromEntries(tlPhases(p).map(k=>[k,String(clientDaysOf(p,k))])),kd:Object.fromEntries(tlPhases(p).filter(kwOf).map(k=>[k,String(consultDaysOf(p,k))])),gates:true}}; renderSheet(); }
+/* re-plan on the SLATE standard from today: finished phases keep their dates, the rest start no earlier than today on the
+   plot-size days; the old plan is kept in tl.prev (R4) and open gate deliverables without a date get the new one */
+function replanOf(p,td){ const t=tlOf(p)||{}, ks0=tlPhases(p), done0=ks0.flatMap(k=>{ const x=stdState(p,k); return [x.sub&&x.sub.doneAt,x.fin&&x.fin.doneAt]; }).filter(Boolean).map(d=>d.slice(0,10));
+  const start=t.start||(done0.length?firstWD(minD(...done0)):td), pv={...p,std:{...p.std,dv:13,tl:{...t,start,from:td}}};
+  const plan=tlCompute(pv,start,true), base=tlPlanSnap(pv,start,true), dates=[];
+  // an open phase behind a phase already finished was only never closed: it gets no date, the POD leader closes it
+  const ord=tlPhases(pv).filter(k=>k!=='5'), stale=k=>k!=='5'&&ord.slice(ord.indexOf(k)+1).some(x=>stdState(p,x).done);
+  tlPhases(pv).forEach(k=>{ const f=plan[k], s=stdState(p,k); if(!f||f.none||stale(k)) return;
+    [[s.sub,f.sub],[s.fin,f.fin]].forEach(([g,date])=>{ if(g&&!g.doneAt&&!g.target&&!g.request&&date) dates.push({id:g.id,date}); }); });
+  return {start,base,dates,stale:tlPhases(pv).filter(k=>!stdState(p,k).done&&stale(k)),prev:t.base?[...(t.prev||[]),{base:t.base,at:t.at||'',by:t.by||''}]:(t.prev||[])}; }
+function replanTl(pid){ const p={...S.projects[pid],id:pid}, td=today(), r=replanOf(p,td);
+  if(!confirm(`Re-plan ${projLabel(p)} from today on the SLATE standard? Finished phases keep their dates; ${r.dates.length} open gate deliverable${r.dates.length===1?'':'s'} get a date.`)) return;
+  run(async()=>{ await S.db.doc('projects/'+pid).update({std:{dv:13,tl:{start:r.start,from:td,at:new Date().toISOString(),by:S.uid,take:+((tlOf(p)||{}).take??TAKE_IN),base:r.base,prev:r.prev}}});
+    for(const x of r.dates) await taskUpdate(x.id,{target:x.date,originalTarget:x.date,revisions:0,request:null},[{type:'scheduled',to:x.date,note:'Re-planned on the SLATE standard'}]); },'Re-planned from today').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } }); }
 function sheetTl(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
   const d=D(), ap=amApprover(), had=!!tlOf(p), ks=tlPhases(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
@@ -5472,7 +5488,7 @@ function sheetTl(){
       ap?null:h('div',{class:'f-hint',text:'SLATE days are set by the Principal or the COO (fast track is agreed with the COO).'}),
       !had?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',checked:d.gates,onchange:e=>{ d.gates=e.target.checked; }}),ap?'Set these as the gate dates':'Propose these as the gate dates (the COO approves them)'):null,
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
-      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:had?'Save days':'Set the timeline'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:had?'Save days':'Set the timeline'}),had&&ap?h('button',{class:'btn',type:'button',onclick:()=>replanTl(p.id),text:'Re-plan from today'}):null,h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
 }
 
 /* a phase that was already set up but had finished before SLATE OS went live: close it as history */
