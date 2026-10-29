@@ -2320,7 +2320,10 @@ function vfGroups(){ const seen=new Set(), out=[]; for(const t of vfQueue()){ co
 /* the day the joint task counts as finished: the last person's finish date */
 const jointLast=ms=>ms.map(m=>(m.verify&&m.verify.at)||m.ownDoneAt||m.doneAt||'').sort().pop()||'';
 async function verifyJointNow(ms){ const last=jointLast(ms);
-  for(const m of ms){ const cur=S.tasks[m.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(m.id,{...vfPatch({...cur,id:m.id}),doneAt:last,ownDoneAt:cur.verify.at},[{type:'verified',to:last,note:`Joint task: counts as finished ${fmtD(last)}, when the last person finished`+(cur.verify.at<last?`; own part done ${fmtD(cur.verify.at)}`:'')}]); } }
+  for(const m of ms){ const cur=S.tasks[m.id]; if(!cur) continue;
+    if(cur.verify&&!cur.doneAt) await taskUpdate(m.id,{...vfPatch({...cur,id:m.id}),doneAt:last,ownDoneAt:cur.verify.at},[{type:'verified',to:last,note:`Joint task: counts as finished ${fmtD(last)}, when the last person finished`+(cur.verify.at<last?`; own part done ${fmtD(cur.verify.at)}`:'')}]);
+    /* a part finished and verified before the task was made joint moves to the shared finish day too */
+    else if(cur.doneAt&&!cur.ownDoneAt&&cur.doneAt<last) await taskUpdate(m.id,{doneAt:last,ownDoneAt:cur.doneAt},[{type:'verified',to:last,note:`Joint task: counts as finished ${fmtD(last)}, when the last person finished; own part done ${fmtD(cur.doneAt)}`}]); } }
 function verifyJoint(t){ return run(()=>verifyJointNow(t._mates||jointMates(t)),'Verified for everyone'); }
 const vfPatch=t=>({doneAt:t.verify.at,doneBy:t.verify.by,verify:null,verifiedBy:S.uid,verifiedAt:new Date().toISOString()});
 async function undoSpawn(t,spawned){ if(!spawned) return; if(!S.paths[spawned]) S.paths[spawned]=isPriv(t.assignee)?`lead/${t.assignee}/tasks/${spawned}`:'tasks/'+spawned; await taskUpdate(spawned,{archived:true},[{type:'archived',note:'Undone'}]); }
