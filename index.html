@@ -1200,6 +1200,8 @@ const preLive=()=>addDays(goLive(),-1);
 /* scores count from this day (settings.scoreFrom); work due before it is a trial run: shown, never scored */
 const scoreFrom=()=>(S.settings&&S.settings.scoreFrom)||'2026-11-10';
 const preScore=t=>!!(t&&t.target)&&t.target<scoreFrom();
+/* a period that runs past the scoring start counts only work due from that day; a period entirely before it is shown in full as practice */
+const preCut=(r,t)=>!!r&&r.e>=scoreFrom()&&preScore(t);
 /* setup window (settings.leadUntil): POD leaders run their own POD's project timelines, deliverables and tasks directly:
    dates, new tasks, done without verification, timeline days. Project information stays with the Principal and the COO. */
 const leadUntil=()=>(S.settings&&S.settings.leadUntil)||'2026-11-03';
@@ -2985,12 +2987,12 @@ function range(kind,offset){
 }
 function count(items,basis){
   const c={early:0,ontime:0,late:0,overdue:0,open:0,total:0,slip:0,slipN:0};
-  for(const t of items){ if(t.legacy||t.unscored||(t.ongoing&&!t.target)||preScore(t)) continue; let k=status(t,basis); if(k==='soon'||k==='verify') k='open'; c[k]++; c.total++;
+  for(const t of items){ if(t.legacy||t.unscored||(t.ongoing&&!t.target)) continue; let k=status(t,basis); if(k==='soon'||k==='verify') k='open'; c[k]++; c.total++;
     const g=tgt(t,basis); if(k==='late'){c.slip+=diff(g,t.doneAt);c.slipN++} if(k==='overdue'){c.slip+=diff(g,today());c.slipN++} }
   return c;
 }
 function rate(c){ const d=c.early+c.ontime+c.late+c.overdue; return d?(c.early+c.ontime)/d:null; }
-function inPeriod(r,basis){ return activeTasks().filter(t=>{const g=tgt(t,basis);return g&&g>=r.s&&g<=r.e}); }
+function inPeriod(r,basis){ return activeTasks().filter(t=>{const g=tgt(t,basis);return g&&g>=r.s&&g<=r.e&&!preCut(r,t)}); }
 function tile(label,val,s){ return h('div',{class:'tile'+(s?' s-'+s:''),'data-s':s||null},h('div',{class:'lbl',text:label}),h('div',{class:'num',text:String(val)})); }
 function stack(c,lg){ return h('div',{class:'stack'+(lg?' lg':''),role:'img','aria-label':KEYS.map(k=>`${ST[k]} ${c[k]}`).join(', ')},
   KEYS.filter(k=>c[k]).map(k=>h('span',{class:'s-'+k,style:`flex:${c[k]} 1 0`}))); }
@@ -3042,10 +3044,10 @@ function creditOf(t){ const s=status(t); let c=null;
 /* joint task: the task counts as finished on the day the last person finished (doneAt); whoever finished their part
    earlier (ownDoneAt) earns +0.02 per day ahead of the last person, up to +0.1 (one "early" step) */
 const jointBonus=t=>t&&t.ownDoneAt&&t.doneAt&&t.ownDoneAt<t.doneAt?Math.min(0.1,0.02*diff(t.ownDoneAt,t.doneAt)):0;
-function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
+function perf(ts){ let pos=0,earn=0,n=0; for(const t of ts){ if(t.legacy||t.unscored) continue; const c=creditOf(t); if(c==null) continue; const w=weightOf(t); pos+=w; earn+=w*c; n++; } return {pos,earn,n,q:pos?earn/pos:null}; }
 /* team performance leaves out the Principal, the COO and Chalk Create */
 const notTeamPerf=id=>!!id&&(id===ownerId()||isCOO(id)||isChalkP(id));
-function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!preScore(t)&&!isPriv(t.assignee)&&!isChalkTask(t)&&!notTeamPerf(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id))).filter(t=>!notTeamPerf(t.assignee))); }
+function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!preCut(r,t)&&!isPriv(t.assignee)&&!isChalkTask(t)&&!notTeamPerf(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id))).filter(t=>!notTeamPerf(t.assignee))); }
 /* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
 S.dashAnon={}; S.anonInfo={};
 function anonRows(r,seen){ const k=r.s+'|'+r.e, c=S.dashAnon[k];
@@ -3317,6 +3319,7 @@ function viewDash(){
   if(cv){ out[0].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(clientsDash()); }
   if(ov) return out.concat(overallDash(r));
 
+  if(r.s<scoreFrom()) out.push(h('div',{class:'callout',style:'font-size:13.5px',text:r.e<scoreFrom()?`Practice period: scores count from ${fmtD(scoreFrom())}. These numbers show how the team is doing but are not final scores.`:`Scores count from ${fmtD(scoreFrom())}: work due before that day is left out of this period.`}));
   const pt=perfTable(r), mine=perf(items);
   const idxOf=D.person?(pt.people.find(x=>x.k===D.person)||{}).idx:(D.pod&&/^pod\b/i.test(D.pod)?(pt.pods.find(x=>x.k===D.pod)||{}).idx:null);
   out.push(h('div',{class:'kpis'},
@@ -3386,7 +3389,9 @@ function viewDash(){
   W.push(listW('Due in the next 7 days',`${soon.length} task${soon.length===1?'':'s'}`,soon,t=>h('span',{class:'d',text:fmtD(t.target)}),'Nothing due this week.'));
   const pend=activeTasks().filter(t=>inPod(t)&&t.request);
   W.push(listW('Waiting for approval',`${pend.length} date${pend.length===1?'':'s'} with the COO`,pend,t=>h('span',{class:'d',text:fmtD(t.request.date)}),'Nothing waiting.'));
-  const nod=activeTasks().filter(t=>inPod(t)&&!t.doneAt&&!t.target&&!t.request);
+  // gate deliverables of phases not running yet (land share resume, as-built where in scope) wait for their phase, not for a date
+  const gateWaits=t=>{ if(!t.gate) return false; const p=S.projects[t.projectId]; if(!p||!p.std) return false; const typ=STD_DEF[p.std.type]||{}; return t.gate.k==='9'||(!p.std.resume&&(typ.off||[]).includes(t.gate.k))||!stdPhases(p).includes(t.gate.k); };
+  const nod=activeTasks().filter(t=>inPod(t)&&!t.doneAt&&!t.target&&!t.request&&!gateWaits(t));
   if(nod.length) W.push(listW('No timeline yet',`${nod.length} task${nod.length===1?'':'s'} need a proposed date`,nod,t=>h('span',{class:'d',text:'—'}),''));
   out.push(h('div',{class:'widgets'},W));
   return out;
