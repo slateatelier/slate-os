@@ -1580,7 +1580,7 @@ const CL_ROLES={L:'POD Leader',J:'Junior Architect',D:'Drafting Pool',A:'Authori
 /* SLATE standard process v1 (team review approved by the Principal, 27 Oct 2026).
    Item: [text, role, cost check, only for type, id]. Ids are fixed: a kept or reworded item keeps its id, so ticks already made stay with it;
    new items have new ids; items the review removed are gone. d = [SLATE working days, client review days] at standard pace. */
-const PH3=[['Design freeze sheet prepared for signature','J',0,'','3-n1',0,'L'],['Architecture, structure, MEP and 3D alignment checked and signed off by a peer POD leader','R',0,'','3-8'],['Column layout and sizes frozen with the structural consultant','L',0,'','3-n3'],['Final coordination with the drafting team','L+J',0,'','3-n2'],['Principal design review, then submit','P',0,'','3-9'],
+const PH3=[['Design freeze sheet prepared for signature','J',0,'','3-n1',0,'L'],['Architecture, structure, MEP and 3D alignment checked and signed off by a peer POD leader','R',0,'','3-8'],['Column layout and sizes frozen with the structural consultant','L',0,'','3-n3'],['From the consultants: structural and MEP sign-off of the frozen set (column sizes, shafts, plant rooms)','L',0,'','3-n4'],['Final coordination with the drafting team','L+J',0,'','3-n2'],['Principal design review, then submit','P',0,'','3-9'],
   ['Value engineering review with the consultants: structural system, slab type, member sizes','L',1,'','3-10'],['Facade compared with a simpler alternative, cost per sft stated','L',1,'','3-11'],['Material specification, best option','J',1,'','3-12',0,'L'],['Passive measures checked: shading, cross-ventilation, daylight','L',1,'','3-13'],['Final efficiency ratio recorded against the phase 0 target','J',1,'','3-14']];
 const PH={
   '0':{no:'0',n:'Brief & feasibility',d:[5,3],gate:'Brief and FAR report accepted by the client',steps:[['final','Brief and FAR report accepted']],items:[
@@ -1653,7 +1653,7 @@ const phLabel=(k,p)=>PH[k]?`${PH[k].no} ${phName(k,p)}`:k;
 Object.keys(PH).forEach(k=>{ PH[k]={...PH[k],items:PH[k].items.map((x,i)=>({id:x[4]||k+'-'+i,t:x[0],r:x[1],c:x[2]?1:0,...(x[3]?{o:x[3]}:{}),...(x[5]?{x:x[5]}:{}),...(x[6]?{k:x[6]}:{})}))}; });
 /* consultant window (v1.3): [SLATE days before the plans go to the STR/MEP consultants, consultant working days]. The rest of the
    phase's SLATE days come after their drawings are back. Consultant time is its own clock (R8), like the client's. */
-const KW={'2':[10,7],'3r':[4,7],'4':[7,10],'6':[10,10],'7':[18,10]};
+const KW={'2':[10,7],'3':[1,2],'3r':[4,7],'4':[7,10],'6':[10,10],'7':[18,10]};
 Object.entries(KW).forEach(([k,v])=>{ if(PH[k]) PH[k].kw=v; });
 /* share of the SLATE days before the plans go out, used when the days come from the plot-size table */
 const KW_R=Object.fromEntries(Object.entries(KW).map(([k,v])=>[k,v[0]/((PH[k]&&PH[k].d&&PH[k].d[0])||v[0]+1)]));
@@ -1661,7 +1661,12 @@ const KW_R=Object.fromEntries(Object.entries(KW).map(([k,v])=>[k,v[0]/((PH[k]&&P
    area charts are finished. In authority drawings the consultants start on the design freeze day, alongside SLATE; SLATE keeps
    a fifth of its days for the combined check after both sets are in. */
 KW_R['2']=1/3;
-const KW_PAR={'4':0.2};
+const KW_PAR={'3':0,'4':0.2};
+/* Version 1: the consultants work alongside SLATE from the day the plans go out. SLATE submits when its own days are done or
+   K_REV working days after the consultants' drawings are back, whichever is later: SLATE's time stretches to the consultants'
+   when they need longer, and every consultant window ends with days to review and coordinate. The design freeze sign-off
+   needs none: the sign-off is the coordination. */
+const K_REV=2, kRevOf=k=>k==='3'?0:K_REV;
 /* structural and MEP are tracked apart: each has its own start, due day, received day and follow-ups */
 const KDISC=[['str','Structural'],['mep','MEP']];
 const kxOf=(p,k,d)=>{ const st=(p&&p.std)||{}, x=((st.kx||{})[k]||{})[d]||{}; return {on:x.on||(st.kShare||{})[k]||'',got:x.got||(st.kGot||{})[k]||'',fu:Array.isArray(x.fu)?x.fu:[]}; };
@@ -1697,7 +1702,7 @@ const consultDaysOf=(p,k)=>{ const w=kwOf(k); if(!w) return 0; const v=p&&p.std&
 const clientDaysOf=(p,k)=>{ const v=p&&p.std&&p.std.cd&&p.std.cd[k]; return v!=null&&v!==''?+v:stdClientDays(p,k); };
 const CLIENT_RULES=[['R1','Review days are agreed up front in the fee proposal and set in SLATE OS at project start.'],['R2','The client always gets the full review days, counted from the actual submission date.'],
   ['R3','Comments are not approval; the client clock runs until approval. Extra rounds are flagged to the COO.'],['R4','The original plan is never edited; the project log keeps SLATE and client time, planned and used.'],
-  ['R5','Starting the next phase before approval is at risk and needs COO approval.'],['R6','Changes after the signed design freeze are extra revisions.'],['R7','Any client change after the design freeze is coordinated with the structural and MEP consultants.'],['R8','Consultant time is its own clock. The structural and MEP consultants’ days are agreed in their work orders and set per project, the same for both. Structural and MEP are tracked apart: each has a start day, a submission due day and a received day. The clock runs from the day SLATE shares the plans (for authority drawings, from the design freeze day) until their drawings are back; consultant delays shift later dates and never count against the team. The POD leader follows up on the due day and logs every follow-up.']];
+  ['R5','Starting the next phase before approval is at risk and needs COO approval.'],['R6','Changes after the signed design freeze are extra revisions.'],['R7','Any client change after the design freeze is coordinated with the structural and MEP consultants.'],['R8','Consultant time is its own clock. The structural and MEP consultants’ days are agreed in their work orders and set per project, the same for both. Structural and MEP are tracked apart: each has a start day, a submission due day and a received day. The clock runs from the day SLATE shares the plans (for authority drawings, from the design freeze day) until their drawings are back. They work alongside SLATE: SLATE submits once its own days are done and at least 2 working days after their drawings are back, to review and coordinate, so its time stretches when they need longer. Consultant delays shift later dates and never count against the team. The POD leader follows up on the due day and logs every follow-up.']];
 const STD_DECISIONS=['Ten phases, Brief & feasibility to as-built, as one standard for every building project type; construction support runs after completion until handover.','A separate Design freeze phase; client changes after it are extra revisions.',
   'Peer review by another POD leader for phases 1 to 3; at design freeze the peer signs off the architecture, structure, MEP and 3D alignment.','Marketing materials run alongside authority drawings, not after. The final 3D starts from the design freeze.','Working drawings split into WD-1 substructure, WD-2 superstructure and WD-3 finishing, each issued NFC then GFC, with client and site feedback days between.',
   'Client review days counted in working days and agreed in the fee proposal.','Deemed approval after 14 working days of no reply, confirmed by the COO.','Client delays shift later dates and never count against the team.',
@@ -5277,7 +5282,7 @@ function kwRow(p,k,can){ const kd=consultDaysOf(p,k), td=today(), par=useBand(p)
     h('div',{class:'ph-days'},h('span',{text:'Consultants'}),h('span',{text:'·'}),
       can?h('label',{class:'ph-cd'},h('input',{type:'number',min:'0',max:'60',value:String(kd),'aria-label':'Consultant days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); save({kd:{[k]:v===kwOf(k)[1]?'':v}},'Consultant days saved'); }}),'working days'):h('span',{text:`${kd} working days`}),
       kd!==kwOf(k)[1]?h('span',{class:'muted',text:`(standard ${kwOf(k)[1]})`}):null,
-      h('span',{class:'muted',text:par?'· start on the design freeze day, alongside SLATE':'· start when SLATE shares the plans'})),
+      h('span',{class:'muted',text:(k==='3'?'· sign off the frozen set within the freeze':k==='4'?'· start on the design freeze day, alongside SLATE':'· start when SLATE shares the plans and work alongside SLATE')+(useBand(p)&&kRevOf(k)?` · then ${kRevOf(k)} days to review and coordinate`:'')})),
     KDISC.map(disc));
 }
 /* ---------- project timeline: the client clock (SLATE standard process v1, rules D6–D8 and R1–R6) ----------
@@ -5343,7 +5348,9 @@ function tlCompute(p,start,live){
       lateShare=live?wdBetween(sharePlan,kShareA||share):0; }
     // with a consultant window SLATE's own clock restarts when the drawings are back: SLATE is late only for sharing late or finishing slowly after.
     // in parallel, SLATE's combined check starts when both its own set and the consultants' drawings are in
-    const subPlan=w&&kd>0?addWorkDays(par?maxD(archEnd,kEnd):kEnd,postN):spanWD(s,wd);
+    if(v13) archEnd=spanWD(s,wd);
+    const subPlan=v13?(w&&kd>0?maxD(archEnd,addWorkDays(kEnd,kRevOf(k))):archEnd)
+      :w&&kd>0?addWorkDays(par?maxD(archEnd,kEnd):kEnd,postN):spanWD(s,wd);
     // SLATE's submission: done, or forecast (never before today while it is still open)
     let sub=subA||(live&&!finA&&subPlan<td?td:subPlan);
     if(!steps.includes('sub')&&finA) sub=finA;   // a one-step phase: the final is also the submission
@@ -5357,7 +5364,7 @@ function tlCompute(p,start,live){
     const approved=!!finA||!!deem;
     const lateC=live&&submitted?wdBetween(due,approved?(finA||deem):(isWD(k)?(fb||td):td)):0;
     const lateS=(live?wdBetween(subPlan,subDone||(sub>subPlan?sub:subPlan)):0)+lateShare;
-    out[k]={k,s,sub,due,fin,clientEnd,sd,cd,subA,finA,deem,submitted,approved,lateC,lateS,kd,share,kDue,kEnd,kShareA,kGotA,lateK,kx,par,archEnd,
+    out[k]={k,s,sub,due,fin,clientEnd,sd,cd,subA,finA,deem,submitted,approved,lateC,lateS,kd,share,kDue,kEnd,kShareA,kGotA,lateK,kx,par:par||(v13&&!!w),archEnd,krev:w?kRevOf(k):0,stretch:v13&&w&&kd>0?Math.max(0,wdBetween(archEnd,subPlan)):0,
       kUsed:live&&kd&&(kShareA||share<=td)?wdBetween(share,kGotA||(td>share?td:share)):0,
       sUsed:live?wdBetween(addDays(s,-1),subDone||(td<s?addDays(s,-1):td)):0,
       cUsed:live&&submitted?wdBetween(sub,approved?(finA||deem):(isWD(k)&&fb?fb:td)):0,
@@ -5546,7 +5553,7 @@ function tlChart(p,live,base,ks){
   const td=today(), tx=X(td), mos=[]; { let m=t0.slice(0,7)+'-01'; if(m<t0) m=addDays(m.slice(0,8)+'28',5).slice(0,7)+'-01'; while(m<=t1){ mos.push(m); m=addDays(m.slice(0,8)+'28',5).slice(0,7)+'-01'; } }
   const fmtShort=d=>{ const [y,mm,dd]=d.split('-'); return `${+dd} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mm-1]}${y!==td.slice(0,4)?" '"+y.slice(2):''}`; };
   return h('div',{class:'tl-chart'},h('div',{class:'tl-row'},h('span'),h('div',{class:'tl-mo'},mos.map(m=>h('span',{style:`left:${X(m)}%`,text:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m.slice(5,7)-1]}))),h('span')),ks.map(k=>{ const f=live[k], b=base[k];
-    const tip=`Phase ${PH[k].no} ${phName(k,p)}\nSLATE ${f.sd} days: ${fmtD(f.s)} → ${f.subA?'submitted ':''}${fmtD(f.sub)}\n`+(f.kd&&f.kx?KDISC.map(([d,l])=>{ const x=f.kx[d]; return `${l} ${f.kd} days: ${x.on?'started':'starts'} ${fmtD(x.share)}, ${x.got?'back':'due'} ${fmtD(x.got||x.due)}${x.late?` · ${x.late} days late`:''}\n`; }).join('')+(f.par?'Alongside SLATE’s authority drawings\n':''):'')+`Client ${f.cd} days: due ${fmtD(f.due)}${f.lateC?` · ${f.lateC} days late`:''}\n${isWD(k)?'GFC':'Approved'} ${f.finA||f.deem?'':'(forecast) '}${fmtD(f.fin)}`+(b?`\nPlanned ${fmtD(b.fin)}`:'');
+    const tip=`Phase ${PH[k].no} ${phName(k,p)}\nSLATE ${f.sd} days: ${fmtD(f.s)} → ${f.subA?'submitted ':''}${fmtD(f.sub)}\n`+(f.kd&&f.kx?KDISC.map(([d,l])=>{ const x=f.kx[d]; return `${l} ${f.kd} days: ${x.on?'started':'starts'} ${fmtD(x.share)}, ${x.got?'back':'due'} ${fmtD(x.got||x.due)}${x.late?` · ${x.late} days late`:''}\n`; }).join('')+(f.krev?`Then ${f.krev} days to review and coordinate\n`:'')+(f.stretch?`SLATE’s time stretched ${f.stretch} working day${f.stretch===1?'':'s'} to the consultants’\n`:''):'')+`Client ${f.cd} days: due ${fmtD(f.due)}${f.lateC?` · ${f.lateC} days late`:''}\n${isWD(k)?'GFC':'Approved'} ${f.finA||f.deem?'':'(forecast) '}${fmtD(f.fin)}`+(b?`\nPlanned ${fmtD(b.fin)}`:'');
     return h('div',{class:'tl-row'},h('span',{class:'tl-n',text:`${PH[k].no} ${phName(k,p)}`}),
       h('div',{class:'tl-track','data-tip':tip},
         b?h('i',{class:'tl-base',style:`left:${X(b.s)}%;width:${Wd(b.s,b.fin)}%`}):null,
@@ -5807,7 +5814,7 @@ function daysSection(){ const t=S.stdDays||'std', T=DAYS_T[t], L=DAYS_LBL[t];
       h('tbody',{},Object.keys(T).map(k=>h('tr',{class:k==='5'||k==='9'?'muted':''},h('td',{text:`${k} ${nm[k]}`+(k==='5'||k==='9'?' · alongside':'')}),h('td',{class:'n',text:T[k][0]==null?'—':String(T[k][0])}),T[k][1].map(v=>h('td',{class:'n',text:String(v)})))),
         h('tr',{style:'font-weight:600'},h('td',{text:'Total to GFC'}),h('td',{}),L.map((x,i)=>h('td',{class:'n',text:String(daysTot(t,i))}))),
         h('tr',{class:'muted'},h('td',{text:'≈ months'}),h('td',{}),L.map((x,i)=>h('td',{class:'n',text:(daysTot(t,i)/22).toFixed(1)})))))),
-    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Columns are plot size in katha. The total adds SLATE and client days from phase 0 to WD-3 in a row; marketing and as-built run alongside and are not in it. Consultant days (R8) are their own clock on top. In a project timeline WD-2 and WD-3 start once the set before is submitted, so a real timeline is usually shorter. Projects whose timeline was set before these days keep their days; new timelines take these.'}));
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Columns are plot size in katha. The total adds SLATE and client days from phase 0 to WD-3 in a row; marketing and as-built run alongside and are not in it. Consultants (R8) work alongside SLATE; when they need longer, the phase runs to their days plus 2 days to review and coordinate. In a project timeline WD-2 and WD-3 start once the set before is submitted, so a real timeline is usually shorter. Projects whose timeline was set before these days keep their days; new timelines take these.'}));
 }
 function viewStd(){
   const d=stdDoc(), ed=canEditStd();
