@@ -64,7 +64,9 @@ rep("""h('div', { class: 'banner warn' }, h('span', { text: 'File uploads aren�
 # ---------- app: header — the space switch, and signing out ----------
 rep("""  me.replaceChildren(h('span', { class: 'who-t', text: myRole() }), ava(S.uid));""",
     """  const sw = window.BooksHost && BooksHost.spaceSwitch();
-  me.replaceChildren(...(sw ? [sw] : [h('span', { class: 'who-t', text: myRole() }), h('button', { class: 'ava-btn', type: 'button', title: 'Sign out', onclick: () => { if (confirm('Sign out of SLATE OS?')) BooksHost.signOut(); } }, ava(S.uid))]));""")
+  me.replaceChildren(...(sw ? [sw] : [h('span', { class: 'who-t', text: myRole() }), h('button', { class: 'ava-btn', type: 'button', title: 'Sign out', onclick: () => { if (confirm('Sign out of SLATE OS?')) BooksHost.signOut(); } }, ava(S.uid))]));
+  { const left = document.getElementById('bk-left'); if (left) left.replaceChildren(...(sw ? BooksHost.headLeft(() => ava(S.uid)) : [])); }""")
+rep('''<div class="me" id="me-slot"></div>''', '''<span id="bk-left"></span><div class="me" id="me-slot"></div>''')
 rep("""  out.push(h('div', { class: 'sec' }, secH('Data and help'), h('div', { class: 'list' },""",
     """  out.push(h('div', { class: 'sec' }, secH('Data and help'), h('div', { class: 'list' },
     moreItem('Sign out', 'Signed in as ' + nameOf(S.uid) + ' · ' + role, () => { if (confirm('Sign out of SLATE OS?')) BooksHost.signOut(); }),""")
@@ -87,7 +89,20 @@ body .chrome{background:rgba(231,241,234,.88);border-bottom:2px solid #3F7F5A}
 .ava-btn{appearance:none;border:0;background:none;padding:0;cursor:pointer;border-radius:50%}
 .me{transform:translateY(-50%)!important;top:calc(50% + 4px)!important}
 @media (max-width:640px){.space-b{font-size:12px;padding:5px 8px}.space-sw{padding:2px}}
-@media (max-width:480px){body.has-spaces .divider,body.has-spaces .product{display:none}.space-b{font-size:11.5px;padding:5px 7px}body.has-spaces .top-in{justify-content:flex-start;padding-left:max(16px,env(safe-area-inset-left,0px))}}
+@media (max-width:440px){.space-b{font-size:11.5px;padding:5px 8px}}
+@media (max-width:560px){body.has-spaces .top-in .logo{visibility:hidden}body.has-spaces .top-in .divider,body.has-spaces .top-in .product{display:none}}
+/* Studio's header: profile icon and bell on the left */
+.top-in{--hic:38px}
+.mebtn{position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:calc(50% + 4px);transform:translateY(-50%);appearance:none;border:0;background:none;padding:0;cursor:pointer;display:block;line-height:0;width:var(--hic);height:var(--hic)}
+.mebtn .ava{width:var(--hic);height:var(--hic);border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:600;background:#1c1c1e;color:#fff;overflow:hidden}
+.mebtn .ava.ic{background:var(--c);color:#fff}.mebtn .ava svg{width:62%;height:62%}
+.mebtn .ava.on{box-shadow:0 0 0 2px #34C759}
+.bell{position:absolute;left:calc(max(16px,env(safe-area-inset-left,0px)) + var(--hic) + 10px);top:calc(50% + 4px);transform:translateY(-50%);appearance:none;border:0;background:none;height:var(--hic);padding:0;border-radius:999px;cursor:pointer;display:flex;align-items:center;color:var(--ink,#1c1c1e);font:inherit}
+.bell .bi{width:var(--hic);height:var(--hic);border-radius:50%;background:var(--group,#efeff4);display:grid;place-items:center;flex:none}
+.bell svg{width:calc(var(--hic)*.47);height:calc(var(--hic)*.47)}
+.bell.has{background:#FCE4E4;padding-right:13px}.bell.has .bi{background:#fff;box-shadow:0 0 0 2px #d7262b;color:#d7262b}
+.bell .bn{margin-left:9px;font-size:14px;font-weight:700;color:#d7262b;font-variant-numeric:tabular-nums}
+@media (max-width:640px){.top-in{--hic:34px}.bell.has{padding-right:9px}.bell .bn{margin-left:6px;font-size:12.5px}.logo{height:34px}}
 </style>
 <div class="chrome">""")
 open(out, 'w', encoding='utf-8').write(s)

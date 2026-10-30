@@ -184,6 +184,21 @@ function spaceSwitch() {
   });
   return el;
 }
+/* the left of the header, as in Studio: your profile icon and the bell (Studio keeps the count; the bell opens Studio's inbox) */
+function headLeft(fallbackAva) {
+  if (!spaceSwitch()) return [];
+  let hd = null; try { hd = JSON.parse(localStorage.getItem('slate-hdr') || 'null'); } catch (_) {}
+  if (hd && ME && hd.uid !== ME.id) hd = null;
+  const me = document.createElement('button'); me.className = 'mebtn'; me.type = 'button'; me.title = 'Sign out'; me.setAttribute('aria-label', 'Your account: sign out');
+  if (hd && hd.ava) { const t = document.createElement('template'); t.innerHTML = hd.ava; me.append(t.content.firstElementChild || fallbackAva()); } else me.append(fallbackAva());
+  me.onclick = () => { if (confirm('Sign out of SLATE OS?')) signOut(); };
+  const n = hd ? +hd.n || 0 : 0;
+  const bell = document.createElement('button'); bell.type = 'button'; bell.className = 'bell' + (n ? ' has' : '');
+  bell.setAttribute('aria-label', n ? 'Notifications, ' + n + ' new' : 'Notifications');
+  bell.innerHTML = '<span class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>' + (n ? '<span class="bn">' + (n > 99 ? '99+' : n) + '</span>' : '');
+  bell.onclick = () => { location.href = '/?go=inbox'; };
+  return [me, bell];
+}
 async function signOut() { try { await sb.auth.signOut(); } catch (_) {} location.href = '/'; }
 
 /* ---------- start ---------- */
@@ -201,7 +216,7 @@ const ready = (async () => {
 })();
 
 window.BooksHost = {
-  ready, sb, fileUrl, spaceSwitch, signOut,
+  ready, sb, fileUrl, spaceSwitch, signOut, headLeft,
   onChange(fn) { rerender = fn; },
   isCOO: id => !!(PEOPLE[id] && PEOPLE[id].designation === 'coo'),
   role: () => ROLE
