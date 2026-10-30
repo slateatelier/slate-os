@@ -2341,7 +2341,7 @@ function renderHeader(){
   if(inBiz){ S.biz=S.biz||{tab:'over',q:'',st:'active'}; const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
     const bt=[['over','Overview'],['leads','Leads',nl],['proposed','Proposals',np],['fees','Fees'],['hr','HR & salaries'],['admin','Running costs'],...(S.uid===ownerId()?[['value','People value']]:[])];
     tabs.replaceChildren(sw,...bt.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':'biz-'+k,'aria-current':S.biz.tab===k?'page':null,onclick:()=>{ S.biz.tab=k; render(true); window.scrollTo(0,0); }},l,n?h('span',{class:'badge',text:String(n)}):null)),
-      window.slateFinanceRole?h('a',{class:'tab',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none'},'Finance ↗'):null);
+      FIN_UI&&window.slateFinanceRole?h('a',{class:'tab',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none'},'Finance ↗'):null);
   } else
   tabs.replaceChildren(...(sw?[sw]:[]),...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
   try{ document.body.dataset.view=S.view; const fh=document.getElementById('far-host'); if(fh) fh.hidden=S.view!=='far'||!!(S.state!=='ready')||!!(S.far&&S.far.tab==='dash'&&canSeeScoring()); }catch(e){}
@@ -2371,7 +2371,7 @@ function viewMore(){
     ...grp('Daily',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null),
     ...grp('Reference',item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
     ...grp('Tools',item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
-      window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
+      FIN_UI&&window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
     ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
       item('reports','Issue reports',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
@@ -6650,6 +6650,8 @@ const HX_ICO={pin:'M12 21s-6.5-5.8-6.5-11.2a6.5 6.5 0 1 1 13 0C18.5 15.2 12 21 1
  brief:'M3 8h18v12H3zM8 8V5h8v3M3 13h18'};
 function hxIco(k,cls){ return svgEl('svg',{viewBox:'0 0 24 24',class:'hx-ico'+(cls?' '+cls:''),fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[k]||HX_ICO.circle})); }
 /* small icon beside each top tab label */
+/* the Finance screens (/finance) are hidden until Books replaces them (January 2027); invoices are manual until then. The data underneath stays. */
+const FIN_UI=false;
 const TAB_ICO={biz:'brief',meet:'meet',queue:'check',mine:'home',all:'list',projects:'layers',cal:'cal',team:'users',dash:'chart',chalk:'pen',people:'chat',more:'dots',acct:'key'};
 function tabIco(k){ const i=TAB_ICO[k]; if(!i) return null; return svgEl('svg',{viewBox:'0 0 24 24',class:'tab-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[i]})); }
 /* a look-alike of the real control, so people recognise it on screen */
@@ -8140,7 +8142,7 @@ function viewBiz(){
   if(S.biz.tab==='proposed') return viewProposals(S.pf2||(S.pf2={q:'',ps:'open'}));
   return viewFees(); }
 function viewFees(){
-  const B=S.biz, out=[...bizHead('Fees, cost budgets and site visit terms for every project, set here. Finance uses the same numbers; edit them here, not in Finance.',h('div',{class:'actions'},h('a',{class:'btn',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none',text:'Open Finance ↗'})))];
+  const B=S.biz, out=[...bizHead('Fees, cost budgets and site visit terms for every project, set here. Books will bill against these numbers; edit them here.',FIN_UI?h('div',{class:'actions'},h('a',{class:'btn',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none',text:'Open Finance ↗'})):null)];
   if(!finOn()){ out.push(h('p',{class:'muted',text:'Fees need Finance access. Sign in again if you have just been given it.'})); return out; }
   loadFeeFin(); const F=S.feeFin;
   if(!F||F.state==='loading'||F.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading fees from Finance…'})); return out; }
@@ -8478,7 +8480,7 @@ function sheetProjClose(){
       (du.unbilledMs||[]).length?h('span',{class:'f-hint',style:'margin:0',text:'Not yet billed: '+du.unbilledMs.map(m=>`${m.label} ${+m.pct}% (${taka(m.amount)})`).join(', ')}):null,
       +du.due>1?h('span',{class:'f-hint',style:'margin:0',text:`${du.open} invoice${+du.open===1?'':'s'} unpaid`+(+du.overdue?` · ${du.overdue} overdue`:'')}):null,
       h('span',{class:'f-hint',style:'margin:0',text:o==='onhold'?'Chase these before the project goes quiet. The amount is recorded with the hold.':'You can still '+OUTCOMES[o].btn.toLowerCase()+' now: nothing here waits on as-built drawings or the last payment. The project shows Account open to you and the COO until Finance has it all, and you are both reminded on the 1st of each month.'}),
-      h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'})));
+      FIN_UI?h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'}):null));
     else if(du&&!du.linked) f.push(h('p',{class:'f-hint',style:'margin:0',text:'This project isn’t linked to a Finance project, so unpaid bills can’t be checked.'}));
     else if(du) f.push(h('p',{class:'f-hint',style:'margin:0',text:'Finance: fully billed and collected.'}));
   }
@@ -8722,8 +8724,8 @@ function acctBox(p){ if(!finOn()) return null; acctLoad(); if(!S.acct) return nu
   return h('div',{class:'callout',style:'margin-top:10px'},h('b',{text:'Account open · '+acctLine(a)}),
     (a.unbilledMs||[]).length?h('div',{class:'f-hint',style:'margin:0',text:'Still to bill: '+a.unbilledMs.map(m=>`${m.label} ${+m.pct}% (${taka(m.amount)})`).join(', ')}):null,
     +a.due>1?h('div',{class:'f-hint',style:'margin:0',text:`${a.open} invoice${+a.open===1?'':'s'} unpaid`+(+a.overdue?` · ${a.overdue} overdue`:'')}):null,
-    h('span',{class:'f-hint',style:'margin:0',text:'The project stays completed. Bill and collect in Finance; mark the Finance project Closed to write off anything that won’t be billed.'}),
-    h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'})); }
+    h('span',{class:'f-hint',style:'margin:0',text:FIN_UI?'The project stays completed. Bill and collect in Finance; mark the Finance project Closed to write off anything that won’t be billed.':'The project stays completed. Bill and collect by manual invoice until Books goes live.'}),
+    FIN_UI?h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'}):null); }
 /* the project page's lifecycle buttons */
 function lifecycleActs(p){ const acts=[]; if(!S.canWrite) return acts;
   if(amApprover()){
