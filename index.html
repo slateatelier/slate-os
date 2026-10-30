@@ -5962,6 +5962,10 @@ function myChecklistSec(list,o={}){
 
 /* ---------- SLATE standard process page (More): read by everyone, edited by the Principal and the COO ---------- */
 const STD_ORDER=['0','1','2','3','3r','4','5','6','7','8','9'];
+/* revision history of the SLATE standard, newest first (the issued PDF carries the same table) */
+const STD_REVS=[
+  {v:'1.01',date:'2026-10-30',what:'Phase 0, Brief & feasibility: “Project set up in SLATE OS; timeline approved” and “Structural and MEP consultants appointed, with their work orders” moved from phase 1, right after the work order is signed. Phase 1 now starts with the floor layouts. Nothing else changed.',who:'Ticks and owners moved with the two items. On a project whose phase 0 is already closed, the COO ticks them there if done, or follows them up.'},
+  {v:'1',date:'2026-10-29',what:'First issue: drafted by the POD leaders, approved by the Principal on 27 Oct 2026, reviewed in full by the whole team and adopted on 29 Oct 2026.'}];
 const canEditStd=()=>S.canWrite&&(S.isOwner||amApprover());
 const dayRange=k=>{ const r=DAYS_T.std[k==='3r'?'3':k], v=DAYS_T.dev[k==='3r'?'3':k]; if(!r) return ''; const xs=[...r[1],...v[1]], lo=Math.min(...xs), hi=Math.max(...xs); return lo===hi?String(lo):`${lo}–${hi}`; };
 const dayClient=k=>{ const a=DAYS_T.std[k==='3r'?'3':k][0], b=DAYS_T.dev[k==='3r'?'3':k][0]; return a===b?String(a):`${a} (developer ${b})`; };
@@ -5984,6 +5988,8 @@ function viewStd(){
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Settings'}),h('h1',{class:'h1',text:'SLATE standard process'}),
     h('p',{class:'lead',text:'Version 1.01, issued 30 Oct 2026 (Version 1 adopted 29 Oct 2026): drafted by the POD leaders, approved by the Principal and adopted by the whole team after a full review. In 1.01, project set-up and the consultants’ appointment moved to phase 0, after the work order. It includes phase days by plot size and a separate clock for the structural and MEP consultants (R8). One spine of phases for every client project. Each phase closes at its gate deliverables; the work inside is a checklist, ticked off, never dated.'+(ed?' You can edit any phase; changes apply to every project straight away.':' The Principal and the COO keep this list up to date.')})))];
   if(d) out.push(h('div',{class:'f-hint',style:'margin-top:-12px;padding:0 4px',text:`Last changed by ${nameOf(d.by)} · ${fmtTs(d.updatedAt)}`}));
+  /* what's new in the latest version: shown for two weeks after it is issued; the full list is under Revision history at the end */
+  { const V=STD_REVS[0]; if(today()<=addDays(V.date,14)) out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 #C1272D;display:grid;gap:6px'},h('b',{text:`What’s new in Version ${V.v} · ${fmtD(V.date)}`}),h('div',{style:'font-size:14.5px;line-height:1.45',text:V.what}),V.who?h('div',{class:'f-hint',style:'margin:0',text:V.who}):null)); }
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project types'})),h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Type'}),h('th',{text:'Phases'}),h('th',{text:'How it differs'}))),
     h('tbody',{},Object.entries(STD_DEF).map(([k,t])=>h('tr',{},h('td',{style:'font-weight:500',text:t.name}),h('td',{class:'mono',text:t.phases.filter(x=>!(t.off||[]).includes(x)).map(x=>x==='3r'?'3R':x).join(' ')+(t.off&&t.off.length?` · later: ${t.off.map(x=>x==='3r'?'3R':x).join(' ')}`:'')}),h('td',{class:'sub2',text:t.note})))))),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'3R is phase 3 run again when a land share project resumes.'})));
@@ -6006,6 +6012,9 @@ function viewStd(){
         cost.length?h('div',{},h('div',{class:'lbl',text:`Cost checks · ${cost.length}`}),h('ul',{style:'margin:4px 0 0;padding-left:20px;display:grid;gap:3px'},cost.map(i=>h('li',{},i.t,h('span',{class:'muted',style:'font-size:12.5px',text:' · '+(clRole(i.r)||i.r)}))))):null,
         changed&&ed?h('div',{class:'f-hint',text:'Edited from the original standard.'}):null)));
   }
+  out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Revision history'}),h('span',{class:'cnt',text:`${STD_REVS.length} versions`})),
+    h('div',{class:'list'},STD_REVS.map(r=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},
+      h('div',{class:'pc-row'},h('b',{text:'Version '+r.v}),h('span',{class:'f-hint',style:'margin:0',text:fmtD(r.date)+' · Principal & CEO'})),h('div',{style:'font-size:14px;line-height:1.45',text:r.what}))))));
   return out;
 }
 function openStdEdit(k){ const ph=PH[k]; S.sheet={type:'stdEdit',k,err:'',confirm:false,d:{n:ph.n,gate:ph.gate,steps:ph.steps.map(([s,t])=>({s,t})),items:ph.items.map(x=>({...x}))}}; renderSheet(); }
