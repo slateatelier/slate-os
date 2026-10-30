@@ -20,10 +20,15 @@ const authStore = {
   removeItem: k => { L_.removeItem(k); S_.removeItem(k); }
 };
 const sessionLock = (() => { let tail = Promise.resolve(); return (_n, _t, fn) => { const r = tail.then(() => fn()); tail = r.catch(() => {}); return r; }; })();
-if (!window.supabase || !CFG) return;
-const sb = window.supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: authStore, lock: sessionLock } });
-addEventListener('pagehide', () => { try { sb.auth.stopAutoRefresh(); } catch (_) {} });
-addEventListener('pageshow', () => { try { sb.auth.startAutoRefresh(); } catch (_) {} });
+/* inside SLATE OS (the Books space): use SLATE OS's own connection, so there is one sign-in session, not two */
+const EMBED = (() => { try { return new URLSearchParams(location.search).get('embed') === '1' && window.parent !== window && !!window.parent.slateSupabase; } catch (_) { return false; } })();
+if (EMBED) document.documentElement.classList.add('embed');
+if (!EMBED && (!window.supabase || !CFG)) return;
+const sb = EMBED ? window.parent.slateSupabase : window.supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: authStore, lock: sessionLock } });
+if (!EMBED) {
+  addEventListener('pagehide', () => { try { sb.auth.stopAutoRefresh(); } catch (_) {} });
+  addEventListener('pageshow', () => { try { sb.auth.startAutoRefresh(); } catch (_) {} });
+}
 
 /* ---------- errors in the shape Books expects ---------- */
 function hostErr(e) {
@@ -198,6 +203,7 @@ const downloads = {
 
 /* ---------- spaces: Studio · Business · Books (Principal and COO) ---------- */
 function spaceSwitch() {
+  if (EMBED) return null;
   if (!(ROLE === 'Principal' || (ME && PEOPLE[ME.id] && PEOPLE[ME.id].designation === 'coo'))) return null;
   const el = document.createElement('div'); el.className = 'space-sw'; el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Space');
   [['Studio', '/'], ['Business', '/?space=biz'], ['Books', null]].forEach(([l, href]) => {
@@ -231,7 +237,7 @@ function headLeft(fallbackAva) {
   bell.onclick = () => { location.href = '/?go=inbox'; };
   return [me, bell];
 }
-async function signOut() { try { await sb.auth.signOut(); } catch (_) {} location.href = '/'; }
+async function signOut() { try { await sb.auth.signOut(); } catch (_) {} (EMBED ? window.top : window).location.href = '/'; }
 
 /* ---------- start ---------- */
 const ready = (async () => {
@@ -243,12 +249,13 @@ const ready = (async () => {
   const p = PEOPLE[session.user.id] || {};
   ME = { id: session.user.id, name: p.label || p.full_name || session.user.email, isOwner: ROLE === 'Principal',
     canEdit: ['Principal', 'COO', 'Accountant', 'Viewer'].includes(ROLE) };
+  if (!EMBED && spaceSwitch()) { location.replace('/?space=books'); return new Promise(() => {}); }
   document.body.classList.toggle('has-spaces', !!spaceSwitch());
   return { ok: true };
 })();
 
 window.BooksHost = {
-  ready, sb, fileUrl, spaceSwitch, signOut, headLeft,
+  ready, sb, fileUrl, embed: EMBED, spaceSwitch, signOut, headLeft,
   onChange(fn) { rerender = fn; },
   isCOO: id => !!(PEOPLE[id] && PEOPLE[id].designation === 'coo'),
   role: () => ROLE
