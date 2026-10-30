@@ -7659,7 +7659,7 @@ function viewHR(){
     const flag=st&&st.incrementDue&&st.incrementDue<=ym?['Increment due','late']:st&&st.probationEnd&&st.probationEnd<=in30&&!st.confirmedOn?['Probation ends '+fmtD(st.probationEnd),'overdue']:null;
     return h('button',{class:'pcard',type:'button',onclick:()=>r.hid?toast('This salary is private to the Principal.'):openSal(st?st.id:null,r.uid)},
       h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:podLabel(r.team)||r.team}),r.hid?h('span',{class:'pill s-open',text:'Private to the Principal'}):st&&st.principalOnly?h('span',{class:'pill s-open',text:'Only you'}):flag?h('span',{class:'pill s-'+flag[1],text:flag[0]}):!r.active?h('span',{class:'pill s-open',text:'Inactive'}):!r.gross&&r.uid!==ownerId()?h('span',{class:'pill s-late',text:'No salary set'}):null),
-      h('div',{class:'pc-name',text:r.name}),
+      h('div',{class:'pc-name'},r.name,st&&st.holder?h('span',{class:'pill s-open',style:'margin-left:8px;font-size:12px;vertical-align:middle',title:'Held by',text:st.holder}):null),
       h('div',{class:'pc-meta',text:[r.role||(st&&st.designation),st&&st.careerStart?expLen(st.careerStart)+' experience':'',st&&st.joinDate?expLen(st.joinDate)+' at SLATE':''].filter(Boolean).join(' · ')}),
       h('div',{class:'pc-row'},h('b',{text:r.gross?taka(r.gross)+' a month':'—'}),h('span',{class:'muted',text:last&&prev?`+${taka(salGross(last)-salGross(prev))} from ${ymLabel(last.from)}`:last?'since '+ymLabel(last.from):''}))); })));
   return out; }
@@ -7669,7 +7669,7 @@ function expLen(from){ const n=expMonths(from); if(n==null) return ''; const y=M
 function expHint(d){ if(!d.careerStart) return 'Total experience is counted from here and grows on its own.'; return 'Total experience today: '+expLen(d.careerStart)+(d.joinDate?' · at SLATE '+expLen(d.joinDate):''); }
 function openSal(sid,uid){ const F=S.feeFin, st=sid?(F.staff||[]).find(x=>x.id===sid):null, r=salRate(st)||{};
   const d={uid:uid||(st&&st.userId)||'',name:(st&&st.name)||(uid?nameOf(uid):''),designation:(st&&st.designation)||(uid?roleOf(uid):''),joinDate:(st&&st.joinDate)||'',careerStart:(st&&st.careerStart)||'',payMethod:(st&&st.payMethod)||'cash',bankInfo:(st&&st.bankInfo)||'',bankPart:st&&st.bankPart?String(st.bankPart):'',
-    probationEnd:(st&&st.probationEnd)||'',confirmedOn:(st&&st.confirmedOn)||'',incrementDue:(st&&st.incrementDue)||'',active:!st||st.active!==false,note:(st&&st.note)||'',from:today().slice(0,7),why:'',tax:r.tax!=null?String(r.tax):'0'};
+    probationEnd:(st&&st.probationEnd)||'',confirmedOn:(st&&st.confirmedOn)||'',incrementDue:(st&&st.incrementDue)||'',active:!st||st.active!==false,note:(st&&st.note)||'',holder:(st&&st.holder)||'',from:today().slice(0,7),why:'',tax:r.tax!=null?String(r.tax):'0'};
   SAL_P.forEach(([k])=>{ d[k]=r[k]!=null?String(r[k]):''; });
   S.sheet={type:'sal',sid:sid||null,d,err:''}; renderSheet(); }
 function sheetSal(){
@@ -7684,7 +7684,7 @@ function sheetSal(){
     const same=salGross(cur)&&SAL_P.every(([k])=>(+cur[k]||0)===nr[k])&&(+cur.tax||0)===nr.tax;
     let rates=((st&&st.rates)||[]).slice(); if(!same){ if(d.why.trim()) nr.why=d.why.trim(); nr.setBy=S.uid; rates=rates.filter(x=>x.from!==nr.from); rates.push(nr); rates.sort((a,b)=>a.from.localeCompare(b.from)); }
     const data={userId:d.uid,name:d.name.trim(),designation:(d.designation||'').trim(),joinDate:d.joinDate||'',careerStart:d.careerStart||'',payMethod:d.payMethod,bankInfo:d.payMethod!=='cash'?(d.bankInfo||'').trim():'',bankPart:d.payMethod==='split'?+d.bankPart||0:0,
-      rates,active:!!d.active,note:(d.note||'').trim(),probationEnd:d.probationEnd||'',confirmedOn:d.confirmedOn||'',incrementDue:d.incrementDue||'',hrSetAt:new Date().toISOString(),hrSetBy:S.uid};
+      rates,active:!!d.active,note:(d.note||'').trim(),holder:(d.holder||'').trim(),probationEnd:d.probationEnd||'',confirmedOn:d.confirmedOn||'',incrementDue:d.incrementDue||'',hrSetAt:new Date().toISOString(),hrSetBy:S.uid};
     const sb=window.slateSupabase;
     const ok=await run(async()=>{
       if(st){ const {id,...rest}=st; const {data:o,error}=await sb.from('fin_docs').update({data:{...rest,...data}}).eq('path','staff/'+st.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Finance is limited to the Principal and the COO.'); }
@@ -7697,6 +7697,7 @@ function sheetSal(){
     h('p',{class:'f-hint',style:'margin:0',text:'Only you and the COO see this. Saved straight into Finance, which uses it for the salary sheets.'}),
     h('form',{class:'form',onsubmit:save},
       h('div',{class:'form-row'},d.uid?field('Name',h('input',{value:d.name,readonly:true,style:'color:var(--muted)'})):cap('Name *',h('input',{value:d.name,oninput:e=>{d.name=e.target.value}})),cap('Designation',h('input',{value:d.designation,oninput:e=>{d.designation=e.target.value}}))),
+      cap('Held by',h('input',{value:d.holder,maxlength:80,placeholder:'For a shared account such as Accounts: who holds it now',oninput:e=>{d.holder=e.target.value}}),'Shown as a tag on the card. When someone new takes over, change the name here.'),
       h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:'Monthly salary (Tk)'}),
       h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center'},h('input',{id:'sal-gross',type:'number',min:0,step:'1',inputmode:'numeric','aria-label':'Gross salary',placeholder:'Gross a month',value:SAL_P.reduce((a,[k])=>a+(+d[k]||0),0)||'',style:'width:100%;min-width:0'}),
         h('button',{class:'btn',type:'button',style:'white-space:nowrap',onclick:()=>{ const g=Math.round(+((document.getElementById('sal-gross')||{}).value)||0); if(!(g>0)) return fail('Enter the gross salary first.'); Object.assign(d,salSplit(g)); S.sheet.err=''; renderSheet(); },text:'Standard split'})),
