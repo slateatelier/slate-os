@@ -61,6 +61,7 @@ create or replace function public.books_role() returns text
 language sql stable security definer set search_path to '' as $$ select private.books_role() $$;
 revoke all on function private.books_role(), private.books_admin(), private.books_writer(), private.books_own(text) from public, anon;
 revoke all on function public.books_role() from public, anon;
+grant execute on function private.books_role(), private.books_admin(), private.books_writer(), private.books_own(text) to authenticated;
 grant execute on function public.books_role() to authenticated;
 
 alter table public.books_docs enable row level security;
