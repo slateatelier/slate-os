@@ -36,7 +36,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tabs-in::-webkit-scrollbar{display:none}
 .tab{appearance:none;border:0;background:none;font-size:14px;font-weight:500;color:var(--muted);padding:10px 10px 9px;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;display:flex;gap:6px;align-items:center}
 .tab[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
-.space-sw{display:flex;flex:0 0 auto;align-self:center;background:var(--group);border-radius:999px;padding:3px;gap:2px;margin-right:6px}
+.space-dock{position:sticky;left:0;z-index:2;flex:0 0 auto;display:flex;align-items:center;padding-right:8px;background:linear-gradient(90deg,#fff 85%,rgba(255,255,255,0))}
+.tabs-in.has-sw>:first-child{margin-left:0}.tabs-in.has-sw>:last-child{margin-right:0}
+.space-sw{display:flex;flex:0 0 auto;align-self:center;background:var(--group);border-radius:999px;padding:3px;gap:2px}
 .space-b{appearance:none;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--muted);padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;display:flex;gap:5px;align-items:center}
 .space-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .badge{background:var(--overdue);color:#fff;border-radius:9px;font-size:11px;padding:0 6px;line-height:17px;font-weight:600}
@@ -2337,13 +2339,15 @@ function renderHeader(){
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
   const sw=spaces?h('div',{class:'space-sw',role:'group','aria-label':'Space'},[['studio','Studio'],['biz','Business',propList().filter(propDue).length]].map(([k,l,n])=>h('button',{type:'button',class:'space-b'+((k==='biz')===inBiz?' on':''),'aria-pressed':String((k==='biz')===inBiz),
-      onclick:()=>{ if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
+      onclick:()=>{ if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
+  /* the switch stays put at the left edge whichever space is open; the tabs scroll beside it */
+  tabs.classList.toggle('has-sw',!!spaces); const dock=spaces?h('div',{class:'space-dock'},sw):null;
   if(inBiz){ S.biz=S.biz||{tab:'over',q:'',st:'active'}; const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
     const bt=[['over','Overview'],['leads','Leads',nl],['proposed','Proposals',np],['fees','Fees'],['hr','HR & salaries'],['admin','Running costs'],...(S.uid===ownerId()?[['value','People value']]:[])];
-    tabs.replaceChildren(sw,...bt.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':'biz-'+k,'aria-current':S.biz.tab===k?'page':null,onclick:()=>{ S.biz.tab=k; render(true); window.scrollTo(0,0); }},l,n?h('span',{class:'badge',text:String(n)}):null)),
+    tabs.replaceChildren(dock,...bt.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':'biz-'+k,'aria-current':S.biz.tab===k?'page':null,onclick:()=>{ S.biz.tab=k; render(true); window.scrollTo(0,0); }},l,n?h('span',{class:'badge',text:String(n)}):null)),
       FIN_UI&&window.slateFinanceRole?h('a',{class:'tab',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none'},'Finance ↗'):null);
   } else
-  tabs.replaceChildren(...(sw?[sw]:[]),...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
+  tabs.replaceChildren(...(dock?[dock]:[]),...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
   try{ document.body.dataset.view=S.view; const fh=document.getElementById('far-host'); if(fh) fh.hidden=S.view!=='far'||!!(S.state!=='ready')||!!(S.far&&S.far.tab==='dash'&&canSeeScoring()); }catch(e){}
   const fab=$('#fab'), fm=S.view==='mine'?fabItems():[]; if(S.view!=='mine') fabClose();
   fab.hidden=!(fm.length>1||(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view))); fab.onclick=()=>fm.length>1?fabToggle():openNewTask();
