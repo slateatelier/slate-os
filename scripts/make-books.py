@@ -111,5 +111,44 @@ html.embed .top-in{display:none}html.embed .chrome{top:0}
 _ix = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'index.html'), encoding='utf-8').read()
 _ic = _ix[_ix.index('const ICONS=') + len('const ICONS='):_ix.index('\nconst ICON=')].rstrip().rstrip(';')
 rep('<script src="/books-host.js"></script>', '<script>window.SLATE_ICONS=' + _ic + ';</script>\n<script src="/books-host.js"></script>')
+# ---------- staff and projects come from SLATE OS (Business › HR & salaries, Studio and Business › Fees) ----------
+_a = s.index('function sheetProject() {'); _b = s.index('\n}\n', _a)
+_f = s[_a:_b]
+_f = _f.replace("const id = S.sheet.id, ro = !can.setup();", "const id = S.sheet.id, ro = !can.setup(), os = !!(id && S.projects[id] && S.projects[id].src === 'os');")
+for _k in ("inp('code', { placeholder: 'e.g. JOL-NAVA039-5K-2629', disabled: ro })", "sel('status', [['Active', 'Active'], ['On hold', 'On hold'], ['Closed', 'Closed']], { disabled: ro })", "inp('name', { required: true, disabled: ro })", "inp('contract', { inputmode: 'decimal', disabled: ro })"):
+    assert _f.count(_k) == 1, _k
+    _f = _f.replace(_k, _k.replace('disabled: ro', 'disabled: ro || os'))
+_f = _f.replace("field('Client', inp('client', { disabled: ro }))", "field('Client', inp('client', { disabled: ro }), os ? 'The client’s name as it goes on invoices.' : '')")
+_f = _f.replace("return [head(id ? 'Project' : 'New project', id ? projLabel(id) : 'New project'),",
+  "return [head(id ? 'Project' : 'New project', id ? projLabel(id) : 'New project'), os ? h('div', { class: 'callout ok' }, 'From SLATE OS: the code, name, fee and open or closed are set in Studio and Business › Fees. Here you add the client’s name for invoices, a joint venture, overheads and notes.') : null,")
+_f = _f.replace("    const nid = id || nextId('p', S.projects);\n",
+  "    if (os) return run(() => Store.patch('projects', id, { client: d.client.trim(), overhead: !!d.overhead, notes: (d.notes || '').trim(), jvPartner: d.jvPartner || '', jvShare: d.jvPartner ? r2(parseAmt(d.jvShare) || 0) : 0, earned: d.status !== 'Active' ? r2(parseAmt(d.earned) || 0) : 0 }), 'Saved').then(ok => { if (ok) closeSheet(); });\n    const nid = id || nextId('p', S.projects);\n")
+s = s[:_a] + _f + s[_b:]
+rep("""const out = [pageH('Projects', 'Tag fees and costs to a project to see what each one earns. Codes match SLATE OS.', can.setup() ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openSheet({ type: 'project', d: projDraft() }), text: '+ New project' })] : null)];""",
+    """const out = [pageH('Projects', 'Projects come from SLATE OS: open one in Studio and set its fee in Business › Fees, and it appears here. Tag fees and costs to a project to see what each one earns.')];""")
+# staff
+rep("""const out = [pageH('Staff', 'Everyone on the salary sheet, with their monthly gross salary.', can.enter() ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openSheet({ type: 'staffm', d: { active: true, joined: today() } }), text: '+ New staff' })] : null)];""",
+    """const out = [pageH('Staff', 'Everyone on the salary sheet. Salaries, tax and bank or cash are set in SLATE OS › Business › HR & salaries; changes there show here at once.')];""")
+rep("""function sheetStaff() {
+  const id = S.sheet.id, ro = !can.enter();""", """function sheetStaff() {
+  const id = S.sheet.id, ro = !can.enter() || !!(id && S.staff[id] && S.staff[id].src === 'os');""")
+rep("""  return [head('Staff', id ? S.staff[id].name : 'New staff'), ro ?""", """  return [head('Staff', id ? S.staff[id].name : 'New staff'), id && S.staff[id].src === 'os' ? h('div', { class: 'callout ok' }, 'From SLATE OS › Business › HR & salaries' + (S.staff[id].account ? ' (the ' + S.staff[id].account + ' account)' : '') + '. Change the salary there; the salary sheet picks it up.') : null, ro ?""")
+rep("""emptyBox('No salary sheets yet', 'Add staff in More › Staff, then prepare the first month.')""", """emptyBox('No salary sheets yet', 'Staff come from SLATE OS › Business › HR & salaries. Prepare the first month when they show in More › Staff.')""")
+rep("""  if (!rows.length) return toast('Add staff in More › Staff first.');""", """  if (!rows.length) return toast('No staff yet: they come from SLATE OS › Business › HR & salaries.');""")
+# the salary for the month being prepared, from the SLATE OS salary history
+rep("""function preparePayroll(month) {""", """/* staff from SLATE OS carry their salary history: use the rate in force for the month being prepared */
+function osRate(x, month) { const rs = (x.rates || []).slice().sort((a, b) => a.from.localeCompare(b.from)); let r = null; rs.forEach(z => { if (z.from <= month) r = z; }); r = r || rs[0] || {};
+  const g = ['basic', 'house', 'medical', 'conv', 'other'].reduce((t, k) => t + (+r[k] || 0), 0); return { gross: g, tax: +r.tax || 0, bank: x.payMethod === 'bank' ? g : x.payMethod === 'split' ? (+x.bankPart || 0) : 0 }; }
+function preparePayroll(month) {""")
+rep("""gross: +x.gross || 0, payDays: Math.min(joinedIn, leftIn), arrear: 0, other: 0, otherDed: 0, tax: pr ? pr.tax : (+x.tax || 0), bank: pr ? pr.bank : (+x.bank || 0),""",
+    """gross: x.src === 'os' ? osRate(x, month).gross : (+x.gross || 0), payDays: Math.min(joinedIn, leftIn), arrear: 0, other: 0, otherDed: 0, tax: x.src === 'os' ? osRate(x, month).tax : (pr ? pr.tax : (+x.tax || 0)), bank: x.src === 'os' ? osRate(x, month).bank : (pr ? pr.bank : (+x.bank || 0)),""")
+# people and roles: everyone with a SLATE OS account
+rep("""  const ids = new Set(Object.keys(S.members)); Object.keys(S.settings.team || {}).forEach(k => ids.add(k)); if (S.uid) ids.add(S.uid);""",
+    """  const ids = new Set(Object.keys(S.members)); Object.keys(S.settings.team || {}).forEach(k => ids.add(k)); if (S.uid) ids.add(S.uid);
+  if (window.BooksHost && BooksHost.peopleIds) BooksHost.peopleIds().forEach(k => ids.add(k));""")
+
+rep("""'Give each person a role. Share SLATE Books first: the COO and the accountant as Editors, office staff as Contributors. They appear here after they open it once.'""",
+    """'Everyone with a SLATE OS account is listed. Give each person a role; without one they see nothing in Books.'""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))

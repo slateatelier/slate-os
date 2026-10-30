@@ -258,6 +258,7 @@ window.BooksHost = {
   ready, sb, fileUrl, embed: EMBED, spaceSwitch, signOut, headLeft,
   onChange(fn) { rerender = fn; },
   isCOO: id => !!(PEOPLE[id] && PEOPLE[id].designation === 'coo'),
+  peopleIds: () => Object.values(PEOPLE).filter(p => p.active !== false).map(p => p.id),
   role: () => ROLE
 };
 window.claude = {

@@ -3429,7 +3429,7 @@ function nextId(prefix, coll) { let n = 0; Object.keys(coll).forEach(k => { cons
 function moreProjects() {
   const ids = Object.keys(S.projects).sort((a, b) => projLabel(a).localeCompare(projLabel(b)));
   const by = { Active: [], 'On hold': [], Closed: [] }; ids.forEach(k => (by[S.projects[k].status] || by.Active).push(k));
-  const out = [pageH('Projects', 'Tag fees and costs to a project to see what each one earns. Codes match SLATE OS.', can.setup() ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openSheet({ type: 'project', d: projDraft() }), text: '+ New project' })] : null)];
+  const out = [pageH('Projects', 'Projects come from SLATE OS: open one in Studio and set its fee in Business › Fees, and it appears here. Tag fees and costs to a project to see what each one earns.')];
   Object.entries(by).forEach(([st, list]) => { if (list.length) out.push(h('div', { class: 'sec' }, secH(st, String(list.length)), h('div', { class: 'list' }, list.map(k => { const p = S.projects[k]; return h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'project', id: k, d: projDraft(k) }) },
     h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: p.name }), p.overhead ? h('span', { class: 'tag', text: 'Overheads' }) : null), h('div', { class: 'row-meta', text: [p.code, p.client].filter(Boolean).join(' · ') })),
     h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : null)); })))); });
@@ -3437,18 +3437,19 @@ function moreProjects() {
 }
 function projDraft(k) { const p = S.projects[k] || {}; return { code: p.code || '', name: p.name || '', client: p.client || '', contract: +p.contract ? String(p.contract) : '', status: p.status || 'Active', overhead: !!p.overhead, notes: p.notes || '', jvPartner: p.jvPartner || '', jvShare: p.jvShare ? String(p.jvShare) : '', earned: +p.earned ? String(p.earned) : '' }; }
 function sheetProject() {
-  const id = S.sheet.id, ro = !can.setup();
-  const fields = [h('div', { class: 'form-row' }, field('Project code', inp('code', { placeholder: 'e.g. JOL-NAVA039-5K-2629', disabled: ro }), 'As in SLATE OS.'), field('Status', sel('status', [['Active', 'Active'], ['On hold', 'On hold'], ['Closed', 'Closed']], { disabled: ro }))),
-    field('Project name', inp('name', { required: true, disabled: ro })), field('Client', inp('client', { disabled: ro })),
-    field('Fee agreed for SLATE (Tk)', inp('contract', { inputmode: 'decimal', disabled: ro }), 'Used to show what is still to be collected.'),
+  const id = S.sheet.id, ro = !can.setup(), os = !!(id && S.projects[id] && S.projects[id].src === 'os');
+  const fields = [h('div', { class: 'form-row' }, field('Project code', inp('code', { placeholder: 'e.g. JOL-NAVA039-5K-2629', disabled: ro || os }), 'As in SLATE OS.'), field('Status', sel('status', [['Active', 'Active'], ['On hold', 'On hold'], ['Closed', 'Closed']], { disabled: ro || os }))),
+    field('Project name', inp('name', { required: true, disabled: ro || os })), field('Client', inp('client', { disabled: ro }), os ? 'The client’s name as it goes on invoices.' : ''),
+    field('Fee agreed for SLATE (Tk)', inp('contract', { inputmode: 'decimal', disabled: ro || os }), 'Used to show what is still to be collected.'),
     D().status !== 'Active' ? field('Fee SLATE has earned for work done (Tk)', inp('earned', { inputmode: 'decimal', disabled: ro }), 'For a paused or cancelled project: the fee for the work done up to now. What has not been received yet still shows as to come.') : null,
     h('div', { class: 'form-row' }, field('Joint venture with', sel('jvPartner', [['', 'Not a joint venture']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'pay' && activeL(k)).sort((a, b) => L(a).localeCompare(L(b))).map(k => [k, L(k)])), { disabled: ro }), 'The partner who shares fees and costs.'),
       D().jvPartner ? field('SLATE’s share (%)', inp('jvShare', { inputmode: 'decimal', disabled: ro, placeholder: '40' }), 'Of fees and of shared costs.') : null),
     field('Notes', ta('notes', { rows: 2, disabled: ro, placeholder: 'Joint-venture share, billing name, terms' })), chk('overhead', 'This is the head office overheads centre, not a client project')];
   const extra = id ? [h('button', { class: 'btn', type: 'button', onclick: () => { closeSheet(); S.rep.proj = id; go('reports', 'projects'); }, text: 'Profit report' })] : [];
-  return [head(id ? 'Project' : 'New project', id ? projLabel(id) : 'New project'), ro ? h('div', { class: 'form' }, fields) : form(null, fields, 'Save', () => {
+  return [head(id ? 'Project' : 'New project', id ? projLabel(id) : 'New project'), os ? h('div', { class: 'callout ok' }, 'From SLATE OS: the code, name, fee and open or closed are set in Studio and Business › Fees. Here you add the client’s name for invoices, a joint venture, overheads and notes.') : null, ro ? h('div', { class: 'form' }, fields) : form(null, fields, 'Save', () => {
     const d = D(); if (!d.name.trim()) return fail('Give the project a name.');
     if (d.code.trim() && Object.entries(S.projects).some(([k, p]) => k !== id && (p.code || '').trim().toLowerCase() === d.code.trim().toLowerCase())) return fail('Another project already uses this code.');
+    if (os) return run(() => Store.patch('projects', id, { client: d.client.trim(), overhead: !!d.overhead, notes: (d.notes || '').trim(), jvPartner: d.jvPartner || '', jvShare: d.jvPartner ? r2(parseAmt(d.jvShare) || 0) : 0, earned: d.status !== 'Active' ? r2(parseAmt(d.earned) || 0) : 0 }), 'Saved').then(ok => { if (ok) closeSheet(); });
     const nid = id || nextId('p', S.projects);
     run(() => Store.put('projects', nid, Object.assign({}, S.projects[id] || {}, { code: d.code.trim(), name: d.name.trim(), client: d.client.trim(), contract: r2(parseAmt(d.contract) || 0), status: d.status, overhead: !!d.overhead, notes: (d.notes || '').trim(), jvPartner: d.jvPartner || '', jvShare: d.jvPartner ? r2(parseAmt(d.jvShare) || 0) : 0, earned: d.status !== 'Active' ? r2(parseAmt(d.earned) || 0) : 0 })), 'Saved').then(ok => { if (ok) closeSheet(); });
   }, h('span', { class: 'actions' }, extra))];
@@ -3497,12 +3498,13 @@ function sheetPolicy() {
 /* people and roles */
 function peopleIds() {
   const ids = new Set(Object.keys(S.members)); Object.keys(S.settings.team || {}).forEach(k => ids.add(k)); if (S.uid) ids.add(S.uid);
+  if (window.BooksHost && BooksHost.peopleIds) BooksHost.peopleIds().forEach(k => ids.add(k));
   return [...ids];
 }
 function morePeople() {
   const own = can.settings(), team = S.settings.team || {};
   const ids = peopleIds().sort((a, b) => (roleOf(a) === 'Principal' ? -1 : 0) - (roleOf(b) === 'Principal' ? -1 : 0) || nameOf(a).localeCompare(nameOf(b)));
-  const out = [pageH('People and roles', own ? 'Give each person a role. Share SLATE Books first: the COO and the accountant as Editors, office staff as Contributors. They appear here after they open it once.' : 'Only the Principal can change roles.')];
+  const out = [pageH('People and roles', own ? 'Everyone with a SLATE OS account is listed. Give each person a role; without one they see nothing in Books.' : 'Only the Principal can change roles.')];
   out.push(h('div', { class: 'list' }, ids.map(id => {
     const r = roleOf(id), seen = (S.members[id] || {}).seen;
     const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto', onchange: e => setRole(id, e.target.value) }, ROLES.filter(x => x !== 'Principal').map(x => h('option', { value: x, text: x === 'Viewer' ? 'No role (view only)' : x }))); s.value = r === 'Principal' ? 'Viewer' : r; return s; })() : h('span', { class: 'tag', text: r });
@@ -3659,22 +3661,25 @@ function morePayroll() {
   const last = months[0], next = last ? SB.addMonths(last.month, 1) : today().slice(0, 7);
   const out = [pageH('Salary sheets', 'Prepared by the Accountant, checked by the COO, approved by the Principal. Then recorded in the books in one step.',
     can.enter() && !S.payroll[next] ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => preparePayroll(next), text: '+ Prepare ' + monthName(next) })] : null)];
-  if (!months.length) out.push(emptyBox('No salary sheets yet', 'Add staff in More › Staff, then prepare the first month.'));
+  if (!months.length) out.push(emptyBox('No salary sheets yet', 'Staff come from SLATE OS › Business › HR & salaries. Prepare the first month when they show in More › Staff.'));
   else out.push(h('div', { class: 'list' }, months.map(p => { const t = payTotals(payRows(p)); return h('button', { class: 'row', type: 'button', onclick: () => { S.payMonth = p.id; go('more', 'paymonth'); } }, h('span', { class: 'ico out', 'aria-hidden': 'true', text: '৳' }),
     h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: monthName(p.month) }), h('span', { class: 'pill st-' + (p.status === 'posted' || p.status === 'approved' ? 'approved' : p.status === 'returned' ? 'returned' : 'pending'), text: PAY_ST[p.status] || p.status })),
       h('div', { class: 'row-meta', text: `${(p.rows || []).length} staff · bank ${fmt(t.bank)} · cash ${fmt(t.cash)}` })),
     h('div', { class: 'row-amt' }, h('span', { class: 'a', text: fmt(t.net) }), h('span', { class: 'b', text: 'net pay' }))); })));
   return out;
 }
+/* staff from SLATE OS carry their salary history: use the rate in force for the month being prepared */
+function osRate(x, month) { const rs = (x.rates || []).slice().sort((a, b) => a.from.localeCompare(b.from)); let r = null; rs.forEach(z => { if (z.from <= month) r = z; }); r = r || rs[0] || {};
+  const g = ['basic', 'house', 'medical', 'conv', 'other'].reduce((t, k) => t + (+r[k] || 0), 0); return { gross: g, tax: +r.tax || 0, bank: x.payMethod === 'bank' ? g : x.payMethod === 'split' ? (+x.bankPart || 0) : 0 }; }
 function preparePayroll(month) {
   const days = daysInMonth(month), start = month + '-01', end = month + '-' + String(days).padStart(2, '0');
   const prev = Object.values(S.payroll).filter(p => p.month < month).sort((a, b) => b.month.localeCompare(a.month))[0];
   const prevRow = id => prev && (prev.rows || []).find(r => r.staffId === id);
   const rows = staffList().filter(x => x.active !== false && (!x.joined || x.joined <= end) && (!x.left || x.left >= start)).map(x => {
     const pr = prevRow(x.id), joinedIn = x.joined && x.joined > start ? days - (+x.joined.slice(8, 10)) + 1 : days, leftIn = x.left && x.left < end ? +x.left.slice(8, 10) : days;
-    return { staffId: x.id, sl: x.sl || '', empId: x.empId || '', name: x.name, designation: x.designation || '', joined: x.joined || '', gross: +x.gross || 0, payDays: Math.min(joinedIn, leftIn), arrear: 0, other: 0, otherDed: 0, tax: pr ? pr.tax : (+x.tax || 0), bank: pr ? pr.bank : (+x.bank || 0), remarks: x.remarks || '' };
+    return { staffId: x.id, sl: x.sl || '', empId: x.empId || '', name: x.name, designation: x.designation || '', joined: x.joined || '', gross: x.src === 'os' ? osRate(x, month).gross : (+x.gross || 0), payDays: Math.min(joinedIn, leftIn), arrear: 0, other: 0, otherDed: 0, tax: x.src === 'os' ? osRate(x, month).tax : (pr ? pr.tax : (+x.tax || 0)), bank: x.src === 'os' ? osRate(x, month).bank : (pr ? pr.bank : (+x.bank || 0)), remarks: x.remarks || '' };
   });
-  if (!rows.length) return toast('Add staff in More › Staff first.');
+  if (!rows.length) return toast('No staff yet: they come from SLATE OS › Business › HR & salaries.');
   run(() => Store.put('payroll', month, { month, days, rows, status: 'draft', trail: trailAdd([], 'created'), at: new Date().toISOString(), by: S.uid }), monthName(month) + ' salary sheet started').then(ok => { if (ok) { S.payMonth = month; go('more', 'paymonth'); } });
 }
 function morePayMonth() {
@@ -3739,7 +3744,7 @@ function sheetPayPost() {
 /* More › Staff */
 function moreStaff() {
   const list = staffList(), act = list.filter(x => x.active !== false), gone = list.filter(x => x.active === false);
-  const out = [pageH('Staff', 'Everyone on the salary sheet, with their monthly gross salary.', can.enter() ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openSheet({ type: 'staffm', d: { active: true, joined: today() } }), text: '+ New staff' })] : null)];
+  const out = [pageH('Staff', 'Everyone on the salary sheet. Salaries, tax and bank or cash are set in SLATE OS › Business › HR & salaries; changes there show here at once.')];
   const row = x => h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'staffm', id: x.id, d: Object.assign({}, x, { gross: String(x.gross || ''), bank: String(x.bank || ''), tax: String(x.tax || '') }) }) }, ava(null),
     h('div', { class: 'row-main' }, h('div', { class: 'row-title', text: x.name }), h('div', { class: 'row-meta', text: [x.empId, x.designation, x.joined ? 'joined ' + fmtD(x.joined, true) : '', x.remarks].filter(Boolean).join(' · ') })),
     h('div', { class: 'row-amt' }, h('span', { class: 'a', text: fmt(x.gross) }), h('span', { class: 'b', text: x.bank ? 'bank ' + fmt(x.bank) : 'cash' })));
@@ -3749,13 +3754,13 @@ function moreStaff() {
   return out;
 }
 function sheetStaff() {
-  const id = S.sheet.id, ro = !can.enter();
+  const id = S.sheet.id, ro = !can.enter() || !!(id && S.staff[id] && S.staff[id].src === 'os');
   const fields = [h('div', { class: 'form-row' }, field('Employee ID', inp('empId', { placeholder: 'e.g. SL8020', disabled: ro })), field('Joined', inp('joined', { type: 'date', disabled: ro }))),
     field('Name', inp('name', { disabled: ro })), field('Designation', inp('designation', { disabled: ro })),
     h('div', { class: 'form-row' }, field('Gross salary a month (Tk)', inp('gross', { inputmode: 'decimal', disabled: ro })), field('Usually paid by bank (Tk)', inp('bank', { inputmode: 'decimal', disabled: ro, placeholder: '0' }), 'The rest is paid in cash.'), field('Usual tax a month (Tk)', inp('tax', { inputmode: 'decimal', disabled: ro, placeholder: '0' }))),
     field('Remarks', inp('remarks', { disabled: ro, placeholder: 'e.g. On probation for 6 months, contractual' })),
     h('div', { class: 'form-row' }, chk('active', 'On the salary sheet'), field('Left on', inp('left', { type: 'date', disabled: ro })))];
-  return [head('Staff', id ? S.staff[id].name : 'New staff'), ro ? h('div', { class: 'form' }, fields) : form(null, fields, 'Save', () => {
+  return [head('Staff', id ? S.staff[id].name : 'New staff'), id && S.staff[id].src === 'os' ? h('div', { class: 'callout ok' }, 'From SLATE OS › Business › HR & salaries' + (S.staff[id].account ? ' (the ' + S.staff[id].account + ' account)' : '') + '. Change the salary there; the salary sheet picks it up.') : null, ro ? h('div', { class: 'form' }, fields) : form(null, fields, 'Save', () => {
     const d = D(); if (!(d.name || '').trim()) return fail('Enter the name.'); if (!(parseAmt(d.gross) > 0)) return fail('Enter the gross salary.');
     const nid = id || nextId('s', S.staff);
     run(() => Store.put('staff', nid, Object.assign({}, S.staff[id] || {}, { empId: (d.empId || '').trim(), name: d.name.trim(), designation: (d.designation || '').trim(), joined: d.joined || '', left: d.left || '', gross: r2(parseAmt(d.gross)), bank: r2(parseAmt(d.bank) || 0), tax: r2(parseAmt(d.tax) || 0), remarks: (d.remarks || '').trim(), active: d.active !== false && !(d.left && d.left < today()), sl: (S.staff[id] || {}).sl || Object.keys(S.staff).length + 1 })), 'Saved').then(ok => { if (ok) closeSheet(); });
