@@ -2322,7 +2322,8 @@ function renderHeader(){
       nn?h('span',fxA('badge:bell',['pulse'],{class:'bn',text:nn>99?'99+':String(nn)})):null)); }
   const reqs=amApprover()?queueCount():0;
   const full=fullView(), mp=myPod();
-  const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
+  /* Chalk Create is off for now; when its space is built it sits beside Studio and Business in the switch */
+  const cmem=amChalkMember(), ck=[];
   const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['meet','Meetings'],['team','Team'],['dash','Dashboard'],...(canProps()&&S.canWrite?[['biz','Business',propList().filter(propDue).length]]:[]),...ck,['more','More',nUnseenCount()]]; /* daily work first, then reviews, then Business and Chalk; People lives in More */
   /* the Principal and the COO work in two spaces: Studio (the studio's screens, as the team sees them) and Business.
      The space follows the screen: Business is S.view 'biz'; everything else is Studio. */
