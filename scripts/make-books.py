@@ -90,17 +90,5 @@ body .chrome{background:rgba(231,241,234,.88);border-bottom:2px solid #3F7F5A}
 @media (max-width:480px){body.has-spaces .divider,body.has-spaces .product{display:none}.space-b{font-size:11.5px;padding:5px 7px}body.has-spaces .top-in{justify-content:flex-start;padding-left:max(16px,env(safe-area-inset-left,0px))}}
 </style>
 <div class="chrome">""")
-
-# ---------- the COO also keeps settings and roles; approval rules (incl. the COO's own limit) stay with the Principal ----------
-rep("""  settings: () => S.isOwner && !S.readonly,""", """  settings: () => !S.readonly && (S.isOwner || myRole() === 'COO'),
-  rules: () => S.isOwner && !S.readonly,""")
-rep("""const a = settingsAppr(), own = can.settings();""", """const a = settingsAppr(), own = can.rules();""")
-rep("""'Give each person a role. Share SLATE Books first: the COO and the accountant as Editors, office staff as Contributors. They appear here after they open it once.' : 'Only the Principal can change roles.'""",
-    """'Give each person a role. People appear here after they open Books once from their SLATE OS account.' : 'Only the Principal and the COO can change roles.'""")
-rep("""const pick = own && id !== ownerId() ?""", """const pick = own && id !== ownerId() && (S.isOwner || id !== S.uid) ?""")
-rep("""'Only the Principal can change settings.'""", """'Only the Principal and the COO can change settings.'""")
-rep("""Principal: 'Sees everything, approves payments, sets roles and rules.', COO: 'Checks every entry and request, sees the books, can approve up to a limit.',""",
-    """Principal: 'Sees everything, approves payments, sets roles, settings and approval rules.', COO: 'Checks every entry and request, sees the books, approves up to a limit, sets roles and settings.',""")
-rep("""Pick a later date, or ask the Principal to reopen.`""", """Pick a later date, or ask the Principal or the COO to reopen.`""")
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
