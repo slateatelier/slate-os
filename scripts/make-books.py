@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Build books.html (SLATE Books inside SLATE OS) from the SLATE Books artifact.
+The Books code is kept as it is; the changes below connect it to SLATE OS (books-host.js),
+add the Studio · Business · Books switch and the Bangladesh financial year, and swap the Claude-only messages.
+Usage: python3 scripts/make-books.py <artifact.html> books.html"""
+import sys, re
+src, out = sys.argv[1], sys.argv[2]
+s = open(src, encoding='utf-8').read()
+def rep(a, b, n=1):
+    global s
+    c = s.count(a)
+    assert c == n, (c, a[:90])
+    s = s.replace(a, b)
+
+# ---------- head: icons, and the host before the Books scripts ----------
+rep('<title>SLATE Books</title>', '<title>SLATE Books</title>\n<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">\n<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">\n<meta name="theme-color" content="#ffffff">')
+first = s.index('<script>')
+s = s[:first] + '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>\n<script src="/config.js"></script>\n<script src="/books-host.js"></script>\n' + s[first:]
+
+# ---------- engine: the financial year follows a rule (Bangladesh: July–June to June 2027, a 9-month FY 2027-28, then April–March) ----------
+rep("""  function fyRange(startYear, fyStart) {""", """  /* the financial year a date falls in. rule 'bd': Bangladesh, July–June up to 30 Jun 2027, then FY 2027-28 runs
+     1 Jul 2027 to 31 Mar 2028 (nine months), then April–March. Any other rule: a fixed start month (rule or fyStart). */
+  function fyOfRule(d, rule, fyStart) {
+    if (rule === 'bd' || rule == null || rule === '') {
+      if (d < '2027-07-01') return fyRange(fyStartYear(d, 7), 7);
+      if (d <= '2028-03-31') return { from: '2027-07-01', to: '2028-03-31', label: 'FY 2027-28', short: '27-28', months: 9 };
+      return fyRange(fyStartYear(d, 4), 4);
+    }
+    var m = +rule || +fyStart || 7;
+    return fyRange(fyStartYear(d, m), m);
+  }
+  function fyRange(startYear, fyStart) {""")
+rep("""    var fy = fyRange(fyStartYear(date, +P.settings.fyStart || 7), +P.settings.fyStart || 7).short;""",
+    """    var fy = fyOfRule(date, P.settings.fyRule, P.settings.fyStart).short;""")
+rep("""dayBefore: dayBefore, fyStartYear: fyStartYear, fyRange: fyRange,""", """dayBefore: dayBefore, fyStartYear: fyStartYear, fyRange: fyRange, fyOfRule: fyOfRule,""")
+
+# ---------- app: financial year ----------
+rep("""function fyOf(d) { return SB.fyRange(SB.fyStartYear(d, fyStart()), fyStart()); }""",
+    """function fyOf(d) { return SB.fyOfRule(d, S.settings.fyRule, fyStart()); }
+const FY_RULES = [['bd', 'Bangladesh: July–June until June 2027, FY 2027-28 runs July–March, then April–March'], ['7', 'July–June'], ['4', 'April–March'], ['1', 'January–December']];
+const fyRuleName = st => (FY_RULES.find(x => x[0] === String(st.fyRule || 'bd')) || FY_RULES[0])[1];""")
+rep("""  if (p === 'lastfy') { const f = SB.fyRange(SB.fyStartYear(today(), fyStart()) - 1, fyStart()); return { from: f.from, to: f.to, label: f.label, short: f.label }; }""",
+    """  if (p === 'lastfy') { const f = fyOf(SB.dayBefore(curFY().from)); return { from: f.from, to: f.to, label: f.label, short: f.label }; }""")
+rep("""fact('Financial year starts', MONL[(+st.fyStart || 7) - 1]),""", """fact('Financial year', fyRuleName(st), curFY().label + ': ' + fmtD(curFY().from, true) + ' to ' + fmtD(curFY().to, true)),""")
+rep("""fyStart: String(st.fyStart || 7), lockDate:""", """fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate:""")
+rep("""field('Financial year starts in', sel('fyStart', MONL.map((m, i) => [String(i + 1), m])))""", """field('Financial year', sel('fyRule', FY_RULES), 'Voucher and invoice numbers restart each financial year.')""")
+rep("""fyStart: +d.fyStart, lockDate: d.lockDate || '',""", """fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '',""")
+
+# ---------- app: the COO is the COO without being given the role ----------
+rep("""return (t && ROLES.includes(t.role)) ? t.role : (id === S.uid && S.isOwner ? 'Principal' : 'Viewer');""",
+    """return (t && ROLES.includes(t.role)) ? t.role : (id === S.uid && S.isOwner ? 'Principal' : (window.BooksHost && BooksHost.isCOO(id) ? 'COO' : 'Viewer'));""")
+
+# ---------- app: files open through signed links ----------
+rep("""const fileUrl = f => f ? (f.id && location.protocol !== 'file:' ? '/_blob/' + f.id : f.url || '') : '';""",
+    """const fileUrl = f => f ? (f.id ? BooksHost.fileUrl(f.id) : f.url || '') : '';""")
+
+# ---------- app: messages that pointed at Claude ----------
+rep("""h('strong', { text: 'Open SLATE Books in Claude' }), h('span', { text: 'The accounts are kept in Claude. Open the shared link at claude.ai while signed in.' })""",
+    """h('strong', { text: 'Sign in to SLATE OS first' }), h('span', {}, 'SLATE Books uses your SLATE OS account. ', h('a', { href: '/?next=books', text: 'Sign in' }), ', then come back here.')""")
+rep("""h('span', { text: 'Ask the Principal to share SLATE Books with you as an Editor.' })""", """h('span', { text: 'Ask the Principal to give you a role in SLATE Books.' })""")
+rep("""h('span', { text: 'You can view SLATE Books but not change it. Ask the Principal to share it with you as an Editor.' })""", """h('span', { text: 'You can view SLATE Books but not change it. Your role is Viewer.' })""")
+rep("""h('div', { class: 'banner warn' }, h('span', { text: 'File uploads aren’t available in this view. Open SLATE Books in Claude t""", """h('div', { class: 'banner warn' }, h('span', { text: 'File uploads aren’t available right now. Reload the page t""")
+
+# ---------- app: header — the space switch, and signing out ----------
+rep("""  me.replaceChildren(h('span', { class: 'who-t', text: myRole() }), ava(S.uid));""",
+    """  const sw = window.BooksHost && BooksHost.spaceSwitch();
+  me.replaceChildren(...(sw ? [sw] : [h('span', { class: 'who-t', text: myRole() }), h('button', { class: 'ava-btn', type: 'button', title: 'Sign out', onclick: () => { if (confirm('Sign out of SLATE OS?')) BooksHost.signOut(); } }, ava(S.uid))]));""")
+rep("""  out.push(h('div', { class: 'sec' }, secH('Data and help'), h('div', { class: 'list' },""",
+    """  out.push(h('div', { class: 'sec' }, secH('Data and help'), h('div', { class: 'list' },
+    moreItem('Sign out', 'Signed in as ' + nameOf(S.uid) + ' · ' + role, () => { if (confirm('Sign out of SLATE OS?')) BooksHost.signOut(); }),""")
+rep("""    out.push(h('div', { class: 'card' }, h('div', { class: 'list', style: 'background:transparent' }, moreItem('How SLATE Books works', 'What to do with a petty cash bill or a payment request', () => go('more', 'help')))));""",
+    """    out.push(h('div', { class: 'card' }, h('div', { class: 'list', style: 'background:transparent' }, moreItem('How SLATE Books works', 'What to do with a petty cash bill or a payment request', () => go('more', 'help')), moreItem('Sign out', 'Signed in as ' + nameOf(S.uid), () => { if (confirm('Sign out of SLATE OS?')) BooksHost.signOut(); }))));""")
+rep("""boot();
+
+})();""", """if (window.BooksHost) BooksHost.onChange(() => { render(); renderSheet(true); });
+boot();
+
+})();""")
+
+# ---------- styles: the switch, and Books' own tint (green, the colour of money in) ----------
+rep("""</style>
+<div class="chrome">""", """.space-sw{display:flex;flex:0 0 auto;background:var(--group);border-radius:999px;padding:3px;gap:2px}
+.space-b{appearance:none;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--muted);padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;text-decoration:none;display:flex;align-items:center}
+.space-b.on{background:#3F7F5A;color:#fff}
+body .chrome{background:rgba(231,241,234,.88);border-bottom:2px solid #3F7F5A}
+.tab[aria-current="page"]{color:#2F6446;border-bottom-color:#3F7F5A}
+.ava-btn{appearance:none;border:0;background:none;padding:0;cursor:pointer;border-radius:50%}
+.me{transform:translateY(-50%)!important;top:calc(50% + 4px)!important}
+@media (max-width:640px){.space-b{font-size:12px;padding:5px 8px}.space-sw{padding:2px}}
+@media (max-width:480px){body.has-spaces .divider,body.has-spaces .product{display:none}.space-b{font-size:11.5px;padding:5px 7px}body.has-spaces .top-in{justify-content:flex-start;padding-left:max(16px,env(safe-area-inset-left,0px))}}
+</style>
+<div class="chrome">""")
+open(out, 'w', encoding='utf-8').write(s)
+print('ok', len(s))

@@ -2141,6 +2141,14 @@ function slateGo(go){
   fire();
 }
 { const q=new URLSearchParams(location.search), go=q.get('go');
+  if(q.get('space')==='biz'){ q.delete('space'); try{ history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash); }catch(e){}
+    let n=0; const open=()=>{ if((S.state!=='ready'||!S.settings)&&n++<60) return setTimeout(open,250); if(S.state==='ready'&&canProps()){ S.view='biz'; render(true); } }; setTimeout(open,200); }
+  /* someone whose work is only in Books (the accountant, petty cash staff) goes straight there */
+  { let n=0; const route=async()=>{ if(!(S.state==='ready'&&S.uid&&S.settings)){ if(n++<240) setTimeout(route,250); return; }
+      if(roleGroup(S.uid)!=='other'||amApprover()||S.isOwner) return;
+      try{ const sb=window.slateSupabase; if(!sb) return; const {data}=await sb.rpc('books_role'); if(['Accountant','Office staff'].includes(data)) location.replace('/books'); }catch(_){} };
+    setTimeout(route,400); }
+  if(q.get('next')==='books'){ let n=0; const back=()=>{ if(S.state==='ready'&&S.uid) return location.replace('/books'); if(n++<240) setTimeout(back,250); }; setTimeout(back,300); }
   if(go){ q.delete('go'); try{ history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash); }catch(e){} setTimeout(()=>slateGo(go),300); }
   if('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message',e=>{ if(e.data&&e.data.type==='slate-go') slateGo(e.data.go); }); }
 async function boot(){
@@ -2343,8 +2351,8 @@ function renderHeader(){
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
-  const sw=spaces?h('div',{class:'space-sw',role:'group','aria-label':'Space'},[['studio','Studio'],['biz','Business',propList().filter(propDue).length]].map(([k,l,n])=>h('button',{type:'button',class:'space-b'+((k==='biz')===inBiz?' on':''),'aria-pressed':String((k==='biz')===inBiz),
-      onclick:()=>{ if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
+  const sw=spaces?h('div',{class:'space-sw',role:'group','aria-label':'Space'},[['studio','Studio'],['biz','Business',propList().filter(propDue).length],['books','Books']].map(([k,l,n])=>h('button',{type:'button',class:'space-b'+(k!=='books'&&(k==='biz')===inBiz?' on':''),'aria-pressed':String(k!=='books'&&(k==='biz')===inBiz),
+      onclick:()=>{ if(k==='books'){ location.href='/books'; return; } if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
   /* the switch stays put at the left edge whichever space is open; the tabs scroll beside it */
   /* the switch sits in the top-right corner; Business tints the top bar so it is clear which space is open */
   { const slot=$('#space-slot'); if(slot) slot.replaceChildren(...(sw?[sw]:[])); document.body.classList.toggle('space-biz',!!inBiz); document.body.classList.toggle('has-spaces',!!spaces); }
