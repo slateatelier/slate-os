@@ -1295,7 +1295,8 @@ const can = {
   approve: (amount) => S.admin && !S.readonly && (myRole() === 'Principal' || (myRole() === 'COO' && (+amount || 0) > 0 && (+amount || 0) <= (+settingsAppr().cooLimit || 0))),
   pay: () => S.admin && !S.readonly && ['Principal', 'COO', 'Accountant'].includes(myRole()),
   setup: () => S.admin && !S.readonly && ['Principal', 'COO', 'Accountant'].includes(myRole()),
-  settings: () => S.isOwner && !S.readonly,
+  settings: () => !S.readonly && (S.isOwner || myRole() === 'COO'),
+  rules: () => S.isOwner && !S.readonly,
   request: () => !S.readonly && myRole() !== 'Viewer'
 };
 
@@ -2298,7 +2299,7 @@ function moneyLines(d) {
   lines.push({ l: d.cat, dr: 0, cr: amt, cc });
   return lines;
 }
-function checkLock(date) { const lk = S.settings.lockDate; if (lk && date <= lk) return `The books are closed up to ${fmtD(lk, true)}. Pick a later date, or ask the Principal to reopen.`; return ''; }
+function checkLock(date) { const lk = S.settings.lockDate; if (lk && date <= lk) return `The books are closed up to ${fmtD(lk, true)}. Pick a later date, or ask the Principal or the COO to reopen.`; return ''; }
 async function saveMoney() {
   const d = D(), k = d.kind;
   if (k === 'out' && d.mode !== 'bill') {
@@ -3456,10 +3457,10 @@ function peopleIds() {
 function morePeople() {
   const own = can.settings(), team = S.settings.team || {};
   const ids = peopleIds().sort((a, b) => (roleOf(a) === 'Principal' ? -1 : 0) - (roleOf(b) === 'Principal' ? -1 : 0) || nameOf(a).localeCompare(nameOf(b)));
-  const out = [pageH('People and roles', own ? 'Give each person a role. Share SLATE Books first: the COO and the accountant as Editors, office staff as Contributors. They appear here after they open it once.' : 'Only the Principal can change roles.')];
+  const out = [pageH('People and roles', own ? 'Give each person a role. People appear here after they open Books once from their SLATE OS account.' : 'Only the Principal and the COO can change roles.')];
   out.push(h('div', { class: 'list' }, ids.map(id => {
     const r = roleOf(id), seen = (S.members[id] || {}).seen;
-    const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto', onchange: e => setRole(id, e.target.value) }, ROLES.filter(x => x !== 'Principal').map(x => h('option', { value: x, text: x === 'Viewer' ? 'No role (view only)' : x }))); s.value = r === 'Principal' ? 'Viewer' : r; return s; })() : h('span', { class: 'tag', text: r });
+    const pick = own && id !== ownerId() && (S.isOwner || id !== S.uid) ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto', onchange: e => setRole(id, e.target.value) }, ROLES.filter(x => x !== 'Principal').map(x => h('option', { value: x, text: x === 'Viewer' ? 'No role (view only)' : x }))); s.value = r === 'Principal' ? 'Viewer' : r; return s; })() : h('span', { class: 'tag', text: r });
     const hd = holderAt(id), hs = holdersOf(id), acct = (team[id] || {}).account;
     const holdBtn = own && id !== ownerId() ? h('button', { class: 'linkish', type: 'button', style: 'font-size:12.5px', onclick: () => openSheet({ type: 'holders', id }), text: hs.length ? 'Account holder' : 'Set account holder' }) : null;
     return h('div', { class: 'row' }, ava(id), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: nameOf(id) }), id === S.uid ? h('span', { class: 'tag', text: 'You' }) : null, hs.length ? h('span', { class: 'tag', text: 'Shared account' }) : null),
@@ -3499,7 +3500,7 @@ function sheetHolders() {
     ['Close or reassign everything ' + cur.name + ' has pending.', 'Count the petty cash with a witness and save the count.', 'Change the password of the account, sign out all its sessions, and move its recovery phone to the new person.'].map(x => h('li', { text: x })))));
   return out;
 }
-const ROLE_HELP = { Principal: 'Sees everything, approves payments, sets roles and rules.', COO: 'Checks every entry and request, sees the books, can approve up to a limit.', Accountant: 'Enters money in and out, raises invoices, posts approved bills, runs reports.', 'Office staff': 'Records petty cash bills with photos and asks for top-ups. Doesn’t see the books.', Viewer: 'Can look, can’t change anything.' };
+const ROLE_HELP = { Principal: 'Sees everything, approves payments, sets roles, settings and approval rules.', COO: 'Checks every entry and request, sees the books, approves up to a limit, sets roles and settings.', Accountant: 'Enters money in and out, raises invoices, posts approved bills, runs reports.', 'Office staff': 'Records petty cash bills with photos and asks for top-ups. Doesn’t see the books.', Viewer: 'Can look, can’t change anything.' };
 function setRole(id, role) {
   const team = Object.assign({}, S.settings.team || {}); team[id] = Object.assign({}, team[id] || {}, { role });
   run(() => Store.patch('settings', 'main', { team }), 'Role saved');
@@ -3507,7 +3508,7 @@ function setRole(id, role) {
 
 /* approval rules */
 function moreRules() {
-  const a = settingsAppr(), own = can.settings();
+  const a = settingsAppr(), own = can.rules();
   const tog = (k, label) => h('label', { class: 'chk-l' }, h('input', { type: 'checkbox', checked: !!a[k], disabled: !own, onchange: e => saveAppr({ [k]: e.target.checked }) }), h('span', { text: label }));
   const out = [pageH('Approval rules', own ? 'Choose who has to look at each kind of entry. Changes apply to new entries.' : 'Set by the Principal.')];
   out.push(h('div', { class: 'card' }, h('b', { text: 'Money out (payments and petty cash bills)' }), tog('outCheck', 'The COO checks it'), tog('outApprove', 'The Principal approves it')));
@@ -3525,7 +3526,7 @@ function saveAppr(p) { run(() => Store.patch('settings', 'main', { approval: Obj
 /* settings */
 function moreSettings() {
   const own = can.settings(), st = S.settings;
-  const out = [pageH('Settings', own ? 'Company details for letterheads, voucher numbering and closing the books.' : 'Only the Principal can change settings.', own ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openSheet({ type: 'settings', d: settingsDraft() }), text: 'Edit' })] : null)];
+  const out = [pageH('Settings', own ? 'Company details for letterheads, voucher numbering and closing the books.' : 'Only the Principal and the COO can change settings.', own ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openSheet({ type: 'settings', d: settingsDraft() }), text: 'Edit' })] : null)];
   out.push(h('div', { class: 'facts' }, fact('Company', st.company || 'SLATE'), fact('Address', st.address || 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212'), fact('Phone and email', [st.phone || '01749-390284', st.email || 'info@slate-atelier.com'].join(' · ')),
     fact('Financial year', fyRuleName(st), curFY().label + ': ' + fmtD(curFY().from, true) + ' to ' + fmtD(curFY().to, true)), fact('Books closed up to', st.lockDate ? fmtD(st.lockDate, true) : 'Open'), fact('Petty cash box', L(pettyLedger()) || '—'),
     fact('Usual cash account', L(st.defaultCash) || 'Ask each time'), fact('Tax withheld goes to', L(tdsLedger()) || '—'), fact('Voucher numbers', Object.entries(st.prefixes || {}).filter(([k]) => ['Payment', 'Receipt', 'Contra', 'Journal'].includes(k)).map(([k, v]) => `${k} ${v}/${curFY().short}/001`).join(' · ')),

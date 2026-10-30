@@ -2,13 +2,15 @@
 -- One table for every Books record (ledgers, vouchers, invoices, requests, payroll, assets, files, settings …),
 -- each row a document: path = '<collection path>/<id>', coll = the collection path, data = the record.
 -- Who sees what:
---   Principal (designation principal) ............ everything; settings, roles, closing the books
---   COO (designation coo) ......................... everything except settings and roles
+--   Principal (designation principal) ............ everything; settings, roles, approval rules, closing the books
+--   COO (designation coo) ......................... everything, including settings, roles and closing the books;
+--                                                   not the approval rules or the COO's own role
 --   Accountant (given the role in Books) .......... enters and pays; sees the books
 --   Viewer (given the role in Books) .............. reads the books, changes nothing
 --   Office staff (given the role in Books) ........ petty cash and their own requests only
 --   anyone else ................................... nothing (they may only say they visited, so the Principal can give a role)
--- Entries dated on or before the closing date (settings.lockDate) can be changed only by the Principal.
+-- Entries dated on or before the closing date (settings.lockDate) can be changed only by the Principal
+-- (the COO can move the closing date to reopen a month).
 -- Every change is written to books_audit. Files go to the private storage bucket 'books'.
 -- Run once in the Supabase SQL editor. It runs as one transaction: if any step fails, nothing changes.
 
@@ -90,8 +92,7 @@ create policy books_delete on public.books_docs for delete to authenticated usin
 drop policy if exists books_audit_read on public.books_audit;
 create policy books_audit_read on public.books_audit for select to authenticated using ((select private.books_role()) in ('Principal','COO'));
 
--- the guard: stamps, settings and roles for the Principal alone (the COO may change the approval rules' working
--- fields only through the Principal), closed months, and the audit trail
+-- the guard: stamps, who changes the settings, closed months, and the audit trail
 create or replace function private.books_guard() returns trigger
 language plpgsql security definer set search_path to '' as $$
 declare r text := private.books_role(); lock text; d_old text; d_new text;
@@ -108,15 +109,20 @@ begin
     new.coll := regexp_replace(new.path, '/[^/]+$', '');
     new.doc_id := regexp_replace(new.path, '^.*/', '');
   end if;
-  -- the settings: roles, the closing date and the approval limits are the Principal's
+  -- the settings: the Principal and the COO keep them (company details, roles, financial year, closing date);
+  -- the approval rules (which include the COO's own approval limit) and the owner stay the Principal's alone,
+  -- and the COO cannot change their own role
   if coalesce(new.path, old.path) = 'settings/main' and r is distinct from 'Principal' then
-    if tg_op = 'DELETE' then raise exception 'Only the Principal changes Books settings'; end if;
-    if tg_op = 'INSERT' or (new.data->'team') is distinct from (old.data->'team')
-       or (new.data->'lockDate') is distinct from (old.data->'lockDate')
-       or (new.data->'approval') is distinct from (old.data->'approval')
-       or (new.data->'fyRule') is distinct from (old.data->'fyRule')
-       or (new.data->'ownerId') is distinct from (old.data->'ownerId') then
-      raise exception 'Only the Principal changes roles, approval limits, the financial year or the closing date';
+    if r is distinct from 'COO' then
+      raise exception 'Only the Principal and the COO change Books settings';
+    end if;
+    if tg_op = 'DELETE' then raise exception 'Only the Principal removes Books settings'; end if;
+    if tg_op = 'UPDATE' and ((new.data->'approval') is distinct from (old.data->'approval')
+       or (new.data->'ownerId') is distinct from (old.data->'ownerId')) then
+      raise exception 'Only the Principal changes the approval rules';
+    end if;
+    if tg_op = 'UPDATE' and (new.data->'team'->(auth.uid()::text)) is distinct from (old.data->'team'->(auth.uid()::text)) then
+      raise exception 'Only the Principal changes the COO''s own role';
     end if;
   end if;
   -- closed months: entries dated on or before the closing date stay as they are, except for the Principal
