@@ -1278,6 +1278,7 @@
           sheets['Finance projects'] = fin('projects').map(p => ({ Code: p.code, Name: p.name, Client: p.client, Status: p.status || 'active', 'Fee (BDT)': p.fee, Milestones: (p.milestones || []).map(m => `${m.label} ${m.pct}%`).join(' | '), Note: p.note || '' }));
           sheets['Finance invoices'] = fin('invoices').map(i => ({ No: i.no, Date: i.date, Due: i.due, Project: fpl(i.projectId), Description: i.desc, 'Fee (BDT)': i.amount, 'VAT %': i.vatPct, Status: i.status, 'Void reason': i.voidReason || '' }));
           sheets['Finance payments'] = fin('receipts').map(r => ({ Date: r.date, Invoice: (fi[r.invoiceId] || {}).no || '', Project: fpl(r.projectId), Received: r.received, AIT: r.ait, VDS: r.vds, Method: r.method, Ref: r.ref || '', 'Recorded by': nm(r.createdBy) }));
+          sheets['Salaries'] = fin('staff').map(x => ({ Name: x.name, Designation: x.designation || '', Active: x.active === false ? 'No' : 'Yes', Joined: x.joinDate || '', 'Career start': x.careerStart || '', 'Pay method': x.payMethod || '', 'Bank part': x.bankPart || '', 'Probation ends': x.probationEnd || '', 'Increment due': x.incrementDue || '', 'Salary history': JSON.stringify(x.rates || []), Note: x.note || '' }));
           sheets['Finance change log'] = (data.finance_log || []).map(a => ({ At: a.at, By: nm(a.actor), Record: a.path, Change: a.op }));
         }
         const wb = X.utils.book_new();
