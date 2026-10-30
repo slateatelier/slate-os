@@ -43,8 +43,22 @@ const cache = new Map();            // collection path -> Map(id -> data)
 const loading = new Map();          // collection path -> Promise
 const collSubs = new Map();         // collection path -> Set(callback)
 const docSubs = new Map();          // doc path -> Set(callback)
+let all = null;                     // one load of every record you may see, at start (instead of one call per kind)
+async function loadAll() {
+  const by = new Map();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('books_docs').select('path,coll,data').order('path').range(from, from + 999);
+    if (error) throw hostErr(error);
+    data.forEach(r => { if (!by.has(r.coll)) by.set(r.coll, new Map()); by.get(r.coll).set(idOf(r.path), r.data); });
+    if (data.length < 1000) break;
+  }
+  by.forEach((m, c) => { if (!cache.has(c)) cache.set(c, m); });
+  all = true;
+}
 async function loadColl(coll) {
   if (cache.has(coll)) return cache.get(coll);
+  if (all === true) { const m = new Map(); cache.set(coll, m); return m; }
+  if (all) { try { await all; } catch (_) {} if (cache.has(coll)) return cache.get(coll); if (all === true) { const m = new Map(); cache.set(coll, m); return m; } }
   if (loading.has(coll)) return loading.get(coll);
   const p = (async () => {
     const m = new Map();
@@ -76,7 +90,7 @@ function startLive() {
   }).subscribe();
 }
 /* a refresh when the page comes back into view, in case a live update was missed while it slept */
-async function refreshAll() { for (const coll of [...cache.keys()]) { cache.delete(coll); try { await loadColl(coll); emitColl(coll); [...docSubs.keys()].filter(p => collOf(p) === coll).forEach(emitDoc); } catch (_) {} } }
+async function refreshAll() { all = null; for (const coll of [...cache.keys()]) { cache.delete(coll); try { await loadColl(coll); emitColl(coll); [...docSubs.keys()].filter(p => collOf(p) === coll).forEach(emitDoc); } catch (_) {} } }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshAll(); });
 
 function docRef(path) {
@@ -130,9 +144,18 @@ const db = {
 };
 
 /* ---------- user ---------- */
-let ME = null, ROLE = null, PEOPLE = {};
+let ME = null, ROLE = null, PEOPLE = {}, MYICON = null;
+/* your SLATE OS profile icon, worked out as Studio does: the icon you chose, if no one chose it before you */
+async function loadMyIcon(uid) {
+  const icons = window.SLATE_ICONS; if (!icons) return;
+  const mem = {}; Object.values(PEOPLE).forEach(p => { mem[p.id] = { icon: p.icon || null, iconAt: p.icon_at || null }; });
+  const key = mem[uid] && mem[uid].icon; const ic = key && icons.find(x => x[0] === key); if (!ic) return;
+  let best = null;
+  for (const [id, m] of Object.entries(mem)) if (m && m.icon === key && (!best || (m.iconAt || '') < (mem[best].iconAt || '') || ((m.iconAt || '') === (mem[best].iconAt || '') && id < best))) best = id;
+  if (best === uid) MYICON = ic;
+}
 async function loadPeople() {
-  const { data } = await sb.from('profiles').select('id,full_name,label,designation,active');
+  const { data } = await sb.from('profiles').select('id,full_name,label,designation,active,icon,icon_at');
   PEOPLE = {}; (data || []).forEach(p => { PEOPLE[p.id] = p; });
 }
 const user = {
@@ -190,7 +213,16 @@ function headLeft(fallbackAva) {
   let hd = null; try { hd = JSON.parse(localStorage.getItem('slate-hdr') || 'null'); } catch (_) {}
   if (hd && ME && hd.uid !== ME.id) hd = null;
   const me = document.createElement('button'); me.className = 'mebtn'; me.type = 'button'; me.title = 'Sign out'; me.setAttribute('aria-label', 'Your account: sign out');
-  if (hd && hd.ava) { const t = document.createElement('template'); t.innerHTML = hd.ava; me.append(t.content.firstElementChild || fallbackAva()); } else me.append(fallbackAva());
+  const a = document.createElement('span');
+  if (MYICON) {
+    a.className = 'ava ic on'; a.style.setProperty('--c', MYICON[2]);
+    const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg');
+    [['viewBox', '0 0 24 24'], ['fill', 'none'], ['stroke', '#fff'], ['stroke-width', '1.8'], ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']].forEach(([k, v]) => svg.setAttribute(k, v));
+    MYICON[3].forEach(([t, at]) => { const el = document.createElementNS(NS, t); Object.entries(at).forEach(([k, v]) => el.setAttribute(k, v)); svg.append(el); });
+    a.append(svg); me.append(a);
+  } else if (hd && hd.ava) { const t = document.createElement('template'); t.innerHTML = hd.ava; me.append(t.content.firstElementChild || fallbackAva()); }
+  else { const p = ME && PEOPLE[ME.id]; const nm = (p && (p.label || p.full_name)) || (ME && ME.name) || '';
+    a.className = 'ava lead on'; a.textContent = nm.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase(); me.append(a); }
   me.onclick = () => { if (confirm('Sign out of SLATE OS?')) signOut(); };
   const n = hd ? +hd.n || 0 : 0;
   const bell = document.createElement('button'); bell.type = 'button'; bell.className = 'bell' + (n ? ' has' : '');
@@ -205,9 +237,9 @@ async function signOut() { try { await sb.auth.signOut(); } catch (_) {} locatio
 const ready = (async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return { signedOut: true };
-  await loadPeople();
-  const { data: role } = await sb.rpc('books_role');
-  ROLE = role || null;
+  const pAll = loadAll(); all = pAll; pAll.catch(() => { all = null; });
+  const [, r] = await Promise.all([loadPeople().then(() => loadMyIcon(session.user.id)).catch(() => {}), sb.rpc('books_role')]);
+  ROLE = (r && r.data) || null;
   const p = PEOPLE[session.user.id] || {};
   ME = { id: session.user.id, name: p.label || p.full_name || session.user.email, isOwner: ROLE === 'Principal',
     canEdit: ['Principal', 'COO', 'Accountant', 'Viewer'].includes(ROLE) };

@@ -1,8 +1,8 @@
 /* SLATE OS service worker: lets the app open from the home screen.
    The page and its scripts are fetched fresh whenever online (so updates arrive at once);
    the saved copy is used only when the network is unavailable. Data calls are never cached. */
-const CACHE = 'slate-os-v148';
-const SHELL = ['/', '/slate-db.js', '/config.js', '/qr.js', '/manifest.webmanifest', '/icons/tile-black.png',
+const CACHE = 'slate-os-v149';
+const SHELL = ['/', '/books', '/books-host.js', '/slate-db.js', '/config.js', '/qr.js', '/manifest.webmanifest', '/icons/tile-black.png',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
 
@@ -26,6 +26,14 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== self.location.origin) return;
+  // Books: the saved copy opens at once; a fresh copy is fetched behind it for next time (a release clears the saved copy)
+  if (url.pathname === '/books' || url.pathname === '/books.html' || url.pathname === '/books-host.js') {
+    const key = url.pathname === '/books-host.js' ? '/books-host.js' : '/books';
+    const fresh = fetch(req).then(res => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(key, copy)); } return res; });
+    e.respondWith(caches.match(key).then(hit => hit || fresh).catch(() => fresh));
+    e.waitUntil(fresh.catch(() => {}));
+    return;
+  }
   // Other pages (Finance) are never stored, so they can't replace the saved copy of the app.
   if (req.mode === 'navigate' && url.pathname !== '/' && url.pathname !== '/index.html') return;
   if (/^\/finance(\.js|\.html)?$/.test(url.pathname)) return;

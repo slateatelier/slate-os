@@ -3,7 +3,7 @@
 The Books code is kept as it is; the changes below connect it to SLATE OS (books-host.js),
 add the Studio · Business · Books switch and the Bangladesh financial year, and swap the Claude-only messages.
 Usage: python3 scripts/make-books.py <artifact.html> books.html"""
-import sys, re
+import sys, os, re
 src, out = sys.argv[1], sys.argv[2]
 s = open(src, encoding='utf-8').read()
 def rep(a, b, n=1):
@@ -105,5 +105,10 @@ body .chrome{background:rgba(231,241,234,.88);border-bottom:2px solid #3F7F5A}
 @media (max-width:640px){.top-in{--hic:34px}.bell.has{padding-right:9px}.bell .bn{margin-left:6px;font-size:12.5px}.logo{height:34px}}
 </style>
 <div class="chrome">""")
+
+# ---------- the profile icons, the same list Studio uses ----------
+_ix = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'index.html'), encoding='utf-8').read()
+_ic = _ix[_ix.index('const ICONS=') + len('const ICONS='):_ix.index('\nconst ICON=')].rstrip().rstrip(';')
+rep('<script src="/books-host.js"></script>', '<script>window.SLATE_ICONS=' + _ic + ';</script>\n<script src="/books-host.js"></script>')
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
