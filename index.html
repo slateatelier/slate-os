@@ -1586,13 +1586,12 @@ const PH3=[['Design freeze sheet prepared for signature','J',0,'','3-n1',0,'L'],
   ['Value engineering review with the consultants: structural system, slab type, member sizes','L',1,'','3-10'],['Facade compared with a simpler alternative, cost per sft stated','L',1,'','3-11'],['Material specification, best option','J',1,'','3-12',0,'L'],['Passive measures checked: shading, cross-ventilation, daylight','L',1,'','3-13'],['Final efficiency ratio recorded against the phase 0 target','J',1,'','3-14']];
 const PH={
   '0':{no:'0',n:'Brief & feasibility',d:[5,3],gate:'Brief and FAR report accepted by the client',steps:[['final','Brief and FAR report accepted']],items:[
-    ['Work order or agreement signed','C',0,'','0-n6'],['Site visit with photos and site notes (optional; chargeable)','J',0,'','0-1'],['Land document checklist reviewed: deed, mutation, khatian, survey','L',0,'','0-0'],['FAR, MGC and height check (DAP, Imarot Nirman Bidhimala 2025; the 2008 or 1996 rules where an older approval applies)','L',0,'','0-2'],
+    ['Work order or agreement signed','C',0,'','0-n6'],['Project set up in SLATE OS; timeline approved','C',0,'','1-1'],['From the client or SLATE: structural and MEP consultants appointed, with their work orders (land share: at 3R when the project goes live again)','C',0,'','1-2',['share']],['Site visit with photos and site notes (optional; chargeable)','J',0,'','0-1'],['Land document checklist reviewed: deed, mutation, khatian, survey','L',0,'','0-0'],['FAR, MGC and height check (DAP, Imarot Nirman Bidhimala 2025; the 2008 or 1996 rules where an older approval applies)','L',0,'','0-2'],
     ['Preliminary area statement and saleable area','J',0,'','0-3'],['Authority route identified: RAJUK, Cantonment, Jolshiri or Bashundhara; PP (block development), DTCA and Fire triggers','L',0,'','0-4'],['Design brief: unit mix, parking, budget, landowner needs','L',0,'','0-n1'],
     ['From the client: deed, mutation and khatian copies; digital survey; soil test; landowner requirements; LO and developer floor distribution, allotment paper, NOC, LO and developer agreement','L',0,'','0-n2'],
     ['SWOT analysis (optional)','J',0,'','0-n3'],['3D direction mood board shared with the client','J',0,'','0-n4'],['Principal review, then the brief and FAR report issued','P',0,'','0-5'],
     ['FAR yield maximised: every permissible area tested','L',1,'','0-6'],['Efficiency target set: saleable or usable area ÷ gross built area','L',1,'','0-7'],['Cost drivers flagged: basement depth, soil, shore protection, neighbours','L',1,'','0-8']]},
   '1':{no:'1',n:'Concept design',d:[10,7],gate:'One option selected by the client in writing',steps:[['sub','Concept design submitted'],['final','Option selected in writing']],items:[
-    ['Project set up in SLATE OS; timeline approved','C',0,'','1-1'],['From the client or SLATE: structural and MEP consultants appointed, with their work orders (land share: at 3R when the project goes live again)','C',0,'','1-2',['share']],
     ['Layout for all floors: typical, ground, parking and roof','J+L',0,'','1-5'],['Design information chart','J',0,'','1-n1'],['FAR area check done','L',0,'','1-7'],['Basic structural grid with parking, using consultant input','L',0,'','1-6'],
     ['Concept 3D massing and facade direction: several massing options with AI renders','J',0,'','1-8',0,'L'],['Package: cover, index, project information, features and amenities','J',0,'','1-9'],
     ['From the client: decision on the preferred option and unit mix','L',0,'','1-n2'],['Peer review passed','R',0,'','1-n3'],['Principal design review, then submit','P',0,'','1-10'],
@@ -5316,8 +5315,9 @@ function setPace(p,v){
   const from=paceOf(p); if(v===from) return;
   const upd={std:{pace:v}}, isProp=p.std&&p.std.type==='proposal';
   if(isProp&&stdState(p,'1').created&&((v==='fast')!==(from==='fast'))){ const m={};
-    SPRINT_NA.forEach(id=>{ const x=clOf(p,'1',id); if(x.done) return; if(v==='fast'){ if(!x.na) m[id]={na:true,sp:true}; } else if(x.sp) m[id]={na:false,sp:false}; });
-    if(Object.keys(m).length) upd.cl={'1':m}; }
+    SPRINT_NA.forEach(id=>{ const k=clItems('0').some(it=>it.id===id)?'0':'1', x=clOf(p,k,id); if(x.done) return; const set=o=>{ m[k]={...(m[k]||{}),[id]:o}; };
+      if(v==='fast'){ if(!x.na) set({na:true,sp:true}); } else if(x.sp) set({na:false,sp:false}); });
+    if(Object.keys(m).length) upd.cl=m; }
   return run(()=>S.db.doc('projects/'+p.id).update(upd),'Pace set to '+paceName(p,v));
 }
 function paceRow(p){
