@@ -36,6 +36,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tabs-in::-webkit-scrollbar{display:none}
 .tab{appearance:none;border:0;background:none;font-size:14px;font-weight:500;color:var(--muted);padding:10px 10px 9px;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;display:flex;gap:6px;align-items:center}
 .tab[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
+.space-sw{display:flex;flex:0 0 auto;align-self:center;background:var(--group);border-radius:999px;padding:3px;gap:2px;margin-right:6px}
+.space-b{appearance:none;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--muted);padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;display:flex;gap:5px;align-items:center}
+.space-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .badge{background:var(--overdue);color:#fff;border-radius:9px;font-size:11px;padding:0 6px;line-height:17px;font-weight:600}
 
 main{padding-block:24px 80px;display:grid;gap:24px}
@@ -2321,13 +2324,25 @@ function renderHeader(){
   const full=fullView(), mp=myPod();
   const cmem=amChalkMember(), ck=canChalkView()?[['chalk','Chalk Create',S.isOwner?chalkReqs().length:0]]:[];
   const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['meet','Meetings'],['team','Team'],['dash','Dashboard'],...(canProps()&&S.canWrite?[['biz','Business',propList().filter(propDue).length]]:[]),...ck,['more','More',nUnseenCount()]]; /* daily work first, then reviews, then Business and Chalk; People lives in More */
+  /* the Principal and the COO work in two spaces: Studio (the studio's screens, as the team sees them) and Business.
+     The space follows the screen: Business is S.view 'biz'; everything else is Studio. */
+  const spaces=!cmem&&canProps()&&S.canWrite, inBiz=spaces&&S.view==='biz';
+  if(spaces){ const i=list.findIndex(x=>x[0]==='biz'); if(i>=0) list.splice(i,1); }
+  if(!inBiz&&S.view!=='biz') S.lastStudio=S.view;
   const TASKV=['all','board','gantt'], MOREV=cmem?['notice']:['more','notice','activity','setup','std','help','far','reports','backup','entries','people','tlstatus'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
-  if(![...list.map(x=>x[0]),...TASKV,...MOREV].includes(S.view)) S.view='mine';
+  if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
-  tabs.replaceChildren(...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
+  const sw=spaces?h('div',{class:'space-sw',role:'group','aria-label':'Space'},[['studio','Studio'],['biz','Business',propList().filter(propDue).length]].map(([k,l,n])=>h('button',{type:'button',class:'space-b'+((k==='biz')===inBiz?' on':''),'aria-pressed':String((k==='biz')===inBiz),
+      onclick:()=>{ if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
+  if(inBiz){ S.biz=S.biz||{tab:'over',q:'',st:'active'}; const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
+    const bt=[['over','Overview'],['leads','Leads',nl],['proposed','Proposals',np],['fees','Fees'],['hr','HR & salaries'],['admin','Running costs'],...(S.uid===ownerId()?[['value','People value']]:[])];
+    tabs.replaceChildren(sw,...bt.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':'biz-'+k,'aria-current':S.biz.tab===k?'page':null,onclick:()=>{ S.biz.tab=k; render(true); window.scrollTo(0,0); }},l,n?h('span',{class:'badge',text:String(n)}):null)),
+      window.slateFinanceRole?h('a',{class:'tab',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none'},'Finance ↗'):null);
+  } else
+  tabs.replaceChildren(...(sw?[sw]:[]),...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
   try{ document.body.dataset.view=S.view; const fh=document.getElementById('far-host'); if(fh) fh.hidden=S.view!=='far'||!!(S.state!=='ready')||!!(S.far&&S.far.tab==='dash'&&canSeeScoring()); }catch(e){}
   const fab=$('#fab'), fm=S.view==='mine'?fabItems():[]; if(S.view!=='mine') fabClose();
   fab.hidden=!(fm.length>1||(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view))); fab.onclick=()=>fm.length>1?fabToggle():openNewTask();
@@ -7827,8 +7842,9 @@ function feeStats(fr){ const F=S.feeFin, fee=+((fr||{}).fee)||0; if(!fr||!F||F.s
   return {fee,billed,col,due:Math.max(0,billed-col),unb:Math.max(0,fee-billed)}; }
 const msLocked=(fr,m)=>!!fr&&!!S.feeFin&&S.feeFin.inv.some(i=>i.projectId===fr.id&&i.milestoneId===m.id&&i.status!=='void');
 function bizHead(lead,action){ const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl, ph=window.innerWidth<=640, d=n=>n?' · '+n+(ph?'':' due'):'';
-  const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:S.biz.tab==='value'?'Only you':'Only you and the COO'}),h('h1',{class:'h1',text:'Business'})),action?h('div',{class:'biz-act'},action):null),
-    h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['fees','Fees'],['hr','HR'],['admin','Admin'],...(S.uid===ownerId()?[['value',ph?'Value':'People value']]:[])],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
+  const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:'Business · '+(S.biz.tab==='value'?'only you':'only you and the COO')}),h('h1',{class:'h1',text:({over:'Overview',leads:'Leads',proposed:'Proposals',fees:'Fees',hr:'HR & salaries',admin:'Running costs',value:'People value'})[S.biz.tab]||'Business'})),action?h('div',{class:'biz-act'},action):null),
+    S.canWrite?null:h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['fees','Fees'],['hr','HR'],['admin','Admin'],...(S.uid===ownerId()?[['value',ph?'Value':'People value']]:[])],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
+  out.splice(0,out.length,...out.filter(Boolean));
   if(lead) out.push(h('p',{class:'f-hint biz-lead',text:lead}));
   return out; }
 /* totals behind Fees and the Overview */
