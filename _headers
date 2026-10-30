@@ -40,3 +40,15 @@
 /i/*
   Cache-Control: no-store
   Referrer-Policy: no-referrer
+
+# SLATE Books runs inside SLATE OS in a frame (the Books space), so it may be framed, and only by SLATE OS itself
+/books
+  ! X-Frame-Options
+  Content-Security-Policy: frame-ancestors 'self'
+  Cache-Control: no-cache
+/books.html
+  ! X-Frame-Options
+  Content-Security-Policy: frame-ancestors 'self'
+  Cache-Control: no-cache
+/books-host.js
+  Cache-Control: no-cache

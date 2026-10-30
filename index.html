@@ -2156,7 +2156,10 @@ function placeBooks(){ const pane=document.getElementById('books-pane'), ti=docu
 function openBooks(){
   let pane=document.getElementById('books-pane');
   if(!pane){ pane=h('div',{id:'books-pane'},h('div',{class:'bk-wait',text:'Opening Books…'})); const f=document.createElement('iframe'); f.title='SLATE Books'; f.src='/books?embed=1';
-    f.addEventListener('load',()=>{ const w=pane.querySelector('.bk-wait'); if(w) w.remove(); }); pane.append(f); document.body.append(pane); }
+    f.addEventListener('load',()=>{ const w=pane.querySelector('.bk-wait'); if(w) w.remove(); }); pane.append(f); document.body.append(pane);
+    /* if Books cannot show here (blocked or offline), say so and offer it on its own page instead of a blank screen */
+    setTimeout(()=>{ let ok=false; try{ const d=f.contentDocument; ok=!!(d&&d.getElementById('view')); }catch(e){}
+      if(!ok&&!pane.querySelector('.bk-wait')) pane.append(h('div',{class:'bk-wait'},h('div',{style:'text-align:center;padding:24px'},h('div',{text:'Books didn’t open here.'}),h('a',{href:'/books?solo=1',style:'color:var(--ink);text-decoration:underline',text:'Open Books on its own page'})))); },8000); }
   S.books=true; render(true); placeBooks();
 }
 addEventListener('resize',()=>{ if(S.books) placeBooks(); });

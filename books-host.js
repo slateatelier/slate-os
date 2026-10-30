@@ -249,7 +249,7 @@ const ready = (async () => {
   const p = PEOPLE[session.user.id] || {};
   ME = { id: session.user.id, name: p.label || p.full_name || session.user.email, isOwner: ROLE === 'Principal',
     canEdit: ['Principal', 'COO', 'Accountant', 'Viewer'].includes(ROLE) };
-  if (!EMBED && spaceSwitch()) { location.replace('/?space=books'); return new Promise(() => {}); }
+  if (!EMBED && spaceSwitch() && !/[?&]solo=1/.test(location.search)) { location.replace('/?space=books'); return new Promise(() => {}); }
   document.body.classList.toggle('has-spaces', !!spaceSwitch());
   return { ok: true };
 })();
