@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
     if (body.action === 'deactivate' || body.action === 'reactivate') {
       // someone leaves SLATE: block their sign-in and make the account read-only; their records stay
       const on = body.action === 'reactivate';
+      if (!boss) return fail('Switching a sign-in off or on needs the Principal. Change Active on their card in Business › HR & salaries; the Principal approves it.', 403);
       const id = String(body.user_id || '');
       if (!UUID.test(id)) return fail('Choose a person.');
       if (id === me.id) return fail('You can’t deactivate your own account.');
