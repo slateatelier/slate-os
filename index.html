@@ -7769,15 +7769,16 @@ function pbDefaults(p,kind){
     feeMode:k==='det'?'parts':'lump',parts:PB_PARTS[k].map(([label,rate])=>({label,rate:String(rate)})),disc:'',discMode:'amt',
     lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabRate:'270',
     sched:PB_SCHED[k].map(([label,pct])=>({label,pct:String(pct)})),
-    vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',validDays:'30',revFree:'2',revFee:'20000',
+    vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',validDays:'30',revFree:'2',revRate:'10000',
     terms:PB_TERMS.join('\n'),signName:'Syed Mohammed Imran',signTitle:'Principal Architect'}; }
+const pbRevFee=d=>Math.round((+d.katha||0)*(+d.revRate||0));
 function pbFee(d){ const area=+d.area||0;
   if(d.feeMode==='lump'){ const t=+d.lump||0; return {sub:t,disc:0,total:t,rate:area?t/area:0,area}; }
   const rate=d.parts.reduce((a,x)=>a+(+x.rate||0),0), sub=rate*area, disc=d.discMode==='sft'?(+d.disc||0)*area:(+d.disc||0), total=Math.max(0,sub-disc);
   return {sub,disc,total,rate:area?total/area:0,rawRate:rate,area}; }
 function openPropDoc(id,kind){ const p=(S.props||{})[id]; if(!p) return;
   const d=p.doc&&!kind?JSON.parse(JSON.stringify(p.doc)):pbDefaults(p,kind);
-  if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revFee==null) d.revFee='20000';
+  if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revRate==null) d.revRate='10000'; delete d.revFee;
   if(p.doc&&kind){ d.ref=p.doc.ref||d.ref; d.date=p.doc.date||d.date; }
   S.sheet={type:'propDoc',id,d,err:'',pdf:null}; renderSheet(); }
 function sheetPropDoc(){
@@ -7834,7 +7835,7 @@ function sheetPropDoc(){
       h('div',{class:'form-row'},field('Free site visits',inp('vFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra visit, lead (Tk)',inp('vLead',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
       h('div',{class:'form-row'},field('Extra visit, senior (Tk)',inp('vSenior',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('As-built drawings (Tk)',inp('asBuilt',{type:'number',min:0,step:'any',inputmode:'decimal'},),'Leave empty if included')),
       field('Extra 3D view (Tk per image)',inp('extra3d',{type:'number',min:0,step:'any',inputmode:'decimal'})),
-      h('div',{class:'form-row'},field('Free revisions (whole project)',inp('revFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Each extra revision (Tk)',inp('revFee',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
+      h('div',{class:'form-row'},field('Free revisions (whole project)',inp('revFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra revision (Tk per katha)',inp('revRate',{type:'number',min:0,step:'any',inputmode:'decimal'}),+d.katha&&+d.revRate?'= '+pbTk(pbRevFee(d))+' per revision on '+d.katha+' katha':'Enter the land size above')),
       field('Offer valid for (days)',inp('validDays',{type:'number',min:1,step:'1',inputmode:'numeric'}),d.date&&+d.validDays>0?'Valid until '+fmtD(addDays(d.date,+d.validDays))+'. Shown on the proposal.':null),
       field('VAT and AIT',sel('tax',[['excl','Not included: added to each invoice (client pays)'],['incl','Included in the fee']])),
       sec('Terms'),field('One per line',ta('terms',{rows:6})),
@@ -7908,10 +7909,10 @@ function pbBlocks(p,d){
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
   const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?['Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?['Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
     d.asBuilt!==''&&d.asBuilt!=null?['As-built drawings',+d.asBuilt?pbTk(d.asBuilt)+' (fixed)':'Included']:null,+d.extra3d?['Additional 3D view',pbTk(d.extra3d)+' per image']:null,
-    +d.revFee?['Design revision beyond the '+(+d.revFree||0)+' included',pbTk(d.revFee)+' per revision']:null].filter(Boolean);
+    pbRevFee(d)?['Design revision beyond the '+(+d.revFree||0)+' included',pbTk(pbRevFee(d))+' per revision ('+pbTk(d.revRate)+' per katha)']:null].filter(Boolean);
   if(ex.length) add(`<h2>Site visits and additional services</h2><table>${ex.map(([k,v])=>`<tr><td>${pbEsc(k)}</td><td class="n">${pbEsc(v)}</td></tr>`).join('')}</table>`);
   const gen=[];
-  if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(+d.revFee?`Each further revision is charged ${pbTk(d.revFee)}.`:'Further revisions are charged separately.'));
+  if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(pbRevFee(d)?`Each further revision is charged at ${pbTk(d.revRate)} per katha of land, ${pbTk(pbRevFee(d))} for this project.`:'Further revisions are charged separately.'));
   if(+d.validDays>0) gen.push(`This offer is valid for ${+d.validDays} days, until ${fmtLong(addDays(d.date||today(),+d.validDays))}. After that the fee and terms may be revised.`);
   list('Terms and conditions',[...pbLines(d.terms),...gen]);
   add(`<p class="pb-p" style="margin-top:6mm">We look forward to working with you.</p><div class="pb-acc"><div><b>${pbEsc(d.signName)}</b>${pbEsc(d.signTitle)}<br>SLATE</div><div><b>Accepted by</b>Name, signature and date<br>${pbEsc(d.toCompany||p.client||'')}</div></div>`);
