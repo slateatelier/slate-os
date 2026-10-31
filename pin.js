@@ -9,10 +9,6 @@ let sb = null, st = null, until = 0, timer = null, lastTouch = 0, asking = null;
 const lockCbs = [], unlockCbs = [];
 const client = () => sb || window.slateSupabase || (window.BooksHost && window.BooksHost.sb) || null;
 const touch = () => { try { return matchMedia('(pointer:coarse)').matches; } catch (_) { return false; } };
-/* iPhone: a field focused by code (not by a tap) can end up focused with no keyboard, and tapping it then does nothing.
-   So on touch screens nothing is focused for the person; a tap on a field always brings the keyboard up. */
-const focusLater = i => { if (!touch()) setTimeout(() => i.focus(), 30); };
-const tapFix = i => { i.addEventListener('touchend', e => { if (document.activeElement === i) { e.preventDefault(); i.blur(); setTimeout(() => i.focus(), 0); } }); return i; };
 const isPhone = () => { try { return matchMedia('(pointer:coarse)').matches && Math.min(screen.width, screen.height) <= 820; } catch (_) { return false; } };
 const hhmm = iso => { try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
 
@@ -73,7 +69,29 @@ const CSS = `#slate-pin{position:fixed;inset:0;z-index:2147483000;background:#ff
 #slate-pin button{font:inherit;font-size:15px;font-weight:600;border:0;border-radius:10px;padding:12px 16px;cursor:pointer;background:#E8E8EC;color:#000}
 #slate-pin button.pri{background:#000;color:#fff}
 #slate-pin button.lnk{background:none;padding:4px;font-weight:500;font-size:14px;color:#000;text-decoration:underline;text-decoration-color:#C7C7CC;text-underline-offset:3px;justify-self:center}
-#slate-pin button[disabled]{opacity:.5}`;
+#slate-pin button[disabled]{opacity:.5}
+#slate-pin .dots{display:flex;gap:18px;justify-content:center;padding:6px 0 2px}
+#slate-pin .dots i{width:16px;height:16px;border-radius:50%;border:2px solid #000;box-sizing:border-box}
+#slate-pin .dots i.on{background:#000}
+#slate-pin .padlbl{text-align:center;font-size:14px;font-weight:600;color:#000}
+#slate-pin .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;width:100%;justify-self:center}
+#slate-pin .keys button{font-size:26px;font-weight:500;padding:0;height:62px;border-radius:14px;background:#F2F2F7;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+#slate-pin .keys button:active{background:#D8D8DE}
+#slate-pin .keys button.blank{visibility:hidden}
+#slate-pin .keys button.del{font-size:15px;font-weight:600;background:none}`;
+/* the PIN is entered on buttons on the screen, not with the phone's keyboard (which an iPhone Home Screen app
+   would not always open for this screen); a computer keyboard's number keys work too */
+function pad(label, onFull) {
+  let v = '';
+  const lbl = el('div', { class: 'padlbl', text: label || '' });
+  const dots = el('div', { class: 'dots', role: 'img', 'aria-label': 'PIN, 0 of 4 digits' }, [0, 1, 2, 3].map(() => el('i')));
+  const draw = () => { [...dots.children].forEach((d, i) => d.classList.toggle('on', i < v.length)); dots.setAttribute('aria-label', `PIN, ${v.length} of 4 digits`); };
+  const press = k => { if (k === 'del') v = v.slice(0, -1); else if (/^\d$/.test(k) && v.length < 4) v += k; draw(); if (v.length === 4 && k !== 'del') { const x = v; setTimeout(() => onFull(x), 120); } };
+  const keys = el('div', { class: 'keys' }, ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map(k => k === ''
+    ? el('button', { type: 'button', class: 'blank', tabindex: '-1', 'aria-hidden': 'true' })
+    : el('button', { type: 'button', class: k === 'del' ? 'del' : '', 'aria-label': k === 'del' ? 'Delete' : k, text: k === 'del' ? 'Delete' : k, onclick: () => press(k) })));
+  return { node: [lbl, dots, keys], press, clear: () => { v = ''; draw(); }, setLabel: t => { lbl.textContent = t; } };
+}
 function el(t, a, ...kids) {
   const e = document.createElement(t);
   Object.entries(a || {}).forEach(([k, v]) => { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v); });
@@ -86,8 +104,10 @@ function ask(opts) {
   return new Promise(resolve => {
     if (!document.getElementById('slate-pin-css')) document.head.append(el('style', { id: 'slate-pin-css', text: CSS }));
     const root = el('div', { id: 'slate-pin', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Business and Books PIN' });
-    let mode = st && st.hasPin && !st.blocked ? 'enter' : 'set', busy = false;
-    const done = ok => { root.remove(); document.documentElement.style.overflow = ''; resolve(ok); };
+    let mode = st && st.hasPin && !st.blocked ? 'enter' : 'set', busy = false, active = null;
+    const onKey = e => { if (!active || busy || (e.target && e.target.tagName === 'INPUT')) return; if (/^\d$/.test(e.key)) { e.preventDefault(); active.press(e.key); } else if (e.key === 'Backspace') { e.preventDefault(); active.press('del'); } };
+    document.addEventListener('keydown', onKey);
+    const done = ok => { document.removeEventListener('keydown', onKey); root.remove(); document.documentElement.style.overflow = ''; resolve(ok); };
     const trustBox = () => (st && st.canTrust && isPhone()) ? el('label', { class: 'ck' }, el('input', { type: 'checkbox', id: 'pin-trust' }), 'Keep unlocked on this phone') : null;
     const trust = () => { const t = root.querySelector('#pin-trust'); return !!(t && t.checked); };
     const ok = r => {
@@ -108,33 +128,30 @@ function ask(opts) {
       const cancel = el('button', { type: 'button', onclick: () => done(false), text: opts.cancelText || 'Back to Studio' });
       let body;
       if (mode === 'enter') {
-        const pin = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '4', 'aria-label': 'PIN', placeholder: '••••' });
-        const submit = () => { const v = pin.value.replace(/\D/g, ''); if (v.length !== 4) return fail('The PIN is 4 digits.'); go('pin_unlock', { p_pin: v, p_trust: trust() }); pin.value = ''; };
-        pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, 4); if (pin.value.length === 4) submit(); });
-        pin.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+        const P1 = pad('', v => { P1.clear(); go('pin_unlock', { p_pin: v, p_trust: trust() }); });
+        active = P1;
         body = [el('h2', { text: 'Enter your PIN' }),
           el('p', { text: st && st.lockedUntil ? `Too many wrong tries. Try again after ${hhmm(st.lockedUntil)}.` : 'Business and Books need your 4-digit PIN on this device. They lock again after 10 minutes without use.' }),
-          pin, trustBox(), err,
-          el('div', { class: 'btns' }, el('button', { type: 'button', class: 'pri', onclick: submit, text: 'Unlock' }), cancel,
+          ...P1.node, trustBox(), err,
+          el('div', { class: 'btns' }, cancel,
             el('button', { type: 'button', class: 'lnk', onclick: () => { mode = 'set'; render(); }, text: 'Forgot your PIN? Set a new one' }))];
-        tapFix(pin); focusLater(pin);
       } else {
         const pw = el('input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Your SLATE OS password' });
-        const p1 = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'new-password', maxlength: '4', placeholder: '••••', 'aria-label': 'New PIN' });
-        const p2 = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'new-password', maxlength: '4', placeholder: '••••', 'aria-label': 'New PIN again' });
-        [p1, p2].forEach(i => i.addEventListener('input', () => { i.value = i.value.replace(/\D/g, '').slice(0, 4); }));
-        const submit = () => {
-          if (!pw.value) return fail('Enter your SLATE OS password.');
-          if (p1.value.length !== 4) return fail('The PIN is 4 digits.');
-          if (p1.value !== p2.value) return fail('The two PINs are different.');
-          go('pin_set', { p_password: pw.value, p_pin: p1.value, p_trust: trust() });
-        };
+        let first = '';
+        const P2 = pad('New PIN (4 digits)', v => {
+          if (!pw.value) { P2.clear(); return fail('Enter your SLATE OS password first.'); }
+          if (!first) { first = v; P2.clear(); P2.setLabel('The same PIN again'); err.textContent = ''; return; }
+          if (v !== first) { first = ''; P2.clear(); P2.setLabel('New PIN (4 digits)'); return fail('The two PINs were different. Enter the new PIN again.'); }
+          const pin = first; first = ''; P2.clear(); P2.setLabel('New PIN (4 digits)');
+          go('pin_set', { p_password: pw.value, p_pin: pin, p_trust: trust() });
+        });
+        active = P2;
         body = [el('h2', { text: st && st.hasPin ? 'Set a new PIN' : 'Set your PIN' }),
-          el('p', { text: st && st.blocked ? 'Too many wrong PINs today, so Business and Books are closed until you set a new PIN. Enter your SLATE OS password to set it.' : 'Business and Books now need a 4-digit PIN as well as your sign-in, so they stay closed on a shared computer. Enter your SLATE OS password to set it.' }),
-          el('label', {}, 'Your SLATE OS password', pw), el('label', {}, 'New PIN (4 digits)', p1), el('label', {}, 'New PIN again', p2), trustBox(), err,
-          el('div', { class: 'btns' }, el('button', { type: 'button', class: 'pri', onclick: submit, text: 'Set PIN and open' }), cancel,
+          el('p', { text: st && st.blocked ? 'Too many wrong PINs today, so Business and Books are closed until you set a new PIN. Enter your SLATE OS password, then the new PIN twice.' : 'Business and Books need a 4-digit PIN as well as your sign-in, so they stay closed on a shared computer. Enter your SLATE OS password, then the new PIN twice.' }),
+          el('label', {}, 'Your SLATE OS password', pw), ...P2.node, trustBox(), err,
+          el('div', { class: 'btns' }, cancel,
             st && st.hasPin && !st.blocked ? el('button', { type: 'button', class: 'lnk', onclick: () => { mode = 'enter'; render(); }, text: 'I know my PIN' }) : null)];
-        [pw, p1, p2].forEach(tapFix); focusLater(pw);
+        if (!touch()) setTimeout(() => pw.focus(), 30);
       }
       const ico = el('div', { class: 'pl' }); ico.innerHTML = LOCK_ICO;
       root.replaceChildren(el('div', { class: 'pc' }, ico, ...body));
