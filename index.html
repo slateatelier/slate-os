@@ -8819,10 +8819,10 @@ function sheetFee(){
   const msRow=(m,i)=>{ const lk=msLocked(fr,m);
     return h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 64px 64px 30px;gap:6px;align-items:center'},
       h('input',{value:m.label,placeholder:'Milestone','aria-label':'Milestone',readonly:lk,oninput:e=>{m.label=e.target.value}}),
-      h('input',{type:'number',min:0,max:100,step:'0.5',value:m.pct,'aria-label':'Percent of fee',readonly:lk,oninput:e=>{m.pct=e.target.value; const t=document.getElementById('ms-sum'); if(t) t.textContent=msTxt();}}),
+      h('input',{type:'number',min:0,max:100,step:'any',value:m.pct,'aria-label':'Percent of fee',readonly:lk,oninput:e=>{m.pct=e.target.value; const t=document.getElementById('ms-sum'); if(t) t.textContent=msTxt();}}),
       h('span',{class:'muted',style:'font-size:12.5px;text-align:right',text:lk?'Invoiced':feeNow?bdt(feeNow*(+m.pct||0)/100):''}),
       lk?h('span'):h('button',{class:'btn btn-sm',type:'button','aria-label':'Remove milestone',onclick:()=>{ d.ms.splice(i,1); renderSheet(); },text:'×'})); };
-  const msTxt=()=>{ const t=d.ms.reduce((a,m)=>a+(+m.pct||0),0); return `${t}% of the fee`+(t!==100?' · should total 100%':''); };
+  const msTxt=()=>{ const t=Math.round(d.ms.reduce((a,m)=>a+(+m.pct||0),0)*100)/100; return `${t}% of the fee`+(Math.round(t)!==100?' · should total 100%':''); };
   return [head(`${p.code||''} · Fee`,p.name),
     h('p',{class:'f-hint',style:'margin:0',text:'Only you and the COO see this. Saved straight into Finance, which uses it for invoices.'}),
     fr?h('div',{class:'n-sum'},[['Fee',taka(s.fee)],['Billed',bdt(s.billed)],['Collected',bdt(s.col)],['Unpaid',bdt(s.due)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v}),h('span',{text:l})))):h('p',{class:'f-hint',style:'margin:0',text:'Not in Finance yet: saving creates its Finance record. Finance then only needs the billing details (bills as, bank account, address).'}),
@@ -8886,7 +8886,7 @@ function viewProjects(){
     h('div',{class:'list'},openA.map(p=>{ const a=acctOf(p), nx=(a.unbilledMs||[])[0];
       return h('div',{class:'card',role:'button',tabindex:'0',style:'border-radius:0;border-bottom:1px solid var(--line);cursor:pointer;gap:6px',onclick:()=>openProjectView(p.id),onkeydown:e=>{ if(e.key==='Enter') openProjectView(p.id); }},
         h('div',{class:'row-title'},h('span',{class:'mono',text:p.code||''}),h('span',{text:p.name})),
-        h('div',{class:'row-meta'},h('span',{text:outcomeLabel(p)+(closedOn(p)?' '+fmtD(closedOn(p)):'')}),nx?h('span',{text:`· next to bill: ${nx.label} (${+nx.pct}%)`}):null),
+        h('div',{class:'row-meta'},h('span',{text:outcomeLabel(p)+(closedOn(p)?' '+fmtD(closedOn(p)):'')}),nx?h('span',{text:`· next to bill: ${nx.label} (${Math.round(+nx.pct*10)/10}%)`}):null),
         h('div',{},h('span',{class:'pill '+(+a.overdue?'s-overdue':'s-late'),text:acctLine(a)+(+a.overdue?` · ${a.overdue} overdue`:'')}))); }))):null;
   if(!list.length){ out.push(h('p',{class:'muted',text:all.length?(f.st==='archive'?'Nothing in the archive matches these filters.':f.st==='acct'?(S.acct?'No open accounts. Every closed project is fully billed and collected.':'Checking Finance…'):f.st==='active'&&!f.q&&!f.pod?'No active projects.':'No projects match these filters.'):'No projects yet.'})); if(holdSec) out.push(holdSec); if(acctSec) out.push(acctSec); return out; }
   out.push(h('div',{class:'pgrid'},list.map(p=>{ const st=stats.get(p.id), [hl,hk]=HEALTH[st.health];
@@ -9061,7 +9061,7 @@ function sheetProjClose(){
   if(window.slateFinanceRole&&!internal){
     if(du===undefined) f.push(h('p',{class:'f-hint',style:'margin:0',text:'Checking Finance for unpaid bills…'}));
     else if(du&&(+du.due>1||+du.unbilled>1)) f.push(h('div',{class:'callout'},h('b',{text:'Account open · '+acctLine(du)}),
-      (du.unbilledMs||[]).length?h('span',{class:'f-hint',style:'margin:0',text:'Not yet billed: '+du.unbilledMs.map(m=>`${m.label} ${+m.pct}% (${taka(m.amount)})`).join(', ')}):null,
+      (du.unbilledMs||[]).length?h('span',{class:'f-hint',style:'margin:0',text:'Not yet billed: '+du.unbilledMs.map(m=>`${m.label} ${Math.round(+m.pct*10)/10}% (${taka(m.amount)})`).join(', ')}):null,
       +du.due>1?h('span',{class:'f-hint',style:'margin:0',text:`${du.open} invoice${+du.open===1?'':'s'} unpaid`+(+du.overdue?` · ${du.overdue} overdue`:'')}):null,
       h('span',{class:'f-hint',style:'margin:0',text:o==='onhold'?'Chase these before the project goes quiet. The amount is recorded with the hold.':'You can still '+OUTCOMES[o].btn.toLowerCase()+' now: nothing here waits on as-built drawings or the last payment. The project shows Account open to you and the COO until Finance has it all, and you are both reminded on the 1st of each month.'}),
       FIN_UI?h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'}):null));
@@ -9306,7 +9306,7 @@ async function doSup(pid,m,d){
 function acctBox(p){ if(!finOn()) return null; acctLoad(); if(!S.acct) return null; const a=acctOf(p);
   if(!a) return h('p',{class:'f-hint',style:'margin:8px 0 0',text:'Account settled in Finance.'});
   return h('div',{class:'callout',style:'margin-top:10px'},h('b',{text:'Account open · '+acctLine(a)}),
-    (a.unbilledMs||[]).length?h('div',{class:'f-hint',style:'margin:0',text:'Still to bill: '+a.unbilledMs.map(m=>`${m.label} ${+m.pct}% (${taka(m.amount)})`).join(', ')}):null,
+    (a.unbilledMs||[]).length?h('div',{class:'f-hint',style:'margin:0',text:'Still to bill: '+a.unbilledMs.map(m=>`${m.label} ${Math.round(+m.pct*10)/10}% (${taka(m.amount)})`).join(', ')}):null,
     +a.due>1?h('div',{class:'f-hint',style:'margin:0',text:`${a.open} invoice${+a.open===1?'':'s'} unpaid`+(+a.overdue?` · ${a.overdue} overdue`:'')}):null,
     h('span',{class:'f-hint',style:'margin:0',text:FIN_UI?'The project stays completed. Bill and collect in Finance; mark the Finance project Closed to write off anything that won’t be billed.':'The project stays completed. Bill and collect by manual invoice until Books goes live.'}),
     FIN_UI?h('a',{href:'/finance',target:'_blank',rel:'noopener',text:'Open Finance ↗'}):null); }
