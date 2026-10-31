@@ -271,5 +271,31 @@ rep("""return h('button', { class: 'row', type: 'button', onclick: () => openShe
 # any row with no icon: its text takes the icon's column too (Accounts, Fixed assets and the like)
 rep(""".row-main{min-width:0}""", """.row-main{min-width:0}.row>.row-main:first-child{grid-column:1/3}""")
 
+# ---------- full project status from SLATE OS: Completed and Construction support still owe the whole fee ----------
+rep("""function comingInBox() {""", """/* a project that owes only the work done: paused, closed after a phase, or cancelled */
+const STOPPED = st => !!st && !['Active', 'Completed', 'Construction support'].includes(st);
+function comingInBox() {""")
+rep("""  const stopped = x => x.status && x.status !== 'Active', earned = x => +((S.projects[x.id] || {}).earned) || 0;""",
+    """  const stopped = x => STOPPED(x.status), earned = x => +((S.projects[x.id] || {}).earned) || 0, flag = x => S.projects[x.id] || {};""")
+rep("""  const act = list.filter(x => x.id && !x.overhead && (x.status === 'Active' || (stopped(x) && x.toCollect > 0.5)));""",
+    """  const act = list.filter(x => x.id && !x.overhead && !flag(x).feeTba && !flag(x).free && (!stopped(x) || x.toCollect > 0.5));
+  const tba = list.filter(x => x.id && !x.overhead && flag(x).feeTba && !stopped(x));""")
+rep("""noFee = act.filter(x => x.status === 'Active' && !x.contract).length;""", """noFee = act.filter(x => !stopped(x) && !x.contract).length;""")
+rep("""  if (noFee) body.push(""", """  if (tba.length) body.push(h('div', { class: 'f-hint' }, 'Fee to be agreed, not counted until it is set in SLATE OS › Business › Fees:', h('div', { class: 'pst-chips' }, tba.map(x => h('span', { class: 'pst-chip pst-a', title: x.code || '' }, h('i', { class: 'pst-dot pst-a' }), (x.name || x.code) + (x.revenueToDate > 0.5 ? ' · received ' + tkShort(x.revenueToDate) : '') + (+flag(x).estFee ? ' · est. ' + tkShort(+flag(x).estFee) : ''))))));
+  if (noFee) body.push(""")
+rep("""[['Active', 'Running'], ['On hold', 'On hold'], ['Closed', 'Closed'], ['Cancelled', 'Cancelled']]""", """[['Active', 'Running'], ['Construction support', 'Construction support'], ['On hold', 'On hold'], ['Completed', 'Completed'], ['Cancelled', 'Cancelled']]""")
+rep("""const pstCls = st => /cancel/i.test(st || '') ? 'pst-x' : /hold|paus/i.test(st || '') ? 'pst-h' : /clos|complet/i.test(st || '') ? 'pst-c' : 'pst-a';""",
+    """const pstCls = st => /cancel/i.test(st || '') ? 'pst-x' : /hold|paus/i.test(st || '') ? 'pst-h' : /complet/i.test(st || '') ? 'pst-d' : /clos/i.test(st || '') ? 'pst-c' : 'pst-a';""")
+rep(""".pst-a.pst-dot{background:#34A853}""", """.pst-a.pst-dot{background:#34A853}.pst-d.pst-dot{background:#2F6FD6}""")
+rep("""const by = { Active: [], 'On hold': [], Completed: [], Closed: [], Cancelled: [] };""", """const by = { Active: [], 'Construction support': [], 'On hold': [], Completed: [], Closed: [], Cancelled: [] };""")
+rep("""    D().status !== 'Active' ? field('Fee SLATE has earned for work done (Tk)',""", """    STOPPED(D().status) ? field('Fee SLATE has earned for work done (Tk)',""")
+rep("""      (pr.status && pr.status !== 'Active') ? (+pr.earned ?""", """      STOPPED(pr.status) ? (+pr.earned ?""")
+
+rep("""[['Active', 'Active'], ['On hold', 'On hold'], ['Closed', 'Closed']], { disabled: ro || os })""", """[['Active', 'Active'], ['Construction support', 'Construction support'], ['On hold', 'On hold'], ['Completed', 'Completed'], ['Closed', 'Closed'], ['Cancelled', 'Cancelled']], { disabled: ro || os })""")
+
+# projects list: say when the fee is still to be agreed, or the project is pro bono
+rep("""h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : null)); })))); });""",
+    """h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : p.feeTba ? h('span', { class: 'b', text: 'fee to be agreed' }) : p.free ? h('span', { class: 'b', text: 'pro bono' }) : null)); })))); });""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))

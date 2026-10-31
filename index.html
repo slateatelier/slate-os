@@ -8237,13 +8237,18 @@ async function loadFeeFin(force){
     if(error) throw error;
     const fp={},inv=[],rec=[],wo=[],wp=[],staff=[],rec2=[],exp=[],accts=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else if(r.coll==='staff') staff.push(d); else if(r.coll==='recurring') rec2.push(d); else if(r.coll==='expenses'){ if(d.recurringId) exp.push(d); } else if(r.coll==='accounts') accts.push(d); else wp.push(d); });
     let priv=[]; try{ const pr=await sb.rpc('fin_private_people'); if(!pr.error&&Array.isArray(pr.data)) priv=pr.data; }catch(e){}
-    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,rec2,exp,accts,at:Date.now(),err:''});
+    /* money received and invoiced per project comes from Books (m_books_status.sql) */
+    let bk={}, bkOk=false; try{ const r=await sb.rpc('biz_books_money'); if(!r.error&&r.data){ bk=r.data; bkOk=true; } }catch(e){}
+    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,rec2,exp,accts,bk,bkOk,at:Date.now(),err:''});
   }catch(e){ F.state='err'; F.err=(e&&e.message)||String(e); }
   if(S.view==='biz') render(true); if(S.sheet&&['fee','sal','rec','recPay'].includes(S.sheet.type)) renderSheet(); }
 /* the Finance record for an OS project: linked by osId, else by the same code */
 function feeRecOf(p){ const F=S.feeFin; if(!F||F.state!=='ok') return null; const all=Object.values(F.fp);
   return all.find(x=>x.osId===p.id)||(p.code?all.find(x=>!x.osId&&(x.code||'').toUpperCase()===p.code.toUpperCase()):null)||null; }
-function feeStats(fr){ const F=S.feeFin, fee=+((fr||{}).fee)||0; if(!fr||!F||F.state!=='ok') return {fee,billed:0,col:0,due:0,unb:fee};
+function feeStats(fr){ const F=S.feeFin, tba=!!fr&&fr.feeBasis==='tba', fee=tba?0:+((fr||{}).fee)||0; if(!fr||!F||F.state!=='ok') return {fee,billed:0,col:0,due:0,unb:fee,tba,est:tba?+fr.estFee||0:0};
+  /* from Books: received = fee money paid in (with or without an invoice); billed = invoiced, or received where there was no invoice */
+  if(F.bkOk){ const b=(F.bk||{})[fr.osId]||{}, col=+b.rec||0, billed=Math.max(+b.inv||0,col);
+    return {fee,billed,col,due:Math.max(0,billed-col),unb:tba?0:Math.max(0,fee-billed),tba,est:tba?+fr.estFee||0:0,m:b.m||{}}; }
   let billed=0,col=0; const st=i=>i.status==='void'?'void':(i.status==='draft'||!i.status)?'draft':'issued';
   for(const i of F.inv.filter(i=>i.projectId===fr.id&&st(i)==='issued')){ const t=(+i.amount||0)*(1+(+i.vatPct||0)/100)||1, net=i.net!=null?+i.net:+i.amount||0;
     const paid=F.rec.filter(r=>r.invoiceId===i.id).reduce((s,r)=>s+(+r.received||0)+(+r.ait||0)+(+r.vds||0),0);
@@ -8261,8 +8266,8 @@ function feeRows(){ const F=S.feeFin;
   const rows=projects().filter(p=>p.pod!=='Studio'&&!isInternalP(p)&&p.status!=='pending').map(p=>{ const fr=feeRecOf(p); return {p,fr,s:feeStats(fr),pb:p.proBono==='yes'}; });
   const linked=new Set(rows.filter(r=>r.fr).map(r=>r.fr.id)), orphan=Object.values(F.fp).filter(x=>!linked.has(x.id));
   const live=rows.filter(r=>!r.p.closed||outcomeOf(r.p)==='completed'), sum=k=>live.reduce((a,r)=>a+r.s[k],0)+orphan.reduce((a,x)=>a+feeStats(x)[k],0);
-  const noFee=rows.filter(r=>!r.p.closed&&!r.pb&&!(r.s.fee>0));
-  return {rows,orphan,live,sum,noFee}; }
+  const noFee=rows.filter(r=>!r.p.closed&&!r.pb&&!r.s.tba&&!(r.s.fee>0)), tbaRows=rows.filter(r=>!r.p.closed&&!r.pb&&r.s.tba);
+  return {rows,orphan,live,sum,noFee,tbaRows}; }
 function viewBizOver(){
   const B=S.biz, out=[...bizHead('',null)], ym=today().slice(0,7), td=today();
   const all=propList(), leads=all.filter(p=>isLead(p)&&propOpen(p)), props=all.filter(p=>!isLead(p)&&propOpen(p));
@@ -8276,7 +8281,7 @@ function viewBizOver(){
   let money=null;
   if(finOn()){ loadFeeFin(); const F=S.feeFin;
     if(F&&F.state==='ok'){
-      const {rows,sum,noFee}=feeRows(), col=F.rec.filter(r=>(r.date||'').slice(0,7)===ym).reduce((a,r)=>a+(+r.received||0)+(+r.ait||0)+(+r.vds||0),0);
+      const {rows,sum,noFee,tbaRows}=feeRows(), col=F.bkOk?Object.values(F.bk||{}).reduce((a,b)=>a+(+((b.m||{})[ym])||0),0):F.rec.filter(r=>(r.date||'').slice(0,7)===ym).reduce((a,r)=>a+(+r.received||0)+(+r.ait||0)+(+r.vds||0),0);
       const toCol=rows.filter(r=>r.s.due>1);
       const hr=hrRows(), act=hr.filter(r=>r.st&&r.active&&r.gross), pay=act.reduce((a,r)=>a+r.gross,0), noSal=hr.filter(r=>r.uid&&r.uid!==ownerId()&&!r.gross&&!r.hid);
       const in30=addDays(td,30), hrDue=hr.filter(r=>r.st&&r.active&&((r.st.incrementDue&&r.st.incrementDue<=ym)||(r.st.probationEnd&&r.st.probationEnd<=in30&&!r.st.confirmedOn)));
@@ -8288,6 +8293,7 @@ function viewBizOver(){
       if(toCol.length) needs.push(['overdue',toCol.length+' project'+(toCol.length>1?'s':'')+' with fees to collect',bdt(sum('due'))+' unpaid',go('fees',()=>{B.st='due';})]);
       if(lateBills.length) needs.push(['overdue',lateBills.length+' bill'+(lateBills.length>1?'s':'')+' past the due day',lateBills.map(x=>x.name).join(', '),go('admin',()=>{B.am=ym;})]);
       if(noFee.length) needs.push(['late',noFee.length+' project'+(noFee.length>1?'s':'')+' with no fee set',noFee.slice(0,3).map(r=>r.p.name).join(', '),go('fees',()=>{B.st='nofee';})]);
+      if(tbaRows.length) needs.push(['late',tbaRows.length+' project'+(tbaRows.length>1?'s':'')+' with the fee still to be agreed',tbaRows.slice(0,3).map(r=>r.p.name).join(', '),go('fees',()=>{B.st='tba';})]);
       if(noSal.length) needs.push(['late',noSal.length+' '+(noSal.length>1?'people':'person')+' with no salary set',noSal.slice(0,3).map(r=>r.name).join(', '),go('hr',()=>{B.hs='nosal';})]);
       if(hrDue.length) needs.push(['late',hrDue.length+' increment or probation due',hrDue.slice(0,3).map(r=>r.name).join(', '),go('hr',()=>{B.hs='due';})]);
     } else if(F&&F.state==='err') money=[h('p',{class:'err',text:'Couldn’t load Finance: '+F.err})];
@@ -8295,7 +8301,7 @@ function viewBizOver(){
   }
   out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Needs you'}),needs.length?h('span',{class:'cnt',text:String(needs.length)}):null),
     needs.length?h('div',{class:'biz-needs'},needs.map(([s,t,sub,fn])=>h('button',{type:'button',class:'biz-need',onclick:fn},h('span',{class:'dot s-'+s}),h('span',{class:'bn-t'},h('b',{text:t}),sub?h('span',{class:'muted',text:sub}):null),h('span',{class:'muted',text:'›'})))):h('p',{class:'muted',style:'margin:0 2px 8px',text:'Nothing needs you right now.'}));
-  if(money) out.push(...money);
+  if(money) out.push(...money.filter(Boolean));
   out.push(sec('Pipeline','open now',go('leads')),h('div',{class:'kpis kpis4'},kpi('Open leads',leads.length),kpi('Open proposals',props.length),kpi('Proposed value',propV?bdt(propV):'—',null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'lump-sum proposals'})),kpi('Win rate',won.length+lost.length?Math.round(won.length/(won.length+lost.length)*100)+'%':'—')));
   return out; }
 /* ---------- People value (Principal only): what each person costs SLATE against the fees their work earns ----------
@@ -8363,6 +8369,8 @@ function pvCalc(per,R){
   const BK=S.pvBooks&&S.pvBooks.state==='ok'?S.pvBooks:null;
   if(BK) BK.inv.filter(i=>i.status&&!['draft','cancelled','void'].includes(i.status)&&i.date&&i.date>=s&&i.date<=e).forEach(i=>{ const net=pvBooksNet(i), os=(BK.proj[i.project]||{}).osId;
     if(os&&S.projects[os]&&!isChalkProj(S.projects[os])) billed[os]=(billed[os]||0)+net; else unlinked+=net; });
+  /* fees received without an invoice (the old books) count as billed in the month they came in */
+  if(F.bkOk) Object.entries(F.bk||{}).forEach(([os,b])=>{ if(!S.projects[os]||isChalkProj(S.projects[os])) return; const r=months.reduce((a,ym)=>a+(+((b.m||{})[ym])||0),0); if(r>(billed[os]||0)) billed[os]=r; });
   const proj=[]; let unatt=0;
   for(const [pid,B] of Object.entries(billed)){ const p=S.projects[pid];
     const lead=(p.std&&p.std.lead)||personFor('lead',p.pod)||'';
@@ -8589,18 +8597,18 @@ function viewFees(){
     h('details',{class:'biz-more',open:!!B.more,ontoggle:e=>{B.more=e.target.open;}},h('summary',{text:'More numbers'}),
       h('div',{class:'kpis kpis4'},kpi('Billed',bdt(sum('billed'))),kpi('Projects with a fee',rows.filter(r=>r.s.fee>0).length),kpi('No fee set',noFee.length,noFee.length?'late':''),kpi('Pro bono',rows.filter(r=>r.pb).length),
         kpi('Cost budget',bdt(cb)),kpi('Extra site visits to bill',vis?bdt(vis):'—',vis?'late':''),kpi('Proposed (open, lump sum)',propV?bdt(propV):'—'))));
-  const stSel=h('select',{'aria-label':'Show',onchange:e=>{B.st=e.target.value;render(true)}},[['active','Active projects'],['nofee','No fee set'],['due','Money to collect'],['done','Completed'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); stSel.value=B.st;
+  const stSel=h('select',{'aria-label':'Show',onchange:e=>{B.st=e.target.value;render(true)}},[['active','Active projects'],['nofee','No fee set'],['tba','Fee to be agreed'],['due','Money to collect'],['done','Completed'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); stSel.value=B.st;
   out.push(h('div',{class:'bar'},h('input',{type:'search',placeholder:'Search code, name or client',value:B.q,oninput:e=>{B.q=e.target.value;render(true)}}),stSel));
   const list=rows.filter(r=>{ const p=r.p;
-    if(B.st==='active'&&p.closed) return false; if(B.st==='nofee'&&!(!p.closed&&!r.pb&&!(r.s.fee>0))) return false; if(B.st==='due'&&!(r.s.due>1||r.s.unb>1)) return false; if(B.st==='done'&&outcomeOf(p)!=='completed') return false;
+    if(B.st==='active'&&p.closed) return false; if(B.st==='nofee'&&!(!p.closed&&!r.pb&&!r.s.tba&&!(r.s.fee>0))) return false; if(B.st==='tba'&&!r.s.tba) return false; if(B.st==='due'&&!(r.s.due>1||r.s.unb>1)) return false; if(B.st==='done'&&outcomeOf(p)!=='completed') return false;
     return !q||`${p.code} ${p.name} ${p.client||''}`.toLowerCase().includes(q); });
   if(!list.length) out.push(h('p',{class:'muted',text:'No projects match.'}));
   else out.push(h('div',{class:'pgrid'},list.map(({p,fr,s,pb})=>{ const pct=s.fee?Math.min(100,Math.round(s.billed/s.fee*100)):0;
     return h('button',{class:'pcard',type:'button',onclick:()=>openFee(p.id)},
-      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),pb?h('span',{class:'pill s-open',text:'Pro bono'}):s.fee?h('span',{class:'pill s-'+(s.due>1?'overdue':s.unb>1?'late':'ontime'),text:s.due>1?bdt(s.due)+' unpaid':s.unb>1?pct+'% billed':'Fully billed'}):h('span',{class:'pill s-late',text:'No fee set'})),
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),pb?h('span',{class:'pill s-open',text:'Pro bono'}):s.tba?h('span',{class:'pill s-open',text:'Fee to be agreed'}):s.fee?h('span',{class:'pill s-'+(s.due>1?'overdue':s.unb>1?'late':'ontime'),text:s.due>1?bdt(s.due)+' unpaid':s.unb>1?pct+'% billed':'Fully billed'}):h('span',{class:'pill s-late',text:'No fee set'})),
       h('div',{class:'pc-name pn',text:p.name}),
       h('div',{class:'pc-meta',text:[p.client,p.katha?p.katha+' katha':'',fr&&fr.feeBasis==='sft'||(fr&&!fr.feeBasis&&+fr.rate)?`${(+fr.areaSft||0).toLocaleString('en-IN')} sft × ${taka(fr.rate)}`:fr&&s.fee?'Lump sum':''].filter(Boolean).join(' · ')}),
-      h('div',{class:'pc-row'},h('b',{text:pb?'No fee':s.fee?taka(s.fee):'—'}),h('span',{class:'muted',text:s.fee?`billed ${bdt(s.billed)} · collected ${bdt(s.col)}`:''})),
+      h('div',{class:'pc-row'},h('b',{text:pb?'No fee':s.tba?(s.est?'est. '+taka(s.est):'Not agreed yet'):s.fee?taka(s.fee):'—'}),h('span',{class:'muted',text:s.fee?`billed ${bdt(s.billed)} · collected ${bdt(s.col)}`:s.col?`received ${bdt(s.col)}`:''})),
       (()=>{ const cs=(fr&&fr.costs)||[]; if(!cs.length) return null; const B=cs.reduce((a,c)=>a+(+c.budget||0),0), V=cs.reduce((a,c)=>a+(costVar(fr,c)||0),0);
         return h('div',{class:'pc-row'},h('span',{class:'muted',text:`Costs ${bdt(B)} budgeted`}),V?h('span',{style:'color:'+(V>0?'var(--ontime)':'var(--overdue)'),text:(V>0?'saved ':'over ')+bdt(Math.abs(V))}):h('span')); })(),
       s.fee?h('div',{class:'pc-bar'},h('span',{style:`width:${pct}%`})):null); })));
@@ -8610,7 +8618,7 @@ function viewFees(){
   return out; }
 function openFee(pid){ const p=S.projects[pid]; if(!p) return; const fr=feeRecOf({...p,id:pid});
   const area=fr&&+fr.areaSft?String(fr.areaSft):String(+p.constManual||(p.farCalc&&p.farCalc.construction)||'');
-  const d={basis:p.proBono==='yes'?'pb':fr?(fr.feeBasis||(+fr.rate&&+fr.areaSft?'sft':'lump')):'sft',area:area==='0'?'':area,rate:fr&&+fr.rate?String(fr.rate):'',fee:fr&&+fr.fee?String(fr.fee):'',note:fr&&fr.feeNote||'',
+  const d={est:fr&&+fr.estFee?String(fr.estFee):'',basis:p.proBono==='yes'?'pb':fr?(fr.feeBasis||(+fr.rate&&+fr.areaSft?'sft':'lump')):'sft',area:area==='0'?'':area,rate:fr&&+fr.rate?String(fr.rate):'',fee:fr&&+fr.fee?String(fr.fee):'',note:fr&&fr.feeNote||'',
     ms:(fr&&fr.milestones&&fr.milestones.length?fr.milestones:FEE_DEF_MS.map(([label,pct])=>({id:Math.random().toString(36).slice(2,9),label,pct}))).map(m=>({...m})),
     costs:((fr&&fr.costs)||[]).map(c=>({...c,budget:c.budget?String(c.budget):'',deal:c.deal?String(c.deal):''})),vFree:fr&&fr.visits&&fr.visits.free!=null?String(fr.visits.free):'',vFee:fr&&fr.visits&&+fr.visits.fee?String(fr.visits.fee):''};
   S.sheet={type:'fee',pid,d,err:''}; renderSheet(); }
@@ -8644,20 +8652,20 @@ function costSection(d,fr,p,feeNow){
     h('p',{class:'f-hint',style:'margin:0',text:`${used} site visit${used===1?'':'s'} done so far (scheduled and on-call, from construction support)`+(free==null?'.':extra?` · ${extra} chargeable`+(+d.vFee?` = ${taka(extra*(+d.vFee))} to bill`:''):` · ${free-used} free visit${free-used===1?'':'s'} left.`)})]; }
 function sheetFee(){
   const pid=S.sheet.pid, p=S.projects[pid]?{...S.projects[pid],id:pid}:null; if(!p) return [head('Fee','Not found')];
-  const d=S.sheet.d, fr=feeRecOf(p), s=feeStats(fr), sft=d.basis==='sft', pb=d.basis==='pb';
-  const calc=()=>sft&&+d.area&&+d.rate?Math.round(+d.area*+d.rate):null, feeNow=pb?0:sft?(calc()||0):+d.fee||0, msSum=d.ms.reduce((a,m)=>a+(+m.pct||0),0);
+  const d=S.sheet.d, fr=feeRecOf(p), s=feeStats(fr), sft=d.basis==='sft', pb=d.basis==='pb', tba=d.basis==='tba';
+  const calc=()=>sft&&+d.area&&+d.rate?Math.round(+d.area*+d.rate):null, feeNow=pb||tba?0:sft?(calc()||0):+d.fee||0, msSum=d.ms.reduce((a,m)=>a+(+m.pct||0),0);
   const num=(k,attrs)=>h('input',{type:'number',min:0,step:'any',inputmode:'decimal',value:d[k],...attrs,oninput:e=>{ d[k]=e.target.value; const t=document.getElementById('fee-live'); if(t) t.textContent=liveTxt(); }});
   const liveTxt=()=>{ const f=d.basis==='pb'?0:d.basis==='sft'?(+d.area&&+d.rate?Math.round(+d.area*+d.rate):0):+d.fee||0; return f?`Total fee ${taka(f)} (${bdt(f)})`+' excl. VAT':'Total fee not set'; };
   const save=async e=>{ e.preventDefault(); if(!canBiz()) return fail('Only the Principal or the COO sets fees.');
     if(sft&&!(+d.area>0&&+d.rate>0)) return fail('Enter the construction area and the rate per sft.');
     if(d.basis==='lump'&&!(+d.fee>0)) return fail('Enter the total fee, or choose Pro bono.');
     const ms=d.ms.filter(m=>(m.label||'').trim()).map(m=>({...m,label:m.label.trim(),pct:+m.pct||0}));
-    if(!pb&&Math.round(ms.reduce((a,m)=>a+m.pct,0))!==100) return fail('Payment milestones need to add up to 100%.');
+    if(!pb&&!tba&&Math.round(ms.reduce((a,m)=>a+m.pct,0))!==100) return fail('Payment milestones need to add up to 100%.');
     if(fr) for(const m of (fr.milestones||[])) if(msLocked(fr,m)&&!ms.some(x=>x.id===m.id)) return fail(`“${m.label}” has been invoiced, so it can’t be removed.`);
     const costs=d.costs.filter(c=>(c.label||'').trim()||+c.budget||+c.deal).map(c=>({id:c.id,type:c.type||'other',label:(c.label||'').trim()||costTypeL(c.type),budget:+c.budget||0,deal:+c.deal||0,vendor:(c.vendor||'').trim(),note:(c.note||'').trim()}));
     if(costs.some(c=>c.budget<0||c.deal<0)) return fail('Budget amounts can’t be negative.');
     if(fr) for(const c of (fr.costs||[])) if(costWO(fr,c).n&&!costs.some(x=>x.id===c.id)) return fail(`“${c.label}” has a work order in Finance, so it can’t be removed.`);
-    const terms={costs,visits:{free:d.vFree===''?null:Math.max(0,Math.round(+d.vFree||0)),fee:+d.vFee||0},feeBasis:pb?'lump':d.basis,areaSft:sft?+d.area:(+d.area||0),rate:sft?+d.rate:0,fee:pb?0:sft?Math.round(+d.area*+d.rate):Math.round(+d.fee||0),feeNote:(d.note||'').trim(),milestones:pb?(fr&&fr.milestones)||[]:ms,feeSetAt:new Date().toISOString(),feeSetBy:S.uid};
+    const terms={costs,visits:{free:d.vFree===''?null:Math.max(0,Math.round(+d.vFree||0)),fee:+d.vFee||0},feeBasis:pb?'lump':d.basis,areaSft:sft?+d.area:(+d.area||0),rate:sft?+d.rate:0,fee:pb||tba?0:sft?Math.round(+d.area*+d.rate):Math.round(+d.fee||0),estFee:tba?Math.round(+d.est||0):0,feeNote:(d.note||'').trim(),milestones:pb||tba?(fr&&fr.milestones&&fr.milestones.length?fr.milestones:ms):ms,feeSetAt:new Date().toISOString(),feeSetBy:S.uid};
     const sb=window.slateSupabase;
     const ok=await run(async()=>{
       if(fr){ const {id,...rest}=fr; const {data:o,error}=await sb.from('fin_docs').update({data:{...rest,...terms,osId:p.id}}).eq('path','projects/'+fr.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Finance is limited to the Principal and the COO.'); }
@@ -8676,8 +8684,9 @@ function sheetFee(){
     h('p',{class:'f-hint',style:'margin:0',text:'Only you and the COO see this. Saved straight into Finance, which uses it for invoices.'}),
     fr?h('div',{class:'n-sum'},[['Fee',taka(s.fee)],['Billed',bdt(s.billed)],['Collected',bdt(s.col)],['Unpaid',bdt(s.due)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v}),h('span',{text:l})))):h('p',{class:'f-hint',style:'margin:0',text:'Not in Finance yet: saving creates its Finance record. Finance then only needs the billing details (bills as, bank account, address).'}),
     h('form',{class:'form',onsubmit:save},
-      field('Fee basis',seg('Fee basis',[['sft','Per sft'],['lump','Lump sum'],['pb','Pro bono']],d.basis,v=>{ d.basis=v; renderSheet(); })),
-      pb?h('p',{class:'f-hint',style:'margin:0',text:'No fee is expected. Finance and the Clients dashboard won’t look for one.'}):[
+      field('Fee basis',seg('Fee basis',[['sft','Per sft'],['lump','Lump sum'],['tba','To be agreed'],['pb','Pro bono']],d.basis,v=>{ d.basis=v; renderSheet(); })),
+      pb?h('p',{class:'f-hint',style:'margin:0',text:'No fee is expected. Finance and the Clients dashboard won’t look for one.'}):tba?[h('p',{class:'f-hint',style:'margin:0',text:'The project is running but the total fee isn’t agreed yet. Money received is still recorded against it in Books; nothing is counted as owed. Set the fee here once it is agreed.'}),
+        field('Estimated fee (optional, Tk)',h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d.est||'',placeholder:'e.g. area × rate',oninput:e=>{d.est=e.target.value}}),'Shown as “est.” only; never counted as money owed.')]:[
         h('div',{class:'form-row',style:'align-items:start'},field('Construction area (sft)'+(sft?' *':''),num('area',{step:'1'}),p.farCalc&&p.farCalc.construction&&!fr?'From the project’s FAR calculation':null),
           sft?field('Rate (Tk per sft) *',num('rate')):field('Total fee (Tk) *',num('fee',{step:'1'}))),
         h('div',{id:'fee-live',style:'font-weight:600;font-size:15px',text:liveTxt()}),

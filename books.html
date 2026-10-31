@@ -154,7 +154,7 @@ button.kpi{cursor:pointer}button.kpi:hover{border-color:var(--faint)}
 .wl .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wl .m .mono{font-size:11.5px}
 .pst-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px;flex:none}
-.pst-a.pst-dot{background:#34A853}.pst-h.pst-dot{background:#F2A007}.pst-c.pst-dot{background:#AEAEB2}.pst-x.pst-dot{background:#D7262B}
+.pst-a.pst-dot{background:#34A853}.pst-d.pst-dot{background:#2F6FD6}.pst-h.pst-dot{background:#F2A007}.pst-c.pst-dot{background:#AEAEB2}.pst-x.pst-dot{background:#D7262B}
 .pst-t{font-weight:600}.pst-t.pst-h{color:#B26A00}.pst-t.pst-c{color:#6E6E73}.pst-t.pst-x{color:#B71C21}
 .pst-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .pst-chip{display:inline-flex;align-items:center;font-size:12px;font-weight:500;padding:3px 9px;border-radius:999px;background:#F2F2F7;color:var(--ink)}
@@ -3489,21 +3489,21 @@ function nextId(prefix, coll) { let n = 0; Object.keys(coll).forEach(k => { cons
 /* projects */
 function moreProjects() {
   const ids = Object.keys(S.projects).sort((a, b) => projLabel(a).localeCompare(projLabel(b)));
-  const by = { Active: [], 'On hold': [], Completed: [], Closed: [], Cancelled: [] }; ids.forEach(k => (by[S.projects[k].status] || by.Active).push(k));
+  const by = { Active: [], 'Construction support': [], 'On hold': [], Completed: [], Closed: [], Cancelled: [] }; ids.forEach(k => (by[S.projects[k].status] || by.Active).push(k));
   const out = [pageH('Projects', 'Projects come from SLATE OS: open one in Studio and set its fee in Business › Fees, and it appears here. Tag fees and costs to a project to see what each one earns.')];
   Object.entries(by).forEach(([st, list]) => { if (list.length) out.push(h('div', { class: 'sec' }, secH(st, String(list.length)), h('div', { class: 'list' }, list.map(k => { const p = S.projects[k]; return h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'project', id: k, d: projDraft(k) }) },
     h('span', { class: 'pst-dot ' + pstCls(p.status), style: 'justify-self:center;margin:0', title: p.status || 'Active', 'aria-hidden': 'true' }),
     h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: p.name }), p.overhead ? h('span', { class: 'tag', text: 'Overheads' }) : null), h('div', { class: 'row-meta', text: [p.code, p.client].filter(Boolean).join(' · ') })),
-    h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : null)); })))); });
+    h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : p.feeTba ? h('span', { class: 'b', text: 'fee to be agreed' }) : p.free ? h('span', { class: 'b', text: 'pro bono' }) : null)); })))); });
   return out;
 }
 function projDraft(k) { const p = S.projects[k] || {}; return { code: p.code || '', name: p.name || '', client: p.client || '', contract: +p.contract ? String(p.contract) : '', status: p.status || 'Active', overhead: !!p.overhead, notes: p.notes || '', jvPartner: p.jvPartner || '', jvShare: p.jvShare ? String(p.jvShare) : '', earned: +p.earned ? String(p.earned) : '' }; }
 function sheetProject() {
   const id = S.sheet.id, ro = !can.setup(), os = !!(id && S.projects[id] && S.projects[id].src === 'os');
-  const fields = [h('div', { class: 'form-row' }, field('Project code', inp('code', { placeholder: 'e.g. JOL-NAVA039-5K-2629', disabled: ro || os }), 'As in SLATE OS.'), field('Status', sel('status', [['Active', 'Active'], ['On hold', 'On hold'], ['Closed', 'Closed']], { disabled: ro || os }))),
+  const fields = [h('div', { class: 'form-row' }, field('Project code', inp('code', { placeholder: 'e.g. JOL-NAVA039-5K-2629', disabled: ro || os }), 'As in SLATE OS.'), field('Status', sel('status', [['Active', 'Active'], ['Construction support', 'Construction support'], ['On hold', 'On hold'], ['Completed', 'Completed'], ['Closed', 'Closed'], ['Cancelled', 'Cancelled']], { disabled: ro || os }))),
     field('Project name', inp('name', { required: true, disabled: ro || os })), field('Client', inp('client', { disabled: ro }), os ? 'The client’s name as it goes on invoices.' : ''),
     field('Fee agreed for SLATE (Tk)', inp('contract', { inputmode: 'decimal', disabled: ro || os }), 'Used to show what is still to be collected.'),
-    D().status !== 'Active' ? field('Fee SLATE has earned for work done (Tk)', inp('earned', { inputmode: 'decimal', disabled: ro }), 'For a paused or cancelled project: the fee for the work done up to now. What has not been received yet still shows as to come.') : null,
+    STOPPED(D().status) ? field('Fee SLATE has earned for work done (Tk)', inp('earned', { inputmode: 'decimal', disabled: ro }), 'For a paused or cancelled project: the fee for the work done up to now. What has not been received yet still shows as to come.') : null,
     h('div', { class: 'form-row' }, field('Joint venture with', sel('jvPartner', [['', 'Not a joint venture']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'pay' && activeL(k)).sort((a, b) => L(a).localeCompare(L(b))).map(k => [k, L(k)])), { disabled: ro }), 'The partner who shares fees and costs.'),
       D().jvPartner ? field('SLATE’s share (%)', inp('jvShare', { inputmode: 'decimal', disabled: ro, placeholder: '40' }), 'Of fees and of shared costs.') : null),
     field('Notes', ta('notes', { rows: 2, disabled: ro, placeholder: 'Joint-venture share, billing name, terms' })), chk('overhead', 'This is the head office overheads centre, not a client project')];
@@ -4089,21 +4089,25 @@ function planBox() {
 
 /* what is going to come in: agreed fees not yet received, and open invoices */
 /* project status colours: running green, on hold amber, closed grey, cancelled red */
-const pstCls = st => /cancel/i.test(st || '') ? 'pst-x' : /hold|paus/i.test(st || '') ? 'pst-h' : /clos|complet/i.test(st || '') ? 'pst-c' : 'pst-a';
+const pstCls = st => /cancel/i.test(st || '') ? 'pst-x' : /hold|paus/i.test(st || '') ? 'pst-h' : /complet/i.test(st || '') ? 'pst-d' : /clos/i.test(st || '') ? 'pst-c' : 'pst-a';
+/* a project that owes only the work done: paused, closed after a phase, or cancelled */
+const STOPPED = st => !!st && !['Active', 'Completed', 'Construction support'].includes(st);
 function comingInBox() {
   const fy = curFY(), list = memo('pjall', () => SB.projectReport(P(), fy.from, today()));
   /* a paused or cancelled project counts only what is still owed for work already done */
-  const stopped = x => x.status && x.status !== 'Active', earned = x => +((S.projects[x.id] || {}).earned) || 0;
+  const stopped = x => STOPPED(x.status), earned = x => +((S.projects[x.id] || {}).earned) || 0, flag = x => S.projects[x.id] || {};
   list.forEach(x => { if (x.id && stopped(x)) { x.contract = earned(x); x.toCollect = earned(x) ? r2(earned(x) - x.revenueToDate) : null; } });
-  const act = list.filter(x => x.id && !x.overhead && (x.status === 'Active' || (stopped(x) && x.toCollect > 0.5)));
+  const act = list.filter(x => x.id && !x.overhead && !flag(x).feeTba && !flag(x).free && (!stopped(x) || x.toCollect > 0.5));
+  const tba = list.filter(x => x.id && !x.overhead && flag(x).feeTba && !stopped(x));
   const held = list.filter(x => x.id && !x.overhead && stopped(x) && !earned(x) && +((S.projects[x.id] || {}).contract || 0) > x.revenueToDate + 0.5);
-  const due = act.filter(x => x.toCollect > 0.5).sort((a, b) => b.toCollect - a.toCollect), noFee = act.filter(x => x.status === 'Active' && !x.contract).length;
+  const due = act.filter(x => x.toCollect > 0.5).sort((a, b) => b.toCollect - a.toCollect), noFee = act.filter(x => !stopped(x) && !x.contract).length;
   const tot = r2(due.reduce((s, x) => s + x.toCollect, 0)), inv = owes().clients;
   const body = [due.length ? wlist(due.slice(0, 6).map(x => h('button', { type: 'button', onclick: () => { S.rep.proj = x.id; go('reports', 'projects'); } }, h('span', { class: 't' }, h('i', { class: 'pst-dot ' + pstCls(x.status), title: x.status || 'Active' }), x.name || x.code), h('span', { class: 'm' }, x.code && x.name ? h('span', { class: 'mono', text: x.code + ' · ' }) : null, stopped(x) ? h('b', { class: 'pst-t ' + pstCls(x.status), text: x.status + ' · due for work done · ' }) : null, `received ${tkShort(x.revenueToDate)} of ${tkShort(x.contract)}`), h('span', { class: 'd', text: tk(x.toCollect) })))) : h('div', { class: 'w-empty', text: 'No agreed fees are waiting to be collected.' })];
   if (due.length > 6) body.push(h('div', { class: 'muted', style: 'font-size:12px', text: `and ${due.length - 6} more projects, ${tk(due.slice(6).reduce((s, x) => s + x.toCollect, 0))}` }));
   if (inv > 0.5) body.push(h('div', { class: 'muted', style: 'font-size:13px', text: `Invoices sent and not yet paid: ${tk(inv)}` }));
   if (held.length) body.push(h('div', { class: 'f-hint' }, 'Paused or closed, not counted until the amount due for work done is set in More › Projects:', h('div', { class: 'pst-chips' }, held.map(x => h('span', { class: 'pst-chip ' + pstCls(x.status), title: (x.code ? x.code + ' · ' : '') + (x.status || '') }, h('i', { class: 'pst-dot ' + pstCls(x.status) }), x.name || x.code)))),
-    h('div', { class: 'pst-key' }, [['Active', 'Running'], ['On hold', 'On hold'], ['Closed', 'Closed'], ['Cancelled', 'Cancelled']].map(([k, l]) => h('span', {}, h('i', { class: 'pst-dot ' + pstCls(k) }), l))));
+    h('div', { class: 'pst-key' }, [['Active', 'Running'], ['Construction support', 'Construction support'], ['On hold', 'On hold'], ['Completed', 'Completed'], ['Cancelled', 'Cancelled']].map(([k, l]) => h('span', {}, h('i', { class: 'pst-dot ' + pstCls(k) }), l))));
+  if (tba.length) body.push(h('div', { class: 'f-hint' }, 'Fee to be agreed, not counted until it is set in SLATE OS › Business › Fees:', h('div', { class: 'pst-chips' }, tba.map(x => h('span', { class: 'pst-chip pst-a', title: x.code || '' }, h('i', { class: 'pst-dot pst-a' }), (x.name || x.code) + (x.revenueToDate > 0.5 ? ' · received ' + tkShort(x.revenueToDate) : '') + (+flag(x).estFee ? ' · est. ' + tkShort(+flag(x).estFee) : ''))))));
   if (noFee) body.push(h('div', { class: 'f-hint', text: `${noFee} active project${noFee === 1 ? ' has' : 's have'} no agreed fee in SLATE Books, so ${noFee === 1 ? 'it isn’t' : 'they aren’t'} counted. Add the fee in More › Projects.` }));
   return widget('Fees still to come in', tkShort(tot + inv), h('div', { style: 'display:grid;gap:8px' }, body));
 }
@@ -4230,7 +4234,7 @@ function jvBox() {
       [`SLATE’s ${jv.share}% of that`, tk(due), open],
       [`Received from ${pn}`, tk(got), rep],
       ins.length ? [hold > 0.5 ? `${pn} is holding for SLATE` : hold < -0.5 ? `Received ahead of ${clientOf(p)}’s payments` : 'SLATE has its full share so far', tk(Math.abs(hold)), open, null, hold > 0.5 ? 'neg' : ''] : null,
-      (pr.status && pr.status !== 'Active') ? (+pr.earned ? [`Still due for work done (SLATE’s ${tk(+pr.earned)})`, tk(Math.max(0, +pr.earned - got)), rep] : ['Still due for work done', 'Not set yet', () => openSheet({ type: 'project', id: p, d: projDraft(p) })]) : pr.contract ? [`Still to come of SLATE’s ${tk(pr.contract)}`, tk(Math.max(0, pr.contract - got)), rep] : null,
+      STOPPED(pr.status) ? (+pr.earned ? [`Still due for work done (SLATE’s ${tk(+pr.earned)})`, tk(Math.max(0, +pr.earned - got)), rep] : ['Still due for work done', 'Not set yet', () => openSheet({ type: 'project', id: p, d: projDraft(p) })]) : pr.contract ? [`Still to come of SLATE’s ${tk(pr.contract)}`, tk(Math.max(0, pr.contract - got)), rep] : null,
       ['SLATE’s share of costs so far', tk((x.direct || 0) + (x.other || 0)), rep],
       [bal > 0.5 ? `${pn} owes SLATE for shared costs` : bal < -0.5 ? `SLATE owes ${pn} for shared costs` : `No shared costs owed either way`, bal ? tk(Math.abs(bal)) : '', () => openLedger(jv.partner)]].filter(Boolean);
     return widget('Joint venture: ' + (pr.name || pr.code), (pr.status && pr.status !== 'Active' ? pr.status + ' · ' : '') + `SLATE ${jv.share}% · ${pn} ${100 - jv.share}%`, h('div', { class: 'jvw', style: 'display:grid;gap:8px' },
