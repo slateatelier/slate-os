@@ -89,6 +89,10 @@ body[data-view=far] main{padding-bottom:4px}#far-host{padding-bottom:80px}
 
 .sec{display:grid;gap:8px}
 .sec-h{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 4px}
+.sec.fold>.sec-h{justify-content:flex-start}.sec.fold>.sec-h>h2{flex:1;min-width:0;user-select:none}
+.fold-b{appearance:none;border:0;background:var(--group);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:17px;line-height:1;color:var(--ink);cursor:pointer;flex:none;transform:rotate(90deg);transition:transform .15s}
+.sec.folded .fold-b{transform:rotate(0)}
+.sec.folded>:not(.sec-h){display:none!important}
 .sec-h h2{font-size:12px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--muted);margin:0}
 .sec-h .cnt{font-size:12px;color:var(--muted)}
 .tsum{display:flex;gap:8px;overflow-x:auto;min-width:0;max-width:100%;padding:2px 0;scrollbar-width:none}.tsum::-webkit-scrollbar{display:none}
@@ -4844,8 +4848,20 @@ function viewSetup(){
       h('li',{text:'A completed task is locked: only the Principal and the COO can reopen it, edit it or correct its completion date, and each needs a written reason kept in the history. Client feedback after completion is added with “+ Client revision”, which creates a linked revision task with its own submission date; the original on-time record stays.'}),
       h('li',{text:'Nothing is deleted. Archived tasks keep their full history and can be restored.'})))));
   if(own&&finOn()) out.push(salPrivSec());
-  return out;
+  return out.map(setupFold);
 }
+/* Settings: every section folds; tap its heading to open or close it. Each section remembers its state on this device.
+   Long ones (Projects, People, the task list, How access works) start closed; the rest start open. */
+const FOLD_CLOSED=/^(projects|people|standard task list|how access works|project types|pod names)$/i;
+function setupFold(sec){ if(!sec||!sec.classList||!sec.classList.contains('sec')) return sec;
+  const hd=sec.querySelector(':scope>.sec-h'), h2=hd&&hd.querySelector('h2'); if(!h2) return sec;
+  const key=h2.textContent.trim(), st=(pref.fold||{})[key], closed=st==null?FOLD_CLOSED.test(key):!st;
+  sec.classList.add('fold'); sec.classList.toggle('folded',closed);
+  const chev=h('button',{type:'button',class:'fold-b','aria-expanded':String(!closed),'aria-label':(closed?'Open ':'Close ')+key,text:'›'});
+  const toggle=()=>{ const c=!sec.classList.contains('folded'); sec.classList.toggle('folded',c); chev.setAttribute('aria-expanded',String(!c)); chev.setAttribute('aria-label',(c?'Open ':'Close ')+key); savePref('fold',{...(pref.fold||{}),[key]:!c}); };
+  chev.addEventListener('click',e=>{ e.stopPropagation(); toggle(); });
+  h2.style.cursor='pointer'; h2.addEventListener('click',toggle);
+  hd.prepend(chev); return sec; }
 /* Settings › Salaries only I see (Principal only): hidden from the COO in SLATE OS and Finance, enforced in the database */
 function salPrivSec(){
   if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlocked()) return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Salaries only I see'})),h('div',{class:'card'},h('p',{class:'muted',style:'margin:0',text:'Salaries are in Business, which needs your PIN on this device.'}),h('button',{class:'btn',type:'button',style:'justify-self:start',onclick:()=>SlatePin.ensure().then(ok=>{ if(ok) render(true); }),text:'Enter PIN'})));
