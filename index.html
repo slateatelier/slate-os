@@ -7876,8 +7876,7 @@ function sheetPropDoc(){
     const f=pbFee(d), cur=S.props[id]||p, doc={...d,total:Math.round(f.total),savedAt:new Date().toISOString()};
     const ok=await run(()=>propWrite(id,{...cur,doc,fee:f.total?String(Math.round(f.total)):cur.fee||'',feeBasis:'lump',feeNote:cur.feeNote||(d.tax==='excl'?'plus VAT and AIT':'')}),silent?null:'Proposal saved');
     return ok; };
-  const preview=async(plain)=>{ const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to see the proposal.'); try{ w.document.write('<p style="font:16px system-ui;padding:24px">Preparing the proposal…</p>'); }catch(_){}
-    if(await save(true)===false){ w.close(); return; } const html=await pbHTML(S.props[id]||p,d,true,plain===true); w.document.open(); w.document.write(html); w.document.close(); };
+  const preview=async(plain)=>{ if(await save(true)===false) return; pbShowPreview(await pbHTML(S.props[id]||p,d,true,plain===true),plain===true); };
   const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
     try{ const file=await pbPdfRetry(S.props[id]||p,d,false); const print=await pbPdfRetry(S.props[id]||p,d,true); sh.pdf={state:'ok',file,print}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
   const share=async(which)=>{ const f=sh.pdf&&sh.pdf[which==='print'?'print':'file']; if(!f) return;
@@ -7953,7 +7952,7 @@ function sheetPropDoc(){
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(id),text:'Close'})))]; }
 
 /* the proposal as letterhead pages: blocks are measured in a hidden frame and packed onto A4 pages */
-const PB_CSS=`@page{size:A4;margin:0}*{box-sizing:border-box}
+const PB_CSS=`@page{size:A4;margin:0}*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:#E6E8EA;color:#000;font:10pt/1.42 "Didact Gothic","Century Gothic",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
 .bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;justify-content:center;padding:10px;background:#231f20}.bar button{font:500 13px system-ui;padding:8px 14px;border-radius:6px;border:0;cursor:pointer}.bar .p{background:#C41E29;color:#fff}
 .page{width:210mm;min-height:297mm;margin:8mm auto;background:#fff;padding:43.5mm 14mm 16mm 12.6mm;position:relative;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.12)}
@@ -8062,6 +8061,19 @@ ${plain?'<style>.page{box-shadow:none}</style>':''}
 ${pages.map((b,i)=>`<div class="page">${plain?'':pbLetterhead()}${b.map(x=>`<div class="pb-blk">${x}</div>`).join('')}<div class="docref">${pbEsc(ref)} · page ${i+1} of ${pages.length}</div></div>`).join('')}
 ${withBar?`<script>(function(){function fit(){var px=210*96/25.4,w=document.documentElement.clientWidth,z=Math.min(1,(w-16)/px);document.querySelectorAll('.page').forEach(function(p){p.style.zoom=z;});}addEventListener('resize',fit);fit();})();<\/script>`:''}
 </body></html>`; }
+/* the proposal preview opens over the app (an iPhone home-screen app can't close a pop-up window) */
+function pbShowPreview(html,plain){
+  document.getElementById('pb-prev')?.remove();
+  html=html.replace(/<div class="bar">[\s\S]*?<\/div>/,'');
+  const fr=h('iframe',{title:'Proposal preview',style:'flex:1;width:100%;border:0;background:#e6e6e6'}); fr.srcdoc=html;
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',esc); }, esc=e=>{ if(e.key==='Escape') close(); };
+  const ov=h('div',{id:'pb-prev',role:'dialog','aria-modal':'true','aria-label':'Proposal preview',style:'position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;background:#e6e6e6'},
+    h('div',{style:'display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:#231f20'},
+      h('button',{type:'button',class:'btn',style:'background:#C41E29;color:#fff;border:0',onclick:()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){ toast('Use “Save and make PDFs” instead.'); } },text:'Print or save as PDF'}),
+      h('button',{type:'button',class:'btn',onclick:close,text:'Close'}),
+      h('span',{style:'color:#bbb;font-size:13px;flex-basis:100%;text-align:center',text:plain?'Print copy: for the printed letterhead pad':'Share copy: with the letterhead design'})),
+    fr);
+  document.body.append(ov); document.addEventListener('keydown',esc); }
 async function pbPdfRetry(p,d,plain){
   for(let i=0;;i++){ try{ return await pbPdf(p,d,plain); }
     catch(e){ if(i>=3||!e.busy) throw e; toast('The PDF printer is busy. Trying again in '+(15*(i+1))+' seconds…'); await new Promise(r=>setTimeout(r,15000*(i+1))); } } }
