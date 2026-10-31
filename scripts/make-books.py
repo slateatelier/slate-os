@@ -297,5 +297,41 @@ rep("""[['Active', 'Active'], ['On hold', 'On hold'], ['Closed', 'Closed']], { d
 rep("""h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : null)); })))); });""",
     """h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : p.feeTba ? h('span', { class: 'b', text: 'fee to be agreed' }) : p.free ? h('span', { class: 'b', text: 'pro bono' }) : null)); })))); });""")
 
+# Home: tap a line in "Where the money went / came from" to see the accounts inside it, then an account to see its entries
+rep("""  const spend = {}, income = {};
+  Object.entries(flow).forEach(([l, a]) => {
+    if (a < 0) { const n = SB.friendly(P(), l); spend[n] = (spend[n] || 0) - a; }
+    else if (a > 0 && groupOf(l) === 'inc') { const n = devOf(l) || L(l); income[n] = (income[n] || 0) + a; }
+    else if (a > 0) { const n = SB.friendly(P(), l); income[n] = (income[n] || 0) + a; }
+  });""", """  const spend = {}, income = {}, spendL = {}, incomeL = {}, addL = (m, n, l, a) => { (m[n] = m[n] || []).push([l, a]); };
+  Object.entries(flow).forEach(([l, a]) => {
+    if (a < 0) { const n = SB.friendly(P(), l); spend[n] = (spend[n] || 0) - a; addL(spendL, n, l, -a); }
+    else if (a > 0 && groupOf(l) === 'inc') { const n = devOf(l) || L(l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
+    else if (a > 0) { const n = SB.friendly(P(), l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
+  });""")
+rep("""    widget('Where the money went', pr.label, hbars(spend, '#3A3A3C', 'went')),
+    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came')),""",
+    """    widget('Where the money went', pr.label, hbars(spend, '#3A3A3C', 'went', spendL, pr)),
+    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came', incomeL, pr)),""")
+rep("""function hbars(map, color, key) {""", """function hbars(map, color, key, det, pr) {""")
+rep("""  const bar = ([n, v, cnt]) => h(cnt && key ? 'button' : 'div', { class: 'hb' + (cnt && key ? ' hb-more' : ''), type: cnt && key ? 'button' : null, onclick: cnt && key ? tog : null }, h('span', { class: 'nm', title: n, text: cnt ? `${n} (${cnt}) ›` : n }), h('div', { class: 'track' }, h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` })), h('span', { class: 'v', text: tkShort(v).replace('Tk ', '') }));
+  return h('div', { class: 'hbars' }, top.map(bar),""",
+    """  const dOpen = S.hbDet || {}, dk = n => key + ':' + n;
+  const sub = n => { const ls = ((det || {})[n] || []).filter(x => x[1] > 0.5).sort((a, b) => b[1] - a[1]); if (!ls.length) return null;
+    return h('div', { class: 'hb-sub' }, h('div', { class: 'hb-sub-t', text: n }), ls.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' })))); };
+  const bar = ([n, v, cnt]) => { const can = !cnt && det && (det[n] || []).length, op = can && dOpen[dk(n)];
+    return [h(cnt && key || can ? 'button' : 'div', { class: 'hb' + (cnt && key ? ' hb-more' : '') + (can ? ' hb-can' : '') + (op ? ' is-open' : ''), type: cnt && key || can ? 'button' : null, 'aria-expanded': can ? String(!!op) : null,
+      onclick: cnt && key ? tog : can ? () => { S.hbDet = Object.assign({}, dOpen, { [dk(n)]: !op }); render(true); } : null },
+      h('span', { class: 'nm', title: n, text: cnt ? `${n} (${cnt}) ›` : n }), h('div', { class: 'track' }, h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` })), h('span', { class: 'v', text: tkShort(v).replace('Tk ', '') })),
+      op ? sub(n) : null]; };
+  return h('div', { class: 'hbars' }, top.map(bar).flat(),""")
+rep(""".hb .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}""",
+    """.hb .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button.hb-can .nm::after{content:' ▾';color:var(--muted);font-size:11px}button.hb-can.is-open .nm::after{content:' ▴'}
+.hb-sub{display:grid;gap:2px;margin:-4px 0 6px;padding:8px 10px;border-radius:10px;background:var(--fill, #f2f2f7)}
+.hb-sub-t{font-size:12px;font-weight:600;color:var(--muted);padding:2px 2px 6px}
+.hb-sub button{appearance:none;background:none;border:0;border-top:1px solid var(--line, rgba(60,60,67,.12));font:inherit;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 2px;font-size:13px}
+.hb-sub button:first-of-type{border-top:0}.hb-sub .a{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))

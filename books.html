@@ -141,6 +141,11 @@ button.kpi{cursor:pointer}button.kpi:hover{border-color:var(--faint)}
 .hbars{display:grid;gap:10px}
 .hb{display:grid;grid-template-columns:minmax(0,140px) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px}
 .hb .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button.hb-can .nm::after{content:' ▾';color:var(--muted);font-size:11px}button.hb-can.is-open .nm::after{content:' ▴'}
+.hb-sub{display:grid;gap:2px;margin:-4px 0 6px;padding:8px 10px;border-radius:10px;background:var(--fill, #f2f2f7)}
+.hb-sub-t{font-size:12px;font-weight:600;color:var(--muted);padding:2px 2px 6px}
+.hb-sub button{appearance:none;background:none;border:0;border-top:1px solid var(--line, rgba(60,60,67,.12));font:inherit;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 2px;font-size:13px}
+.hb-sub button:first-of-type{border-top:0}.hb-sub .a{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}
 .hb .v{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;min-width:64px}
 .track{position:relative;height:12px;background:var(--group);border-radius:4px;overflow:hidden}
 .track span{display:block;height:100%;background:var(--c,var(--ink));border-radius:4px}
@@ -1871,11 +1876,11 @@ function viewHome() {
   out.push(h('div', { class: 'say' }, sayLine(pr, inT, outT, net, ow, q)));
   const months = (() => { const end = today().slice(0, 7), start = SB.addMonths(end, -11); return SB.monthlyMoney(P(), start + '-01', SB.monthEnd(end)); })();
   const flow = memo('flow:' + pr.from + pr.to, () => SB.flowByLedger(P(), pr.from, pr.to));
-  const spend = {}, income = {};
+  const spend = {}, income = {}, spendL = {}, incomeL = {}, addL = (m, n, l, a) => { (m[n] = m[n] || []).push([l, a]); };
   Object.entries(flow).forEach(([l, a]) => {
-    if (a < 0) { const n = SB.friendly(P(), l); spend[n] = (spend[n] || 0) - a; }
-    else if (a > 0 && groupOf(l) === 'inc') { const n = devOf(l) || L(l); income[n] = (income[n] || 0) + a; }
-    else if (a > 0) { const n = SB.friendly(P(), l); income[n] = (income[n] || 0) + a; }
+    if (a < 0) { const n = SB.friendly(P(), l); spend[n] = (spend[n] || 0) - a; addL(spendL, n, l, -a); }
+    else if (a > 0 && groupOf(l) === 'inc') { const n = devOf(l) || L(l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
+    else if (a > 0) { const n = SB.friendly(P(), l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
   });
   const full = can.books();
   out.push(h('div', { class: 'widgets' },
@@ -1883,8 +1888,8 @@ function viewHome() {
     full ? planBox() : null,
     widget('Money in and out, last 12 months', 'Tk', barChart(months), 'span2', h('div', { class: 'legend' }, h('span', { style: '--c:var(--k-in)', text: 'Money in' }), h('span', { style: '--c:var(--k-out)', text: 'Money out' }))),
     widget('Waiting for you', q.length ? q.length + ' item' + (q.length > 1 ? 's' : '') : '', q.length ? wlist(q.slice(0, 6).map(queueItem)) : h('div', { class: 'w-empty', text: 'Nothing waiting. New entries and requests that need your check or approval show here.' })),
-    widget('Where the money went', pr.label, hbars(spend, '#3A3A3C', 'went')),
-    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came')),
+    widget('Where the money went', pr.label, hbars(spend, '#3A3A3C', 'went', spendL, pr)),
+    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came', incomeL, pr)),
     full ? forecastBox() : null,
     full ? comingInBox() : null,
     full ? jvBox() : null,
@@ -1933,15 +1938,22 @@ function barChart(mm) {
 function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x || 1))), f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
 function axisTk(v) { if (v >= 1e7) return (v / 1e7).toFixed(v % 1e7 ? 1 : 0) + 'cr'; if (v >= 1e5) return (v / 1e5).toFixed(v % 1e5 ? 1 : 0) + 'L'; if (v >= 1e3) return Math.round(v / 1e3) + 'k'; return String(v); }
 /* the top seven, then "everything else" — tap it to open the full list */
-function hbars(map, color, key) {
+function hbars(map, color, key, det, pr) {
   const rows = Object.entries(map).filter(([, v]) => v > 0.5).sort((a, b) => b[1] - a[1]);
   if (!rows.length) return h('div', { class: 'w-empty', text: 'Nothing in this period.' });
   const open = key && (S.hbOpen || {})[key], tog = () => { S.hbOpen = Object.assign({}, S.hbOpen, { [key]: !open }); render(true); };
   const restRows = rows.slice(7), rest = restRows.reduce((s, r) => s + r[1], 0);
   const top = open ? rows.slice() : rows.slice(0, 7); if (!open && rest > 0) top.push(['Everything else', rest, restRows.length]);
   const max = Math.max(...top.map(r => r[1]));
-  const bar = ([n, v, cnt]) => h(cnt && key ? 'button' : 'div', { class: 'hb' + (cnt && key ? ' hb-more' : ''), type: cnt && key ? 'button' : null, onclick: cnt && key ? tog : null }, h('span', { class: 'nm', title: n, text: cnt ? `${n} (${cnt}) ›` : n }), h('div', { class: 'track' }, h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` })), h('span', { class: 'v', text: tkShort(v).replace('Tk ', '') }));
-  return h('div', { class: 'hbars' }, top.map(bar), open && restRows.length ? h('button', { class: 'linkish', type: 'button', style: 'justify-self:start', onclick: tog, text: 'Show the top 7 only' }) : null);
+  const dOpen = S.hbDet || {}, dk = n => key + ':' + n;
+  const sub = n => { const ls = ((det || {})[n] || []).filter(x => x[1] > 0.5).sort((a, b) => b[1] - a[1]); if (!ls.length) return null;
+    return h('div', { class: 'hb-sub' }, h('div', { class: 'hb-sub-t', text: n }), ls.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' })))); };
+  const bar = ([n, v, cnt]) => { const can = !cnt && det && (det[n] || []).length, op = can && dOpen[dk(n)];
+    return [h(cnt && key || can ? 'button' : 'div', { class: 'hb' + (cnt && key ? ' hb-more' : '') + (can ? ' hb-can' : '') + (op ? ' is-open' : ''), type: cnt && key || can ? 'button' : null, 'aria-expanded': can ? String(!!op) : null,
+      onclick: cnt && key ? tog : can ? () => { S.hbDet = Object.assign({}, dOpen, { [dk(n)]: !op }); render(true); } : null },
+      h('span', { class: 'nm', title: n, text: cnt ? `${n} (${cnt}) ›` : n }), h('div', { class: 'track' }, h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` })), h('span', { class: 'v', text: tkShort(v).replace('Tk ', '') })),
+      op ? sub(n) : null]; };
+  return h('div', { class: 'hbars' }, top.map(bar).flat(), open && restRows.length ? h('button', { class: 'linkish', type: 'button', style: 'justify-self:start', onclick: tog, text: 'Show the top 7 only' }) : null);
 }
 function accTable(pos) {
   const rows = pos.filter(p => p.active || Math.abs(p.bal) > 0.5);
