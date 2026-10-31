@@ -179,5 +179,56 @@ rep("""'Everyone with a SLATE OS account is listed. Give each person a role; wit
     """'Everyone with a SLATE OS account is listed. Roles are set on each person’s card in SLATE OS › Business › HR & salaries; without one they see nothing in Books.'""")
 rep("""without one they see nothing in Books.' : 'Only the Principal can change roles.')];""", """without one they see nothing in Books.' : 'Roles are set by the Principal and the COO in SLATE OS › Business › HR & salaries.')];""")
 
+# ---------- Conveyance: team members' approved transport claims, paid once a month by Accounts ----------
+rep("""staff: moreStaff, accounts: moreAccounts,""", """staff: moreStaff, conv: moreConv, accounts: moreAccounts,""")
+rep("""  if (canPayroll()) out.push(h('div', { class: 'sec' }, secH('Salaries'), h('div', { class: 'list' },""",
+    """  if (can.enter()) out.push(h('div', { class: 'sec' }, secH('Team'), h('div', { class: 'list' },
+    moreItem('Conveyance', 'Transport claims approved by the COO, paid once a month', () => go('more', 'conv')))));
+  if (canPayroll()) out.push(h('div', { class: 'sec' }, secH('Salaries'), h('div', { class: 'list' },""")
+rep("""function moreItem(t, d, onclick, right) {""", """/* Conveyance (claims are made in SLATE OS; the COO approves them there). Here Accounts pays each person once a month:
+   the payment is entered as Money out, then those claims are marked paid in SLATE OS. */
+const CONV_PUR = { site: 'Site visit', client: 'Client meeting', authority: 'Authority', consultant: 'Consultant meeting', market: 'Market visit', errand: 'Office errand', other: 'Other' };
+function convLoad(force) { const C = S.conv || (S.conv = { state: 'idle', rows: [] }); if (!force && C.state !== 'idle') return C;
+  C.state = 'loading';
+  Promise.all([BooksHost.sb.from('conv_claims').select('*').in('status', ['approved', 'paid']).order('trip_date').limit(3000), BooksHost.sb.from('conv_types').select('id,label')]).then(([a, b]) => {
+    const e = a.error || b.error; if (e) { C.state = 'err'; C.err = /conv_|schema cache|does not exist/i.test(e.message || '') ? 'Conveyance needs the latest SLATE OS database update.' : e.message; }
+    else { C.rows = a.data || []; C.types = Object.fromEntries((b.data || []).map(t => [t.id, t.label])); C.state = 'ok'; } render(true); });
+  return C; }
+const convProjOf = os => os ? (Object.keys(S.projects).find(k => S.projects[k] && S.projects[k].osId === os) || '') : '';
+function convLedger() { return Object.keys(S.ledgers).find(k => activeL(k) && !isCashL(k) && /convey|transport|travel/i.test(L(k))) || ''; }
+function convPay(uid, xs) {
+  const ids = xs.map(r => r.id), amt = xs.reduce((a, r) => a + (+r.amount || 0), 0), months = [...new Set(xs.map(r => monthName(r.trip_date.slice(0, 7))))].join(', ');
+  const projs = [...new Set(xs.map(r => convProjOf(r.project_id)))], proj = projs.length === 1 ? projs[0] : '';
+  openMoney('out', { amount: String(amt), cat: convLedger(), proj, party: nameOf(uid), narr: `Conveyance ${months} for ${nameOf(uid)}: ${ids.join(', ')}`,
+    after: async (vid, vdoc) => { const { error } = await BooksHost.sb.rpc('conv_mark_paid', { p_ids: ids, p_voucher: vid, p_voucher_no: vdoc.no || '' });
+      if (error) throw new Error('The payment is entered, but the claims could not be marked paid: ' + error.message + '. Tell the Principal before paying again.');
+      S.conv.state = 'idle'; } });
+}
+function moreConv() {
+  const C = convLoad(), out = [pageH('Conveyance', 'Transport claims the COO has approved in SLATE OS. Pay each person once a month: Pay enters the money out here and marks their claims paid. Claims with a paper bill should come with the bill, the claim ID written on it.')];
+  if (C.state !== 'ok') { out.push(C.state === 'err' ? emptyBox('Couldn’t load conveyance', C.err) : h('p', { class: 'muted', text: 'Loading…' })); return out; }
+  const due = C.rows.filter(r => r.status === 'approved'), by = {};
+  due.forEach(r => (by[r.user_id] = by[r.user_id] || []).push(r));
+  const total = due.reduce((a, r) => a + (+r.amount || 0), 0);
+  if (!due.length) out.push(emptyBox('Nothing to pay', 'Approved conveyance claims appear here.'));
+  else out.push(h('div', { class: 'sec' }, secH('To pay', tk(total)), h('div', { class: 'list' }, Object.entries(by).sort((a, b) => nameOf(a[0]).localeCompare(nameOf(b[0]))).map(([uid, xs]) => {
+    const sum = xs.reduce((a, r) => a + (+r.amount || 0), 0), bills = xs.filter(r => r.paper_bill).length;
+    return h('div', { class: 'card', style: 'display:grid;gap:8px' },
+      h('div', { style: 'display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap' }, h('div', {}, h('b', { text: nameOf(uid) }), h('div', { class: 'f-hint', style: 'margin:0', text: `${xs.length} claim${xs.length === 1 ? '' : 's'}${bills ? ' · ' + bills + ' with a paper bill' : ''}` })),
+        h('div', { style: 'display:flex;gap:10px;align-items:center' }, h('b', { class: 'mono', text: tk(sum) }), can.enter() ? h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => convPay(uid, xs), text: 'Pay' }) : null)),
+      h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {}, xs.map(r => h('tr', {}, h('td', { class: 'mono', text: r.id }), h('td', { text: fmtD(r.trip_date) }),
+        h('td', { text: `${r.from_place} → ${r.to_place}${r.round_trip ? ' and back' : ''} · ${(C.types || {})[r.mode] || r.mode}${(r.people || []).length ? ' · with ' + r.people.map(x => nameOf(x)).join(', ') : ''}${convProjOf(r.project_id) ? ' · ' + projLabel(convProjOf(r.project_id)) : ' · ' + (CONV_PUR[r.purpose] || '')}${r.paper_bill ? ' · paper bill' : ''}` }),
+        h('td', { class: 'n', text: fmt(r.amount) })))))));
+  }))));
+  const paid = C.rows.filter(r => r.status === 'paid').sort((a, b) => (b.paid_at || '').localeCompare(a.paid_at || '')), pv = {};
+  paid.forEach(r => { const k = r.voucher_id || r.id; (pv[k] = pv[k] || []).push(r); });
+  const pays = Object.values(pv).slice(0, 40);
+  if (pays.length) out.push(h('div', { class: 'sec' }, secH('Paid', pays.length + ''), h('div', { class: 'list' }, pays.map(xs => { const r = xs[0], v = S.vouchers[r.voucher_id];
+    return h('button', { class: 'row', type: 'button', onclick: () => v ? openSheet({ type: 'voucher', id: r.voucher_id }) : null }, h('div', { class: 'row-main' }, h('div', { class: 'row-title', text: nameOf(r.user_id) + ' · ' + xs.length + ' claim' + (xs.length === 1 ? '' : 's') }),
+      h('div', { class: 'row-meta', text: [r.voucher_no, r.paid_at ? fmtD(r.paid_at.slice(0, 10)) : '', xs.map(x => x.id).join(', ')].filter(Boolean).join(' · ') })), h('div', { class: 'row-amt', text: tk(xs.reduce((a, x) => a + (+x.amount || 0), 0)) })); }))));
+  return out;
+}
+function moreItem(t, d, onclick, right) {""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))

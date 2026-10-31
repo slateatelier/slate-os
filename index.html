@@ -2152,6 +2152,7 @@ async function openNotice(id,kind){
   if(kind==='accounts'){ S.pf={...(S.pf||{q:'',pod:''}),st:'acct'}; acctLoad(true); return goView('projects'); }
   if(kind==='nudge'||kind==='brief'||kind==='daywrap') return goView('mine');
   if(kind==='issue_report') return goView('reports');
+  if(kind==='conveyance'){ S.conv&&(S.conv.state='idle'); S.convF={tab:convApprover()?'wait':'mine',sel:new Set()}; return goView('conv'); }
   if(/^minutes_/.test(kind)){ S.mhub='weekly'; return goView('meet'); }
   if(/^meeting_/.test(kind)){ S.mhub='up'; return goView('meet'); }
   if(kind==='role_request') return goView(S.isOwner?'setup':'mine');
@@ -2409,7 +2410,7 @@ function renderHeader(){
   const spaces=!cmem&&canProps()&&S.canWrite, inBiz=spaces&&S.view==='biz';
   if(spaces){ const i=list.findIndex(x=>x[0]==='biz'); if(i>=0) list.splice(i,1); }
   if(!inBiz&&S.view!=='biz') S.lastStudio=S.view;
-  const TASKV=['all','board','gantt'], MOREV=cmem?['notice']:['more','notice','activity','setup','std','help','far','reports','backup','entries','people','tlstatus'];
+  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','setup','std','help','far','conv','reports','backup','entries','people','tlstatus'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
@@ -2442,20 +2443,137 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
   if(NAV_SUB.includes(S.view)) out.push(amChalkMember()?navBack('Home',()=>{ S.view='mine'; render(true); }):navBack('More',()=>{ S.view='more'; render(true); }));
   return out.concat(v());
 }
 
+/* ---------- Conveyance: transport for site visits, client meetings and errands ----------
+   The person who paid claims; anyone who travelled with them is named and can't claim the same trip again.
+   Limits per trip and kind of transport are set by the Principal (Settings). The COO approves (the Principal approves
+   the COO's own). Accounts pays approved claims once a month from Books. All rules are enforced by the database
+   (supabase/migrations/m_conveyance.sql); this screen only collects and shows. */
+const CONV_PUR=[['site','Site visit'],['client','Client meeting'],['authority','RAJUK or other authority'],['consultant','Consultant meeting'],['market','Market or supplier visit'],['errand','Office errand'],['other','Other']];
+const CONV_ST={submitted:['Waiting for approval','late'],returned:['Returned to you','overdue'],approved:['Approved · to be paid','ontime'],paid:['Paid','ontime'],rejected:['Not approved','overdue'],cancelled:['Cancelled','open']};
+const convPur=k=>(CONV_PUR.find(x=>x[0]===k)||['',k])[1];
+const convApprover=()=>S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||'');
+function loadConv(force){ const C=S.conv||(S.conv={state:'idle',rows:[],types:[]}); if(!force&&C.state!=='idle') return C;
+  C.state='loading'; const sb=window.slateSupabase;
+  Promise.all([sb.from('conv_claims').select('*').order('trip_date',{ascending:false}).order('created_at',{ascending:false}).limit(1000),sb.from('conv_types').select('*').order('sort')])
+    .then(([a,b])=>{ if(a.error) throw a.error; if(b.error) throw b.error; C.rows=a.data||[]; C.types=b.data||[]; C.state='ok'; })
+    .catch(e=>{ C.state='err'; C.err=/conv_|schema cache|does not exist/i.test(e.message||'')?'Conveyance needs the latest database update (m_conveyance.sql).':errMsg(e); })
+    .finally(()=>{ if(S.view==='conv'||S.view==='setup'||S.view==='more'||S.view==='queue') render(true); if(S.sheet&&/^conv/.test(S.sheet.type)) renderSheet(); });
+  return C; }
+const convWaiting=()=>{ const C=S.conv; if(!C||C.state!=='ok'||!convApprover()) return []; return C.rows.filter(r=>r.status==='submitted'&&r.user_id!==S.uid&&(S.isOwner||!/\b(coo|principal)\b/i.test(roster(r.user_id).role||'')&&r.user_id!==ownerId())); };
+const convType=id=>((S.conv&&S.conv.types)||[]).find(t=>t.id===id);
+const convLimit=d=>{ const t=convType(d.mode); if(!t) return 0; return (+t.limit_amt||0)*(t.per_person?1+d.people.length:1)*(d.round?2:1); };
+const convProj=id=>{ const p=id&&S.projects[id]; return p?[p.code,p.name].filter(Boolean).join(' · '):''; };
+function convRow(r,sel){ const st=CONV_ST[r.status]||[r.status,'open'], t=convType(r.mode), mine=r.user_id===S.uid;
+  return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:'+(sel?'auto ':'')+'minmax(0,1fr) auto;align-items:center;gap:10px;cursor:pointer',onclick:e=>{ if(e.target.type==='checkbox') return; openConvView(r.id); }},
+    sel?h('input',{type:'checkbox','aria-label':'Select '+r.id,checked:sel.has(r.id),style:'width:20px;height:20px;margin:0',onchange:e=>{ e.target.checked?sel.add(r.id):sel.delete(r.id); render(true); }}):null,
+    h('div',{style:'min-width:0'},h('div',{style:'font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${r.from_place} → ${r.to_place}${r.round_trip?' and back':''}`}),
+      h('div',{class:'f-hint',style:'margin:0',text:[r.id,fmtD(r.trip_date),mine?'':nameOf(r.user_id),t?t.label:r.mode,r.people&&r.people.length?'with '+r.people.map(nameOf).join(', '):'',convProj(r.project_id)||convPur(r.purpose)].filter(Boolean).join(' · ')})),
+    h('div',{style:'text-align:right'},h('div',{class:'mono',style:'font-weight:600',text:taka(r.amount)}),h('span',{class:'pill s-'+st[1],text:st[0]}))); }
+function viewConv(){ const C=loadConv(), appr=convApprover(), f=S.convF||(S.convF={tab:appr?'wait':'mine',sel:new Set()});
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Transport for work'}),h('h1',{class:'h1',text:'Conveyance'})),h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openConv(),text:'New claim'})))];
+  out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:'Claim transport for site visits, client meetings and office errands, this month or last. If several of you went together, one person claims and names the others. If you have a paper bill, write the claim ID on it and give it to Accounts. Accounts pays approved claims once a month.'}));
+  if(C.state==='loading'||C.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading…'})); return out; }
+  if(C.state==='err'){ out.push(h('p',{class:'err',text:C.err}),h('button',{class:'btn',type:'button',onclick:()=>loadConv(true),text:'Try again'})); return out; }
+  const wait=convWaiting(), ym=today().slice(0,7);
+  const mine=C.rows.filter(r=>r.user_id===S.uid), monthMine=mine.filter(r=>r.trip_date.slice(0,7)===ym&&['submitted','approved','paid'].includes(r.status));
+  out.push(h('div',{class:'kpis kpis3'},kpi('My claims this month',taka(monthMine.reduce((a,r)=>a+(+r.amount||0),0))),kpi('Waiting for approval',mine.filter(r=>r.status==='submitted').length),kpi('Approved, to be paid',taka(mine.filter(r=>r.status==='approved').reduce((a,r)=>a+(+r.amount||0),0)))));
+  if(appr) out.push(h('div',{class:'bar'},seg('Show',[['wait',`To approve${wait.length?' ('+wait.length+')':''}`],['all','Everyone'],['mine','Mine']],f.tab,v=>{ f.tab=v; f.sel.clear(); render(true); })));
+  if(appr&&f.tab==='wait'){
+    if(!wait.length){ out.push(h('div',{class:'empty'},h('h3',{text:'Nothing to approve'}),h('p',{class:'muted',style:'margin:0',text:'New claims appear here and in your notifications.'}))); return out; }
+    [...f.sel].forEach(id=>{ if(!wait.some(r=>r.id===id)) f.sel.delete(id); });
+    const tot=wait.filter(r=>f.sel.has(r.id)).reduce((a,r)=>a+(+r.amount||0),0);
+    out.push(h('div',{class:'bar'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ f.sel.size===wait.length?f.sel.clear():wait.forEach(r=>f.sel.add(r.id)); render(true); },text:f.sel.size===wait.length?'Clear':'Select all'}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:!f.sel.size||S.busy,onclick:()=>convDecide([...f.sel],'approve').then(ok=>{ if(ok) f.sel.clear(); }),text:f.sel.size?`Approve ${f.sel.size} · ${taka(tot)}`:'Approve selected'})));
+    out.push(h('div',{class:'list'},wait.map(r=>convRow(r,f.sel)))); return out; }
+  const list=appr&&f.tab==='all'?C.rows:mine;
+  if(!list.length){ out.push(h('div',{class:'empty'},h('h3',{text:'No claims yet'}),h('p',{class:'muted',style:'margin:0',text:'Use New claim after a site visit or meeting.'}))); return out; }
+  const open=list.filter(r=>['submitted','returned','approved'].includes(r.status)), done=list.filter(r=>!['submitted','returned','approved'].includes(r.status));
+  [['Open',open],['Done',done.slice(0,100)]].forEach(([t,xs])=>{ if(xs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:t}),h('span',{class:'cnt',text:String(xs.length)})),h('div',{class:'list'},xs.map(r=>convRow(r))))); });
+  return out; }
+function convDecide(ids,action,note){ return run(async()=>{ const {error}=await window.slateSupabase.rpc('conv_decide',{p_ids:ids,p_action:action,p_note:note||''}); if(error) throw error; await loadConvNow(); },
+  action==='approve'?(ids.length>1?ids.length+' claims approved':'Approved'):action==='return'?'Returned with your note':'Not approved'); }
+function loadConvNow(){ return new Promise(res=>{ const C=loadConv(true); const w=()=>C.state==='loading'?setTimeout(w,80):res(); w(); }); }
+function openConv(id){ const C=loadConv(), r=id?C.rows.find(x=>x.id===id):null;
+  const d=r?{id:r.id,date:r.trip_date,purpose:r.purpose,project:r.project_id||'',from:r.from_place,to:r.to_place,mode:r.mode,people:(r.people||[]).slice(),round:!!r.round_trip,paperBill:!!r.paper_bill,amount:String(r.amount),note:r.note||''}
+    :{date:today(),purpose:'site',project:'',from:'Office',to:'',mode:'',people:[],round:false,paperBill:false,amount:'',note:''};
+  S.sheet={type:'conv',d,err:''}; renderSheet(); }
+function sheetConv(){ const d=S.sheet.d, C=S.conv||{types:[]}, types=(C.types||[]).filter(t=>t.active&&+t.limit_amt>0);
+  const td=today(), first=(()=>{ const [y,m]=td.split('-').map(Number); return (m===1?(y-1)+'-12':y+'-'+String(m-1).padStart(2,'0'))+'-01'; })();
+  const lim=convLimit(d), upd=()=>{ const x=document.getElementById('conv-lim'); if(x) x.textContent=limTxt(); };
+  const limTxt=()=>{ const t=convType(d.mode), l=convLimit(d); if(!t) return types.length?'Choose how you travelled to see the limit.':''; return `Limit for this trip: ${taka(l)}`+(t.per_person&&d.people.length?` (${taka(t.limit_amt)} × ${1+d.people.length} people${d.round?' × 2':''})`:d.round?` (${taka(t.limit_amt)} × 2 for the return)`:' ('+(t.per_person?'per person':'one fare, however many went')+')'); };
+  const save=async e=>{ e.preventDefault();
+    if(!d.mode) return fail('Choose how you travelled.'); if(!(+d.amount>0)) return fail('Enter the amount.');
+    if(+d.amount>convLimit(d)) return fail(`The most you can claim for this trip is ${taka(convLimit(d))}.`);
+    if(d.purpose==='site'&&!d.project) return fail('Choose the project for a site visit.');
+    if(!d.project&&!d.note.trim()) return fail('Without a project, add a note saying what the trip was for.');
+    let nid='';
+    const ok=await run(async()=>{ const {data,error}=await window.slateSupabase.rpc('conv_submit',{p:{...d,amount:+d.amount}}); if(error) throw error; nid=data; await loadConvNow(); },()=>`Claim ${nid} sent to the ${S.isOwner?'COO':/\bcoo\b/i.test(roster(S.uid).role||'')?'Principal':'COO'}`+(d.paperBill?`. Write ${nid} on the paper bill.`:''));
+    if(ok){ S.view='conv'; if(S.convF) S.convF.tab='mine'; openConvView(nid); } };
+  const ps=Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>!isChalkProj(p)&&(p.code||p.name)).sort((a,b)=>(!!a.closed-!!b.closed)||(a.code||a.name).localeCompare(b.code||b.name));
+  const pSel=h('select',{id:'cv-proj','aria-label':'Project',onchange:e=>{ d.project=e.target.value; }},h('option',{value:'',text:'No project (say what for in the note)'}),ps.map(p=>h('option',{value:p.id,text:[p.code,p.name].filter(Boolean).join(' · ')+(p.closed?' (closed)':'')}))); pSel.value=d.project;
+  const purSel=h('select',{id:'cv-pur','aria-label':'What for',onchange:e=>{ d.purpose=e.target.value; }},CONV_PUR.map(([v,l])=>h('option',{value:v,text:l}))); purSel.value=d.purpose;
+  const mSel=h('select',{id:'cv-mode','aria-label':'How you travelled',onchange:e=>{ d.mode=e.target.value; upd(); }},h('option',{value:'',text:types.length?'Choose…':'No limits set yet'}),types.map(t=>h('option',{value:t.id,text:`${t.label} · up to ${taka(t.limit_amt)}${t.per_person?' each':''}`}))); mSel.value=d.mode;
+  const others=people().filter(id=>id!==S.uid&&!d.people.includes(id));
+  const addSel=h('select',{id:'cv-add','aria-label':'Add someone who was with you',onchange:e=>{ if(e.target.value){ d.people.push(e.target.value); renderSheet(); } }},h('option',{value:'',text:'Add someone who was with you…'}),others.map(id=>h('option',{value:id,text:nameOf(id)})));
+  return [head(d.id?'Conveyance · '+d.id:'Conveyance','New claim'),
+    h('form',{class:'form',onsubmit:save},
+      h('div',{class:'form-row'},field('Date of the trip',h('input',{type:'date',min:first,max:td,value:d.date,oninput:e=>{d.date=e.target.value}})),field('What for',purSel)),
+      field('Project',pSel),
+      h('div',{class:'form-row'},field('From',h('input',{value:d.from,maxlength:120,oninput:e=>{d.from=e.target.value}})),field('To',h('input',{value:d.to,maxlength:120,placeholder:'e.g. Jolshiri site, client office in Banani',oninput:e=>{d.to=e.target.value}}))),
+      field('How you travelled',mSel),
+      h('label',{style:'display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:d.round,style:'width:20px;height:20px;margin:0',onchange:e=>{ d.round=e.target.checked; upd(); }}),'Return trip included (there and back)'),
+      field('Who was with you',h('div',{style:'display:grid;gap:8px'},d.people.length?h('div',{class:'chips'},d.people.map(id=>h('span',{class:'chip'},nameOf(id),h('button',{type:'button','aria-label':'Remove '+nameOf(id),onclick:()=>{ d.people=d.people.filter(x=>x!==id); renderSheet(); },text:'×'})))):null,addSel),'They can’t claim this trip again. For rickshaw, bus and bike rides the limit grows with each person.'),
+      h('div',{class:'form-row',style:'align-items:start'},field('Amount (Tk)',h('input',{type:'number',min:1,step:'1',inputmode:'numeric',value:d.amount,oninput:e=>{d.amount=e.target.value}})),h('div',{id:'conv-lim',class:'f-hint',style:'margin:28px 0 0',text:limTxt()})),
+      h('label',{style:'display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:d.paperBill,style:'width:20px;height:20px;margin:0;flex:none',onchange:e=>{ d.paperBill=e.target.checked; }}),h('span',{},'I have a paper bill',h('span',{class:'f-hint',style:'display:block;margin:0',text:'A shop bill or printed ride receipt. Write the claim ID on it and give it to Accounts.'}))),
+      field('Note',h('input',{value:d.note,maxlength:300,placeholder:'e.g. client name, what was bought',oninput:e=>{d.note=e.target.value}})),
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy||!types.length,text:d.id?'Send again':'Send claim'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+function openConvView(id){ S.sheet={type:'convView',id,err:'',note:''}; renderSheet(); }
+function sheetConvView(){ const C=S.conv||{rows:[]}, r=C.rows.find(x=>x.id===S.sheet.id); if(!r) return [head('Conveyance','Not found')];
+  const st=CONV_ST[r.status]||[r.status,'open'], t=convType(r.mode), mine=r.user_id===S.uid, canDec=r.status==='submitted'&&convWaiting().some(x=>x.id===r.id);
+  const row=(k,v)=>v?h('div',{style:'display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px;padding:6px 0;border-bottom:1px solid var(--line)'},h('span',{class:'muted',text:k}),h('span',{text:v})):null;
+  return [head('Conveyance',r.id),
+    h('div',{style:'display:flex;gap:10px;align-items:center;flex-wrap:wrap'},h('span',{class:'pill s-'+st[1],text:st[0]}),h('b',{style:'font-size:22px',text:taka(r.amount)}),h('span',{class:'f-hint',style:'margin:0',text:'limit '+taka(r.limit_at)})),
+    r.paper_bill&&['submitted','approved','returned'].includes(r.status)&&mine?h('p',{class:'f-hint',style:'margin:0',text:`Write ${r.id} on the paper bill and give it to Accounts.`}):null,
+    h('div',{},row('Claimed by',nameOf(r.user_id)),row('Date',fmtD(r.trip_date)),row('Trip',`${r.from_place} → ${r.to_place}${r.round_trip?' and back':''}`),row('Transport',t?t.label:r.mode),row('With',(r.people||[]).map(nameOf).join(', ')),
+      row('Project',convProj(r.project_id)),row('What for',convPur(r.purpose)),row('Note',r.note),row('Paper bill',r.paper_bill?'Yes':'No'),
+      row(r.status==='returned'?'Returned':'Decision',r.decided_by?`${nameOf(r.decided_by)} · ${fmtD((r.decided_at||'').slice(0,10))}${r.decision_note?' · “'+r.decision_note+'”':''}`:''),
+      row('Paid',r.paid_at?`${fmtD(r.paid_at.slice(0,10))}${r.voucher_no?' · '+r.voucher_no:''}`:'')),
+    canDec?h('div',{style:'display:grid;gap:8px'},h('input',{value:S.sheet.note,placeholder:'Note (needed to return or not approve)','aria-label':'Note',oninput:e=>{S.sheet.note=e.target.value}}),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>convDecide([r.id],'approve').then(ok=>{ if(ok) closeSheet(); }),text:'Approve'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>{ if(!S.sheet.note.trim()) return fail('Add a note saying what to change.'); convDecide([r.id],'return',S.sheet.note).then(ok=>{ if(ok) closeSheet(); }); },text:'Return to change'}),
+        h('button',{class:'btn',type:'button',style:'color:var(--overdue)',disabled:S.busy,onclick:()=>{ if(!S.sheet.note.trim()) return fail('Add a note saying why.'); convDecide([r.id],'reject',S.sheet.note).then(ok=>{ if(ok) closeSheet(); }); },text:'Not approve'}))):null,
+    mine&&['submitted','returned'].includes(r.status)?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openConv(r.id),text:'Change'}),
+      h('button',{class:'btn',type:'button',style:'color:var(--overdue)',disabled:S.busy,onclick:()=>{ if(!confirm('Cancel claim '+r.id+'?')) return; run(async()=>{ const {error}=await window.slateSupabase.rpc('conv_cancel',{p_id:r.id}); if(error) throw error; await loadConvNow(); },'Claim cancelled'); },text:'Cancel claim'})):null]; }
+/* Settings › Conveyance limits (the Principal) */
+function convSetSec(){ const C=loadConv(); if(!S.isOwner) return null;
+  if(C.state!=='ok') return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Conveyance limits'})),h('p',{class:C.state==='err'?'err':'muted',text:C.state==='err'?C.err:'Loading…'}));
+  const D=S.convSet||(S.convSet=C.types.map(t=>({id:t.id,label:t.label,limit:String(+t.limit_amt||''),perPerson:!!t.per_person,active:!!t.active,sort:t.sort})));
+  const save=()=>{ const bad=D.find(x=>x.active&&!(+x.limit>0)); if(bad) return toast(`Set a limit for ${bad.label}, or switch it off.`);
+    run(async()=>{ const {error}=await window.slateSupabase.rpc('conv_set_types',{p:D.map((x,i)=>({...x,label:x.label.trim()||'Other',limit:+x.limit||0,sort:(i+1)*10}))}); if(error) throw error; S.convSet=null; await loadConvNow(); },'Conveyance limits saved'); };
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Conveyance limits'})),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'The most anyone can claim for one trip, by kind of transport. “Each person” multiplies the limit by the number of people who travelled (rickshaw, bus, bike ride); otherwise it is one fare however many went (CNG, car). A return trip doubles it. Only kinds that are on can be claimed.'}),
+    h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Transport'}),h('th',{class:'n',text:'Limit a trip (Tk)'}),h('th',{text:'Each person'}),h('th',{text:'On'}))),
+      h('tbody',{},D.map(x=>h('tr',{},h('td',{},h('input',{value:x.label,maxlength:40,'aria-label':'Transport name',oninput:e=>{x.label=e.target.value}})),
+        h('td',{class:'n'},h('input',{type:'number',min:0,step:'10',inputmode:'numeric',value:x.limit,style:'max-width:110px;text-align:right','aria-label':x.label+' limit',oninput:e=>{x.limit=e.target.value}})),
+        h('td',{},h('input',{type:'checkbox',checked:x.perPerson,style:'width:auto','aria-label':x.label+' each person',onchange:e=>{x.perPerson=e.target.checked}})),
+        h('td',{},h('input',{type:'checkbox',checked:x.active,style:'width:auto','aria-label':x.label+' on',onchange:e=>{x.active=e.target.checked}}))))))),
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:save,text:'Save limits'}),
+      h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ const n=prompt('Name of the transport'); if(!n||!n.trim()) return; D.push({id:('t'+Date.now().toString(36)).slice(0,20),label:n.trim(),limit:'',perPerson:false,active:true}); render(true); },text:'Add a kind'}))); }
 function viewMore(){
+  if(convApprover()) loadConv();
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
   /* grouped: Daily, Reference, Tools, Records, Admin, then Account; a group with nothing in it for this person is left out */
   const grp=(title,...xs)=>{ const its=xs.filter(Boolean); return its.length?[h('div',{class:'more-g',text:title}),h('div',{class:'list'},...its)]:[]; };
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
     ...grp('Daily',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null),
     ...grp('Reference',item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
-    ...grp('Tools',item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
+    ...grp('Tools',item('conv','Conveyance',convApprover()&&convWaiting().length?`${convWaiting().length} to approve · transport for site visits and meetings`:'Claim transport for site visits, client meetings and errands',convApprover()?convWaiting().length:0),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
       S.booksRole&&!(S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||''))?h('a',{class:'more-i',href:'/books?solo=1',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Books'}),h('div',{class:'mi-d',text:S.booksRole==='Office staff'?'Petty cash: submit the bills you paid':S.booksRole==='Accountant'?'SLATE’s accounts':'SLATE’s accounts · view only'})),h('span',{class:'mi-a',text:'›'})):null,
       FIN_UI&&window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
     ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
@@ -2721,6 +2839,8 @@ function quickSec(items){
 function viewQueue(){
   const gs=queueGroups(), total=gs.reduce((a,g)=>a+g.n,0), f=S.qf||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Waiting on you'}),h('h1',{class:'h1',text:'Approvals'})))];
+  const cw=convApprover()?(loadConv(),convWaiting()):[];
+  if(cw.length) out.push(h('button',{class:'more-i',type:'button',onclick:()=>{ S.convF={tab:'wait',sel:new Set()}; S.view='conv'; render(true); window.scrollTo(0,0); }},h('div',{},h('div',{class:'mi-t',text:`Conveyance claims · ${cw.length}`}),h('div',{class:'mi-d',text:taka(cw.reduce((a,r)=>a+(+r.amount||0),0))+' waiting for your approval'})),h('span',{class:'badge',text:String(cw.length)})));
   if(!total){ out.push(h('div',{class:'empty'},h('h3',{text:'Nothing waiting on you'}),h('p',{class:'muted',style:'margin:0',text:'New requests from the team appear here, oldest first, and in your notifications.'}))); return out; }
   const oldest=gs.map(g=>g.oldest).filter(Boolean).sort()[0];
   out.push(h('div',{class:'f-hint',style:'margin:-10px 4px 0',text:`${total} item${total===1?'':'s'}`+(oldest?` · oldest waiting ${ageTxt(ageOf(oldest))}`:'')}));
@@ -4630,6 +4750,7 @@ function viewSetup(){
       h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Task titles are typed freely. As people type, they get suggestions from earlier tasks plus this list (every project type’s standard tasks, the studio task list, and approved additions below).'}),
       added.length?h('div',{class:'list'},added.map(([k,x])=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;align-items:center'},h('div',{},h('div',{style:'font-weight:500',text:x.title}),h('div',{class:'f-hint',text:`${x.cat}${x.del?' · Deliverable':''} · requested by ${nameOf(x.requestedBy)}`})),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>run(()=>S.db.doc('tasklib/'+k).update({status:'removed'}),'Removed from the list'),text:'Remove'})))):h('p',{class:'muted',style:'margin:0;padding:0 4px',text:'No approved additions yet.'})));
   }
+  if(S.isOwner) out.push(convSetSec());
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'On-time target'})),
     h('div',{class:'card'},own?h('div',{class:'bar'},h('input',{id:'tgt',type:'number',min:50,max:100,value:target(),style:'flex:0 0 100px;background:#fff',onchange:e=>{const v=Math.max(50,Math.min(100,Math.round(+e.target.value||90)));run(()=>settingsRef().update({target:v}),'Target updated')}}),h('span',{class:'f-hint',text:'% of milestones delivered on time or early. Shown on the dashboard; rates below it are marked red.'}))
       :h('div',{text:`${target()}% of milestones on time or early`}))));
@@ -4750,7 +4871,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -9070,7 +9191,7 @@ function sheetChalkProj(){
    Back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
    back and the buttons never disagree. */
 const NAV={i:0,stack:[],snap:[],ready:false,applying:false,pending:0,pendT:0,hintAt:0};
-const NAV_SUB=['notice','activity','setup','std','help','far','reports','backup','entries','tlstatus'];   /* pages reached from More */
+const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','tlstatus'];   /* pages reached from More */
 const NAV_TASKV=['all','board','gantt'];                                                      /* one tab, three layouts */
 const NAV_VIEWER=['task','projView','notif','profile','myprofile','meeting','pmeet','timeline','chalkProj','rota'];  /* sheets that open other sheets */
 const NAV_OV='.slate-sheet:not(#slate-auth),#share-card';                                     /* popups laid over everything */
