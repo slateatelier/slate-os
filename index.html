@@ -4933,7 +4933,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -7740,6 +7740,212 @@ function sheetProp(){
       field('Note',ta('note',{rows:3,placeholder:'Anything worth remembering about this client or proposal'})),
       h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:S.sheet.convert?'Move to Proposed':id?'Save proposal':'Add proposed project'}),
         h('button',{class:'btn',type:'button',onclick:()=>id?openPropView(id):closeSheet(),text:'Cancel'})))]; }
+/* ---------- proposal builder: the client-facing proposal on the SLATE letterhead ----------
+   Built inside a proposal (Business › Proposals › open one › Build the proposal). The draft lives in the proposal's
+   record as `doc`; its total becomes the proposal's fee. Two starting points, mixed freely per proposal:
+   "Developer" (scope, one package fee, 4 × 25%) and "Detailed" (per-sft components, discount, 7 stages).
+   The PDF is printed by SLATE's server (the same printer as Finance invoices), so it looks the same from any device. */
+const PB_SCOPE={
+  dev:['Architectural design: concept, design development, authority (RAJUK) drawings, working drawings and finishing drawings','Common area interior design','Landscape design','3D visualization: 8–10 rendered views','Real estate solutions: brochure floor plans, area calculation, specifications','Structural and MEP (electrical and plumbing) design','Design coordination with all consultants','5 site visits during construction'],
+  det:['Architectural design: concept, design development, authority (RAJUK) drawings, working drawings and finishing drawings','Common area interior design','Landscape design','Structural design','MEP design: electrical, plumbing, fire','Marketing: 10–15 rendered views, an animation and brochure design','Design coordination with all consultants','10 site visits during construction','As-built drawings']};
+const PB_DELIV=['Full A3 drawing booklets (2 sets) and authority approval drawings','Soft copies in AutoCAD and PDF','Print-ready high-resolution renders'];
+const PB_TERMS=['The fee is adjusted to the final approved design area.','Additional 3D views, drawings and services beyond this scope are charged separately.','Intercity and overseas travel is borne by the client.','If two consecutive milestone payments are not made, SLATE may issue a termination notice.','SLATE retains the copyright of the design; on full payment the client may use it for this project.'];
+const PB_PARTS={dev:[['Architecture, common area interior, landscape and coordination',40],['Structural design',6],['MEP design',4]],
+  det:[['Architecture, common area interior, landscape and coordination',25],['Structural design',8],['MEP design',5],['Marketing materials',2]]};
+const PB_SCHED={dev:[['On signing (advance)',25],['Final architectural design submitted',25],['Authority drawings submitted',25],['Working drawings submitted',25]],
+  det:[['Advance on commissioning',20],['Design finalisation',10],['3D and animation',10],['Planning permit drawing',10],['RAJUK approval drawing',20],['Working drawings',20],['Finishing drawings',10]]};
+const pbTk=n=>'Tk '+Math.round(+n||0).toLocaleString('en-IN');
+const pbEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pbLines=s=>String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);
+function pbNewRef(){ const y=today().slice(0,4), used=Object.values(S.props||{}).map(p=>p&&p.doc&&p.doc.ref||'').filter(r=>r.startsWith('SLATE/PROP/'+y+'/')).map(r=>+r.split('/').pop()||0);
+  return 'SLATE/PROP/'+y+'/'+String((used.length?Math.max(...used):0)+1).padStart(3,'0'); }
+function pbDefaults(p,kind){
+  const k=kind||'dev', katha=+p.katha||0, area=katha?Math.round(katha*(k==='det'?6600:5000)/100)*100:'';
+  return {kind:k,date:today(),ref:pbNewRef(),toName:p.contact||'',toTitle:'',toCompany:p.client||'',toAddress:'',
+    subject:'Expression of interest and financial proposal: '+(p.name||'').trim(),
+    intro:`Thank you for considering SLATE for ${p.name?p.name.trim():'your project'}. We are pleased to submit our proposal for the design consultancy below, with the scope, the fee and how it is paid.`,
+    site:p.location||'',katha:p.katha||'',area:area===''?'':String(area),storeys:'',use:'Residential',
+    scope:PB_SCOPE[k].join('\n'),deliv:PB_DELIV.join('\n'),
+    feeMode:k==='det'?'parts':'lump',parts:PB_PARTS[k].map(([label,rate])=>({label,rate:String(rate)})),disc:'',discMode:'amt',
+    lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabRate:'270',
+    sched:PB_SCHED[k].map(([label,pct])=>({label,pct:String(pct)})),
+    vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',validDays:'30',revFree:'2',revFee:'20000',
+    terms:PB_TERMS.join('\n'),signName:'Syed Mohammed Imran',signTitle:'Principal Architect'}; }
+function pbFee(d){ const area=+d.area||0;
+  if(d.feeMode==='lump'){ const t=+d.lump||0; return {sub:t,disc:0,total:t,rate:area?t/area:0,area}; }
+  const rate=d.parts.reduce((a,x)=>a+(+x.rate||0),0), sub=rate*area, disc=d.discMode==='sft'?(+d.disc||0)*area:(+d.disc||0), total=Math.max(0,sub-disc);
+  return {sub,disc,total,rate:area?total/area:0,rawRate:rate,area}; }
+function openPropDoc(id,kind){ const p=(S.props||{})[id]; if(!p) return;
+  const d=p.doc&&!kind?JSON.parse(JSON.stringify(p.doc)):pbDefaults(p,kind);
+  if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revFee==null) d.revFee='20000';
+  if(p.doc&&kind){ d.ref=p.doc.ref||d.ref; d.date=p.doc.date||d.date; }
+  S.sheet={type:'propDoc',id,d,err:'',pdf:null}; renderSheet(); }
+function sheetPropDoc(){
+  const sh=S.sheet, d=sh.d, id=sh.id, p=(S.props||{})[id]; if(!p) return [head('Proposal','Not found')];
+  const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:10px',text:t});
+  const F=pbFee(d), schSum=d.sched.reduce((a,x)=>a+(+x.pct||0),0);
+  const upd=()=>{ const t=document.getElementById('pb-tot'); if(t){ const f=pbFee(d); t.textContent=f.total?pbTk(f.total)+(f.area?` · ${pbTk(f.rate)}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''):'—'; } const s=document.getElementById('pb-sum'); if(s){ const v=d.sched.reduce((a,x)=>a+(+x.pct||0),0); s.textContent=`${Math.round(v*100)/100}% of the fee`+(Math.round(v)!==100?' · should total 100%':''); s.style.color=Math.round(v)!==100?'var(--overdue)':''; } };
+  const num=(o,k,ph,w)=>h('input',{type:'number',min:0,step:'any',inputmode:'decimal',placeholder:ph||'',value:o[k]==null?'':o[k],style:w?'width:'+w:'',oninput:e=>{ o[k]=e.target.value; upd(); }});
+  const txt=(o,k,ph)=>h('input',{type:'text',placeholder:ph||'',value:o[k]||'',oninput:e=>{ o[k]=e.target.value; }});
+  const rowsEd=(arr,cols,addRow,label)=>h('div',{style:'display:grid;gap:6px'},arr.map((x,i)=>h('div',{style:`display:grid;grid-template-columns:minmax(0,1fr) ${cols.map(c=>c.w).join(' ')} 30px;gap:6px;align-items:center`},
+      txt(x,'label','Description'),...cols.map(c=>num(x,c.k,c.ph)),h('button',{type:'button',class:'icon-btn','aria-label':'Remove',onclick:()=>{ arr.splice(i,1); renderSheet(); },text:'×'}))),
+    h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ arr.push(addRow()); renderSheet(); },text:label}));
+  const save=async(silent)=>{ if(!canProps()) return fail('Only the Principal or the COO builds proposals.');
+    if(d.feeMode==='parts'&&!(+d.area>0)) return fail('Enter the construction area (sft) to work out the fee.');
+    const f=pbFee(d), cur=S.props[id]||p, doc={...d,total:Math.round(f.total),savedAt:new Date().toISOString()};
+    const ok=await run(()=>propWrite(id,{...cur,doc,fee:f.total?String(Math.round(f.total)):cur.fee||'',feeBasis:'lump',feeNote:cur.feeNote||(d.tax==='excl'?'plus VAT and AIT':'')}),silent?null:'Proposal saved');
+    return ok; };
+  const preview=async()=>{ if(await save(true)===false) return; const html=await pbHTML(S.props[id]||p,d,true); const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to see the proposal.'); w.document.open(); w.document.write(html); w.document.close(); };
+  const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
+    try{ sh.pdf={state:'ok',file:await pbPdf(S.props[id]||p,d)}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
+  const share=async()=>{ const f=sh.pdf&&sh.pdf.file; if(!f) return;
+    try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); };
+  return [head('Build the proposal · only you and the COO',p.name||p.client||'Proposal'),
+    h('p',{class:'lead',style:'margin:0',text:'Write the proposal the client receives, on the SLATE letterhead. Start from either layout and change anything; the total becomes this proposal’s fee.'}),
+    h('div',{class:'form'},
+      h('div',{class:'chips'},[['dev','Start from Developer layout'],['det','Start from Detailed layout']].map(([k,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>{ if(!confirm('Replace this draft with the '+(k==='dev'?'Developer':'Detailed')+' layout?')) return; openPropDoc(id,k); },text:l}))),
+      sec('Letter'),
+      h('div',{class:'form-row'},field('Date',inp('date',{type:'date'})),field('Reference',inp('ref',{maxlength:40}))),
+      h('div',{class:'form-row'},field('To (person)',inp('toName',{maxlength:80,placeholder:'e.g. Mr. Shahin'})),field('Title',inp('toTitle',{maxlength:80,placeholder:'e.g. Managing Director'}))),
+      h('div',{class:'form-row'},field('Company',inp('toCompany',{maxlength:120})),field('Address',inp('toAddress',{maxlength:160}))),
+      field('Subject',inp('subject',{maxlength:160})),
+      field('Opening paragraph',ta('intro',{rows:3})),
+      sec('Project'),
+      field('Site',inp('site',{maxlength:160,placeholder:'Plot, road, sector, area'})),
+      h('div',{class:'form-row'},field('Land (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Construction area (sft)',h('input',{id:'sh-area',type:'number',min:0,step:'any',inputmode:'decimal',value:d.area||'',oninput:e=>{ d.area=e.target.value; upd(); }}))),
+      h('div',{class:'form-row'},field('Storeys',inp('storeys',{maxlength:40,placeholder:'e.g. G+M+8'})),field('Use',inp('use',{maxlength:60}))),
+      sec('Scope of work'),field('One item per line',ta('scope',{rows:7})),
+      field('Deliverables · one per line',ta('deliv',{rows:3})),
+      sec('Fee'),
+      field('How the fee is worked out',seg('Fee basis',[['parts','Per sft by component'],['lump','Lump-sum package']],d.feeMode,v=>{ d.feeMode=v; renderSheet(); })),
+      d.feeMode==='parts'?h('div',{style:'display:grid;gap:8px'},
+        h('div',{class:'f-hint',text:'Rate per sft for each part of the work, times the construction area.'}),
+        rowsEd(d.parts,[{k:'rate',w:'96px',ph:'Tk/sft'}],()=>({label:'',rate:''}),'+ Add a component'),
+        h('div',{class:'form-row'},field('Discount',num(d,'disc','0')),field('Discount is',seg('Discount',[['amt','Tk in total'],['sft','Tk per sft']],d.discMode,v=>{ d.discMode=v; renderSheet(); }))))
+      :h('div',{class:'form-row'},field('Package fee (Tk)',num(d,'lump','e.g. 1400000')),field('Shown per sft on',h('span',{class:'f-hint',style:'padding-top:10px',text:'the construction area above'}))),
+      h('div',{class:'card',style:'gap:2px'},h('div',{class:'lbl',text:'Total fee, before VAT and AIT'}),h('b',{id:'pb-tot',style:'font-size:20px',text:F.total?pbTk(F.total)+(F.area?` · ${pbTk(F.rate)}/sft on ${(+F.area).toLocaleString('en-IN')} sft`:''):'—'})),
+      h('div',{style:'display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center'},h('input',{type:'checkbox',id:'pb-iab',style:'width:20px;height:20px',checked:!!d.iab,onchange:e=>{ d.iab=e.target.checked; renderSheet(); }}),h('label',{for:'pb-iab',style:'font-size:15px',text:'Show the IAB fee scale for comparison'})),
+      d.iab?field('IAB scale (Tk per sft)',inp('iabRate',{type:'number',min:0,step:'any',inputmode:'decimal'}),'Architecture and allied services at the IAB minimum scale for this size of building.'):null,
+      sec('Payment schedule'),
+      rowsEd(d.sched,[{k:'pct',w:'72px',ph:'%'}],()=>({label:'',pct:''}),'+ Add a stage'),
+      h('div',{id:'pb-sum',class:'f-hint',style:Math.round(schSum)!==100?'color:var(--overdue)':'',text:`${Math.round(schSum*100)/100}% of the fee`+(Math.round(schSum)!==100?' · should total 100%':'')}),
+      sec('Site visits and extras'),
+      h('div',{class:'form-row'},field('Free site visits',inp('vFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra visit, lead (Tk)',inp('vLead',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
+      h('div',{class:'form-row'},field('Extra visit, senior (Tk)',inp('vSenior',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('As-built drawings (Tk)',inp('asBuilt',{type:'number',min:0,step:'any',inputmode:'decimal'},),'Leave empty if included')),
+      field('Extra 3D view (Tk per image)',inp('extra3d',{type:'number',min:0,step:'any',inputmode:'decimal'})),
+      h('div',{class:'form-row'},field('Free revisions (whole project)',inp('revFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Each extra revision (Tk)',inp('revFee',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
+      field('Offer valid for (days)',inp('validDays',{type:'number',min:1,step:'1',inputmode:'numeric'}),d.date&&+d.validDays>0?'Valid until '+fmtD(addDays(d.date,+d.validDays))+'. Shown on the proposal.':null),
+      field('VAT and AIT',sel('tax',[['excl','Not included: added to each invoice (client pays)'],['incl','Included in the fee']])),
+      sec('Terms'),field('One per line',ta('terms',{rows:6})),
+      h('div',{class:'form-row'},field('Signed by',inp('signName',{maxlength:80})),field('Title',inp('signTitle',{maxlength:80}))),
+      sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
+      sh.pdf&&sh.pdf.state==='ok'?h('div',{class:'card',style:'gap:8px'},h('b',{text:'The PDF is ready: '+sh.pdf.file.name}),h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'button',onclick:share,text:'Share or save the PDF'}))):null,
+      sh.pdf&&sh.pdf.state==='err'?h('div',{class:'err',role:'alert',text:sh.pdf.err}):null,
+      h('div',{class:'actions sticky-acts'},
+        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDF…':'Save and make PDF'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:preview,text:'Preview'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>save(false),text:'Save'}),
+        h('button',{class:'btn',type:'button',onclick:()=>openPropView(id),text:'Close'})))]; }
+
+/* the proposal as letterhead pages: blocks are measured in a hidden frame and packed onto A4 pages */
+const PB_CSS=`@page{size:A4;margin:0}*{box-sizing:border-box}
+body{margin:0;background:#E6E8EA;color:#000;font:10pt/1.42 "Didact Gothic","Century Gothic",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
+.bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;justify-content:center;padding:10px;background:#231f20}.bar button{font:500 13px system-ui;padding:8px 14px;border-radius:6px;border:0;cursor:pointer}.bar .p{background:#C41E29;color:#fff}
+.page{width:210mm;min-height:297mm;margin:8mm auto;background:#fff;padding:43.5mm 14mm 16mm 12.6mm;position:relative;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.12)}
+.page>*{position:relative;z-index:1}
+.page>.lh-addr,.page>.lh-tab,.page>.lh-wm{position:absolute;z-index:0}
+@media print{body{background:#fff}.bar{display:none}.page{margin:0;box-shadow:none;zoom:1!important;height:297mm;page-break-after:always}.page:last-child{page-break-after:auto}}
+.lh-addr{left:12.6mm;top:22.9mm;font-size:7.6pt;line-height:3.07mm;color:#545454;letter-spacing:.005em;white-space:nowrap}
+.lh-tab{left:177.6mm;top:0;width:19.7mm;height:37.9mm;background:#231f20}
+.lh-mark{position:absolute;left:4.7mm;top:20.6mm;width:10.6mm}.lh-mark svg{display:block;width:100%;height:auto}
+.lh-name{position:absolute;left:0;right:0;top:32.15mm;text-align:center;color:#fff;font-size:5.6pt;line-height:1;letter-spacing:.32em;padding-left:.32em}
+.lh-wm{left:12.2mm;top:239.6mm;font-weight:400;font-size:32pt;line-height:12.35mm;color:#f0f0f0;letter-spacing:.02em}
+b,strong,h1,h2,th,tr.tot td,.to b,.ref span b,.sig b,.amtbox b,.lh-addr,.lh-name,.lh-wm,.dr{font-family:"Jost","Futura",sans-serif}
+b,strong{font-weight:600}
+h1{font-size:15pt;font-weight:600;letter-spacing:.08em;margin:0 0 1.5mm;text-transform:uppercase}.dr{color:#C41E29;font-size:9pt;border:1pt solid #C41E29;padding:1px 6px;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
+.ref{display:flex;justify-content:space-between;gap:6mm;font-size:9pt;color:#545454;margin-bottom:7mm;flex-wrap:wrap}.ref span b{color:#000;font-weight:600}
+.to{margin-bottom:6mm}.to b{display:block;font-weight:600;font-size:11pt}.pre{white-space:pre-line}
+h2{font-size:8.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:7mm 0 2.5mm}
+table{width:100%;border-collapse:collapse;font-size:9.5pt}
+th{font-size:7.5pt;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#545454;text-align:left;padding:2mm 1mm 2mm 0;border-bottom:.75pt solid #000}
+td{padding:2.2mm 1mm 2.2mm 0;border-bottom:.5pt solid #CFCFCF;vertical-align:top}td.n,th.n{text-align:right;padding-right:0}
+tr.tot td{border-bottom:0;border-top:1pt solid #000;font-weight:600}tr.sub td{color:#545454;border-bottom:0}
+.words{font-size:9pt;color:#545454;margin:3mm 0 0}
+.sig{display:flex;flex-wrap:wrap;gap:12mm 20mm;margin-top:16mm}.sig div{min-width:60mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.sig b{display:block;font-weight:600}
+.note{font-size:8.5pt;color:#545454;margin-top:5mm}pre{font:inherit;white-space:pre-wrap;margin:0}
+.amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #000;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font-size:16pt;font-weight:600}
+.docref{position:absolute;left:12.6mm;right:14mm;bottom:7mm;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9A9A9A;text-align:right}
+.pb-ul{margin:0;padding:0 0 0 5mm}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
+.pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:14mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}`;
+const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
+const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
+const pbLetterhead=()=>`<div class="lh-addr">${PB_ADDR.split('\n').map(pbEsc).join('<br>')}</div><div class="lh-tab"><div class="lh-mark">${PB_LOGO}</div><div class="lh-name">SLATE</div></div><div class="lh-wm">DESIGN<br>WITH<br>PURPOSE</div>`;
+const pbHead=t=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${pbEsc(t)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Didact+Gothic&family=Jost:wght@400;500;600&display=swap"><style>${PB_CSS}</style></head>`;
+function pbBlocks(p,d){
+  const f=pbFee(d), B=[], add=(html,keep)=>B.push({html,keep:!!keep}), list=(title,items)=>{ items.forEach((x,i)=>add((i===0?`<h2>${pbEsc(title)}</h2>`:'')+`<ul class="pb-ul"><li>${pbEsc(x)}</li></ul>`,i===0)); };
+  add(`<div class="ref"><span>Ref <b>${pbEsc(d.ref)}</b></span><span>Date <b>${pbEsc(fmtLong(d.date))}</b></span></div>
+    <div class="to">${d.toName?`<b>${pbEsc(d.toName)}</b>`:''}${d.toTitle?pbEsc(d.toTitle)+'<br>':''}${d.toCompany?pbEsc(d.toCompany)+'<br>':''}${pbEsc(d.toAddress)}</div>
+    <h1 style="font-size:12pt;letter-spacing:.04em;text-transform:none">${pbEsc(d.subject)}</h1>`);
+  pbLines(d.intro).forEach(x=>add(`<p class="pb-p">${pbEsc(x)}</p>`));
+  const pr=[['Project',p.name],['Site',d.site],['Land',d.katha?d.katha+' katha':''],['Construction area',d.area?(+d.area).toLocaleString('en-IN')+' sft (approx.)':''],['Storeys',d.storeys],['Use',d.use]].filter(x=>x[1]);
+  if(pr.length) add(`<h2>Project</h2><table>${pr.map(([k,v])=>`<tr><td class="pb-k">${pbEsc(k)}</td><td>${pbEsc(v)}</td></tr>`).join('')}</table>`);
+  list('Scope of work',pbLines(d.scope));
+  const dl=pbLines(d.deliv); if(dl.length) list('Deliverables',dl);
+  let fee='';
+  if(d.feeMode==='parts'){
+    fee=`<table><thead><tr><th>Service</th><th class="n">Rate (Tk/sft)</th><th class="n">Amount (Tk)</th></tr></thead><tbody>
+      ${d.parts.filter(x=>x.label||+x.rate).map(x=>`<tr><td>${pbEsc(x.label)}</td><td class="n">${(+x.rate||0).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate||0)*(+d.area||0)).toLocaleString('en-IN')}</td></tr>`).join('')}
+      ${f.disc?`<tr class="sub"><td>Subtotal (${(+d.area||0).toLocaleString('en-IN')} sft × Tk ${(f.rawRate||0).toLocaleString('en-IN')})</td><td></td><td class="n">${Math.round(f.sub).toLocaleString('en-IN')}</td></tr><tr class="sub"><td>Less special discount${d.discMode==='sft'?` (Tk ${(+d.disc||0).toLocaleString('en-IN')}/sft)`:''}</td><td></td><td class="n">−${Math.round(f.disc).toLocaleString('en-IN')}</td></tr>`:''}
+      <tr class="tot"><td>Total fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`;
+  } else fee=`<div class="amtbox"><span>Total fee (package)${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>`;
+  add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${d.tax==='incl'?'The fee includes VAT and AIT.':'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
+  if(d.iab&&+d.iabRate>0&&f.area){ const pct=Math.round(f.rate/(+d.iabRate)*100);
+    add(`<p class="pb-small">For comparison: the Institute of Architects Bangladesh (IAB) minimum fee scale for architecture and allied services is about Tk ${(+d.iabRate).toLocaleString('en-IN')}/sft, or ${pbTk((+d.iabRate)*f.area)} for this building. SLATE’s fee is Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft, ${pct}% of that scale.</p>`); }
+  const sc=d.sched.filter(x=>x.label||+x.pct);
+  if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
+  const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?['Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?['Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
+    d.asBuilt!==''&&d.asBuilt!=null?['As-built drawings',+d.asBuilt?pbTk(d.asBuilt)+' (fixed)':'Included']:null,+d.extra3d?['Additional 3D view',pbTk(d.extra3d)+' per image']:null,
+    +d.revFee?['Design revision beyond the '+(+d.revFree||0)+' included',pbTk(d.revFee)+' per revision']:null].filter(Boolean);
+  if(ex.length) add(`<h2>Site visits and additional services</h2><table>${ex.map(([k,v])=>`<tr><td>${pbEsc(k)}</td><td class="n">${pbEsc(v)}</td></tr>`).join('')}</table>`);
+  const gen=[];
+  if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(+d.revFee?`Each further revision is charged ${pbTk(d.revFee)}.`:'Further revisions are charged separately.'));
+  if(+d.validDays>0) gen.push(`This offer is valid for ${+d.validDays} days, until ${fmtLong(addDays(d.date||today(),+d.validDays))}. After that the fee and terms may be revised.`);
+  list('Terms and conditions',[...pbLines(d.terms),...gen]);
+  add(`<p class="pb-p" style="margin-top:6mm">We look forward to working with you.</p><div class="pb-acc"><div><b>${pbEsc(d.signName)}</b>${pbEsc(d.signTitle)}<br>SLATE</div><div><b>Accepted by</b>Name, signature and date<br>${pbEsc(d.toCompany||p.client||'')}</div></div>`);
+  return B; }
+async function pbPages(p,d){
+  const B=pbBlocks(p,d), ifr=document.createElement('iframe');
+  ifr.setAttribute('aria-hidden','true'); ifr.style.cssText='position:fixed;left:-10000px;top:0;width:900px;height:1400px;border:0;visibility:hidden';
+  document.body.append(ifr);
+  try{
+    const doc=ifr.contentDocument; doc.open(); doc.write(pbHead('measure')+`<body><div class="page" id="pg">${B.map((b,i)=>`<div class="pb-blk" data-i="${i}">${b.html}</div>`).join('')}</div></body></html>`); doc.close();
+    await new Promise(r=>{ if(doc.readyState==='complete') r(); else ifr.onload=()=>r(); setTimeout(r,2500); });
+    try{ await Promise.race([doc.fonts.ready,new Promise(r=>setTimeout(r,2500))]); }catch(_){}
+    const mm=96/25.4, avail=(297-43.5-34)*mm, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
+    const pages=[[]]; let used=0;
+    B.forEach((b,i)=>{ const need=hs[i]+(b.keep&&i+1<B.length?hs[i+1]:0);
+      if(used>0&&used+need>avail){ pages.push([]); used=0; } pages[pages.length-1].push(b.html); used+=hs[i]; });
+    return pages;
+  } finally { ifr.remove(); } }
+const fmtLong=s=>{ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return `${d} ${['January','February','March','April','May','June','July','August','September','October','November','December'][m-1]} ${y}`; };
+async function pbHTML(p,d,withBar){
+  const pages=await pbPages(p,d), ref=d.ref||'';
+  return pbHead((p.name||'Proposal')+' · SLATE proposal')+`<body>${withBar?'<div class="bar"><button class="p" onclick="print()">Print or save as PDF</button><button onclick="close()">Close</button></div>':''}
+${pages.map((b,i)=>`<div class="page">${pbLetterhead()}${b.map(x=>`<div class="pb-blk">${x}</div>`).join('')}<div class="docref">${pbEsc(ref)} · page ${i+1} of ${pages.length}</div></div>`).join('')}
+${withBar?`<script>(function(){function fit(){var px=210*96/25.4,w=document.documentElement.clientWidth,z=Math.min(1,(w-16)/px);document.querySelectorAll('.page').forEach(function(p){p.style.zoom=z;});}addEventListener('resize',fit);fit();})();<\/script>`:''}
+</body></html>`; }
+async function pbPdf(p,d){
+  const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
+  if(!tok) throw new Error('Your sign-in has expired. Reload SLATE OS and try again.');
+  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'},body:await pbHTML(p,d,false)}); }
+  catch(_){ throw new Error('Couldn’t reach the PDF printer. Check your connection and try again.'); }
+  if(!r.ok){ let m=''; try{ m=(await r.json()).error; }catch(_){} throw new Error(m||'Couldn’t make the PDF. Try again in a moment.'); }
+  const name=('SLATE proposal '+(p.name||p.client||'')).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
+  return new File([await r.blob()],name,{type:'application/pdf'}); }
+
 function sheetPropView(){
   const id=S.sheet.id, p=(S.props||{})[id]?{...S.props[id],id}:null; if(!p) return [head('Proposed project','Not found')];
   const lg=S.sheet.lg, open=propOpen(p), log=[...(p.log||[])].reverse(), pj=p.projectId&&S.projects[p.projectId];
@@ -7788,6 +7994,7 @@ function sheetPropView(){
         h('p',{class:'muted',style:'margin:4px',text:open?'No meetings yet. Schedule one here and it shows on the calendar and in Meetings; the lead’s next follow-up moves to that day.':'No meetings.'}))); }
   if(S.canWrite) out.push(h('div',{class:'actions'},
     open&&ld?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(id,true),text:'Make a proposal →'}):null,
+    open&&!ld?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openPropDoc(id),text:p.doc?'Open the proposal document':'Build the proposal document'}):null,
     open&&!ld?h('button',{class:'btn btn-primary',type:'button',onclick:confirmIt,text:'Client confirmed → make it a client project'}):null,
     open?h('button',{class:'btn',type:'button',onclick:()=>ld?openLead(id):openProp(id),text:'Edit'}):null,
     open?h('button',{class:'btn',type:'button',onclick:()=>outcome('lost'),text:'Lost'}):null,
