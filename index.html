@@ -7965,7 +7965,15 @@ tr.tot td{border-bottom:0;border-top:1pt solid #000;font-weight:600}tr.sub td{co
 .amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #000;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font-size:16pt;font-weight:600}
 .docref{position:absolute;left:12.6mm;right:14mm;bottom:7mm;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9A9A9A;text-align:right}
 .iab-t tr.on td{background:#C41E29;color:#fff;font-weight:600}.iab-t td{padding:1.4mm 1.5mm}.iab-t th{padding-left:1.5mm}
-.pb-ul{margin:0;padding:0 0 0 5mm}.pb-svc{margin:0 0 2.5mm}.pb-svc>b{display:block;font-size:10pt}.pb-chk{list-style:none;padding:0;columns:2;column-gap:6mm}.pb-chk li{padding-left:4.5mm;text-indent:-4.5mm;break-inside:avoid}.pb-chk li:before{content:'✓';color:#C41E29;display:inline-block;width:4.5mm;text-indent:0}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
+.pb-ul{margin:0;padding:0 0 0 5mm}.pb-svc{margin:0 0 2.5mm}.pb-svc>b{display:block;font-size:10pt}.pb-chk{list-style:none;padding:0;columns:2;column-gap:6mm}.pb-chk li{padding-left:4.5mm;text-indent:-4.5mm;break-inside:avoid}.pb-chk li:before{content:'✓';color:#C41E29;display:inline-block;width:4.5mm;text-indent:0}
+/* SLATE red marks the hierarchy: the subject, section headings, totals and the amount to pay */
+h1{border-left:1.6mm solid #C41E29;padding-left:3mm}
+h2{color:#C41E29;display:flex;align-items:center;gap:3mm}h2:after{content:'';flex:1;border-top:.5pt solid #C41E29;opacity:.45}
+.pb-svc>b{border-left:.8mm solid #C41E29;padding-left:2mm;margin-bottom:.5mm}
+th{border-bottom-color:#C41E29}
+tr.tot td{border-top-color:#C41E29;color:#C41E29}
+.amtbox{border-color:#C41E29}.amtbox b{color:#C41E29}
+.ref span b{color:#C41E29}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
 .pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:14mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}`;
 const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
@@ -8000,8 +8008,8 @@ function pbBlocks(p,d){
       ${IAB_BANDS.map((b,i)=>`<tr class="${i===I.bi?'on':''}"><td>${iabBandLabel(b)}${i===I.bi?' &nbsp;◄ this project':''}</td><td class="n">${b[2][I.j]}</td><td class="n">${b[2][I.j]*1.5}</td></tr>`).join('')}</tbody></table>
       <table style="margin-top:3mm"><tr><td>Architecture and allied design: ${(+f.area).toLocaleString('en-IN')} sft × Tk ${I.allied}</td><td class="n">${pbTk(I.arch)}</td></tr>
       ${I.site?`<tr><td>Landscape and allied design: ${I.site.toLocaleString('en-IN')} sft of site × Tk ${I.landRate}</td><td class="n">${pbTk(I.land)}</td></tr>`:''}
-      <tr class="tot"><td>IAB minimum for this project</td><td class="n">${pbTk(I.total)}</td></tr>
-      <tr><td><b>SLATE’s fee</b> (${I.pct}% of the IAB minimum)</td><td class="n"><b>${pbTk(f.total)}</b></td></tr></table>`); }
+      <tr><td><b>IAB minimum for this project</b></td><td class="n"><b>${pbTk(I.total)}</b></td></tr>
+      <tr class="tot"><td>SLATE’s fee (${I.pct}% of the IAB minimum)</td><td class="n">${pbTk(f.total)}</td></tr></table>`); }
   const sc=d.sched.filter(x=>x.label||+x.pct);
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
   const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?['Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?['Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
