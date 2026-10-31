@@ -611,6 +611,13 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .mn-sub{padding:0 0 10px 17px;font-size:13px;display:grid;gap:4px}.mn-sub>div{display:flex;justify-content:space-between;gap:12px;color:var(--muted)}
 .mn-li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}.mn-li:first-child{border-top:0}.mn-li .mono{white-space:pre;text-align:right}
 .mn-key{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.mn-key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.pc-next{font-size:13px;font-weight:600;color:var(--ink)}.pc-next.u{color:var(--overdue)}
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 12px}
+.flow-s{display:flex;gap:8px;align-items:flex-start;text-align:left;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--card,#fff);cursor:pointer;font:inherit;color:inherit;min-width:0}
+.flow-s.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.flow-n{flex:0 0 22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+.flow-t{display:grid;gap:2px;min-width:0}.flow-t b{font-size:14px}.flow-t span{font-size:12px;color:var(--muted);line-height:1.3}
+@media (max-width:640px){.flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .mn-scroll{overflow-x:auto;max-width:100%}.mn-tbl{width:100%;border-collapse:collapse;font-size:13px}.mn-tbl th,.mn-tbl td{padding:6px 8px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}.mn-tbl th:first-child,.mn-tbl td:first-child{text-align:left}.mn-tbl th{color:var(--muted);font-weight:500}
 .biz-bar{flex-wrap:nowrap;margin-top:-4px}.biz-seg{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.biz-seg::-webkit-scrollbar{display:none}.biz-seg .seg{width:max-content}
 .biz-h{align-items:flex-end;flex-wrap:nowrap}.biz-h>.biz-act .actions{width:auto}.biz-act{flex:none;margin-left:auto}.biz-act .actions{margin:0}.biz-act .btn{white-space:nowrap}.biz-lead{margin:-2px 2px 14px;max-width:720px}
@@ -7700,6 +7707,21 @@ const propList=()=>Object.entries(S.props||{}).filter(([k,p])=>p&&(p.name||p.cli
 const propOpen=p=>(p.status||'open')==='open';
 const propLast=p=>{ const l=p.log||[]; return l.length?l[l.length-1]:null; };
 const propDue=p=>propOpen(p)&&!!p.next&&p.next<=today();
+/* the one thing to do next on a lead or proposal, shown on its card and in its Next steps */
+function propNext(p){ if(!propOpen(p)) return null; const td=today(), last=propLast(p);
+  if(isLead(p)){ if(!p.location||!(+p.katha>0)) return {t:'Get the site and land size',u:propDue(p)};
+    if(!(p.log||[]).length) return {t:'Call them and log it',u:true}; if(propDue(p)) return {t:'Follow up today',u:true};
+    return {t:'Make a proposal when ready',u:false}; }
+  if(!p.sentOn) return p.doc?{t:'Send it, then mark it as sent',u:true}:{t:'Build the proposal document',u:true};
+  if(last&&last.resp==='pos') return {t:'Client agreed: make it a client project',u:true};
+  if(propDue(p)) return {t:'Follow up '+(p.next<td?'(overdue)':'today'),u:true};
+  return {t:p.next?'Wait · follow up '+fmtD(p.next):'Set a follow-up date',u:!p.next}; }
+/* the four stages, shown at the top of Leads and Proposals */
+function flowStrip(at){ const all=propList().filter(propOpen), L=all.filter(isLead).length, P=all.filter(p=>!isLead(p)&&!p.sentOn).length, Sx=all.filter(p=>!isLead(p)&&p.sentOn).length,
+    W=propList().filter(p=>p.status==='won'&&(p.wonAt||'').slice(0,7)===today().slice(0,7)).length;
+  const st=[['leads','1','Lead','an inquiry: call, visit, qualify',L],['proposed','2','Proposal','write it and send it',P],['proposed','3','Sent','follow up until they agree',Sx],['projects','4','Client project','confirmed: the team starts',W]];
+  return h('div',{class:'flow'},st.map(([tab,n,t,sub,c],i)=>h('button',{type:'button',class:'flow-s'+(at===tab&&i<3?' on':''),onclick:()=>{ if(tab==='projects'){ S.view='projects'; } else S.biz.tab=tab; render(true); }},
+    h('span',{class:'flow-n',text:n}),h('span',{class:'flow-t'},h('b',{text:t+(c?' · '+c:'')}),h('span',{text:i===3?(c?'this month':sub):sub}))))); }
 const propFee=p=>{ const n=+p.fee||0; if(!n) return p.feeNote||''; return (p.feeBasis==='sft'?taka(n)+' per sft':bdt(n)+' lump sum')+(p.feeNote?' · '+p.feeNote:''); };
 const propTypeName=k=>k&&STD_DEF[k]?STD_DEF[k].name:'';
 const propLine=e=>e?[(PROP_KIND.find(x=>x[0]===e.kind)||[])[1]||'',(PROP_RESP.find(x=>x[0]===e.resp&&x[0])||[])[1]||''].filter(Boolean).join(' · '):'';
@@ -7719,7 +7741,7 @@ function sheetProp(){
     if(d.katha!==''&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     if(d.fee!==''&&!(+d.fee>0)) return fail('Fee should be a number, or leave it empty.');
     const now=new Date().toISOString(), pid=id||S.db.collection('proposals').doc().id, old=id?(S.props||{})[id]||{}:{};
-    const v={...old,name,client,contact:(d.contact||'').trim(),phone:(d.phone||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
+    const v={...old,name,client,contact:(d.contact||'').trim(),phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
       scope:[...d.scope],feeBasis:d.feeBasis||'lump',fee:d.fee===''?'':String(+d.fee),feeNote:(d.feeNote||'').trim(),sentOn:d.sentOn||'',stage:d.stage||'prep',next:d.next||'',note:(d.note||'').trim(),
       src:d.src||'',status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid,proposedAt:now}),...(S.sheet.convert?{lead:false,proposedAt:now}:{})};
     run(()=>propWrite(pid,v),S.sheet.convert?'Moved to Proposed':id?'Proposal updated':'Proposal added: now write the proposal document').then(ok=>{ if(!ok) return; if(!id||S.sheet.convert) openPropDoc(pid,null,v); else openPropView(pid); }); };
@@ -7730,7 +7752,8 @@ function sheetProp(){
       sec('Project'),
       field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'})),
       h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:120,placeholder:'Company or person'})),field('Contact person',inp('contact',{maxlength:80}))),
-      h('div',{class:'form-row'},field('Phone',inp('phone',{type:'tel',maxlength:40})),field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'}))),
+      h('div',{class:'form-row'},field('Phone',inp('phone',{type:'tel',maxlength:40})),field('Email',inp('email',{type:'email',maxlength:120}))),
+      field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'})),
       field('Source',sel('src',[['','Not recorded'],...LEAD_SRC])),
       h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Project type',sel('type',[['','Not decided'],...Object.entries(STD_DEF).filter(([k])=>k!=='proposal').map(([k,t])=>[k,t.name])]))),
       field('Scope proposed',h('div',{class:'chips'},SCOPES.map(chip))),
@@ -7876,7 +7899,7 @@ function sheetPropDoc(){
     const f=pbFee(d), cur=S.props[id]||p, doc={...d,total:Math.round(f.total),savedAt:new Date().toISOString()};
     const ok=await run(()=>propWrite(id,{...cur,doc,fee:f.total?String(Math.round(f.total)):cur.fee||'',feeBasis:'lump',feeNote:cur.feeNote||(d.tax==='excl'?'plus VAT and AIT':'')}),silent?null:'Proposal saved');
     return ok; };
-  const preview=async(plain)=>{ if(await save(true)===false) return; pbShowPreview(await pbHTML(S.props[id]||p,d,true,plain===true),plain===true,()=>pbPdfRetry(S.props[id]||p,d,plain===true)); };
+  const preview=async(plain)=>{ if(await save(true)===false) return; pbShowPreview(await pbHTML(S.props[id]||p,d,true,plain===true),plain===true,()=>pbPdfRetry(S.props[id]||p,d,plain===true),null,()=>preview(plain!==true)); };
   const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
     try{ const r=await pbPdfRetry(S.props[id]||p,d,'both'); sh.pdf={state:'ok',file:r.share,print:r.print}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
   const share=async(which)=>{ const f=sh.pdf&&sh.pdf[which==='print'?'print':'file']; if(!f) return;
@@ -7946,10 +7969,10 @@ function sheetPropDoc(){
         h('div',{class:'actions',style:'margin:0;flex-wrap:wrap'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>share('file'),text:'Share copy (letterhead)'}),sh.pdf.print?h('button',{class:'btn',type:'button',onclick:()=>share('print'),text:'Print copy (for the pad)'}):null)):null,
       sh.pdf&&sh.pdf.state==='err'?h('div',{class:'err',role:'alert',text:sh.pdf.err}):null,
       h('div',{class:'actions sticky-acts'},
-        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDFs…':'Save and make PDFs'}),
-        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>preview(false),text:'Preview'}),h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>preview(true),text:'Preview print copy'}),
-        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>save(false),text:'Save'}),
-        h('button',{class:'btn',type:'button',onclick:()=>openPropView(id),text:'Close'})))]; }
+        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDFs…':'Make the PDFs'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>preview(false),text:'Preview'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:async()=>{ if(await save(true)!==false){ toast('Proposal saved'); openPropView(id); } },text:'Done'})),
+      h('div',{class:'f-hint',style:'margin:0',text:'Every button saves your changes. Done takes you back to the proposal.'}))]; }
 
 /* the proposal as letterhead pages: blocks are measured in a hidden frame and packed onto A4 pages */
 const PB_TOP=53.5; /* mm from the top of the page to the first line: 10 mm of air below the letterhead */
@@ -8069,7 +8092,7 @@ const pbIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platfor
 async function pbShareFile(f){
   try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
   const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); }
-function pbShowPreview(html,plain,makePdf,label){
+function pbShowPreview(html,plain,makePdf,label,swap){
   document.getElementById('pb-prev')?.remove();
   html=html.replace(/<div class="bar">[\s\S]*?<\/div>/,'');
   const fr=h('iframe',{title:'Proposal preview',style:'flex:1;width:100%;border:0;background:#e6e6e6'}); fr.srcdoc=html;
@@ -8081,6 +8104,7 @@ function pbShowPreview(html,plain,makePdf,label){
           try{ file=await makePdf(); b.textContent='Share or save the PDF'; }catch(e){ b.textContent='Make the PDF'; toast(e.message||'Couldn’t make the PDF.'); } b.disabled=false; };
         return b; })(),
       pbIOS()?null:h('button',{type:'button',class:'btn',onclick:()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} },text:'Print'}),
+      swap?h('button',{type:'button',class:'btn',onclick:swap,text:plain?'Show the share copy':'Show the print copy'}):null,
       h('button',{type:'button',class:'btn',onclick:close,text:'Close'}),
       h('span',{style:'color:#bbb;font-size:13px;flex-basis:100%;text-align:center',text:label||(plain?'Print copy: for the printed letterhead pad':'Share copy: with the letterhead design')})),
     fr);
@@ -8138,7 +8162,7 @@ const AG_CLAUSES=[
   ['Entire agreement','This Agreement, with its Schedules, is the entire agreement between the parties on its subject and replaces the proposal and all earlier discussions. It may be changed only in writing signed by both parties. If any provision is found invalid, the rest remains in force. This Agreement is signed in two originals, one for each party.']];
 function agDefaults(p){ const d=p.doc||{};
   return {title:'Agreement for architectural design consultancy services',date:today(),place:'Dhaka',paper:'legal',stampIn:'5',stampAll:false,
-    cName:d.toCompany||p.client||'',cRep:d.toName||p.contact||'',cRepTitle:d.toTitle||'',cAddr:d.toAddress||'',cEmail:'',
+    cName:d.toCompany||p.client||'',cRep:d.toName||p.contact||'',cRepTitle:d.toTitle||'',cAddr:d.toAddress||'',cEmail:p.email||'',
     land:d.site||p.location||'',sName:d.signName||'Syed Mohammed Imran',sTitle:d.signTitle||'Principal Architect',sAddr:PB_ADDR.split('\n').slice(0,2).join(', ').replace(/^SLATE,\s*/,''),sEmail:'info@slate-atelier.com',
     recitals:AG_RECITALS.join('\n'),clauses:AG_CLAUSES.map(([t,x])=>({t,x})),special:''}; }
 function tkWords(n){ n=Math.round(+n||0); if(!n) return 'Taka Zero only';
@@ -8310,10 +8334,10 @@ function sheetAgrDoc(){
         h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>pbShareFile(sh.pdf.file),text:'Share or save the PDF'}))):null,
       sh.pdf&&sh.pdf.state==='err'?h('div',{class:'err',role:'alert',text:sh.pdf.err}):null,
       h('div',{class:'actions sticky-acts'},
-        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDF…':'Save and make PDF'}),
+        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDF…':'Make the PDF'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:preview,text:'Preview'}),
-        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>save(false),text:'Save'}),
-        h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Close'})))]; }
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:async()=>{ if(await save(true)!==false){ toast('Agreement saved'); openPropView(id); } },text:'Done'})),
+      h('div',{class:'f-hint',style:'margin:0',text:'Every button saves your changes. Done takes you back to the proposal.'}))]; }
 
 function sheetPropView(){
   const id=S.sheet.id, p=(S.props||{})[id]?{...S.props[id],id}:null; if(!p) return [head('Proposed project','Not found')];
@@ -8329,26 +8353,26 @@ function sheetPropView(){
   const outcome=(st)=>{ const note=prompt(st==='lost'?'Why was it lost? (optional)':'Why is it dropped? (optional)',''); if(note===null) return;
     save({status:st,closedAt:new Date().toISOString(),closedBy:S.uid,outcomeNote:note.trim(),next:''},st==='lost'?'Marked lost':'Marked dropped'); };
   const confirmIt=()=>{ openProject(); const d=S.sheet.d; d.name=p.name||''; d.client=p.client||''; d.contact=p.contact||''; d.phone=p.phone||''; d.location=p.location||''; d.katha=p.katha||''; d.type=p.type||''; d.scope=[...(p.scope||[])]; d.note=p.note||'';
-    S.sheet.fromProp=id; renderSheet(); toast('Fill in the rest. Once the project is added, the proposal is marked confirmed.'); };
+    if(p.agr){ d.agStatus='signed'; d.agDate=p.agr.date||''; } if(p.doc&&p.doc.ref) d.agRef=(p.doc.ref||'').toUpperCase();
+    S.sheet.fromProp=id; renderSheet(); toast('Fill in the rest. Once the project is added, the proposal is marked confirmed, and its fee and payment stages are ready in Business › Fees.'); };
   const ld=isLead(p), ht=LEAD_HEAT[p.heat]||LEAD_HEAT.warm;
   const out=[head((ld?'Lead':'Proposed project')+' · only you and the COO',pTitle(p)),
     h('div',{class:'sh-status'},open&&ld?h('span',{class:'pill s-'+ht[1],text:ht[0]}):open?h('span',{class:'pill s-'+(propDue(p)?'overdue':'open'),text:PROP_STAGE[p.stage]||'Preparing'}):h('span',{class:'pill s-'+(p.status==='won'?'ontime':'overdue'),text:PROP_OUT[p.status]||p.status}),
       open&&p.next?h('span',{class:'tag',style:propDue(p)?'color:var(--overdue)':'',text:(p.next<today()?'Follow-up was due ':p.next===today()?'Follow up today':'Next follow-up ')+(p.next===today()?'':fmtD(p.next))}):null,
       p.type?h('span',{class:'tag',text:propTypeName(p.type)}):null,p.src?h('span',{class:'tag',text:srcL(p.src)}):null),
-    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),fact('Fee proposed',propFee(p)),
+    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone,p.email].filter(Boolean).join(' · ')),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),fact('Fee proposed',propFee(p)),
       fact('Proposal sent',p.sentOn?fmtD(p.sentOn):''),fact(ld?'Project':'',ld&&p.name?p.name:''),fact('Lead since',p.leadAt&&!ld?fmtD(p.leadAt.slice(0,10)):''),fact('Added',p.createdAt?fmtTs(p.createdAt):'',p.createdBy?'by '+nameOf(p.createdBy):'')),
     (p.scope||[]).length?h('div',{},h('div',{class:'lbl',text:'Scope proposed'}),h('div',{class:'chips',style:'margin-top:4px'},p.scope.map(x=>h('span',{class:'chip',style:'padding-right:12px',text:x})))):null,
     p.note?h('p',{class:'f-hint',style:'margin:0;white-space:pre-wrap',text:p.note}):null,
     !open&&(p.outcomeNote||pj)?h('div',{class:'card',style:'gap:6px'},h('b',{text:PROP_OUT[p.status]+(p.closedAt||p.wonAt?' · '+fmtTs(p.wonAt||p.closedAt):'')}),p.outcomeNote?h('span',{class:'muted',text:p.outcomeNote}):null,
       pj?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>openProjectView(p.projectId),text:'Open the project: '+(pj.code||pj.name)}):null):null];
-  if(open&&S.canWrite) out.push(h('form',{class:'form card',style:'gap:10px',onsubmit:addLog},
-    h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em',text:'Log a client response'}),
+  if(open&&S.canWrite) out.push(h('details',{class:'card',id:'pv-log',style:'gap:10px'},h('summary',{style:'cursor:pointer;font-weight:600',text:'Log a call, meeting or message'}),h('form',{class:'form',style:'gap:10px;padding-top:8px',onsubmit:addLog},
     h('div',{class:'form-row'},field('How',(()=>{ const x=h('select',{onchange:e=>{lg.kind=e.target.value}},PROP_KIND.map(([v,l])=>h('option',{value:v,text:l}))); x.value=lg.kind; return x; })()),
       field('Client response',(()=>{ const x=h('select',{onchange:e=>{lg.resp=e.target.value}},PROP_RESP.map(([v,l])=>h('option',{value:v,text:v?l:'—'}))); x.value=lg.resp; return x; })())),
     field('What was said',(()=>{ const x=h('textarea',{rows:3,placeholder:'e.g. Wants the fee per sft; will decide after the board meeting',oninput:e=>{lg.note=e.target.value}}); x.value=lg.note; return x; })()),
     h('div',{class:'form-row',style:'align-items:end'},field('Next follow-up',h('input',{type:'date',min:today(),value:lg.next,oninput:e=>{lg.next=e.target.value}}),'Empty means no reminder.'),
       h('div',{class:'chips',style:'margin-bottom:6px'},[[2,'In 2 days'],[5,'In a week'],[10,'In 2 weeks']].map(([n,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>{ lg.next=addWorkDays(today(),n); renderSheet(); },text:l})))),
-    h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save response'}))));
+    h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save response'})))));
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Follow-up log'}),h('span',{class:'cnt',text:String(log.length)})),
     log.length?h('div',{class:'list'},log.map(e=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},
       h('div',{class:'row-meta'},h('b',{text:propLine(e)||'Note'}),e.resp&&PROP_RESP_S[e.resp]?h('span',{class:'pill s-'+PROP_RESP_S[e.resp],text:(PROP_RESP.find(x=>x[0]===e.resp)||[])[1]}):null),
@@ -8361,16 +8385,37 @@ function sheetPropView(){
           h('div',{style:'min-width:0'},h('div',{class:'row-title',text:m.title||'Meeting'}),h('div',{class:'row-meta',text:`${fmtD(m.date)}${m.time?' · '+m.time:''}${m.venue?' · '+m.venue:''}`})),
           h('span',{class:'pill s-'+(m.status==='cancelled'?'open':up?'early':m.status==='final'?'ontime':'late'),text:m.status==='cancelled'?'Called off':up?'Upcoming':m.status==='final'?'Minutes done':m.status==='draft'?'Minutes draft':'Minutes due'})); })):
         h('p',{class:'muted',style:'margin:4px',text:open?'No meetings yet. Schedule one here and it shows on the calendar and in Meetings; the lead’s next follow-up moves to that day.':'No meetings.'}))); }
-  if(S.canWrite) out.push(h('div',{class:'actions'},
-    open&&ld?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(id,true),text:'Make a proposal →'}):null,
-    open&&!ld?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openPropDoc(id),text:p.doc?'Open the proposal document':'Build the proposal document'}):null,
-    p.doc&&!ld?h('button',{class:'btn',type:'button',onclick:()=>openAgrDoc(id),text:p.agr?'Open the legal agreement':'Make the legal agreement (optional)'}):null,
-    open&&!ld?h('button',{class:'btn btn-primary',type:'button',onclick:confirmIt,text:'Client confirmed → make it a client project'}):null,
-    open?h('button',{class:'btn',type:'button',onclick:()=>ld?openLead(id):openProp(id),text:'Edit'}):null,
-    open?h('button',{class:'btn',type:'button',onclick:()=>outcome('lost'),text:'Lost'}):null,
-    open?h('button',{class:'btn',type:'button',onclick:()=>outcome('dropped'),text:'Drop'}):null,
-    !open&&p.status!=='won'?h('button',{class:'btn',type:'button',onclick:()=>save({status:'open',closedAt:'',closedBy:'',outcomeNote:'',next:addWorkDays(today(),2)},'Reopened'),text:'Reopen'}):null,
-    h('button',{class:'btn btn-sm',type:'button',style:'margin-left:auto',onclick:()=>{ if(confirm(`Delete this ${ld?'lead':'proposal'} and its log? This can’t be undone.`)) run(()=>S.db.doc('proposals/'+id).delete(),ld?'Lead deleted':'Proposal deleted').then(ok=>{ if(ok) closeSheet(); }); },text:'Delete'})));
+  /* the way forward, one step at a time: each step says where it stands and has one button */
+  if(open&&S.canWrite){ const pd=p.doc||{}, f=p.doc?pbFee(pd):null, schOk=f&&Math.round((pd.sched||[]).reduce((a,x)=>a+(+x.pct||0),0))===100;
+    const miss=ld?[[!(p.phone),'phone'],[!p.src,'source'],[!p.name,'project name'],[!p.location,'site'],[!(+p.katha>0),'land size']]
+      :[[!p.phone,'phone'],[!p.email,'email'],[!p.location,'site'],[!(+p.katha>0),'land size'],[!p.type,'project type'],[!p.doc&&!p.sentOn,'proposal document'],[p.doc&&!(+pd.area>0),'construction area'],[p.doc&&!schOk,'payment stages adding to 100%']];
+    const gaps=miss.filter(x=>x[0]).map(x=>x[1]);
+    const step=(n,title,state,ok,btn,opt)=>h('div',{style:'display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:10px 0;border-top:'+(n>1?'1px solid var(--line)':'0')},
+      h('span',{style:`width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;${ok?'background:var(--ontime);color:#fff':'border:1.5px solid var(--line);color:var(--muted)'}`,text:ok?'✓':String(n)}),
+      h('div',{style:'display:grid;gap:6px;min-width:0'},h('div',{},h('b',{text:title+(opt?' (optional)':'')}),h('div',{class:'f-hint',style:'margin:2px 0 0',text:state})),btn||null));
+    const logOpen=()=>{ const el=document.getElementById('pv-log'); if(el){ el.open=true; el.scrollIntoView({behavior:'smooth',block:'start'}); } };
+    const B=(t,fn,pri,dis)=>h('button',{class:'btn btn-sm'+(pri?' btn-primary':''),type:'button',style:'justify-self:start',disabled:!!dis,onclick:fn,text:t});
+    const steps=ld?[
+      step(1,'Lead details',gaps.length?'Still missing: '+gaps.join(', '):'Name, phone, source, site and land size are in.',!gaps.length,B('Edit details',()=>openLead(id))),
+      step(2,'Follow up',log.length?`${log.length} response${log.length>1?'s':''} logged`+(p.next?' · next '+fmtD(p.next):''):'Call or meet them, then log what they said.',log.length>0,B('Log a call or meeting',logOpen,!log.length)),
+      step(3,'Ready to quote?','The lead becomes a proposal and keeps its log.',false,B('Make a proposal →',()=>openProp(id,true),true))]
+    :[
+      step(1,'Proposal document',p.doc?`${pbTk(f.total)} · ${pd.ref||''}`:'Write the proposal the client receives, on the SLATE letterhead.',!!p.doc,B(p.doc?'Open the proposal':'Build the proposal',()=>openPropDoc(id),!p.doc)),
+      step(2,'Send and follow up',p.sentOn?`Sent ${fmtD(p.sentOn)} · ${log.length} response${log.length===1?'':'s'} logged`+(p.next?' · next follow-up '+fmtD(p.next):''):p.doc?'Send the PDF to the client, then tap below.':'Build the proposal document first.',!!p.sentOn,
+        p.sentOn?B('Log what the client said',logOpen):B('I’ve sent it: follow up in 3 days',()=>save({log:[...(p.log||[]),{at:new Date().toISOString(),by:S.uid,kind:'sent',kindL:'Proposal sent',resp:'',respL:'',note:''}],sentOn:today(),stage:'sent',next:addWorkDays(today(),3)},'Marked as sent · follow-up '+fmtD(addWorkDays(today(),3))),!!p.doc,!p.doc)),
+      step(3,'Legal agreement','For stamp paper, made from the proposal. Make it once the client agrees.',!!p.agr,B(p.agr?'Open the agreement':'Make the agreement',()=>openAgrDoc(id),false,!p.doc),true),
+      step(4,'Client confirmed',gaps.length?'Before you confirm, add: '+gaps.join(', ')+'.':'Everything is in. The project form and the fee are filled in from this proposal.',false,B('Make it a client project →',confirmIt,!!p.doc))];
+    const nx=propNext(p);
+    out.splice(3,0,h('div',{class:'card',style:'gap:0;padding-top:8px;padding-bottom:4px'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-bottom:2px',text:'Next steps'}),nx?h('div',{class:'pc-next u',style:'margin:2px 0 4px',text:'Now: '+nx.t}):null,...steps)); }
+  if(S.canWrite) out.push(h('div',{style:'display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:12px;border-top:1px solid var(--line)'},
+    h('span',{class:'lbl',style:'margin-right:4px',text:open?'Other actions':''}),
+    open?h('button',{class:'btn btn-sm',type:'button',onclick:()=>ld?openLead(id):openProp(id),text:'Edit details'}):null,
+    open?h('button',{class:'btn btn-sm',type:'button',onclick:()=>outcome('lost'),text:'Mark lost'}):null,
+    open?h('button',{class:'btn btn-sm',type:'button',onclick:()=>outcome('dropped'),text:'Drop'}):null,
+    !open&&p.status!=='won'?h('button',{class:'btn btn-sm',type:'button',onclick:()=>save({status:'open',closedAt:'',closedBy:'',outcomeNote:'',next:addWorkDays(today(),2)},'Reopened'),text:'Reopen'}):null,
+    !open&&p.doc&&!ld?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openPropDoc(id),text:'Proposal document'}):null,
+    !open&&p.doc&&!ld?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openAgrDoc(id),text:p.agr?'Legal agreement':'Make the legal agreement'}):null,
+    h('button',{class:'btn btn-sm',type:'button',style:'margin-left:auto;color:var(--overdue)',onclick:()=>{ if(confirm(`Delete this ${ld?'lead':'proposal'} and its log? This can’t be undone.`)) run(()=>S.db.doc('proposals/'+id).delete(),ld?'Lead deleted':'Proposal deleted').then(ok=>{ if(ok) closeSheet(); }); },text:'Delete'})));
   return out; }
 /* after the confirmed proposal's project is saved */
 function propWon(id,pid){ const p=(S.props||{})[id]; if(!p) return Promise.resolve();
@@ -8385,7 +8430,7 @@ const pTitle=p=>p.name||p.client||'Lead';
 const lastTouch=p=>{ const l=propLast(p); return ((l&&l.at)||p.createdAt||'').slice(0,10); };
 const leadStale=p=>propOpen(p)&&isLead(p)&&!!lastTouch(p)&&diff(lastTouch(p),today())>14;
 function openLead(id){ const p=id?(S.props||{})[id]:null;
-  const d={client:'',contact:'',phone:'',src:'',name:'',location:'',katha:'',heat:'warm',next:addWorkDays(today(),2),note:'',...(p?JSON.parse(JSON.stringify(p)):{})};
+  const d={client:'',contact:'',phone:'',email:'',src:'',name:'',location:'',katha:'',heat:'warm',next:addWorkDays(today(),2),note:'',...(p?JSON.parse(JSON.stringify(p)):{})};
   S.sheet={type:'lead',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-client'); el&&el.focus(); },30); }
 function sheetLead(){
   const d=S.sheet.d, id=S.sheet.id;
@@ -8394,7 +8439,7 @@ function sheetLead(){
     if(!client) return fail('Who is the lead? Give a name or company.'); if(!phone) return fail('Add a phone number.'); if(!d.src) return fail('Where did this lead come from?');
     if(d.katha!==''&&d.katha!=null&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     const now=new Date().toISOString(), pid=id||S.db.collection('proposals').doc().id, old=id?(S.props||{})[id]||{}:{};
-    const v={...old,lead:true,client,phone,contact:(d.contact||'').trim(),src:d.src,name:(d.name||'').trim().toUpperCase(),location:(d.location||'').trim(),katha:d.katha===''||d.katha==null?'':String(+d.katha),heat:d.heat||'warm',next:d.next||'',note:(d.note||'').trim(),
+    const v={...old,lead:true,client,phone,email:(d.email||'').trim(),contact:(d.contact||'').trim(),src:d.src,name:(d.name||'').trim().toUpperCase(),location:(d.location||'').trim(),katha:d.katha===''||d.katha==null?'':String(+d.katha),heat:d.heat||'warm',next:d.next||'',note:(d.note||'').trim(),
       status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid,leadAt:now})};
     run(()=>propWrite(pid,v),id?'Lead updated':'Lead added').then(ok=>{ if(ok) openPropView(pid); }); };
   return [head(id?'Edit lead':'New lead',id?pTitle(d):'Only you and the COO see this'),
@@ -8403,7 +8448,8 @@ function sheetLead(){
       h('div',{class:'form-row'},field('Name or company *',inp('client',{maxlength:120,placeholder:'e.g. Rupayan Housing'})),field('Phone *',inp('phone',{type:'tel',maxlength:40}))),
       field('Source *',sel('src',[['','Where did it come from?'],...LEAD_SRC])),
       field('Interest',seg('Interest',Object.entries(LEAD_HEAT).map(([k,[l]])=>[k,l]),d.heat||'warm',v=>{ d.heat=v; renderSheet(); })),
-      h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'}))),
+      h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Email',inp('email',{type:'email',maxlength:120}))),
+      field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'})),
       h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Next follow-up',inp('next',{type:'date'}))),
       field('Note',ta('note',{rows:3,placeholder:'What they want, budget, timing…'})),
       h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save lead':'Add lead'}),
@@ -8415,6 +8461,7 @@ function viewLeads(){
   const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
   const avg=xs=>xs.length?Math.round(xs.reduce((a,b)=>a+b,0)/xs.length)+' days':'—';
   const out=[...bizHead('Leads, before a proposal. When you are ready to quote, make it a proposal; it keeps its log.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openLead(),text:'New lead'})):null),
+    flowStrip('leads'),
     h('div',{class:'kpis kpis5'},kpi('Open leads',openL.length),kpi('Hot',openL.filter(p=>p.heat==='hot').length,'overdue'),kpi('Follow-up due',openL.filter(propDue).length,openL.filter(propDue).length?'overdue':''),kpi('No contact 14+ days',openL.filter(leadStale).length,openL.filter(leadStale).length?'late':''),kpi('Lead → project',pct(won.length,withLead.length),'early'))];
   // conversion by source
   const srcs=[...new Set(withLead.map(p=>p.src||''))].sort((a,b)=>withLead.filter(p=>(p.src||'')===b).length-withLead.filter(p=>(p.src||'')===a).length);
@@ -8436,6 +8483,7 @@ function viewLeads(){
     return h('button',{class:'pcard',type:'button',onclick:()=>openPropView(p.id)},
       h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:srcL(p.src)}),!isLead(p)?h('span',{class:'pill s-ontime',text:p.status==='won'?'Won':'Proposed'}):propOpen(p)?h('span',{class:'pill s-'+ht[1],text:ht[0]}):h('span',{class:'pill s-overdue',text:PROP_OUT[p.status]||p.status})),
       h('div',{class:'pc-name pn',text:pTitle(p)}),
+      (n=>n?h('div',{class:'pc-next'+(n.u?' u':''),text:'Next: '+n.t}):null)(propNext(p)),
       h('div',{class:'pc-meta',text:[p.name?p.client:'',p.phone,p.location,p.katha?p.katha+' katha':''].filter(Boolean).join(' · ')}),
       l?h('div',{class:'f-hint',style:'margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${fmtD(l.at.slice(0,10))} · ${propLine(l)||'Note'}${l.note?' · “'+l.note+'”':''}`}):h('div',{class:'f-hint',style:'margin:0',text:'Not contacted yet'}),
       propOpen(p)&&isLead(p)?h('div',{class:'pc-row'},h('span',{style:leadStale(p)?'color:var(--late)':'',text:lt?`Last contact ${fmtD(lt)}`:''}),h('span',{class:'mono',style:dueP?'color:var(--overdue)':'',text:p.next?(p.next<td?'Overdue ':p.next===td?'Today ':'Next ')+fmtD(p.next):'No follow-up date'})):null); })));
@@ -8781,6 +8829,7 @@ function viewProposals(f){
   const openL=all.filter(propOpen), due=openL.filter(propDue), won=all.filter(p=>p.status==='won'), lost=all.filter(p=>['lost','dropped'].includes(p.status));
   const rate=won.length+lost.length?Math.round(won.length/(won.length+lost.length)*100)+'%':'—';
   const out=[...bizHead('Proposed projects. Confirmed ones become client projects for the team.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(),text:'New proposal'})):null),
+    flowStrip('proposed'),
     h('div',{class:'kpis kpis5'},kpi('Open',openL.length),kpi('Follow-up due',due.length,due.length?'overdue':''),kpi('Confirmed',won.length,'early'),kpi('Lost or dropped',lost.length,'late'),kpi('Win rate',rate))];
   const stSel=h('select',{'aria-label':'Status',onchange:e=>{f.ps=e.target.value;render(true)}},[['open','Open'],['won','Confirmed'],['lost','Lost or dropped'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); stSel.value=ps;
   out.push(h('div',{class:'bar'},h('input',{type:'search',placeholder:'Search name, client or site',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),stSel));
@@ -8791,6 +8840,7 @@ function viewProposals(f){
     return h('button',{class:'pcard',type:'button',onclick:()=>openPropView(p.id)},
       h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.client||''}),propOpen(p)?h('span',{class:'pill s-'+(p.stage==='talks'?'late':p.stage==='sent'?'open':'open'),text:PROP_STAGE[p.stage]||'Preparing'}):h('span',{class:'pill s-'+(p.status==='won'?'ontime':'overdue'),text:PROP_OUT[p.status]})),
       h('div',{class:'pc-name pn',text:p.name}),
+      (n=>n?h('div',{class:'pc-next'+(n.u?' u':''),text:'Next: '+n.t}):null)(propNext(p)),
       h('div',{class:'pc-meta',text:[p.location,p.katha?p.katha+' katha':'',propTypeName(p.type),propFee(p)].filter(Boolean).join(' · ')}),
       l?h('div',{class:'f-hint',style:'margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${fmtD(l.at.slice(0,10))} · ${propLine(l)||'Note'}${l.note?' · “'+l.note+'”':''}`}):h('div',{class:'f-hint',style:'margin:0',text:'No response logged yet'}),
       propOpen(p)?h('div',{class:'pc-row'},h('span',{text:(p.log||[]).length+' log entr'+((p.log||[]).length===1?'y':'ies')}),h('span',{class:'mono',style:dueP?'color:var(--overdue)':'',text:p.next?(p.next<td?'Overdue ':p.next===td?'Today ':'Next ')+fmtD(p.next):'No follow-up date'})):
@@ -9336,11 +9386,17 @@ function viewFees(){
     h('p',{class:'f-hint',style:'margin:0 0 6px',text:'Fee records in Finance not linked to a SLATE OS project. Link them in Finance (SLATE OS project) to manage their fee here.'}),
     h('div',{class:'list'},orphan.map(x=>{ const s=feeStats(x); return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},h('div',{class:'row-title'},h('span',{class:'mono',text:x.code||''}),h('span',{class:'pn',text:x.name||''})),h('div',{class:'row-meta',text:`${taka(s.fee)} · billed ${bdt(s.billed)} · collected ${bdt(s.col)}`})); }))));
   return out; }
+/* a project confirmed from a proposal: its fee, area, payment stages and site visit terms come from the proposal document */
+function feeFromProp(pid){ const pr=Object.values(S.props||{}).find(x=>x&&x.projectId===pid&&x.doc); if(!pr) return null; const d=pr.doc, f=pbFee(d), area=+d.area||0;
+  return {basis:d.feeMode==='parts'&&area?'sft':'lump',area:area?String(area):'',rate:area?String(Math.round(f.total/area*100)/100):'',fee:String(Math.round(f.total)),
+    note:[d.tax==='incl'?'VAT and AIT included':'plus VAT and AIT',d.ref?'as proposal '+d.ref:''].filter(Boolean).join(', '),
+    ms:(d.sched||[]).filter(x=>x.label||+x.pct).map(x=>({id:Math.random().toString(36).slice(2,9),label:x.label,pct:+x.pct||0})),vFree:d.vFree==null?'':String(d.vFree),vFee:+d.vLead?String(d.vLead):''}; }
 function openFee(pid){ const p=S.projects[pid]; if(!p) return; const fr=feeRecOf({...p,id:pid});
   const area=fr&&+fr.areaSft?String(fr.areaSft):String(+p.constManual||(p.farCalc&&p.farCalc.construction)||'');
   const d={est:fr&&+fr.estFee?String(fr.estFee):'',basis:p.proBono==='yes'?'pb':fr?(fr.feeBasis||(+fr.rate&&+fr.areaSft?'sft':'lump')):'sft',area:area==='0'?'':area,rate:fr&&+fr.rate?String(fr.rate):'',fee:fr&&+fr.fee?String(fr.fee):'',note:fr&&fr.feeNote||'',
     ms:(fr&&fr.milestones&&fr.milestones.length?fr.milestones:FEE_DEF_MS.map(([label,pct])=>({id:Math.random().toString(36).slice(2,9),label,pct}))).map(m=>({...m})),
     costs:((fr&&fr.costs)||[]).map(c=>({...c,budget:c.budget?String(c.budget):'',deal:c.deal?String(c.deal):''})),vFree:fr&&fr.visits&&fr.visits.free!=null?String(fr.visits.free):'',vFee:fr&&fr.visits&&+fr.visits.fee?String(fr.visits.fee):''};
+  if(!fr&&p.proBono!=='yes'){ const fp=feeFromProp(pid); if(fp){ Object.assign(d,{basis:fp.basis,area:fp.area||d.area,rate:fp.rate,fee:fp.fee,note:fp.note,vFree:fp.vFree,vFee:fp.vFee}); if(fp.ms.length) d.ms=fp.ms; d.fromProp=true; } }
   S.sheet={type:'fee',pid,d,err:''}; renderSheet(); }
 /* cost budget (consultants, incentive and other costs) and site visit terms, inside the fee sheet */
 function costSection(d,fr,p,feeNow){
@@ -9401,6 +9457,7 @@ function sheetFee(){
       lk?h('span'):h('button',{class:'btn btn-sm',type:'button','aria-label':'Remove milestone',onclick:()=>{ d.ms.splice(i,1); renderSheet(); },text:'×'})); };
   const msTxt=()=>{ const t=Math.round(d.ms.reduce((a,m)=>a+(+m.pct||0),0)*100)/100; return `${t}% of the fee`+(Math.round(t)!==100?' · should total 100%':''); };
   return [head(`${p.code||''} · Fee`,p.name),
+    d.fromProp?h('div',{class:'card',style:'gap:2px;border-left:3px solid var(--accent,#C41E29)'},h('b',{text:'Filled in from the accepted proposal'}),h('span',{class:'f-hint',style:'margin:0',text:'Check the fee, payment milestones and site visits, then save.'})):null,
     h('p',{class:'f-hint',style:'margin:0',text:'Only you and the COO see this. Saved straight into Finance, which uses it for invoices.'}),
     fr?h('div',{class:'n-sum'},[['Fee',taka(s.fee)],['Billed',bdt(s.billed)],['Collected',bdt(s.col)],['Unpaid',bdt(s.due)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v}),h('span',{text:l})))):h('p',{class:'f-hint',style:'margin:0',text:'Not in Finance yet: saving creates its Finance record. Finance then only needs the billing details (bills as, bank account, address).'}),
     h('form',{class:'form',onsubmit:save},
