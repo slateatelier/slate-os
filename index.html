@@ -2155,6 +2155,7 @@ async function openNotice(id,kind){
   if(kind==='accounts'){ S.pf={...(S.pf||{q:'',pod:''}),st:'acct'}; acctLoad(true); return goView('projects'); }
   if(kind==='nudge'||kind==='brief'||kind==='daywrap') return goView('mine');
   if(kind==='issue_report') return goView('reports');
+  if(kind==='access_request'){ if(window.SlatePin&&!(await SlatePin.ensure())) return; S.books=false; S.biz={...(S.biz||{q:'',st:'active'}),tab:'hr'}; S.accReq=null; return goView('biz'); }
   if(kind==='conveyance'){ S.conv&&(S.conv.state='idle'); S.convF={tab:convApprover()?'wait':'mine',sel:new Set()}; return goView('conv'); }
   if(/^minutes_/.test(kind)){ S.mhub='weekly'; return goView('meet'); }
   if(/^meeting_/.test(kind)){ S.mhub='up'; return goView('meet'); }
@@ -2843,6 +2844,8 @@ function viewQueue(){
   const gs=queueGroups(), total=gs.reduce((a,g)=>a+g.n,0), f=S.qf||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Waiting on you'}),h('h1',{class:'h1',text:'Approvals'})))];
   const cw=convApprover()?(loadConv(),convWaiting()):[];
+  const aw=S.isOwner&&window.SlatePin&&SlatePin.unlocked()&&canBiz()?(loadAccReq().rows||[]).filter(r=>r.status==='pending'):[];
+  if(aw.length) out.push(h('button',{class:'more-i',type:'button',onclick:()=>goHR()},h('div',{},h('div',{class:'mi-t',text:`Access changes · ${aw.length}`}),h('div',{class:'mi-d',text:'Asked by the COO · waiting for your approval in Business › HR & salaries'})),h('span',{class:'badge',text:String(aw.length)})));
   if(cw.length) out.push(h('button',{class:'more-i',type:'button',onclick:()=>{ S.convF={tab:'wait',sel:new Set()}; S.view='conv'; render(true); window.scrollTo(0,0); }},h('div',{},h('div',{class:'mi-t',text:`Conveyance claims · ${cw.length}`}),h('div',{class:'mi-d',text:taka(cw.reduce((a,r)=>a+(+r.amount||0),0))+' waiting for your approval'})),h('span',{class:'badge',text:String(cw.length)})));
   if(!total){ out.push(h('div',{class:'empty'},h('h3',{text:'Nothing waiting on you'}),h('p',{class:'muted',style:'margin:0',text:'New requests from the team appear here, oldest first, and in your notifications.'}))); return out; }
   const oldest=gs.map(g=>g.oldest).filter(Boolean).sort()[0];
@@ -7260,8 +7263,9 @@ function doLeave(){
     if((r.ids||[]).includes(uid)||(r.juniors||[]).includes(uid)){ const rep=x=>d.rota?x.map(id=>id===uid?d.rota:id):x.filter(id=>id!==uid);
       await S.db.doc('meetcfg/rota').set({...r,ids:rep(r.ids||[]),juniors:rep(r.juniors||[]),by:S.uid,at:new Date().toISOString()}); }
     if(!window.slateAdminCall) throw new Error('Reload SLATE OS and try again.');
-    await window.slateAdminCall({action:'deactivate',user_id:uid,last_day:last});
-  },`${who}’s work is handed over and the account is closed`).then(ok=>{ if(ok) closeSheet(); });
+    if(S.isOwner) await window.slateAdminCall({action:'deactivate',user_id:uid,last_day:last});
+    else { const {error}=await window.slateSupabase.rpc('hr_set_access',{p_user:uid,p:{login:false}}); if(error) throw error; S.accReq=null; }
+  },S.isOwner?`${who}’s work is handed over and the account is closed`:`${who}’s work is handed over. Closing the account is waiting for the Principal’s approval.`).then(ok=>{ if(ok) closeSheet(); });
 }
 
 function viewHelp(){
@@ -7819,6 +7823,7 @@ function viewHR(){
     h('tbody',{},teams.map(t=>{ const xs=act.filter(r=>r.team===t), g=xs.reduce((a,r)=>a+r.gross,0); return h('tr',{},h('td',{text:podLabel(t)||t}),h('td',{class:'mono',style:'text-align:right',text:String(xs.length)}),h('td',{class:'mono',style:'text-align:right',text:taka(g)}),h('td',{class:'mono',style:'text-align:right',text:total?Math.round(g/total*100)+'%':'—'})); })))));
   const q=(B.hq||'').trim().toLowerCase(), hs=B.hs||'active';
   const sSel=h('select',{'aria-label':'Show',onchange:e=>{B.hs=e.target.value;render(true)}},[['active','Active'],['nosal','No salary set'],['due','Increment or probation due'],['inactive','Left or inactive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); sSel.value=hs;
+  out.push(...accDash());
   out.push(h('div',{class:'bar'},h('input',{type:'search',placeholder:'Search name, designation or team',value:B.hq||'',oninput:e=>{B.hq=e.target.value;render(true)}}),sSel));
   const list=rows.filter(r=>(hs==='all'||(hs==='active'?r.active:hs==='nosal'?noSal.includes(r):hs==='due'?incDue.includes(r)||prob.includes(r):!r.active))&&(!q||`${r.name} ${r.role} ${r.team}`.toLowerCase().includes(q)))
     .sort((a,b)=>(a.team||'').localeCompare(b.team||'')||b.gross-a.gross);
@@ -7861,7 +7866,51 @@ function accCan(uid){ if(!uid||!canBiz()) return {any:false,why:'Only the Princi
   if(isCOO(uid)) return {any:false,why:'Only the Principal changes the COO’s access.'};
   return {any:true,flags:false}; }
 const accDiff=x=>{ if(!x||!x.acc) return {}; const p={}; ['role','team','manager','approver','private','chalkLead'].forEach(k=>{ if(x.acc[k]!==x.acc0[k]) p[k]=x.acc[k]; });
-  if(x.acc.books!=null&&x.acc.books!==x.acc0.books) p.books=x.acc.books; return p; };
+  if(x.acc.books!=null&&x.acc.books!==x.acc0.books) p.books=x.acc.books;
+  const uid=x.d&&x.d.uid; if(uid&&uid!==ownerId()&&x.d.active!==x.wasActive){ const on=!(S.members[uid]&&S.members[uid].active===false); if(x.d.active!==on) p.login=!!x.d.active; }
+  return p; };
+/* ---------- Access at a glance (top of HR & salaries): who can open what, changes waiting for the Principal, recent changes ---------- */
+function loadAccReq(force){ if(S.accReq&&!force) return S.accReq; const A=S.accReq={state:'loading',rows:[]};
+  window.slateSupabase.from('access_requests').select('*').order('requested_at',{ascending:false}).limit(60)
+    .then(({data,error})=>{ if(error) throw error; A.rows=data||[]; A.state='ok'; },e=>{ A.state='err'; A.err=/access_requests|schema cache|does not exist/i.test(e.message||'')?'Approvals need the latest database update.':errMsg(e); })
+    .finally(()=>{ if(S.view==='biz') render(true); });
+  return A; }
+async function accDecide(r,approve){ let note='';
+  if(!approve){ const n=prompt('Why are you declining? (the COO sees this)'); if(n===null) return; note=n; }
+  else if(!confirm(`Approve this change to ${nameOf(r.user_id)}’s access?\n\n• ${accWords(r.patch,r.before).join('\n• ')}\n\nIt takes effect straight away.`)) return;
+  run(async()=>{ const {data,error}=await window.slateSupabase.rpc('access_decide',{p_id:r.id,p_approve:approve,p_note:note}); if(error) throw error;
+    if(approve&&data&&typeof data.login==='boolean') await window.slateAdminCall({action:data.login?'reactivate':'deactivate',user_id:r.user_id});
+    S.accReq=null; try{ if(window.slateReload) await window.slateReload(); }catch(_){} },approve?'Approved · now in effect':'Declined'); }
+function accDash(){ if(!canBiz()) return []; const A=loadAccReq(), open=S.accOpen;
+  const ppl=people().filter(id=>S.members[id]||id===ownerId()), act=ppl.filter(id=>!(S.members[id]&&S.members[id].active===false));
+  const pend=A.state==='ok'?A.rows.filter(r=>r.status==='pending'):[];
+  const recent=A.state==='ok'?A.rows.filter(r=>['applied','declined'].includes(r.status)).slice(0,8):[];
+  const bizN=act.filter(id=>id===ownerId()||/\bcoo\b/i.test(roster(id).role||'')).length;
+  const flag=id=>[isMgr(id)&&id!==ownerId()?'Manager':'',isApprover(id)&&id!==ownerId()?'Approver':'',isPriv(id)?'Private tasks':'',isChalkLead(id)?'Chalk lead':''].filter(Boolean).join(', ');
+  const out=[h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Access at a glance'}),h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ S.accOpen=!open; render(true); },text:open?'Hide list':'Show everyone'})),
+    h('div',{class:'kpis kpis4'},kpi('Can sign in',act.length),kpi('Business',bizN),kpi('Managers and approvers',act.filter(id=>id!==ownerId()&&(isMgr(id)||isApprover(id))).length),kpi('Waiting for you',pend.length,pend.length?'late':'')),
+    A.state==='err'?h('p',{class:'err',text:A.err}):null,
+    pend.length?h('div',{class:'list'},pend.map(r=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:6px'},
+      h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},h('b',{text:nameOf(r.user_id)}),h('span',{class:'pill s-late',text:'Waiting for the Principal'})),
+      h('div',{style:'display:grid;gap:2px;font-size:14px'},accWords(r.patch,r.before).map(t=>h('div',{text:t}))),
+      h('div',{class:'f-hint',style:'margin:0',text:`Asked by ${nameOf(r.requested_by)} · ${fmtTs(r.requested_at)}`}),
+      S.isOwner?h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>accDecide(r,true),text:'Approve'}),h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>accDecide(r,false),text:'Decline'}))
+        :r.requested_by===S.uid?h('div',{class:'actions'},h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{ const {error}=await window.slateSupabase.rpc('access_withdraw',{p_id:r.id}); if(error) throw error; S.accReq=null; },'Request withdrawn'),text:'Withdraw'})):null))):null,
+    open?h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},h('thead',{},h('tr',{},['Person','SLATE OS role','POD or team','Business','Rights','Sign-in'].map(x=>h('th',{text:x})))),
+      h('tbody',{},ppl.map(id=>{ const r=roster(id), on=!(S.members[id]&&S.members[id].active===false), coo=/\bcoo\b/i.test(r.role||''), own=id===ownerId(), pd=pend.find(x=>x.user_id===id);
+        return h('tr',{style:on?'':'opacity:.5'},h('td',{},h('div',{style:'font-weight:500',text:nameOf(id)}),pd?h('div',{class:'sub2',style:'color:var(--late)',text:'Change waiting'}):null),h('td',{text:own?'Principal':roleLabel(r.role)||'—'}),h('td',{text:r.team?podLabel(r.team):'—'}),
+          h('td',{text:own||coo?'Yes (PIN)':'—'}),h('td',{class:'sub2',text:own?'All':flag(id)||'—'}),h('td',{text:on?'On':'Off'})); })))):null,
+    open?h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Books roles (Accountant, Office staff, Viewer) show on each person’s card. Accounts holds the Accountant role.'}):null,
+    recent.length?h('details',{},h('summary',{class:'f-hint',style:'cursor:pointer;margin:0;padding:4px',text:`Recent access changes (${recent.length})`}),
+      h('div',{class:'list'},recent.map(r=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:2px'},
+        h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},h('b',{text:nameOf(r.user_id)}),h('span',{class:'pill s-'+(r.status==='applied'?'ontime':'overdue'),text:r.status==='applied'?'In effect':'Declined'})),
+        h('div',{style:'font-size:14px',text:accWords(r.patch,r.before).join(' · ')}),
+        h('div',{class:'f-hint',style:'margin:0',text:(r.requested_by===r.decided_by?`By ${nameOf(r.requested_by)}`:`Asked by ${nameOf(r.requested_by)}, ${r.status==='applied'?'approved':'declined'} by ${nameOf(r.decided_by)}`)+` · ${fmtTs(r.decided_at||r.requested_at)}`+(r.note?` · “${r.note}”`:'')}))))):null)];
+  return out; }
+/* an access change in plain words: "Books: No access → Office staff" */
+const ACC_L={role:'SLATE OS role',team:'POD or team',books:'Books',manager:'Manager',approver:'Approver',private:'Private tasks',chalkLead:'Chalk Create lead',login:'Sign-in'};
+const accVal=(k,v)=>k==='login'?(v?'on':'switched off'):typeof v==='boolean'?(v?'yes':'no'):k==='team'?(v?podLabel(v).replace(/\bPod\b/g,'POD'):'none'):k==='books'?(v||'No access'):(v||'none');
+function accWords(p,before){ return Object.keys(p).filter(k=>ACC_L[k]).map(k=>k==='login'?(p.login?'Sign-in: switched back on':'Sign-in: switched off (they can no longer sign in)'):`${ACC_L[k]}: ${before&&k in before?accVal(k,before[k])+' → ':''}${accVal(k,p[k])}`); }
 const BOOKS_ROLES=[['','No access'],['Office staff','Office staff · petty cash'],['Accountant','Accountant'],['Viewer','Viewer · sees everything, changes nothing']];
 function accSection(){ const x=S.sheet, a=x.acc, uid=x.d.uid, c=accCan(uid);
   const lbl=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
@@ -7873,20 +7922,29 @@ function accSection(){ const x=S.sheet, a=x.acc, uid=x.d.uid, c=accCan(uid);
   const bSel=a.role==='COO'?h('div',{class:'f-hint',style:'margin:10px 0 0',text:'COO: sees every record and checks entries, with their own PIN'}):a.books==null?h('select',{disabled:true,'aria-label':'Books'},h('option',{text:'Loading…'})):(()=>{ const s=h('select',{id:'acc-books','aria-label':'Books',onchange:e=>{ a.books=e.target.value; renderSheet(); }},BOOKS_ROLES.map(([v,l])=>h('option',{value:v,text:l}))); s.value=a.books; return s; })();
   const box=(k,l,hint)=>h('label',{style:'display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:!!a[k],style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{ a[k]=e.target.checked; }}),h('span',{},l,h('span',{class:'f-hint',style:'display:block;margin:0',text:hint})));
   const biz=a.role==='COO'?'Yes, with their own PIN':'Business: no (only the Principal and the COO)';
+  const pd=((S.accReq&&S.accReq.rows)||[]).find(r=>r.user_id===uid&&r.status==='pending');
   return [lbl('Access'),
-    h('p',{class:'f-hint',style:'margin:-2px 0 0',text:'Set here only. Studio and Books show what you set. Saved with the Save button below.'}),
+    pd?h('div',{class:'card',style:'gap:2px;border:1px solid var(--late)'},h('b',{style:'font-size:14px',text:'A change is waiting for the Principal'}),accWords(pd.patch,pd.before).map(t=>h('div',{style:'font-size:14px',text:t})),h('div',{class:'f-hint',style:'margin:0',text:'Asked by '+nameOf(pd.requested_by)+' · '+fmtTs(pd.requested_at)+'. A new change here replaces it.'})):null,
+    h('p',{class:'f-hint',style:'margin:-2px 0 0',text:S.isOwner?'Set here only. Studio and Books show what you set. Saved with the Save button below, after a warning that lists the change.':'Set here only. Your changes go to the Principal for approval; nothing changes until then.'}),
     h('div',{class:'form-row'},field('SLATE OS role',rSel),field('POD or team',tSel)),
     h('div',{class:'form-row',style:'align-items:start'},field('Books',bSel,a.role==='COO'?'':x.booksErr?'Couldn’t read Books just now.':a.books==='Accountant'?'Opens straight into Books, with a PIN.':a.books==='Office staff'?'Submits petty cash bills only.':a.books==='Viewer'?'Can see every record and salary in Books.':''),field('Business',h('div',{class:'f-hint',style:'margin:10px 0 0',text:biz}))),
     c.flags?h('div',{style:'display:grid;gap:10px;padding-top:4px'},box('manager','Manager','Assigns tasks and proposes dates for their POD'),box('approver','Approver','Approves timelines, date changes and support'),box('private','Private tasks','Their tasks are seen only by them, you and the COO'),box('chalkLead','Chalk Create lead','Assigns Chalk work without COO approval'))
       :h('p',{class:'f-hint',style:'margin:0',text:'Manager, approver, private-task and Chalk-lead rights are set by the Principal.'})]; }
-const accOk=x=>{ const p=accDiff(x); return !(p.books==='Viewer'&&!confirm('Viewer can see every record in Books, including salaries. Give '+nameOf(x.d.uid)+' Viewer?')); };
-async function saveAccess(x){ const p=accDiff(x); if(!Object.keys(p).length) return true;
-  const {error}=await window.slateSupabase.rpc('hr_set_access',{p_user:x.d.uid,p});
-  if(error) throw new Error(/hr_set_access|function .* does not exist|schema cache/i.test(error.message)?'Access needs the latest database update (m_access.sql).':error.message);
-  x.acc0={...x.acc}; try{ if(window.slateReload) await window.slateReload(); }catch(e){}
+/* a warning before any access change: exactly what changes, and whether it waits for the Principal */
+const accOk=x=>{ const p=accDiff(x), b={...x.acc0,login:!(S.members[x.d.uid]&&S.members[x.d.uid].active===false)};
+  const lines=accWords(p,b); if(!lines.length) return true;
+  return confirm(`Change ${nameOf(x.d.uid)}’s access?\n\n• ${lines.join('\n• ')}\n\n`+(p.books==='Viewer'?'Viewer can see every record in Books, including salaries.\n\n':'')+(p.login===false?'Their records and salary history stay.\n\n':'')
+    +(S.isOwner?'This changes what they can see and do, straight away.':'Nothing changes until the Principal approves it.')); };
+async function saveAccess(x){ const p=accDiff(x); if(!Object.keys(p).length) return '';
+  const {data,error}=await window.slateSupabase.rpc('hr_set_access',{p_user:x.d.uid,p});
+  if(error) throw new Error(/hr_set_access|function .* does not exist|schema cache/i.test(error.message)?'Access needs the latest database update.':error.message);
+  x.acc0={...x.acc}; x.wasActive=x.d.active;
+  if(data&&data.pending){ S.accReq=null; return ' · access change sent to the Principal for approval'; }
+  if('login' in p) await window.slateAdminCall({action:p.login?'reactivate':'deactivate',user_id:x.d.uid});
+  S.accReq=null; try{ if(window.slateReload) await window.slateReload(); }catch(e){}
   try{ const f=document.querySelector('#books-pane iframe'); if(f&&f.contentWindow&&f.contentWindow.BooksHost&&f.contentWindow.BooksHost.refresh) f.contentWindow.BooksHost.refresh(); }catch(e){}
-  return true; }
-/* leaving: unticking Active also switches off their sign-in; ticking it again switches it back on */
+  return ' · access updated'+('login' in p?(p.login?' · sign-in on again':' · sign-in switched off'):''); }
+/* leaving: unticking Active also switches off their sign-in (the Principal's change at once; the COO's after the Principal approves) */
 async function syncLogin(x){ const uid=x.d.uid; if(!uid||uid===ownerId()||!window.slateAdminCall) return '';
   if(!S.isOwner&&(uid===S.uid||isCOO(uid))) return '';
   const on=!(S.members[uid]&&S.members[uid].active===false);
@@ -7903,7 +7961,7 @@ function sheetSal(){
     const nr={from:d.from,tax:+d.tax||0}; SAL_P.forEach(([k])=>{ nr[k]=+d[k]||0; });
     const x=S.sheet, accCh=Object.keys(accDiff(x)).length>0;
     if(accCh&&!accOk(x)) return;
-    if(!st&&!salGross(nr)&&accCh){ const ok=await run(()=>saveAccess(x),'Access saved'); if(ok){ closeSheet(); render(true); } return; }
+    if(!st&&!salGross(nr)&&accCh){ let m=''; const ok=await run(async()=>{ m=await saveAccess(x); },()=>'Saved'+m); if(ok){ closeSheet(); render(true); } return; }
     if(!salGross(nr)) return fail('Enter the salary.'); if(!/^\d{4}-\d{2}$/.test(d.from||'')) return fail('Choose the month this salary applies from.');
     if(d.payMethod==='split'&&!(+d.bankPart>0)) return fail('Enter how much goes to the bank each month.');
     const same=salGross(cur)&&SAL_P.every(([k])=>(+cur[k]||0)===nr[k])&&(+cur.tax||0)===nr.tax;
@@ -7911,14 +7969,12 @@ function sheetSal(){
     const data={userId:d.uid,name:d.name.trim(),designation:(d.designation||'').trim(),joinDate:d.joinDate||'',careerStart:d.careerStart||'',payMethod:d.payMethod,bankInfo:d.payMethod!=='cash'?(d.bankInfo||'').trim():'',bankPart:d.payMethod==='split'?+d.bankPart||0:0,
       rates,active:!!d.active,note:(d.note||'').trim(),holder:(d.holder||'').trim(),empId:(d.empId||'').trim().toUpperCase(),probationEnd:d.probationEnd||'',confirmedOn:d.confirmedOn||'',incrementDue:d.incrementDue||'',hrSetAt:new Date().toISOString(),hrSetBy:S.uid};
     const sb=window.slateSupabase;
-    if(d.uid&&!d.active&&x.wasActive&&accCan(d.uid).any&&!(S.members[d.uid]&&S.members[d.uid].active===false)&&!confirm(nameOf(d.uid)+' will no longer be able to sign in to SLATE OS. Their records and salary history stay. Continue?')) return;
     let extra='';
     const ok=await run(async()=>{
       // access first: if it is refused, nothing is saved and the card stays open as it was
-      if(accCh&&accCan(d.uid).any){ await saveAccess(x); extra+=' · access updated'; }
+      if(accCh&&accCan(d.uid).any) extra+=await saveAccess(x);
       if(st){ const {id,...rest}=st; const {data:o,error}=await sb.from('fin_docs').update({data:{...rest,...data}}).eq('path','staff/'+st.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Finance is limited to the Principal and the COO.'); }
       else { const id=finId(); const {error}=await sb.from('fin_docs').insert({path:'staff/'+id,coll:'staff',doc_id:id,data}); if(error) throw error; }
-      if(d.uid&&d.active!==x.wasActive&&accCan(d.uid).any){ extra+=await syncLogin(x); if(extra.includes('sign-in')) try{ if(window.slateReload) await window.slateReload(); }catch(_){} }
     },()=>'Saved'+extra);
     if(ok){ await loadFeeFin(true); closeSheet(); } };
   const rs=((st&&st.rates)||[]).slice().sort((a,b)=>b.from.localeCompare(a.from));

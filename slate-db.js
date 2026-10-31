@@ -1018,6 +1018,7 @@
         });
         const off = p.designation === 'principal' || (!boss && p.designation === 'coo') ? null : el('button', { class: 'link', type: 'button' }, window.slateLeaveSheet ? 'Leaving SLATE…' : 'Deactivate');
         if (off && window.slateLeaveSheet) off.addEventListener('click', () => { root.remove(); window.slateLeaveSheet(p.id); });
+        else if (off && !boss) { off.disabled = true; off.textContent = 'Principal approves'; }
         else if (off) {
           let armedOff = false;
           off.addEventListener('click', async () => {
@@ -1039,8 +1040,9 @@
       offCard.hidden = !ps.length;
       offList.replaceChildren(...ps.map(p => {
         const st = el('div', { class: 'msg', role: 'status' });
-        const locked = !boss && p.designation === 'coo';
-        const on = el('button', { class: 'link', type: 'button' }, locked ? 'Principal only' : 'Reactivate');
+        const locked = !boss;
+        const on = el('button', { class: 'link', type: 'button' }, locked ? 'Principal approves' : 'Reactivate');
+        if (locked) on.title = 'Tick Active on their card in Business › HR & salaries; the Principal approves it.';
         if (locked) on.disabled = true;
         on.addEventListener('click', async () => {
           on.disabled = true; on.textContent = 'Reactivating…';
