@@ -333,5 +333,41 @@ button.hb-can .nm::after{content:' ▾';color:var(--muted);font-size:11px}button
 .hb-sub button{appearance:none;background:none;border:0;border-top:1px solid var(--line, rgba(60,60,67,.12));font:inherit;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 2px;font-size:13px}
 .hb-sub button:first-of-type{border-top:0}.hb-sub .a{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}""")
 
+# Home "Where the money came from": fees still to come show as a red extension of each bar
+rep("""    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came', incomeL, pr)),""",
+    """    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came', incomeL, pr, full ? futureFees(incomeL) : null), null,
+      full ? h('div', { class: 'legend' }, h('span', { style: '--c:var(--k-in)', text: 'Received' }), h('span', { style: '--c:#D7263D', text: 'Still to come (agreed fees not yet received)' })) : null),""")
+rep("""function hbars(map, color, key, det, pr) {
+  const rows = Object.entries(map).filter(([, v]) => v > 0.5).sort((a, b) => b[1] - a[1]);""",
+    """/* fees still to come per line of "where the money came from": each project's agreed fee less what it has paid,
+   filed under the same name as its fee income account; projects with nothing received yet get a line of their own */
+function futureFees(incomeL) {
+  const list = memo('pjall', () => SB.projectReport(P(), curFY().from, today())), out = {}, keyOf = {};
+  Object.entries(incomeL || {}).forEach(([n, ls]) => ls.forEach(([l]) => { const pj = (S.ledgers[l] || {}).project; if (pj) keyOf[pj] = n; }));
+  list.forEach(x => {
+    if (!x.id || x.overhead) return; const f = S.projects[x.id] || {}; if (f.feeTba || f.free) return;
+    const due = STOPPED(x.status) ? (+f.earned || 0) - x.revenueToDate : x.toCollect;
+    if (!(due > 0.5)) return;
+    const n = keyOf[x.id] || [x.code, x.name].filter(Boolean).join(' · ');
+    out[n] = (out[n] || 0) + due;
+  });
+  return out;
+}
+function hbars(map, color, key, det, pr, fut) {
+  fut = fut || {}; Object.keys(fut).forEach(n => { if (!(n in map)) map[n] = 0; });
+  const tot = n => (map[n] || 0) + (fut[n] || 0);
+  const rows = Object.entries(map).filter(([n, v]) => v > 0.5 || fut[n] > 0.5).sort((a, b) => tot(b[0]) - tot(a[0]));""")
+rep("""  const max = Math.max(...top.map(r => r[1]));""", """  const max = Math.max(...top.map(r => r[1] + (r[2] ? 0 : fut[r[0]] || 0)));""")
+rep("""h('div', { class: 'track' }, h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` })), h('span', { class: 'v', text: tkShort(v).replace('Tk ', '') })),
+      op ? sub(n) : null]; };""",
+    """h('div', { class: 'track' + (!cnt && fut[n] > 0.5 ? ' track2' : '') }, v > 0.5 ? h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` }) : null, !cnt && fut[n] > 0.5 ? h('span', { class: 'fut', title: 'Still to come: Tk ' + fmt(fut[n]), style: `width:${Math.max(2, fut[n] / max * 100)}%` }) : null),
+        h('span', { class: 'v' }, v > 0.5 ? tkShort(v).replace('Tk ', '') : '—', !cnt && fut[n] > 0.5 ? h('small', { class: 'v-fut', text: '+' + tkShort(fut[n]).replace('Tk ', '') }) : null)),
+      op ? sub(n) : null]; };""")
+rep(""".track span{display:block;height:100%;background:var(--c,var(--ink));border-radius:4px}""",
+    """.track span{display:block;height:100%;background:var(--c,var(--ink));border-radius:4px}
+.track.track2{display:flex;gap:2px}.track span.fut{background:#D7263D;opacity:.85}
+.hb .v small.v-fut{display:block;font-size:11px;font-weight:600;color:#D7263D;line-height:1.1}
+.hbars>.hb{font-size:14px}""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
