@@ -8,7 +8,7 @@
 --    tap Lock, or 90 days pass.
 --  * Setting or changing a PIN needs the account password. Five wrong PINs lock Business and Books for that
 --    person for 15 minutes and tell the Principal.
---  * Opening Business and Books outside office hours (Sunday to Thursday, 09:00 to 18:00, Dhaka) tells the
+--  * Opening Business and Books outside office hours (Sunday to Thursday, 09:00 to 19:30, Dhaka) tells the
 --    Principal at once (not for the Principal's own use).
 -- Studio, and office staff's petty cash, are not affected.
 -- Run once in the Supabase SQL editor. It runs as one transaction: if any step fails, nothing changes.
@@ -51,11 +51,11 @@ language sql stable security definer set search_path to '' as $$
       or exists (select 1 from private.pin_sessions s where s.session_id = private.pin_session() and s.user_id = auth.uid() and s.until > now())
 $$;
 
--- office hours (Dhaka), from SLATE OS settings if set there: {"officeHours":{"days":[0,1,2,3,4],"start":"09:00","end":"18:00"}} (0 = Sunday)
+-- office hours (Dhaka), from SLATE OS settings if set there: {"officeHours":{"days":[0,1,2,3,4],"start":"09:00","end":"19:30"}} (0 = Sunday)
 create or replace function private.after_hours() returns boolean
 language sql stable security definer set search_path to '' as $$
   with h as (select coalesce((select s.data->'officeHours' from public.docs s where s.path = 'config/settings'),
-                             '{"days":[0,1,2,3,4],"start":"09:00","end":"18:00"}'::jsonb) v),
+                             '{"days":[0,1,2,3,4],"start":"09:00","end":"19:30"}'::jsonb) v),
        t as (select (now() at time zone 'Asia/Dhaka') d)
   select not ((h.v->'days') @> to_jsonb(extract(dow from t.d)::int)
               and to_char(t.d, 'HH24:MI') >= (h.v->>'start') and to_char(t.d, 'HH24:MI') < (h.v->>'end'))
