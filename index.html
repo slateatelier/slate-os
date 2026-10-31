@@ -7878,7 +7878,7 @@ function sheetPropDoc(){
     return ok; };
   const preview=async(plain)=>{ if(await save(true)===false) return; pbShowPreview(await pbHTML(S.props[id]||p,d,true,plain===true),plain===true,()=>pbPdfRetry(S.props[id]||p,d,plain===true)); };
   const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
-    try{ const file=await pbPdfRetry(S.props[id]||p,d,false); const print=await pbPdfRetry(S.props[id]||p,d,true); sh.pdf={state:'ok',file,print}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
+    try{ const r=await pbPdfRetry(S.props[id]||p,d,'both'); sh.pdf={state:'ok',file:r.share,print:r.print}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
   const share=async(which)=>{ const f=sh.pdf&&sh.pdf[which==='print'?'print':'file']; if(!f) return;
     try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); };
@@ -8084,15 +8084,22 @@ function pbShowPreview(html,plain,makePdf){
   document.body.append(ov); document.addEventListener('keydown',esc); }
 async function pbPdfRetry(p,d,plain){
   for(let i=0;;i++){ try{ return await pbPdf(p,d,plain); }
-    catch(e){ if(i>=3||!e.busy) throw e; toast('The PDF printer is busy. Trying again in '+(15*(i+1))+' seconds…'); await new Promise(r=>setTimeout(r,15000*(i+1))); } } }
+    catch(e){ if(i>=3||!e.busy) throw e; toast('The PDF printer is busy. Trying again in '+(20*(i+1))+' seconds…'); await new Promise(r=>setTimeout(r,20000*(i+1))); } } }
+/* plain: true = print copy, false = share copy, 'both' = both copies from one print job ({share, print}) */
 async function pbPdf(p,d,plain){
   const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
   if(!tok) throw new Error('Your sign-in has expired. Reload SLATE OS and try again.');
-  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'},body:await pbHTML(p,d,false,plain)}); }
+  const both=plain==='both', hd={Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'}; if(both) hd['X-Copies']='both';
+  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:hd,body:await pbHTML(p,d,false,plain===true)}); }
   catch(_){ throw new Error('Couldn’t reach the PDF printer. Check your connection and try again.'); }
   if(!r.ok){ let m=''; try{ m=(await r.json()).error; }catch(_){} const er=new Error(m||'Couldn’t make the PDF. Try again in a moment.'); er.busy=r.status===429||/429|rate limit|busy/i.test(m); throw er; }
-  const name=('SLATE proposal '+(p.name||p.client||'')+(plain?' - print on letterhead pad':'')).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
-  return new File([await r.blob()],name,{type:'application/pdf'}); }
+  const nm=pr=>('SLATE proposal '+(p.name||p.client||'')+(pr?' - print on letterhead pad':'')).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
+  const mk=(bytes,pr)=>new File([bytes],nm(pr),{type:'application/pdf'});
+  if(both){ const ct=r.headers.get('content-type')||'';
+    if(!/json/.test(ct)) return {share:mk(await r.blob(),false),print:null};
+    const j=await r.json(), dec=b=>Uint8Array.from(atob(b),c=>c.charCodeAt(0));
+    return {share:mk(dec(j.share),false),print:j.print?mk(dec(j.print),true):null}; }
+  return mk(await r.blob(),plain===true); }
 
 function sheetPropView(){
   const id=S.sheet.id, p=(S.props||{})[id]?{...S.props[id],id}:null; if(!p) return [head('Proposed project','Not found')];

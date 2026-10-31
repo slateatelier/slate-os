@@ -35,15 +35,16 @@ export default {
     if (html.length > MAX_HTML) return fail(413, 'The invoice was too large to print.');
     if (!/^<!doctype html>/i.test(html) || !html.includes('class="page"')) return fail(400, 'That isn’t an invoice page.');
 
-    // Reuse a browser that is already open and idle, so several PDFs in a row don't hit the free plan's
-    // limit on starting new browsers; start a new one (kept open for a minute) only when none is free.
+    // The free plan allows 10 minutes of browser time a day and one new browser every 20 seconds, so:
+    // reuse a browser that is already open and idle, close it as soon as the PDF is made, and when the app
+    // asks for both copies of a proposal (X-Copies: both), print them from the same page in one go.
     let browser, page;
     try {
       try {
         const idle = (await puppeteer.sessions(env.BROWSER)).filter(s => !s.connectionId).map(s => s.sessionId);
         if (idle.length) browser = await puppeteer.connect(env.BROWSER, idle[Math.floor(Math.random() * idle.length)]);
       } catch (_) { browser = null; }
-      if (!browser) browser = await puppeteer.launch(env.BROWSER, { keep_alive: 60000 });
+      if (!browser) browser = await puppeteer.launch(env.BROWSER);
       page = await browser.newPage();
       await page.setViewport({ width: 900, height: 1300 });
       await page.setJavaScriptEnabled(false);
@@ -58,7 +59,15 @@ export default {
       catch (e) { if (!/timeout/i.test(String((e && e.message) || e))) throw e; }
       await Promise.race([page.evaluate('document.fonts.ready.then(() => 1)').catch(() => 0), new Promise(r => setTimeout(r, 8000))]);
       await page.emulateMediaType('print');
-      const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
+      const print = () => page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
+      const pdf = await print();
+      if ((request.headers.get('x-copies') || '') === 'both') {
+        // the copy for the printed letterhead pad: the same pages with the letterhead design left off
+        await page.addStyleTag({ content: '.lh-addr,.lh-tab,.lh-wm{display:none!important}.page{box-shadow:none!important}' });
+        const plain = await print();
+        const b64 = x => Buffer.from(x).toString('base64');
+        return Response.json({ share: b64(pdf), print: b64(plain) }, { headers: { 'Cache-Control': 'no-store' } });
+      }
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' } });
     } catch (e) {
       const why = String((e && e.message) || e || 'unknown error').slice(0, 300);
@@ -68,7 +77,7 @@ export default {
       return fail(busy ? 429 : 500, busy ? 'The PDF printer is busy. Try again in a minute.' : `Couldn’t make the PDF (${why}). Try again in a moment.`);
     } finally {
       if (page) await page.close().catch(() => {});
-      if (browser) { try { browser.disconnect(); } catch (_) {} }
+      if (browser) await browser.close().catch(() => {});
     }
   }
 };
