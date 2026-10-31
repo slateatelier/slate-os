@@ -4197,8 +4197,9 @@ function openPlan() {
 }
 function sheetPlan() {
   const d = D(), fy = curFY(), avg = d.avg, ms = monthsOfFY(fy);
-  const sug = k => Math.round((k === 'fees' ? avg.fees : (avg.spend[k] || 0)) / 1000) * 1000;
-  const line = k => h('div', { class: 'plan-r' }, h('span', { class: 'plan-n', text: PLAN_NAME(k) }), inp('m_' + k, { inputmode: 'decimal', placeholder: '0' }), h('span', { class: 'f-hint', text: 'last 6 months: ' + fmt(sug(k)) + ' a month' }));
+  const ONE_OFF = ['owner', 'other'], raw = k => Math.round((k === 'fees' ? avg.fees : (avg.spend[k] || 0)) / 1000) * 1000;
+  const sug = k => ONE_OFF.includes(k) ? 0 : raw(k);
+  const line = k => h('div', { class: 'plan-r' }, h('span', { class: 'plan-n', text: PLAN_NAME(k) }), inp('m_' + k, { inputmode: 'decimal', placeholder: '0' }), h('span', { class: 'f-hint', text: ONE_OFF.includes(k) ? (raw(k) ? 'last 6 months: ' + fmt(raw(k)) + ' a month, from one-off payments (' + (k === 'owner' ? 'a partner settlement' : 'advances') + '). Plan 0 unless you expect more.' : 'last 6 months: 0') : 'last 6 months: ' + fmt(sug(k)) + ' a month' }));
   const fill = () => { ['fees'].concat(PLAN_LINES).forEach(k => { d['m_' + k] = String(sug(k)); }); renderSheet(); };
   const fields = [h('p', { class: 'lead', style: 'margin:0', text: `Monthly figures for ${fy.label}. Home compares them with what actually comes in and goes out, and uses them for the cash forecast.` }),
     h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: fill, text: 'Fill from the last 6 months' })),

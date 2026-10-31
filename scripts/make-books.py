@@ -377,5 +377,12 @@ rep("""field('Kind', sel('newVk', [['consultant', 'Consultant'], ['supplier', 'S
 rep("""['consultant', 'Consultant: professional work on a project'], ['supplier', 'Supplier: goods, equipment, printing'], ['service', 'Service: insurance, software, commission'],""",
     """['consultant', 'Consultant: design or engineering work on a project'], ['viz', '3D visualisation: renders and animation'], ['supplier', 'Supplier: goods, equipment, printing, insurance'], ['service', 'Service: site measurement, software, maintenance'], ['staff', 'Staff paid through a firm'], ['referral', 'Referral incentive: commission for bringing a project'],""")
 
+# plan: the owner's line and "everything else" (partner payouts, advances) are one-offs, so they aren't suggested as monthly spending
+rep("""  const sug = k => Math.round((k === 'fees' ? avg.fees : (avg.spend[k] || 0)) / 1000) * 1000;""",
+    """  const ONE_OFF = ['owner', 'other'], raw = k => Math.round((k === 'fees' ? avg.fees : (avg.spend[k] || 0)) / 1000) * 1000;
+  const sug = k => ONE_OFF.includes(k) ? 0 : raw(k);""")
+rep("""h('span', { class: 'f-hint', text: 'last 6 months: ' + fmt(sug(k)) + ' a month' }));""",
+    """h('span', { class: 'f-hint', text: ONE_OFF.includes(k) ? (raw(k) ? 'last 6 months: ' + fmt(raw(k)) + ' a month, from one-off payments (' + (k === 'owner' ? 'a partner settlement' : 'advances') + '). Plan 0 unless you expect more.' : 'last 6 months: 0') : 'last 6 months: ' + fmt(sug(k)) + ' a month' }));""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
