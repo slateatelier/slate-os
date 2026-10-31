@@ -1,5 +1,5 @@
 /* SLATE OS · Business and Books PIN
-   The Principal, the COO and the accountant enter a 6-digit PIN to open Business and Books on a device.
+   The Principal, the COO and the accountant enter a 4-digit PIN to open Business and Books on a device.
    The database decides (see supabase/migrations/m_pin.sql); this file only asks for the PIN, keeps it open while
    the person is working, and says when it has locked again.
    SlatePin.ensure() resolves true once unlocked (or when no PIN is needed), false if the person chose not to. */
@@ -80,7 +80,7 @@ function ask(opts) {
   return new Promise(resolve => {
     if (!document.getElementById('slate-pin-css')) document.head.append(el('style', { id: 'slate-pin-css', text: CSS }));
     const root = el('div', { id: 'slate-pin', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Business and Books PIN' });
-    let mode = st && st.hasPin ? 'enter' : 'set', busy = false;
+    let mode = st && st.hasPin && !st.blocked ? 'enter' : 'set', busy = false;
     const done = ok => { root.remove(); document.documentElement.style.overflow = ''; resolve(ok); };
     const trustBox = () => (st && st.canTrust && isPhone()) ? el('label', { class: 'ck' }, el('input', { type: 'checkbox', id: 'pin-trust' }), 'Keep unlocked on this phone') : null;
     const trust = () => { const t = root.querySelector('#pin-trust'); return !!(t && t.checked); };
@@ -89,45 +89,45 @@ function ask(opts) {
       lastTouch = Date.now(); unlockCbs.forEach(f => { try { f(); } catch (e) { console.error(e); } }); done(true);
     };
     const why = r => ({ wrong: `Wrong PIN. ${r.left} ${r.left === 1 ? 'try' : 'tries'} left.`, locked: `Too many wrong tries. Try again after ${hhmm(r.lockedUntil)}.`,
-      password: 'That password isn’t right.', easy: 'That PIN is too easy to guess. Choose another.', format: 'The PIN is 6 digits.',
-      nopin: 'Set your PIN first.', signin: 'Sign in again, then try.' }[r.why] || 'Couldn’t check the PIN. Try again.');
+      password: 'That password isn’t right.', easy: 'That PIN is too easy to guess. Choose another.', format: 'The PIN is 4 digits.',
+      nopin: 'Set your PIN first.', reset: 'Too many wrong tries today. Set a new PIN with your password.', signin: 'Sign in again, then try.' }[r.why] || 'Couldn’t check the PIN. Try again.');
     function render() {
       const err = el('div', { class: 'err', 'aria-live': 'polite' });
       const fail = m => { err.textContent = m; busy = false; root.querySelectorAll('button').forEach(b => { b.disabled = false; }); };
       const go = async (fn, args) => {
         if (busy) return; busy = true; err.textContent = ''; root.querySelectorAll('button').forEach(b => { b.disabled = true; });
-        try { const { data, error } = await client().rpc(fn, args); if (error) throw error; if (data && data.ok) ok(data); else { if (data && data.why === 'nopin') { mode = 'set'; render(); return; } fail(why(data || {})); } }
+        try { const { data, error } = await client().rpc(fn, args); if (error) throw error; if (data && data.ok) ok(data); else { if (data && (data.why === 'nopin' || data.why === 'reset')) { if (data.why === 'reset') st = Object.assign({}, st, { blocked: true }); mode = 'set'; render(); return; } fail(why(data || {})); } }
         catch (e) { fail(/fetch|network/i.test(e.message || '') ? 'No connection. Try again.' : why({})); }
       };
       const cancel = el('button', { type: 'button', onclick: () => done(false), text: opts.cancelText || 'Back to Studio' });
       let body;
       if (mode === 'enter') {
-        const pin = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', autocomplete: 'off', maxlength: '6', 'aria-label': 'PIN', placeholder: '••••••' });
-        const submit = () => { const v = pin.value.replace(/\D/g, ''); if (v.length !== 6) return fail('The PIN is 6 digits.'); go('pin_unlock', { p_pin: v, p_trust: trust() }); pin.value = ''; };
-        pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, 6); if (pin.value.length === 6) submit(); });
+        const pin = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', autocomplete: 'off', maxlength: '4', 'aria-label': 'PIN', placeholder: '••••' });
+        const submit = () => { const v = pin.value.replace(/\D/g, ''); if (v.length !== 4) return fail('The PIN is 4 digits.'); go('pin_unlock', { p_pin: v, p_trust: trust() }); pin.value = ''; };
+        pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, 4); if (pin.value.length === 4) submit(); });
         pin.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
         body = [el('h2', { text: 'Enter your PIN' }),
-          el('p', { text: st && st.lockedUntil ? `Too many wrong tries. Try again after ${hhmm(st.lockedUntil)}.` : 'Business and Books need your 6-digit PIN on this device. They lock again after 10 minutes without use.' }),
+          el('p', { text: st && st.lockedUntil ? `Too many wrong tries. Try again after ${hhmm(st.lockedUntil)}.` : 'Business and Books need your 4-digit PIN on this device. They lock again after 10 minutes without use.' }),
           pin, trustBox(), err,
           el('div', { class: 'btns' }, el('button', { type: 'button', class: 'pri', onclick: submit, text: 'Unlock' }), cancel,
             el('button', { type: 'button', class: 'lnk', onclick: () => { mode = 'set'; render(); }, text: 'Forgot your PIN? Set a new one' }))];
         setTimeout(() => pin.focus(), 30);
       } else {
         const pw = el('input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Your SLATE OS password' });
-        const p1 = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', autocomplete: 'new-password', maxlength: '6', placeholder: '••••••', 'aria-label': 'New PIN' });
-        const p2 = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', autocomplete: 'new-password', maxlength: '6', placeholder: '••••••', 'aria-label': 'New PIN again' });
-        [p1, p2].forEach(i => i.addEventListener('input', () => { i.value = i.value.replace(/\D/g, '').slice(0, 6); }));
+        const p1 = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', autocomplete: 'new-password', maxlength: '4', placeholder: '••••', 'aria-label': 'New PIN' });
+        const p2 = el('input', { type: 'password', class: 'pin', inputmode: 'numeric', autocomplete: 'new-password', maxlength: '4', placeholder: '••••', 'aria-label': 'New PIN again' });
+        [p1, p2].forEach(i => i.addEventListener('input', () => { i.value = i.value.replace(/\D/g, '').slice(0, 4); }));
         const submit = () => {
           if (!pw.value) return fail('Enter your SLATE OS password.');
-          if (p1.value.length !== 6) return fail('The PIN is 6 digits.');
+          if (p1.value.length !== 4) return fail('The PIN is 4 digits.');
           if (p1.value !== p2.value) return fail('The two PINs are different.');
           go('pin_set', { p_password: pw.value, p_pin: p1.value, p_trust: trust() });
         };
         body = [el('h2', { text: st && st.hasPin ? 'Set a new PIN' : 'Set your PIN' }),
-          el('p', { text: 'Business and Books now need a 6-digit PIN as well as your sign-in, so they stay closed on a shared computer. Enter your SLATE OS password to set it.' }),
-          el('label', {}, 'Your SLATE OS password', pw), el('label', {}, 'New PIN (6 digits)', p1), el('label', {}, 'New PIN again', p2), trustBox(), err,
+          el('p', { text: st && st.blocked ? 'Too many wrong PINs today, so Business and Books are closed until you set a new PIN. Enter your SLATE OS password to set it.' : 'Business and Books now need a 4-digit PIN as well as your sign-in, so they stay closed on a shared computer. Enter your SLATE OS password to set it.' }),
+          el('label', {}, 'Your SLATE OS password', pw), el('label', {}, 'New PIN (4 digits)', p1), el('label', {}, 'New PIN again', p2), trustBox(), err,
           el('div', { class: 'btns' }, el('button', { type: 'button', class: 'pri', onclick: submit, text: 'Set PIN and open' }), cancel,
-            st && st.hasPin ? el('button', { type: 'button', class: 'lnk', onclick: () => { mode = 'enter'; render(); }, text: 'I know my PIN' }) : null)];
+            st && st.hasPin && !st.blocked ? el('button', { type: 'button', class: 'lnk', onclick: () => { mode = 'enter'; render(); }, text: 'I know my PIN' }) : null)];
         setTimeout(() => pw.focus(), 30);
       }
       const ico = el('div', { class: 'pl' }); ico.innerHTML = LOCK_ICO;
