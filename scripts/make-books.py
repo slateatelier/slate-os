@@ -240,5 +240,24 @@ rep("""onclick: () => go(k) }, l, n ? h('span', { class: 'badge',""", """onclick
 rep(""".tab{appearance:none;border:0;background:none;font-size:14px;""", """.tab .tab-ic{width:15px;height:15px;flex:none;opacity:.85}.tab[aria-current="page"] .tab-ic{opacity:1}
 .tab{appearance:none;border:0;background:none;font-size:14px;""")
 
+# ---------- Fees still to come in: project name in bold, code beside it; colour by status ----------
+rep("""h('span', { class: 't', text: x.code || x.name }), h('span', { class: 'm', text: `${x.code ? x.name + ' · ' : ''}${stopped(x) ? x.status.toLowerCase() + ' · due for work done · ' : ''}received ${tkShort(x.revenueToDate)} of ${tkShort(x.contract)}` }),""",
+    """h('span', { class: 't' }, h('i', { class: 'pst-dot ' + pstCls(x.status), title: x.status || 'Active' }), x.name || x.code), h('span', { class: 'm' }, x.code && x.name ? h('span', { class: 'mono', text: x.code + ' · ' }) : null, stopped(x) ? h('b', { class: 'pst-t ' + pstCls(x.status), text: x.status + ' · due for work done · ' }) : null, `received ${tkShort(x.revenueToDate)} of ${tkShort(x.contract)}`),""")
+rep("""  if (held.length) body.push(h('div', { class: 'f-hint', text: `Paused or closed, not counted until the amount due for work done is set in More › Projects: ${held.map(x => x.code || x.name).join(', ')}.` }));""",
+    """  if (held.length) body.push(h('div', { class: 'f-hint' }, 'Paused or closed, not counted until the amount due for work done is set in More › Projects:', h('div', { class: 'pst-chips' }, held.map(x => h('span', { class: 'pst-chip ' + pstCls(x.status), title: (x.code ? x.code + ' · ' : '') + (x.status || '') }, h('i', { class: 'pst-dot ' + pstCls(x.status) }), x.name || x.code)))),
+    h('div', { class: 'pst-key' }, [['Active', 'Running'], ['On hold', 'On hold'], ['Closed', 'Closed'], ['Cancelled', 'Cancelled']].map(([k, l]) => h('span', {}, h('i', { class: 'pst-dot ' + pstCls(k) }), l))));""")
+rep("""function comingInBox() {""", """/* project status colours: running green, on hold amber, closed grey, cancelled red */
+const pstCls = st => /cancel/i.test(st || '') ? 'pst-x' : /hold|paus/i.test(st || '') ? 'pst-h' : /clos|complet/i.test(st || '') ? 'pst-c' : 'pst-a';
+function comingInBox() {""")
+rep(""".wl .t{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}""", """.wl .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wl .m .mono{font-size:11.5px}
+.pst-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px;flex:none}
+.pst-a.pst-dot{background:#34A853}.pst-h.pst-dot{background:#F2A007}.pst-c.pst-dot{background:#AEAEB2}.pst-x.pst-dot{background:#D7262B}
+.pst-t{font-weight:600}.pst-t.pst-h{color:#B26A00}.pst-t.pst-c{color:#6E6E73}.pst-t.pst-x{color:#B71C21}
+.pst-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.pst-chip{display:inline-flex;align-items:center;font-size:12px;font-weight:500;padding:3px 9px;border-radius:999px;background:#F2F2F7;color:var(--ink)}
+.pst-chip.pst-h{background:#FFF4DE}.pst-chip.pst-x{background:#FDECEC}.pst-chip.pst-c{background:#F2F2F7;color:#6E6E73}
+.pst-key{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--muted);margin-top:2px}""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
