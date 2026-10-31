@@ -2453,7 +2453,8 @@ function buildView(){
   return out.concat(v());
 }
 
-/* ---------- Conveyance: transport for site visits, client meetings and errands ----------
+/* ---------- Expense claims: transport, meals (per person per day) and client costs (Principal and COO only) ----------
+   The Principal's own claims are approved as soon as they are made. Database: m_conveyance.sql, m_expenses.sql.
    The person who paid claims; anyone who travelled with them is named and can't claim the same trip again.
    Limits per trip and kind of transport are set by the Principal (Settings). The COO approves (the Principal approves
    the COO's own). Accounts pays approved claims once a month from Books. All rules are enforced by the database
@@ -2466,22 +2467,28 @@ function loadConv(force){ const C=S.conv||(S.conv={state:'idle',rows:[],types:[]
   C.state='loading'; const sb=window.slateSupabase;
   Promise.all([sb.from('conv_claims').select('*').order('trip_date',{ascending:false}).order('created_at',{ascending:false}).limit(1000),sb.from('conv_types').select('*').order('sort')])
     .then(([a,b])=>{ if(a.error) throw a.error; if(b.error) throw b.error; C.rows=a.data||[]; C.types=b.data||[]; C.state='ok'; })
-    .catch(e=>{ C.state='err'; C.err=/conv_|schema cache|does not exist/i.test(e.message||'')?'Conveyance needs the latest database update (m_conveyance.sql).':errMsg(e); })
+    .catch(e=>{ C.state='err'; C.err=/conv_|schema cache|does not exist/i.test(e.message||'')?'Expense claims need the latest database update.':errMsg(e); })
     .finally(()=>{ if(S.view==='conv'||S.view==='setup'||S.view==='more'||S.view==='queue') render(true); if(S.sheet&&/^conv/.test(S.sheet.type)) renderSheet(); });
   return C; }
 const convWaiting=()=>{ const C=S.conv; if(!C||C.state!=='ok'||!convApprover()) return []; return C.rows.filter(r=>r.status==='submitted'&&r.user_id!==S.uid&&(S.isOwner||!/\b(coo|principal)\b/i.test(roster(r.user_id).role||'')&&r.user_id!==ownerId())); };
 const convType=id=>((S.conv&&S.conv.types)||[]).find(t=>t.id===id);
-const convLimit=d=>{ const t=convType(d.mode); if(!t) return 0; return (+t.limit_amt||0)*(t.per_person?1+d.people.length:1)*(d.round?2:1); };
+const CONV_KIND=[['transport','Transport'],['meal','Meals'],['client','Client costs']];
+const convKind=d=>{ const t=convType(d.mode); return t?(t.kind||'transport'):'transport'; };
+const convCanClient=()=>S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||'');
+/* the types this person can claim: on, with a limit (the Principal: any type that is on; client costs: Principal and COO only) */
+const convTypesFor=()=>((S.conv&&S.conv.types)||[]).filter(t=>t.active&&(S.isOwner||+t.limit_amt>0)&&((t.kind||'transport')!=='client'||convCanClient()));
+const convWhat=r=>{ const t=convType(r.mode); return (t&&t.kind&&t.kind!=='transport')?`${t.label} at ${r.to_place}`:`${r.from_place} → ${r.to_place}${r.round_trip?' and back':''}`; };
+const convLimit=d=>{ const t=convType(d.mode); if(!t) return 0; if(S.isOwner&&!(+t.limit_amt>0)) return Infinity; return (+t.limit_amt||0)*(t.per_person?1+d.people.length:1)*(d.round?2:1); };
 const convProj=id=>{ const p=id&&S.projects[id]; return p?[p.code,p.name].filter(Boolean).join(' · '):''; };
 function convRow(r,sel){ const st=CONV_ST[r.status]||[r.status,'open'], t=convType(r.mode), mine=r.user_id===S.uid;
   return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:'+(sel?'auto ':'')+'minmax(0,1fr) auto;align-items:center;gap:10px;cursor:pointer',onclick:e=>{ if(e.target.type==='checkbox') return; openConvView(r.id); }},
     sel?h('input',{type:'checkbox','aria-label':'Select '+r.id,checked:sel.has(r.id),style:'width:20px;height:20px;margin:0',onchange:e=>{ e.target.checked?sel.add(r.id):sel.delete(r.id); render(true); }}):null,
-    h('div',{style:'min-width:0'},h('div',{style:'font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${r.from_place} → ${r.to_place}${r.round_trip?' and back':''}`}),
-      h('div',{class:'f-hint',style:'margin:0',text:[r.id,fmtD(r.trip_date),mine?'':nameOf(r.user_id),t?t.label:r.mode,r.people&&r.people.length?'with '+r.people.map(nameOf).join(', '):'',convProj(r.project_id)||convPur(r.purpose)].filter(Boolean).join(' · ')})),
+    h('div',{style:'min-width:0'},h('div',{style:'font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:convWhat(r)}),
+      h('div',{class:'f-hint',style:'margin:0',text:[r.id,fmtD(r.trip_date),mine?'':nameOf(r.user_id),t&&(t.kind||'transport')==='transport'?t.label:'',r.people&&r.people.length?'with '+r.people.map(nameOf).join(', '):'',convProj(r.project_id)||convPur(r.purpose)].filter(Boolean).join(' · ')})),
     h('div',{style:'text-align:right'},h('div',{class:'mono',style:'font-weight:600',text:taka(r.amount)}),h('span',{class:'pill s-'+st[1],text:st[0]}))); }
 function viewConv(){ const C=loadConv(), appr=convApprover(), f=S.convF||(S.convF={tab:appr?'wait':'mine',sel:new Set()});
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Transport for work'}),h('h1',{class:'h1',text:'Conveyance'})),h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openConv(),text:'New claim'})))];
-  out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:'Claim transport for site visits, client meetings and office errands, this month or last. If several of you went together, one person claims and names the others. If you have a paper bill, write the claim ID on it and give it to Accounts. Accounts pays approved claims once a month.'}));
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Transport, meals and client costs'}),h('h1',{class:'h1',text:'Expense claims'})),h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openConv(),text:'New claim'})))];
+  out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:'Claim transport and meals for site visits, client meetings and office errands, this month or last. If several of you went or ate together, one person claims and names the others. If you have a paper bill, write the claim ID on it and give it to Accounts. Accounts pays approved claims once a month.'+(S.isOwner?' Your own claims need no approval.':'')}));
   if(C.state==='loading'||C.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading…'})); return out; }
   if(C.state==='err'){ out.push(h('p',{class:'err',text:C.err}),h('button',{class:'btn',type:'button',onclick:()=>loadConv(true),text:'Try again'})); return out; }
   const wait=convWaiting(), ym=today().slice(0,7);
@@ -2507,44 +2514,57 @@ function openConv(id){ const C=loadConv(), r=id?C.rows.find(x=>x.id===id):null;
   const d=r?{id:r.id,date:r.trip_date,purpose:r.purpose,project:r.project_id||'',from:r.from_place,to:r.to_place,mode:r.mode,people:(r.people||[]).slice(),round:!!r.round_trip,paperBill:!!r.paper_bill,amount:String(r.amount),note:r.note||''}
     :{date:today(),purpose:'site',project:'',from:'Office',to:'',mode:'',people:[],round:false,paperBill:false,amount:'',note:''};
   S.sheet={type:'conv',d,err:''}; renderSheet(); }
-function sheetConv(){ const d=S.sheet.d, C=S.conv||{types:[]}, types=(C.types||[]).filter(t=>t.active&&+t.limit_amt>0);
+function sheetConv(){ const d=S.sheet.d, types=convTypesFor(), kind=convKind(d), tr=kind==='transport';
   const td=today(), first=(()=>{ const [y,m]=td.split('-').map(Number); return (m===1?(y-1)+'-12':y+'-'+String(m-1).padStart(2,'0'))+'-01'; })();
-  const lim=convLimit(d), upd=()=>{ const x=document.getElementById('conv-lim'); if(x) x.textContent=limTxt(); };
-  const limTxt=()=>{ const t=convType(d.mode), l=convLimit(d); if(!t) return types.length?'Choose how you travelled to see the limit.':''; return `Limit for this trip: ${taka(l)}`+(t.per_person&&d.people.length?` (${taka(t.limit_amt)} × ${1+d.people.length} people${d.round?' × 2':''})`:d.round?` (${taka(t.limit_amt)} × 2 for the return)`:' ('+(t.per_person?'per person':'one fare, however many went')+')'); };
+  const upd=()=>{ const x=document.getElementById('conv-lim'); if(x) x.textContent=limTxt(); };
+  const limTxt=()=>{ const t=convType(d.mode), l=convLimit(d); if(!t) return types.length?'Choose what it is for to see the limit.':'';
+    if(l===Infinity) return 'No limit for you.';
+    const n=1+d.people.length, unit=t.kind==='meal'?'per person a day':t.per_person?'per person':tr?'one fare, however many went':'per claim';
+    return `Limit: ${taka(l)}`+(t.per_person&&d.people.length?` (${taka(t.limit_amt)} × ${n} people${d.round?' × 2':''})`:d.round?` (${taka(t.limit_amt)} × 2 for the return)`:` (${unit})`); };
   const save=async e=>{ e.preventDefault();
-    if(!d.mode) return fail('Choose how you travelled.'); if(!(+d.amount>0)) return fail('Enter the amount.');
-    if(+d.amount>convLimit(d)) return fail(`The most you can claim for this trip is ${taka(convLimit(d))}.`);
+    if(!d.mode) return fail('Choose what the claim is for.'); if(!(+d.amount>0)) return fail('Enter the amount.');
+    if(+d.amount>convLimit(d)) return fail(`The most you can claim for this is ${taka(convLimit(d))}.`);
+    if(tr&&(!d.from.trim()||!d.to.trim())) return fail('Enter where you went from and to.');
+    if(!tr&&!d.to.trim()) return fail('Enter where (the restaurant or place).');
     if(d.purpose==='site'&&!d.project) return fail('Choose the project for a site visit.');
-    if(!d.project&&!d.note.trim()) return fail('Without a project, add a note saying what the trip was for.');
+    if(!d.project&&!d.note.trim()) return fail(kind==='client'?'Without a project, add a note naming the client.':'Without a project, add a note saying what it was for.');
     let nid='';
-    const ok=await run(async()=>{ const {data,error}=await window.slateSupabase.rpc('conv_submit',{p:{...d,amount:+d.amount}}); if(error) throw error; nid=data; await loadConvNow(); },()=>`Claim ${nid} sent to the ${S.isOwner?'COO':/\bcoo\b/i.test(roster(S.uid).role||'')?'Principal':'COO'}`+(d.paperBill?`. Write ${nid} on the paper bill.`:''));
+    const ok=await run(async()=>{ const {data,error}=await window.slateSupabase.rpc('conv_submit',{p:{...d,round:tr&&d.round,amount:+d.amount}}); if(error) throw error; nid=data; await loadConvNow(); },
+      ()=>(S.isOwner?`Expense ${nid} recorded; Accounts pays it with this month’s claims`:`Claim ${nid} sent to the ${/\bcoo\b/i.test(roster(S.uid).role||'')?'Principal':'COO'}`)+(d.paperBill?`. Write ${nid} on the paper bill.`:''));
     if(ok){ S.view='conv'; if(S.convF) S.convF.tab='mine'; openConvView(nid); } };
   const ps=Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>!isChalkProj(p)&&(p.code||p.name)).sort((a,b)=>(!!a.closed-!!b.closed)||(a.code||a.name).localeCompare(b.code||b.name));
-  const pSel=h('select',{id:'cv-proj','aria-label':'Project',onchange:e=>{ d.project=e.target.value; }},h('option',{value:'',text:'No project (say what for in the note)'}),ps.map(p=>h('option',{value:p.id,text:[p.code,p.name].filter(Boolean).join(' · ')+(p.closed?' (closed)':'')}))); pSel.value=d.project;
+  const pSel=h('select',{id:'cv-proj','aria-label':'Project',onchange:e=>{ d.project=e.target.value; }},h('option',{value:'',text:kind==='client'?'No project (name the client in the note)':'No project (say what for in the note)'}),ps.map(p=>h('option',{value:p.id,text:[p.code,p.name].filter(Boolean).join(' · ')+(p.closed?' (closed)':'')}))); pSel.value=d.project;
   const purSel=h('select',{id:'cv-pur','aria-label':'What for',onchange:e=>{ d.purpose=e.target.value; }},CONV_PUR.map(([v,l])=>h('option',{value:v,text:l}))); purSel.value=d.purpose;
-  const mSel=h('select',{id:'cv-mode','aria-label':'How you travelled',onchange:e=>{ d.mode=e.target.value; upd(); }},h('option',{value:'',text:types.length?'Choose…':'No limits set yet'}),types.map(t=>h('option',{value:t.id,text:`${t.label} · up to ${taka(t.limit_amt)}${t.per_person?' each':''}`}))); mSel.value=d.mode;
+  const mSel=h('select',{id:'cv-mode','aria-label':'Expense',onchange:e=>{ d.mode=e.target.value; const t=convType(d.mode); if(t&&t.kind==='client') d.purpose='client'; renderSheet(); }},
+    h('option',{value:'',text:types.length?'Choose…':'No limits set yet'}),
+    CONV_KIND.map(([k,l])=>{ const ts=types.filter(t=>(t.kind||'transport')===k); return ts.length?h('optgroup',{label:l},ts.map(t=>h('option',{value:t.id,text:`${t.label}`+(S.isOwner&&!(+t.limit_amt>0)?' · no limit for you':` · up to ${taka(t.limit_amt)}${k==='meal'?' each a day':t.per_person?' each':''}`)}))):null; })); mSel.value=d.mode;
   const others=people().filter(id=>id!==S.uid&&!d.people.includes(id));
-  const addSel=h('select',{id:'cv-add','aria-label':'Add someone who was with you',onchange:e=>{ if(e.target.value){ d.people.push(e.target.value); renderSheet(); } }},h('option',{value:'',text:'Add someone who was with you…'}),others.map(id=>h('option',{value:id,text:nameOf(id)})));
-  return [head(d.id?'Conveyance · '+d.id:'Conveyance','New claim'),
+  const addSel=h('select',{id:'cv-add','aria-label':'Add someone who was with you',onchange:e=>{ if(e.target.value){ d.people.push(e.target.value); renderSheet(); } }},h('option',{value:'',text:kind==='meal'?'Add someone who ate with you…':'Add someone who was with you…'}),others.map(id=>h('option',{value:id,text:nameOf(id)})));
+  const noTypes=!types.length?h('div',{class:'card',style:'gap:6px'},h('div',{style:'font-weight:600',text:'No limits are set yet'}),h('div',{class:'f-hint',style:'margin:0',text:S.isOwner?'Set a limit for each kind of transport and meal, then switch it on.':'The Principal sets the limits first. Ask the Principal or the COO.'}),
+    S.isOwner?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ closeSheet(); S.view='setup'; render(true); setTimeout(()=>{ const x=[...document.querySelectorAll('#view h2')].find(e=>/Expense limits/i.test(e.textContent)); if(x) x.scrollIntoView({block:'start'}); },150); },text:'Set limits in Settings'}):null):null;
+  return [head(d.id?'Expense claim · '+d.id:'Expense claim','New claim'),
     h('form',{class:'form',onsubmit:save},
-      h('div',{class:'form-row'},field('Date of the trip',h('input',{type:'date',min:first,max:td,value:d.date,oninput:e=>{d.date=e.target.value}})),field('What for',purSel)),
+      noTypes,
+      field('Expense',mSel,kind==='client'?'Client costs: only you and the COO can claim these.':''),
+      h('div',{class:'form-row'},field('Date',h('input',{type:'date',min:first,max:td,value:d.date,oninput:e=>{d.date=e.target.value}})),field('What for',purSel)),
       field('Project',pSel),
-      h('div',{class:'form-row'},field('From',h('input',{value:d.from,maxlength:120,oninput:e=>{d.from=e.target.value}})),field('To',h('input',{value:d.to,maxlength:120,placeholder:'e.g. Jolshiri site, client office in Banani',oninput:e=>{d.to=e.target.value}}))),
-      field('How you travelled',mSel),
-      h('label',{style:'display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:d.round,style:'width:20px;height:20px;margin:0',onchange:e=>{ d.round=e.target.checked; upd(); }}),'Return trip included (there and back)'),
-      field('Who was with you',h('div',{style:'display:grid;gap:8px'},d.people.length?h('div',{class:'chips'},d.people.map(id=>h('span',{class:'chip'},nameOf(id),h('button',{type:'button','aria-label':'Remove '+nameOf(id),onclick:()=>{ d.people=d.people.filter(x=>x!==id); renderSheet(); },text:'×'})))):null,addSel),'They can’t claim this trip again. For rickshaw, bus and bike rides the limit grows with each person.'),
+      tr?h('div',{class:'form-row'},field('From',h('input',{value:d.from,maxlength:120,oninput:e=>{d.from=e.target.value}})),field('To',h('input',{value:d.to,maxlength:120,placeholder:'e.g. Jolshiri site, client office in Banani',oninput:e=>{d.to=e.target.value}})))
+        :field('Where',h('input',{value:d.to,maxlength:120,placeholder:kind==='client'?'e.g. restaurant name, Gulshan 2':'e.g. hotel near the site',oninput:e=>{d.to=e.target.value}})),
+      tr?h('label',{style:'display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:d.round,style:'width:20px;height:20px;margin:0',onchange:e=>{ d.round=e.target.checked; upd(); }}),'Return trip included (there and back)'):null,
+      field(kind==='meal'?'Who ate with you':kind==='client'?'Who from SLATE was there':'Who was with you',h('div',{style:'display:grid;gap:8px'},d.people.length?h('div',{class:'chips'},d.people.map(id=>h('span',{class:'chip'},nameOf(id),h('button',{type:'button','aria-label':'Remove '+nameOf(id),onclick:()=>{ d.people=d.people.filter(x=>x!==id); renderSheet(); },text:'×'})))):null,addSel),
+        kind==='meal'?'They can’t claim lunch again that day. The limit grows with each person.':kind==='client'?'For the record.':'They can’t claim this trip again. For rickshaw, bus and bike rides the limit grows with each person.'),
       h('div',{class:'form-row',style:'align-items:start'},field('Amount (Tk)',h('input',{type:'number',min:1,step:'1',inputmode:'numeric',value:d.amount,oninput:e=>{d.amount=e.target.value}})),h('div',{id:'conv-lim',class:'f-hint',style:'margin:28px 0 0',text:limTxt()})),
-      h('label',{style:'display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:d.paperBill,style:'width:20px;height:20px;margin:0;flex:none',onchange:e=>{ d.paperBill=e.target.checked; }}),h('span',{},'I have a paper bill',h('span',{class:'f-hint',style:'display:block;margin:0',text:'A shop bill or printed ride receipt. Write the claim ID on it and give it to Accounts.'}))),
-      field('Note',h('input',{value:d.note,maxlength:300,placeholder:'e.g. client name, what was bought',oninput:e=>{d.note=e.target.value}})),
-      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy||!types.length,text:d.id?'Send again':'Send claim'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+      h('label',{style:'display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:d.paperBill,style:'width:20px;height:20px;margin:0;flex:none',onchange:e=>{ d.paperBill=e.target.checked; }}),h('span',{},'I have a paper bill',h('span',{class:'f-hint',style:'display:block;margin:0',text:'A shop or restaurant bill, or a printed ride receipt. Write the claim ID on it and give it to Accounts.'}))),
+      field('Note',h('input',{value:d.note,maxlength:300,placeholder:kind==='client'?'e.g. client name and what it was about':'e.g. client name, what was bought',oninput:e=>{d.note=e.target.value}})),
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy||!types.length,text:S.isOwner?(d.id?'Save':'Record expense'):d.id?'Send again':'Send claim'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
 function openConvView(id){ S.sheet={type:'convView',id,err:'',note:''}; renderSheet(); }
-function sheetConvView(){ const C=S.conv||{rows:[]}, r=C.rows.find(x=>x.id===S.sheet.id); if(!r) return [head('Conveyance','Not found')];
+function sheetConvView(){ const C=S.conv||{rows:[]}, r=C.rows.find(x=>x.id===S.sheet.id); if(!r) return [head('Expense claim','Not found')];
   const st=CONV_ST[r.status]||[r.status,'open'], t=convType(r.mode), mine=r.user_id===S.uid, canDec=r.status==='submitted'&&convWaiting().some(x=>x.id===r.id);
   const row=(k,v)=>v?h('div',{style:'display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px;padding:6px 0;border-bottom:1px solid var(--line)'},h('span',{class:'muted',text:k}),h('span',{text:v})):null;
-  return [head('Conveyance',r.id),
+  return [head('Expense claim',r.id),
     h('div',{style:'display:flex;gap:10px;align-items:center;flex-wrap:wrap'},h('span',{class:'pill s-'+st[1],text:st[0]}),h('b',{style:'font-size:22px',text:taka(r.amount)}),h('span',{class:'f-hint',style:'margin:0',text:'limit '+taka(r.limit_at)})),
     r.paper_bill&&['submitted','approved','returned'].includes(r.status)&&mine?h('p',{class:'f-hint',style:'margin:0',text:`Write ${r.id} on the paper bill and give it to Accounts.`}):null,
-    h('div',{},row('Claimed by',nameOf(r.user_id)),row('Date',fmtD(r.trip_date)),row('Trip',`${r.from_place} → ${r.to_place}${r.round_trip?' and back':''}`),row('Transport',t?t.label:r.mode),row('With',(r.people||[]).map(nameOf).join(', ')),
+    h('div',{},row('Claimed by',nameOf(r.user_id)),row('Date',fmtD(r.trip_date)),row('What',convWhat(r)),row('Kind',t?((CONV_KIND.find(k=>k[0]===(t.kind||'transport'))||[])[1]+' · '+t.label):r.mode),row('With',(r.people||[]).map(nameOf).join(', ')),
       row('Project',convProj(r.project_id)),row('What for',convPur(r.purpose)),row('Note',r.note),row('Paper bill',r.paper_bill?'Yes':'No'),
       row(r.status==='returned'?'Returned':'Decision',r.decided_by?`${nameOf(r.decided_by)} · ${fmtD((r.decided_at||'').slice(0,10))}${r.decision_note?' · “'+r.decision_note+'”':''}`:''),
       row('Paid',r.paid_at?`${fmtD(r.paid_at.slice(0,10))}${r.voucher_no?' · '+r.voucher_no:''}`:'')),
@@ -2552,23 +2572,24 @@ function sheetConvView(){ const C=S.conv||{rows:[]}, r=C.rows.find(x=>x.id===S.s
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>convDecide([r.id],'approve').then(ok=>{ if(ok) closeSheet(); }),text:'Approve'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>{ if(!S.sheet.note.trim()) return fail('Add a note saying what to change.'); convDecide([r.id],'return',S.sheet.note).then(ok=>{ if(ok) closeSheet(); }); },text:'Return to change'}),
         h('button',{class:'btn',type:'button',style:'color:var(--overdue)',disabled:S.busy,onclick:()=>{ if(!S.sheet.note.trim()) return fail('Add a note saying why.'); convDecide([r.id],'reject',S.sheet.note).then(ok=>{ if(ok) closeSheet(); }); },text:'Not approve'}))):null,
-    mine&&['submitted','returned'].includes(r.status)?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openConv(r.id),text:'Change'}),
+    mine&&(['submitted','returned'].includes(r.status)||(S.isOwner&&r.status==='approved'))?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openConv(r.id),text:'Change'}),
       h('button',{class:'btn',type:'button',style:'color:var(--overdue)',disabled:S.busy,onclick:()=>{ if(!confirm('Cancel claim '+r.id+'?')) return; run(async()=>{ const {error}=await window.slateSupabase.rpc('conv_cancel',{p_id:r.id}); if(error) throw error; await loadConvNow(); },'Claim cancelled'); },text:'Cancel claim'})):null]; }
-/* Settings › Conveyance limits (the Principal) */
+/* Settings › Expense limits (the Principal) */
 function convSetSec(){ const C=loadConv(); if(!S.isOwner) return null;
-  if(C.state!=='ok') return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Conveyance limits'})),h('p',{class:C.state==='err'?'err':'muted',text:C.state==='err'?C.err:'Loading…'}));
-  const D=S.convSet||(S.convSet=C.types.map(t=>({id:t.id,label:t.label,limit:String(+t.limit_amt||''),perPerson:!!t.per_person,active:!!t.active,sort:t.sort})));
-  const save=()=>{ const bad=D.find(x=>x.active&&!(+x.limit>0)); if(bad) return toast(`Set a limit for ${bad.label}, or switch it off.`);
-    run(async()=>{ const {error}=await window.slateSupabase.rpc('conv_set_types',{p:D.map((x,i)=>({...x,label:x.label.trim()||'Other',limit:+x.limit||0,sort:(i+1)*10}))}); if(error) throw error; S.convSet=null; await loadConvNow(); },'Conveyance limits saved'); };
-  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Conveyance limits'})),
-    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'The most anyone can claim for one trip, by kind of transport. “Each person” multiplies the limit by the number of people who travelled (rickshaw, bus, bike ride); otherwise it is one fare however many went (CNG, car). A return trip doubles it. Only kinds that are on can be claimed.'}),
-    h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Transport'}),h('th',{class:'n',text:'Limit a trip (Tk)'}),h('th',{text:'Each person'}),h('th',{text:'On'}))),
-      h('tbody',{},D.map(x=>h('tr',{},h('td',{},h('input',{value:x.label,maxlength:40,'aria-label':'Transport name',oninput:e=>{x.label=e.target.value}})),
-        h('td',{class:'n'},h('input',{type:'number',min:0,step:'10',inputmode:'numeric',value:x.limit,style:'max-width:110px;text-align:right','aria-label':x.label+' limit',oninput:e=>{x.limit=e.target.value}})),
-        h('td',{},h('input',{type:'checkbox',checked:x.perPerson,style:'width:auto','aria-label':x.label+' each person',onchange:e=>{x.perPerson=e.target.checked}})),
-        h('td',{},h('input',{type:'checkbox',checked:x.active,style:'width:auto','aria-label':x.label+' on',onchange:e=>{x.active=e.target.checked}}))))))),
-    h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:save,text:'Save limits'}),
-      h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ const n=prompt('Name of the transport'); if(!n||!n.trim()) return; D.push({id:('t'+Date.now().toString(36)).slice(0,20),label:n.trim(),limit:'',perPerson:false,active:true}); render(true); },text:'Add a kind'}))); }
+  if(C.state!=='ok') return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Expense limits'})),h('p',{class:C.state==='err'?'err':'muted',text:C.state==='err'?C.err:'Loading…'}));
+  const D=S.convSet||(S.convSet=C.types.map(t=>({id:t.id,label:t.label,kind:t.kind||'transport',limit:String(+t.limit_amt||''),perPerson:!!t.per_person,active:!!t.active,sort:t.sort})));
+  const save=()=>{ const bad=D.find(x=>x.active&&x.kind!=='client'&&!(+x.limit>0)); if(bad) return toast(`Set a limit for ${bad.label}, or switch it off.`);
+    run(async()=>{ const {error}=await window.slateSupabase.rpc('conv_set_types',{p:D.map((x,i)=>({...x,label:x.label.trim()||'Other',limit:+x.limit||0,perPerson:x.kind==='meal'?true:x.perPerson,sort:(i+1)*10}))}); if(error) throw error; S.convSet=null; await loadConvNow(); },'Expense limits saved'); };
+  const row=x=>h('tr',{},h('td',{},h('input',{value:x.label,maxlength:40,'aria-label':'Name',oninput:e=>{x.label=e.target.value}})),
+    h('td',{class:'n'},h('input',{type:'number',min:0,step:'10',inputmode:'numeric',value:x.limit,placeholder:x.kind==='client'?'COO limit':'',style:'max-width:110px;text-align:right','aria-label':x.label+' limit',oninput:e=>{x.limit=e.target.value}})),
+    h('td',{},x.kind==='transport'?h('input',{type:'checkbox',checked:x.perPerson,style:'width:auto','aria-label':x.label+' each person',onchange:e=>{x.perPerson=e.target.checked}}):h('span',{class:'muted',text:x.kind==='meal'?'Each, a day':'—'})),
+    h('td',{},h('input',{type:'checkbox',checked:x.active,style:'width:auto','aria-label':x.label+' on',onchange:e=>{x.active=e.target.checked}})));
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Expense limits'})),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'The most anyone can claim. Transport: per trip; “Each person” multiplies it by the number of people who travelled (rickshaw, bus, bike ride), otherwise one fare however many went (CNG, car); a return trip doubles it. Meals: per person per day. Client costs: only you and the COO claim them; the limit is the COO’s, yours have none. Only kinds that are on can be claimed.'}),
+    h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Expense'}),h('th',{class:'n',text:'Limit (Tk)'}),h('th',{text:'Each person'}),h('th',{text:'On'}))),
+      h('tbody',{},CONV_KIND.flatMap(([k,l])=>{ const xs=D.filter(x=>x.kind===k); return [h('tr',{style:'background:var(--group)'},h('td',{colspan:'4',style:'font-weight:600',text:l})),...xs.map(row),
+        h('tr',{},h('td',{colspan:'4'},h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ const n=prompt(`Name of the new ${l.toLowerCase()} expense`); if(!n||!n.trim()) return; D.push({id:('t'+Date.now().toString(36)).slice(0,20),label:n.trim(),kind:k,limit:'',perPerson:k==='meal',active:true}); render(true); },text:`+ Add to ${l.toLowerCase()}`})))]; })))),
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:save,text:'Save limits'}))); }
 function viewMore(){
   if(convApprover()) loadConv();
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
@@ -2577,7 +2598,7 @@ function viewMore(){
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
     ...grp('Daily',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null),
     ...grp('Reference',item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
-    ...grp('Tools',item('conv','Conveyance',convApprover()&&convWaiting().length?`${convWaiting().length} to approve · transport for site visits and meetings`:'Claim transport for site visits, client meetings and errands',convApprover()?convWaiting().length:0),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
+    ...grp('Tools',item('conv','Expense claims',convApprover()&&convWaiting().length?`${convWaiting().length} to approve · transport, meals and client costs`:'Claim transport and meals for site visits, meetings and errands',convApprover()?convWaiting().length:0),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
       S.booksRole&&!(S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||''))?h('a',{class:'more-i',href:'/books?solo=1',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Books'}),h('div',{class:'mi-d',text:S.booksRole==='Office staff'?'Petty cash: submit the bills you paid':S.booksRole==='Accountant'?'SLATE’s accounts':'SLATE’s accounts · view only'})),h('span',{class:'mi-a',text:'›'})):null,
       FIN_UI&&window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
     ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
@@ -2846,7 +2867,7 @@ function viewQueue(){
   const cw=convApprover()?(loadConv(),convWaiting()):[];
   const aw=S.isOwner&&window.SlatePin&&SlatePin.unlocked()&&canBiz()?(loadAccReq().rows||[]).filter(r=>r.status==='pending'):[];
   if(aw.length) out.push(h('button',{class:'more-i',type:'button',onclick:()=>goHR()},h('div',{},h('div',{class:'mi-t',text:`Access changes · ${aw.length}`}),h('div',{class:'mi-d',text:'Asked by the COO · waiting for your approval in Business › HR & salaries'})),h('span',{class:'badge',text:String(aw.length)})));
-  if(cw.length) out.push(h('button',{class:'more-i',type:'button',onclick:()=>{ S.convF={tab:'wait',sel:new Set()}; S.view='conv'; render(true); window.scrollTo(0,0); }},h('div',{},h('div',{class:'mi-t',text:`Conveyance claims · ${cw.length}`}),h('div',{class:'mi-d',text:taka(cw.reduce((a,r)=>a+(+r.amount||0),0))+' waiting for your approval'})),h('span',{class:'badge',text:String(cw.length)})));
+  if(cw.length) out.push(h('button',{class:'more-i',type:'button',onclick:()=>{ S.convF={tab:'wait',sel:new Set()}; S.view='conv'; render(true); window.scrollTo(0,0); }},h('div',{},h('div',{class:'mi-t',text:`Expense claims · ${cw.length}`}),h('div',{class:'mi-d',text:taka(cw.reduce((a,r)=>a+(+r.amount||0),0))+' waiting for your approval'})),h('span',{class:'badge',text:String(cw.length)})));
   if(!total){ out.push(h('div',{class:'empty'},h('h3',{text:'Nothing waiting on you'}),h('p',{class:'muted',style:'margin:0',text:'New requests from the team appear here, oldest first, and in your notifications.'}))); return out; }
   const oldest=gs.map(g=>g.oldest).filter(Boolean).sort()[0];
   out.push(h('div',{class:'f-hint',style:'margin:-10px 4px 0',text:`${total} item${total===1?'':'s'}`+(oldest?` · oldest waiting ${ageTxt(ageOf(oldest))}`:'')}));
