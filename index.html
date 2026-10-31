@@ -7722,7 +7722,7 @@ function sheetProp(){
     const v={...old,name,client,contact:(d.contact||'').trim(),phone:(d.phone||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
       scope:[...d.scope],feeBasis:d.feeBasis||'lump',fee:d.fee===''?'':String(+d.fee),feeNote:(d.feeNote||'').trim(),sentOn:d.sentOn||'',stage:d.stage||'prep',next:d.next||'',note:(d.note||'').trim(),
       src:d.src||'',status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid,proposedAt:now}),...(S.sheet.convert?{lead:false,proposedAt:now}:{})};
-    run(()=>propWrite(pid,v),S.sheet.convert?'Moved to Proposed':id?'Proposal updated':'Proposed project added').then(ok=>{ if(ok) openPropView(pid); }); };
+    run(()=>propWrite(pid,v),S.sheet.convert?'Moved to Proposed':id?'Proposal updated':'Proposal added: now write the proposal document').then(ok=>{ if(!ok) return; if(!id||S.sheet.convert) openPropDoc(pid,null,v); else openPropView(pid); }); };
   const chip=(x)=>{ const on=d.scope.includes(x); return h('button',{type:'button',class:'chip','aria-pressed':String(on),style:'border:0;cursor:pointer;padding:6px 12px;'+(on?'background:var(--ink);color:#fff':''),onclick:()=>{ d.scope=on?d.scope.filter(y=>y!==x):[...d.scope,x]; renderSheet(); },text:x}); };
   return [head(S.sheet.convert?'Make a proposal':id?'Edit proposal':'New proposed project',id?(d.name||d.client||'Proposal'):'Only you and the COO see this'),
     h('p',{class:'lead',style:'margin:0',text:'Just what you need while proposing. When the client confirms, it becomes a client project and the team sees it.'}),
@@ -7780,7 +7780,7 @@ function pbFee(d){ const area=+d.area||0;
   if(d.feeMode==='lump'){ const t=+d.lump||0; return {sub:t,disc:0,total:t,rate:area?t/area:0,area}; }
   const rate=d.parts.reduce((a,x)=>a+(+x.rate||0),0), sub=rate*area, disc=d.discMode==='sft'?(+d.disc||0)*area:(+d.disc||0), total=Math.max(0,sub-disc);
   return {sub,disc,total,rate:area?total/area:0,rawRate:rate,area}; }
-function openPropDoc(id,kind){ const p=(S.props||{})[id]; if(!p) return;
+function openPropDoc(id,kind,fresh){ const p=(S.props||{})[id]||fresh; if(!p) return; if(fresh&&!(S.props||{})[id]) (S.props=S.props||{})[id]=fresh;
   const d=p.doc&&!kind?JSON.parse(JSON.stringify(p.doc)):pbDefaults(p,kind);
   if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revRate==null) d.revRate='10000'; delete d.revFee;
   if(p.doc&&kind){ d.ref=p.doc.ref||d.ref; d.date=p.doc.date||d.date; }
