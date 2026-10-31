@@ -7758,6 +7758,9 @@ const PB_PARTS={dev:[['Architecture, common area interior, landscape and coordin
   det:[['Architecture, common area interior, landscape and coordination',25],['Structural design',8],['MEP design',5],['Marketing materials',2]]};
 const PB_SCHED={dev:[['On signing (advance)',25],['Final architectural design submitted',25],['Authority drawings submitted',25],['Working drawings submitted',25]],
   det:[['Advance on commissioning',20],['Design finalisation',10],['3D and animation',10],['Planning permit drawing',10],['RAJUK approval drawing',20],['Working drawings',20],['Finishing drawings',10]]};
+/* services offered in the fee table, with the usual rate (Tk per sft) from SLATE's agreements; any rate can be changed */
+const PB_SERVICES=[['Architecture, common area interior, landscape and coordination',40],['Architectural design',25],['Common area interior design',5],['Landscape design',3],['Structural design',8],['MEP design',5],
+  ['Marketing materials (3D, animation, brochure)',2],['3D visualization',3],['Real estate solutions (plans, area, specifications)',2],['BOQ and cost estimate',4],['Design coordination',2],['Site supervision',5],['Interior design',200],['Construction management (interior)',0]];
 const pbTk=n=>'Tk '+Math.round(+n||0).toLocaleString('en-IN');
 const pbEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pbLines=s=>String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);
@@ -7826,7 +7829,15 @@ function sheetPropDoc(){
       field('How the fee is worked out',seg('Fee basis',[['parts','Per sft by component'],['lump','Lump-sum package']],d.feeMode,v=>{ d.feeMode=v; renderSheet(); })),
       d.feeMode==='parts'?h('div',{style:'display:grid;gap:8px'},
         h('div',{class:'f-hint',text:'Rate per sft for each part of the work, times the construction area.'}),
-        rowsEd(d.parts,[{k:'rate',w:'96px',ph:'Tk/sft'}],()=>({label:'',rate:''}),'+ Add a component'),
+        h('div',{style:'display:grid;gap:8px'},d.parts.map((x,i)=>{ const known=PB_SERVICES.some(([l])=>l===x.label), other=x.other||(!known&&!!x.label);
+          const pick=h('select',{'aria-label':'Service',onchange:e=>{ const v=e.target.value; if(v==='__other'){ x.other=true; x.label=''; } else { x.other=false; x.label=v; const def=(PB_SERVICES.find(([l])=>l===v)||[])[1]; if((x.rate===''||x.rate==null)&&def) x.rate=String(def); } renderSheet(); }},
+            h('option',{value:'',text:'Choose a service…'}),PB_SERVICES.map(([l,r])=>h('option',{value:l,text:l+(r?` (usually Tk ${r}/sft)`:'')})),h('option',{value:'__other',text:'Other: type it…'}));
+          pick.value=other?'__other':(known?x.label:'');
+          return h('div',{style:'display:grid;gap:6px;padding:8px;border-radius:12px;border:1px solid var(--border)'},
+            h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:6px;align-items:center'},pick,h('button',{type:'button',class:'icon-btn','aria-label':'Remove',onclick:()=>{ d.parts.splice(i,1); renderSheet(); },text:'×'})),
+            other?txt(x,'label','Describe the service'):null,
+            h('div',{style:'display:grid;grid-template-columns:auto 110px;gap:8px;align-items:center;justify-content:start'},h('span',{class:'f-hint',style:'margin:0',text:'Rate, Tk per sft'}),num(x,'rate','Tk/sft'))); })),
+        h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ d.parts.push({label:'',rate:''}); renderSheet(); },text:'+ Add a service'}),
         h('div',{class:'form-row'},field('Discount',num(d,'disc','0')),field('Discount is',seg('Discount',[['amt','Tk in total'],['sft','Tk per sft']],d.discMode,v=>{ d.discMode=v; renderSheet(); }))))
       :h('div',{class:'form-row'},field('Package fee (Tk)',num(d,'lump','e.g. 1400000')),field('Shown per sft on',h('span',{class:'f-hint',style:'padding-top:10px',text:'the construction area above'}))),
       h('div',{class:'card',style:'gap:2px'},h('div',{class:'lbl',text:'Total fee, before VAT and AIT'}),h('b',{id:'pb-tot',style:'font-size:20px',text:F.total?pbTk(F.total)+(F.area?` · ${pbTk(F.rate)}/sft on ${(+F.area).toLocaleString('en-IN')} sft`:''):'—'})),
