@@ -7754,8 +7754,8 @@ const PB_SCOPE={
   det:['Architectural design: concept, design development, authority (RAJUK) drawings, working drawings and finishing drawings','Common area interior design','Landscape design','Structural design','MEP design: electrical, plumbing, fire','Marketing: 10–15 rendered views, an animation and brochure design','Design coordination with all consultants','10 site visits during construction','As-built drawings']};
 const PB_DELIV=['Full A3 drawing booklets (2 sets) and authority approval drawings','Soft copies in AutoCAD and PDF','Print-ready high-resolution renders'];
 const PB_TERMS=['The fee is adjusted to the final approved design area.','Additional 3D views, drawings and services beyond this scope are charged separately.','Intercity and overseas travel is borne by the client.','If two consecutive milestone payments are not made, SLATE may issue a termination notice.','SLATE retains the copyright of the design; on full payment the client may use it for this project.'];
-const PB_PARTS={dev:[['Architecture, common area interior, landscape and coordination',40],['Structural design',6],['MEP design',4]],
-  det:[['Architecture, common area interior, landscape and coordination',25],['Structural design',8],['MEP design',5],['Marketing materials',2]]};
+const PB_PARTS={dev:[['Architecture, common area interior, landscape and coordination',40],['Structural design',6],['MEP design',4],['3D visualization',0],['Real estate solutions (plans, area, specifications)',0]],
+  det:[['Architecture, common area interior, landscape and coordination',25],['Structural design',8],['MEP design',5],['Marketing materials (3D, animation, brochure)',2]]};
 const PB_SCHED={dev:[['On signing (advance)',25],['Final architectural design submitted',25],['Authority drawings submitted',25],['Working drawings submitted',25]],
   det:[['Advance on commissioning',20],['Design finalisation',10],['3D and animation',10],['Planning permit drawing',10],['RAJUK approval drawing',20],['Working drawings',20],['Finishing drawings',10]]};
 /* services offered in the fee table, with the usual rate (Tk per sft) from SLATE's agreements; any rate can be changed */
@@ -7777,9 +7777,9 @@ const PB_SVC_INFO={
  'MEP design':['Mechanical, electrical and plumbing design by SLATE’s MEP consultant.',
    ['Electrical: lighting, power, DB and cable layouts, load calculation','Substation, generator and LT panel sizing','Plumbing: water supply, sanitary and storm water drainage','Fire detection, fire fighting and fire safety drawings','HVAC and ventilation provisions','Lift and pump specifications','Fire service and DPDC/DESCO submission support']],
  'Marketing materials (3D, animation, brochure)':['Sales and marketing material for the developer, made from the approved design.',
-   ['Exterior 3D views (day and night)','Interior 3D views of common areas and a typical apartment','Walk-through or fly-through animation','Brochure layout with plans and specifications','Social media images in the needed sizes']],
+   ['10–15 rendered 3D views: exterior (day and night) and interiors of the common areas and a typical apartment','Walk-through or fly-through animation','Brochure layout with plans and specifications','Social media images in the needed sizes']],
  '3D visualization':['Photo-realistic 3D images of the design.',
-   ['Exterior 3D views','Interior 3D views','One round of changes per view','High-resolution files, print-ready']],
+   ['8–10 rendered 3D views, exterior and interior','One round of changes per view','High-resolution files, print-ready']],
  'Real estate solutions (plans, area, specifications)':['Material the sales team needs to sell the apartments.',
    ['Sale floor plans for each apartment type','Apartment area statement (net and gross)','Specification list for the brochure and sale agreement','Parking allocation plan']],
  'BOQ and cost estimate':['Quantities and cost estimate of the works, for budgeting and tender.',
@@ -7799,6 +7799,13 @@ function pbSvcFill(x){ const info=pbSvcInfo(x.label); x.desc=info?info[0]:''; x.
 function pbSvcView(x){ const info=pbSvcInfo(x.label);
   return {desc:x.desc!=null?x.desc:(info?info[0]:''),items:Array.isArray(x.check)?x.check.filter(c=>c.on&&c.t).map(c=>c.t):(info?info[1]:[])}; }
 const PB_OPEN=new Set();
+/* the scope of work, built from the services in the fee so the two always agree */
+function pbScopeAuto(d){ const L=[];
+  d.parts.filter(x=>x.label).forEach((x,i)=>L.push({n:i+1,label:x.label,...pbSvcView(x)}));
+  const more=[];
+  if(+d.vFree>0) more.push(`${+d.vFree} site visits during construction; further visits are charged as listed under additional services`);
+  if(d.asBuilt!==''&&d.asBuilt!=null) more.push(+d.asBuilt?`As-built drawings, at the fixed fee listed under additional services`:'As-built drawings, included in the fee');
+  return {svc:L,more:[...more,...pbLines(d.scopeExtra)]}; }
 /* IAB recommended scale of minimum fees (Schedule D, 2018). Part I, category B: basic architectural design, Tk per sft of total
    floor area, by floor-area band and jurisdiction; architecture and allied design services are 1.5 times these rates.
    Part III, category B: landscape and allied design, Tk per sft of site area. Up to 10,750 sft is a lump sum. */
@@ -7822,7 +7829,7 @@ function pbDefaults(p,kind){
     subject:'Expression of interest and financial proposal: '+(p.name||'').trim(),
     intro:`Thank you for considering SLATE for ${p.name?p.name.trim():'your project'}. We are pleased to submit our proposal for the design consultancy below, with the scope, the fee and how it is paid.`,
     site:p.location||'',katha:p.katha||'',area:area===''?'':String(area),storeys:'',use:'Residential',
-    scope:PB_SCOPE[k].join('\n'),deliv:PB_DELIV.join('\n'),
+    scopeAuto:true,scopeExtra:'',scope:PB_SCOPE[k].join('\n'),deliv:PB_DELIV.join('\n'),
     feeMode:k==='det'?'parts':'lump',parts:PB_PARTS[k].map(([label,rate])=>({label,rate:String(rate)})),disc:'',discMode:'amt',
     lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabJur:'0',
     sched:PB_SCHED[k].map(([label,pct])=>({label,pct:String(pct)})),
@@ -7889,7 +7896,13 @@ function sheetPropDoc(){
       field('Site',inp('site',{maxlength:160,placeholder:'Plot, road, sector, area'})),
       h('div',{class:'form-row'},field('Land (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Construction area (sft)',h('input',{id:'sh-area',type:'number',min:0,step:'any',inputmode:'decimal',value:d.area||'',oninput:e=>{ d.area=e.target.value; upd(); }}))),
       h('div',{class:'form-row'},field('Storeys',inp('storeys',{maxlength:40,placeholder:'e.g. G+M+8'})),field('Use',inp('use',{maxlength:60}))),
-      sec('Scope of work'),field('One item per line',ta('scope',{rows:7})),
+      sec('Scope of work'),
+      field('Scope is written from',seg('Scope',[['auto','The services in the fee'],['own','My own list']],d.scopeAuto?'auto':'own',v=>{ d.scopeAuto=v==='auto'; renderSheet(); })),
+      d.scopeAuto?h('div',{style:'display:grid;gap:8px'},
+        h('div',{class:'f-hint',style:'margin:0',text:'The scope lists every service in the fee below, in the same order and numbering, with its description and ticked items, so the scope and the fee always match. Site visits and as-built drawings are added from Site visits and extras.'}),
+        h('div',{class:'card',style:'gap:4px;font-size:14px'},(()=>{ const A=pbScopeAuto(d); return [...A.svc.map(x=>h('div',{text:`${x.n}. ${x.label} · ${x.items.length} items`})),...A.more.map(t=>h('div',{class:'f-hint',style:'margin:0',text:'• '+t}))]; })()),
+        field('Anything else in the scope · one per line',ta('scopeExtra',{rows:2})))
+      :field('One item per line · check it matches the services in the fee',ta('scope',{rows:7})),
       field('Deliverables · one per line',ta('deliv',{rows:3})),
       sec('Fee'),
       field('How the fee is worked out',seg('Fee basis',[['parts','Per sft by component'],['lump','Lump-sum package']],d.feeMode,v=>{ d.feeMode=v; renderSheet(); })),
@@ -7989,17 +8002,19 @@ function pbBlocks(p,d){
   pbLines(d.intro).forEach(x=>add(`<p class="pb-p">${pbEsc(x)}</p>`));
   const pr=[['Project',p.name],['Site',d.site],['Land',d.katha?d.katha+' katha':''],['Construction area',d.area?(+d.area).toLocaleString('en-IN')+' sft (approx.)':''],['Storeys',d.storeys],['Use',d.use]].filter(x=>x[1]);
   if(pr.length) add(`<h2>Project</h2><table>${pr.map(([k,v])=>`<tr><td class="pb-k">${pbEsc(k)}</td><td>${pbEsc(v)}</td></tr>`).join('')}</table>`);
-  list('Scope of work',pbLines(d.scope));
+  if(!d.scopeAuto) list('Scope of work',pbLines(d.scope));
+  const A=pbScopeAuto(d), sv=A.svc.filter(x=>d.scopeAuto||x.desc||x.items.length), num=d.scopeAuto;
+  sv.forEach((x,i)=>add((i===0?`<h2>${num?'Scope of work':'Services in detail'}</h2>`:'')+`<div class="pb-svc"><b>${num?x.n+'. ':''}${pbEsc(x.label)}</b>${x.desc?`<p class="pb-small" style="margin:0.5mm 0 1mm">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="pb-ul pb-chk">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}</div>`,i===0));
+  if(num&&A.more.length) add(`<div class="pb-svc"><b>Also included</b><ul class="pb-ul">${A.more.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul></div>`);
   const dl=pbLines(d.deliv); if(dl.length) list('Deliverables',dl);
-  const sv=d.parts.filter(x=>x.label).map(x=>({label:x.label,...pbSvcView(x)})).filter(x=>x.desc||x.items.length);
-  sv.forEach((x,i)=>add((i===0?'<h2>Services in detail</h2>':'')+`<div class="pb-svc"><b>${pbEsc(x.label)}</b>${x.desc?`<p class="pb-small" style="margin:0.5mm 0 1mm">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="pb-ul pb-chk">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}</div>`,i===0));
+
   let fee='';
   if(d.feeMode==='parts'){
     fee=`<table><thead><tr><th>Service</th><th class="n">Rate (Tk/sft)</th><th class="n">Amount (Tk)</th></tr></thead><tbody>
-      ${d.parts.filter(x=>x.label||+x.rate).map(x=>`<tr><td>${pbEsc(x.label)}</td><td class="n">${(+x.rate||0).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate||0)*(+d.area||0)).toLocaleString('en-IN')}</td></tr>`).join('')}
+      ${d.parts.filter(x=>x.label||+x.rate).map((x,i)=>`<tr><td>${d.scopeAuto?(i+1)+'. ':''}${pbEsc(x.label)}</td>${+x.rate?`<td class="n">${(+x.rate).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate)*(+d.area||0)).toLocaleString('en-IN')}</td>`:'<td class="n">—</td><td class="n">Included</td>'}</tr>`).join('')}
       ${f.disc?`<tr class="sub"><td>Subtotal (${(+d.area||0).toLocaleString('en-IN')} sft × Tk ${(f.rawRate||0).toLocaleString('en-IN')})</td><td></td><td class="n">${Math.round(f.sub).toLocaleString('en-IN')}</td></tr><tr class="sub"><td>Less special discount${d.discMode==='sft'?` (Tk ${(+d.disc||0).toLocaleString('en-IN')}/sft)`:''}</td><td></td><td class="n">−${Math.round(f.disc).toLocaleString('en-IN')}</td></tr>`:''}
       <tr class="tot"><td>Total fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`;
-  } else fee=`<div class="amtbox"><span>Total fee (package)${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>`;
+  } else fee=`<div class="amtbox"><span>Total fee (package)${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${d.scopeAuto&&d.parts.some(x=>x.label)?`<p class="pb-small">The package covers services 1 to ${d.parts.filter(x=>x.label).length} in the scope of work.</p>`:''}`;
   add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${d.tax==='incl'?'The fee includes VAT and AIT.':'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
   if(d.iab&&f.area){ const I=pbIab(d,f);
     if(I.bi>=0) add(`<h2>IAB recommended minimum fees (Schedule D, 2018)</h2>
