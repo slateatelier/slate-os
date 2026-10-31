@@ -53,18 +53,20 @@ body.space-books .space-b.on{background:#3F7F5A;color:#fff;box-shadow:none}
 body.space-books{overflow:hidden}
 #books-pane .bk-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:14px}
 @media (max-width:640px){.space-b{font-size:12px;padding:5px 9px}.space-sw{padding:2px}}
-@media (max-width:440px){body.has-spaces .top-in .divider,body.has-spaces .top-in .product{display:none}.space-b{font-size:11.5px;padding:5px 8px}}
-/* phones with the space switch: the centred logo makes way, so a small round SLATE mark sits at the far left */
+/* phones with the space switch: SLATE | OS on the left, bell and your icon on the right; the switch on its own row below */
 .mini-logo{display:none}
-@media (max-width:560px){body.has-spaces .top-in{--hic:30px}
-  body.has-spaces .mini-logo{display:block;position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:calc(50% + 4px);transform:translateY(-50%);width:var(--hic);height:var(--hic);border-radius:50%;background:#fff center/56% auto no-repeat;filter:invert(1)}
-  body.has-spaces .mebtn{left:calc(max(14px,env(safe-area-inset-left,0px)) + var(--hic) + 6px)}
-  body.has-spaces #bell-slot .bell{left:calc(max(14px,env(safe-area-inset-left,0px)) + 2 * var(--hic) + 12px)}
-  body.has-spaces .bell.has{background:none;padding-right:0}
-  body.has-spaces .bell .bn{position:absolute;top:-5px;right:-7px;margin:0;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#D7262B;color:#fff;font-size:10.5px;line-height:17px;text-align:center}
-  body.has-spaces .me-plus{width:12px;height:12px;line-height:12px;font-size:10px}}
-@media (max-width:400px){body.has-spaces .space-b{font-size:11px;padding:5px 7px}body.has-spaces .space-lock{padding-inline:6px!important}}
-@media (max-width:560px){body.has-spaces .top-in .logo{visibility:hidden}body.has-spaces .top-in .divider,body.has-spaces .top-in .product{display:none}}
+@media (max-width:560px){
+  body.has-spaces .top-in{flex-wrap:wrap;justify-content:flex-start;row-gap:10px;padding-top:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));--hic:34px}
+  body.has-spaces .top-in .logo{height:30px;margin-block:2px}
+  body.has-spaces .top-in .divider{display:block;height:22px}
+  body.has-spaces .top-in .product{display:inline-flex}
+  body.has-spaces .mebtn{left:auto;right:max(16px,env(safe-area-inset-right,0px));top:10px;transform:none}
+  body.has-spaces #bell-slot .bell{left:auto;right:calc(max(16px,env(safe-area-inset-right,0px)) + var(--hic) + 10px);top:10px;transform:none}
+  body.has-spaces #space-slot{position:static;transform:none;flex:0 0 100%;order:9;display:flex}
+  body.has-spaces .space-sw{flex:1 1 auto;display:flex;padding:3px}
+  body.has-spaces .space-b{flex:1 1 0;justify-content:center;font-size:13.5px;padding:7px 8px}
+  body.has-spaces .space-lock{flex:0 0 auto;padding-inline:12px!important}
+}
 .space-sw{display:flex;flex:0 0 auto;align-self:center;background:var(--group);border-radius:999px;padding:3px;gap:2px}
 .space-b{appearance:none;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--muted);padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;display:flex;gap:5px;align-items:center}
 .space-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
