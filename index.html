@@ -7761,6 +7761,56 @@ const PB_SCHED={dev:[['On signing (advance)',25],['Final architectural design su
 /* services offered in the fee table, with the usual rate (Tk per sft) from SLATE's agreements; any rate can be changed */
 const PB_SERVICES=[['Architecture, common area interior, landscape and coordination',40],['Architectural design',25],['Common area interior design',5],['Landscape design',3],['Structural design',8],['MEP design',5],
   ['Marketing materials (3D, animation, brochure)',2],['3D visualization',3],['Real estate solutions (plans, area, specifications)',2],['BOQ and cost estimate',4],['Design coordination',2],['Site supervision',5],['Interior design',200],['Construction management (interior)',0]];
+/* default description and checklist for each service: shown in the builder (edit the words, tick what is included)
+   and printed in the proposal under "Services in detail" */
+const PB_SVC_INFO={
+ 'Architecture, common area interior, landscape and coordination':['Complete architectural design of the building, with the interior of the common areas, the landscape, and coordination of all engineering consultants until construction is complete.',
+   ['Site study, survey review and planning analysis (FAR, MGC, setbacks, parking)','Concept design options with massing and 3D','Design development with typical and special floor plans','Facade design and material selection','Common area interior: lobby, lift lobbies, corridors, staircases and rooftop','Landscape: ground floor, setbacks, podium and rooftop','Planning permit and RAJUK approval drawings','Working drawings, details and finishing schedules','Coordination of structural, MEP and other consultants','Site visits during construction as listed in this proposal']],
+ 'Architectural design':['Architectural design of the building from concept to working drawings, ready for approval and construction.',
+   ['Site study and planning analysis (FAR, MGC, setbacks, parking)','Concept design options','Design development: plans, sections and elevations','Facade design and material selection','Planning permit and RAJUK approval drawings','Working drawings, details, door and window schedules','Finishing and specification schedules']],
+ 'Common area interior design':['Interior design of the shared spaces of the building, so arrival and circulation feel finished and consistent with the architecture.',
+   ['Entrance lobby and reception','Lift lobbies on every floor','Corridors and staircases','Community hall, gym or prayer room where provided','Ceiling, lighting, wall and floor finishes','Signage and wayfinding','Material board and 3D views of key spaces']],
+ 'Landscape design':['Landscape design of the open areas of the site and the building.',
+   ['Ground floor, driveway and setback landscape','Podium and rooftop garden','Hard landscape: paving, steps, seating and water features','Soft landscape: tree and plant selection suited to Dhaka','Outdoor lighting layout','Drainage and irrigation points coordinated with MEP']],
+ 'Structural design':['Structural analysis and design of the building by SLATE’s structural consultant, to BNBC 2020.',
+   ['Soil test review and foundation design','Structural analysis and design to BNBC 2020 (earthquake and wind)','Structural drawings for RAJUK approval','Detailed structural working drawings and reinforcement details','Design calculation report','Answers to RAJUK and contractor queries']],
+ 'MEP design':['Mechanical, electrical and plumbing design by SLATE’s MEP consultant.',
+   ['Electrical: lighting, power, DB and cable layouts, load calculation','Substation, generator and LT panel sizing','Plumbing: water supply, sanitary and storm water drainage','Fire detection, fire fighting and fire safety drawings','HVAC and ventilation provisions','Lift and pump specifications','Fire service and DPDC/DESCO submission support']],
+ 'Marketing materials (3D, animation, brochure)':['Sales and marketing material for the developer, made from the approved design.',
+   ['Exterior 3D views (day and night)','Interior 3D views of common areas and a typical apartment','Walk-through or fly-through animation','Brochure layout with plans and specifications','Social media images in the needed sizes']],
+ '3D visualization':['Photo-realistic 3D images of the design.',
+   ['Exterior 3D views','Interior 3D views','One round of changes per view','High-resolution files, print-ready']],
+ 'Real estate solutions (plans, area, specifications)':['Material the sales team needs to sell the apartments.',
+   ['Sale floor plans for each apartment type','Apartment area statement (net and gross)','Specification list for the brochure and sale agreement','Parking allocation plan']],
+ 'BOQ and cost estimate':['Quantities and cost estimate of the works, for budgeting and tender.',
+   ['Bill of quantities (BOQ) from the working drawings','Cost estimate at current market rates','Material specifications for tender','Comparison of contractor quotations']],
+ 'Design coordination':['Coordinating the drawings of all consultants so they agree before work starts on site.',
+   ['Coordination meetings with structural and MEP consultants','Clash check between architecture, structure and services','Combined services layout for ceilings and shafts','Updated drawings issued after coordination']],
+ 'Site supervision':['Periodic visits by SLATE’s architects to check the work on site follows the design.',
+   ['Site visits at key stages (number as listed in this proposal)','Inspection of setting-out, finishes and facade work','Site visit report after each visit','Answers to contractor queries (RFIs)','Approval of material samples and shop drawings']],
+ 'Interior design':['Complete interior design of the space, from layout to furniture, finishes and details.',
+   ['Space planning and furniture layout','Concept mood board and material palette','3D views of the main spaces','Ceiling, lighting and electrical layouts','Floor, wall and joinery details','Loose furniture, lighting and sanitary fittings selection','Finishing schedule and BOQ']],
+ 'Construction management (interior)':['SLATE manages the interior works on site through its own team and vendors, to the approved design, budget and programme.',
+   ['Work programme and budget','Vendor and material procurement','Daily site management and quality checks','Weekly progress report with photos','Snag list and handover']]
+};
+PB_SVC_INFO['Marketing materials']=PB_SVC_INFO['Marketing materials (3D, animation, brochure)'];
+const pbSvcInfo=label=>PB_SVC_INFO[label]||null;
+function pbSvcFill(x){ const info=pbSvcInfo(x.label); x.desc=info?info[0]:''; x.check=info?info[1].map(t=>({t,on:true})):[]; }
+function pbSvcView(x){ const info=pbSvcInfo(x.label);
+  return {desc:x.desc!=null?x.desc:(info?info[0]:''),items:Array.isArray(x.check)?x.check.filter(c=>c.on&&c.t).map(c=>c.t):(info?info[1]:[])}; }
+const PB_OPEN=new Set();
+/* IAB recommended scale of minimum fees (Schedule D, 2018). Part I, category B: basic architectural design, Tk per sft of total
+   floor area, by floor-area band and jurisdiction; architecture and allied design services are 1.5 times these rates.
+   Part III, category B: landscape and allied design, Tk per sft of site area. Up to 10,750 sft is a lump sum. */
+const IAB_JUR=['RAJUK & CDA and surrounding area','KDA, RDA, CoxDA and divisional cities','District towns','Upazila towns','Design of identical buildings'];
+const IAB_BANDS=[[10751,20000,[135,110,87.5,67.5,28]],[20001,40000,[130,105,84,64.5,27]],[40001,80000,[125,100,80.5,61.5,26]],[80001,160000,[120,95,77,58.5,25]],[160001,320000,[115,90,73.5,55.5,24]],
+  [320001,640000,[110,85,70,52.5,23]],[640001,1280000,[105,80,66.5,49.5,22]],[1280001,2560000,[100,75,63,46.5,21]],[2560001,Infinity,[95,70,59.5,43.5,20]]];
+const IAB_LAND=[75,70,60,55,55];
+const iabBandLabel=b=>b[1]===Infinity?`${b[0].toLocaleString('en-IN')} sft and above`:`${b[0].toLocaleString('en-IN')} – ${b[1].toLocaleString('en-IN')} sft`;
+function pbIab(d,f){ const j=Math.max(0,Math.min(4,+d.iabJur||0)), area=+d.area||0, site=Math.round((+d.katha||0)*720);
+  const bi=IAB_BANDS.findIndex(b=>area>=b[0]&&area<=b[1]); if(bi<0) return {j,bi,area,site,lump:area>0};
+  const basic=IAB_BANDS[bi][2][j], allied=basic*1.5, arch=allied*area, land=IAB_LAND[j]*site, total=arch+land;
+  return {j,bi,area,site,basic,allied,arch,land,landRate:IAB_LAND[j],total,pct:total?Math.round((f.total||0)/total*100):null}; }
 const pbTk=n=>'Tk '+Math.round(+n||0).toLocaleString('en-IN');
 const pbEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pbLines=s=>String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);
@@ -7774,7 +7824,7 @@ function pbDefaults(p,kind){
     site:p.location||'',katha:p.katha||'',area:area===''?'':String(area),storeys:'',use:'Residential',
     scope:PB_SCOPE[k].join('\n'),deliv:PB_DELIV.join('\n'),
     feeMode:k==='det'?'parts':'lump',parts:PB_PARTS[k].map(([label,rate])=>({label,rate:String(rate)})),disc:'',discMode:'amt',
-    lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabRate:'270',
+    lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabJur:'0',
     sched:PB_SCHED[k].map(([label,pct])=>({label,pct:String(pct)})),
     vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',validDays:'30',revFree:'2',revRate:'10000',
     terms:PB_TERMS.join('\n'),signName:'Syed Mohammed Imran',signTitle:'Principal Architect'}; }
@@ -7788,6 +7838,22 @@ function openPropDoc(id,kind,fresh){ const p=(S.props||{})[id]||fresh; if(!p) re
   if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revRate==null) d.revRate='10000'; delete d.revFee;
   if(p.doc&&kind){ d.ref=p.doc.ref||d.ref; d.date=p.doc.date||d.date; }
   S.sheet={type:'propDoc',id,d,err:'',pdf:null}; renderSheet(); }
+function pbSvcEditor(x,i){
+  if(x.desc==null||!Array.isArray(x.check)){ const info=pbSvcInfo(x.label); if(x.desc==null) x.desc=info?info[0]:''; if(!Array.isArray(x.check)) x.check=info?info[1].map(t=>({t,on:true})):[]; }
+  const cnt=h('span',{class:'f-hint',style:'margin:0 0 0 6px'}), recount=()=>{ cnt.textContent=`${x.check.filter(c=>c.on).length} of ${x.check.length} ticked`; }; recount();
+  const add=h('input',{type:'text',placeholder:'Add an item…',onkeydown:e=>{ if(e.key==='Enter'){ e.preventDefault(); addIt(); } }});
+  const addIt=()=>{ const t=add.value.trim(); if(!t) return; x.check.push({t,on:true}); PB_OPEN.add(i); renderSheet(); };
+  const det=h('details',{open:PB_OPEN.has(i),ontoggle:e=>{ e.target.open?PB_OPEN.add(i):PB_OPEN.delete(i); }},
+    h('summary',{style:'cursor:pointer;font-size:14px;font-weight:600'},'What’s included',cnt),
+    h('div',{style:'display:grid;gap:8px;padding-top:8px'},
+      h('textarea',{rows:3,placeholder:'Describe this service',value:x.desc||'',oninput:e=>{ x.desc=e.target.value; }}),
+      h('div',{style:'display:grid;gap:4px'},x.check.map((c,j)=>h('div',{style:'display:grid;grid-template-columns:22px minmax(0,1fr) 28px;gap:8px;align-items:center'},
+        h('input',{type:'checkbox',style:'width:20px;height:20px',checked:!!c.on,'aria-label':c.t,onchange:e=>{ c.on=e.target.checked; recount(); }}),
+        h('textarea',{rows:Math.max(1,Math.ceil(c.t.length/22)),value:c.t,style:'font-size:14px;padding:6px 8px;min-height:0;resize:none',oninput:e=>{ c.t=e.target.value; }}),
+        h('button',{type:'button',class:'icon-btn','aria-label':'Remove item',onclick:()=>{ x.check.splice(j,1); PB_OPEN.add(i); renderSheet(); },text:'×'})))),
+      h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px'},add,h('button',{type:'button',class:'btn btn-sm',onclick:addIt,text:'Add'})),
+      pbSvcInfo(x.label)?h('button',{type:'button',class:'btn btn-sm',style:'justify-self:start',onclick:()=>{ pbSvcFill(x); PB_OPEN.add(i); renderSheet(); },text:'Reset to SLATE’s default'}):null));
+  return det; }
 function sheetPropDoc(){
   const sh=S.sheet, d=sh.d, id=sh.id, p=(S.props||{})[id]; if(!p) return [head('Proposal','Not found')];
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:10px',text:t});
@@ -7827,22 +7893,28 @@ function sheetPropDoc(){
       field('Deliverables · one per line',ta('deliv',{rows:3})),
       sec('Fee'),
       field('How the fee is worked out',seg('Fee basis',[['parts','Per sft by component'],['lump','Lump-sum package']],d.feeMode,v=>{ d.feeMode=v; renderSheet(); })),
-      d.feeMode==='parts'?h('div',{style:'display:grid;gap:8px'},
-        h('div',{class:'f-hint',text:'Rate per sft for each part of the work, times the construction area.'}),
+      h('div',{style:'display:grid;gap:8px'},
+        h('div',{class:'f-hint',text:d.feeMode==='parts'?'Choose each service and its rate per sft (times the construction area). Open “What’s included” to edit its description and tick the items it covers.':'Choose the services in the package. Open “What’s included” to edit each description and tick the items it covers.'}),
         h('div',{style:'display:grid;gap:8px'},d.parts.map((x,i)=>{ const known=PB_SERVICES.some(([l])=>l===x.label), other=x.other||(!known&&!!x.label);
-          const pick=h('select',{'aria-label':'Service',onchange:e=>{ const v=e.target.value; if(v==='__other'){ x.other=true; x.label=''; } else { x.other=false; x.label=v; const def=(PB_SERVICES.find(([l])=>l===v)||[])[1]; if((x.rate===''||x.rate==null)&&def) x.rate=String(def); } renderSheet(); }},
+          const pick=h('select',{'aria-label':'Service',onchange:e=>{ const v=e.target.value; if(v==='__other'){ x.other=true; x.label=''; x.desc=''; x.check=[]; } else { x.other=false; x.label=v; pbSvcFill(x); const def=(PB_SERVICES.find(([l])=>l===v)||[])[1]; if((x.rate===''||x.rate==null)&&def) x.rate=String(def); } renderSheet(); }},
             h('option',{value:'',text:'Choose a service…'}),PB_SERVICES.map(([l,r])=>h('option',{value:l,text:l+(r?` (usually Tk ${r}/sft)`:'')})),h('option',{value:'__other',text:'Other: type it…'}));
           pick.value=other?'__other':(known?x.label:'');
           return h('div',{style:'display:grid;gap:6px;padding:8px;border-radius:12px;border:1px solid var(--border)'},
             h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:6px;align-items:center'},pick,h('button',{type:'button',class:'icon-btn','aria-label':'Remove',onclick:()=>{ d.parts.splice(i,1); renderSheet(); },text:'×'})),
             other?txt(x,'label','Describe the service'):null,
-            h('div',{style:'display:grid;grid-template-columns:auto 110px;gap:8px;align-items:center;justify-content:start'},h('span',{class:'f-hint',style:'margin:0',text:'Rate, Tk per sft'}),num(x,'rate','Tk/sft'))); })),
+            d.feeMode==='parts'?h('div',{style:'display:grid;grid-template-columns:auto 110px;gap:8px;align-items:center;justify-content:start'},h('span',{class:'f-hint',style:'margin:0',text:'Rate, Tk per sft'}),num(x,'rate','Tk/sft')):null,
+            x.label?pbSvcEditor(x,i):null); })),
         h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ d.parts.push({label:'',rate:''}); renderSheet(); },text:'+ Add a service'}),
-        h('div',{class:'form-row'},field('Discount',num(d,'disc','0')),field('Discount is',seg('Discount',[['amt','Tk in total'],['sft','Tk per sft']],d.discMode,v=>{ d.discMode=v; renderSheet(); }))))
-      :h('div',{class:'form-row'},field('Package fee (Tk)',num(d,'lump','e.g. 1400000')),field('Shown per sft on',h('span',{class:'f-hint',style:'padding-top:10px',text:'the construction area above'}))),
+        d.feeMode==='parts'?h('div',{class:'form-row'},field('Discount',num(d,'disc','0')),field('Discount is',seg('Discount',[['amt','Tk in total'],['sft','Tk per sft']],d.discMode,v=>{ d.discMode=v; renderSheet(); })))
+        :h('div',{class:'form-row'},field('Package fee (Tk)',num(d,'lump','e.g. 1400000')),field('Shown per sft on',h('span',{class:'f-hint',style:'padding-top:10px',text:'the construction area above'})))),
       h('div',{class:'card',style:'gap:2px'},h('div',{class:'lbl',text:'Total fee, before VAT and AIT'}),h('b',{id:'pb-tot',style:'font-size:20px',text:F.total?pbTk(F.total)+(F.area?` · ${pbTk(F.rate)}/sft on ${(+F.area).toLocaleString('en-IN')} sft`:''):'—'})),
       h('div',{style:'display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center'},h('input',{type:'checkbox',id:'pb-iab',style:'width:20px;height:20px',checked:!!d.iab,onchange:e=>{ d.iab=e.target.checked; renderSheet(); }}),h('label',{for:'pb-iab',style:'font-size:15px',text:'Show the IAB fee scale for comparison'})),
-      d.iab?field('IAB scale (Tk per sft)',inp('iabRate',{type:'number',min:0,step:'any',inputmode:'decimal'}),'Architecture and allied services at the IAB minimum scale for this size of building.'):null,
+      d.iab?(()=>{ const I=pbIab(d,F);
+        return h('div',{style:'display:grid;gap:8px'},
+          field('Where the project is (IAB jurisdiction)',h('select',{onchange:e=>{ d.iabJur=e.target.value; renderSheet(); }},IAB_JUR.map((l,i)=>{ const o=h('option',{value:String(i),text:l}); if(String(i)===String(d.iabJur||'0')) o.selected=true; return o; }))),
+          h('div',{class:'mn-scroll'},h('table',{class:'iab-t'},h('thead',{},h('tr',{},h('th',{text:'Floor area'}),h('th',{class:'n',text:'Basic Tk/sft'}),h('th',{class:'n',text:'With allied ×1.5'}))),
+            h('tbody',{},IAB_BANDS.map((b,i)=>h('tr',{class:i===I.bi?'on':''},h('td',{text:iabBandLabel(b)}),h('td',{class:'n',text:String(b[2][I.j])}),h('td',{class:'n',text:String(b[2][I.j]*1.5)})))))),
+          h('div',{class:'f-hint',style:'margin:0'},I.bi>=0?`This project: ${(+d.area).toLocaleString('en-IN')} sft → Tk ${I.allied}/sft for architecture and allied design = ${pbTk(I.arch)}`+(I.site?`, plus landscape Tk ${I.landRate}/sft on ${I.site.toLocaleString('en-IN')} sft of site (${d.katha} katha) = ${pbTk(I.land)}`:'')+`. IAB minimum ${pbTk(I.total)}; SLATE’s fee is ${I.pct}% of it.`:I.lump?'Up to 10,750 sft the IAB scale is a lump sum, so no per-sft comparison.':'Enter the construction area to find the IAB band.')); })():null,
       sec('Payment schedule'),
       rowsEd(d.sched,[{k:'pct',w:'72px',ph:'%'}],()=>({label:'',pct:''}),'+ Add a stage'),
       h('div',{id:'pb-sum',class:'f-hint',style:Math.round(schSum)!==100?'color:var(--overdue)':'',text:`${Math.round(schSum*100)/100}% of the fee`+(Math.round(schSum)!==100?' · should total 100%':'')}),
@@ -7892,7 +7964,8 @@ tr.tot td{border-bottom:0;border-top:1pt solid #000;font-weight:600}tr.sub td{co
 .note{font-size:8.5pt;color:#545454;margin-top:5mm}pre{font:inherit;white-space:pre-wrap;margin:0}
 .amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #000;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font-size:16pt;font-weight:600}
 .docref{position:absolute;left:12.6mm;right:14mm;bottom:7mm;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9A9A9A;text-align:right}
-.pb-ul{margin:0;padding:0 0 0 5mm}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
+.iab-t tr.on td{background:#C41E29;color:#fff;font-weight:600}.iab-t td{padding:1.4mm 1.5mm}.iab-t th{padding-left:1.5mm}
+.pb-ul{margin:0;padding:0 0 0 5mm}.pb-svc{margin:0 0 2.5mm}.pb-svc>b{display:block;font-size:10pt}.pb-chk{list-style:none;padding:0;columns:2;column-gap:6mm}.pb-chk li{padding-left:4.5mm;text-indent:-4.5mm;break-inside:avoid}.pb-chk li:before{content:'✓';color:#C41E29;display:inline-block;width:4.5mm;text-indent:0}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
 .pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:14mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}`;
 const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
@@ -7910,6 +7983,8 @@ function pbBlocks(p,d){
   if(pr.length) add(`<h2>Project</h2><table>${pr.map(([k,v])=>`<tr><td class="pb-k">${pbEsc(k)}</td><td>${pbEsc(v)}</td></tr>`).join('')}</table>`);
   list('Scope of work',pbLines(d.scope));
   const dl=pbLines(d.deliv); if(dl.length) list('Deliverables',dl);
+  const sv=d.parts.filter(x=>x.label).map(x=>({label:x.label,...pbSvcView(x)})).filter(x=>x.desc||x.items.length);
+  sv.forEach((x,i)=>add((i===0?'<h2>Services in detail</h2>':'')+`<div class="pb-svc"><b>${pbEsc(x.label)}</b>${x.desc?`<p class="pb-small" style="margin:0.5mm 0 1mm">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="pb-ul pb-chk">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}</div>`,i===0));
   let fee='';
   if(d.feeMode==='parts'){
     fee=`<table><thead><tr><th>Service</th><th class="n">Rate (Tk/sft)</th><th class="n">Amount (Tk)</th></tr></thead><tbody>
@@ -7918,8 +7993,15 @@ function pbBlocks(p,d){
       <tr class="tot"><td>Total fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`;
   } else fee=`<div class="amtbox"><span>Total fee (package)${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>`;
   add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${d.tax==='incl'?'The fee includes VAT and AIT.':'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
-  if(d.iab&&+d.iabRate>0&&f.area){ const pct=Math.round(f.rate/(+d.iabRate)*100);
-    add(`<p class="pb-small">For comparison: the Institute of Architects Bangladesh (IAB) minimum fee scale for architecture and allied services is about Tk ${(+d.iabRate).toLocaleString('en-IN')}/sft, or ${pbTk((+d.iabRate)*f.area)} for this building. SLATE’s fee is Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft, ${pct}% of that scale.</p>`); }
+  if(d.iab&&f.area){ const I=pbIab(d,f);
+    if(I.bi>=0) add(`<h2>IAB recommended minimum fees (Schedule D, 2018)</h2>
+      <p class="pb-small" style="margin:0 0 2mm">${pbEsc(IAB_JUR[I.j])}. Basic architectural design, Tk per sft of total floor area; architecture and allied design services are 1.5 times the basic rate.</p>
+      <table class="iab-t"><thead><tr><th>Total floor area</th><th class="n">Basic (Tk/sft)</th><th class="n">With allied services (Tk/sft)</th></tr></thead><tbody>
+      ${IAB_BANDS.map((b,i)=>`<tr class="${i===I.bi?'on':''}"><td>${iabBandLabel(b)}${i===I.bi?' &nbsp;◄ this project':''}</td><td class="n">${b[2][I.j]}</td><td class="n">${b[2][I.j]*1.5}</td></tr>`).join('')}</tbody></table>
+      <table style="margin-top:3mm"><tr><td>Architecture and allied design: ${(+f.area).toLocaleString('en-IN')} sft × Tk ${I.allied}</td><td class="n">${pbTk(I.arch)}</td></tr>
+      ${I.site?`<tr><td>Landscape and allied design: ${I.site.toLocaleString('en-IN')} sft of site × Tk ${I.landRate}</td><td class="n">${pbTk(I.land)}</td></tr>`:''}
+      <tr class="tot"><td>IAB minimum for this project</td><td class="n">${pbTk(I.total)}</td></tr>
+      <tr><td><b>SLATE’s fee</b> (${I.pct}% of the IAB minimum)</td><td class="n"><b>${pbTk(f.total)}</b></td></tr></table>`); }
   const sc=d.sched.filter(x=>x.label||+x.pct);
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
   const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?['Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?['Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
