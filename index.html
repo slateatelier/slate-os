@@ -7876,10 +7876,10 @@ function sheetPropDoc(){
     const f=pbFee(d), cur=S.props[id]||p, doc={...d,total:Math.round(f.total),savedAt:new Date().toISOString()};
     const ok=await run(()=>propWrite(id,{...cur,doc,fee:f.total?String(Math.round(f.total)):cur.fee||'',feeBasis:'lump',feeNote:cur.feeNote||(d.tax==='excl'?'plus VAT and AIT':'')}),silent?null:'Proposal saved');
     return ok; };
-  const preview=async()=>{ if(await save(true)===false) return; const html=await pbHTML(S.props[id]||p,d,true); const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to see the proposal.'); w.document.open(); w.document.write(html); w.document.close(); };
+  const preview=async(plain)=>{ if(await save(true)===false) return; const html=await pbHTML(S.props[id]||p,d,true,plain===true); const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to see the proposal.'); w.document.open(); w.document.write(html); w.document.close(); };
   const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
-    try{ sh.pdf={state:'ok',file:await pbPdf(S.props[id]||p,d)}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
-  const share=async()=>{ const f=sh.pdf&&sh.pdf.file; if(!f) return;
+    try{ const [file,print]=await Promise.all([pbPdf(S.props[id]||p,d,false),pbPdf(S.props[id]||p,d,true)]); sh.pdf={state:'ok',file,print}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
+  const share=async(which)=>{ const f=sh.pdf&&sh.pdf[which==='print'?'print':'file']; if(!f) return;
     try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); };
   return [head('Build the proposal · only you and the COO',p.name||p.client||'Proposal'),
@@ -7941,11 +7941,13 @@ function sheetPropDoc(){
       sec('Terms'),field('One per line',ta('terms',{rows:6})),
       h('div',{class:'form-row'},field('Signed by',inp('signName',{maxlength:80})),field('Title',inp('signTitle',{maxlength:80}))),
       sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
-      sh.pdf&&sh.pdf.state==='ok'?h('div',{class:'card',style:'gap:8px'},h('b',{text:'The PDF is ready: '+sh.pdf.file.name}),h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'button',onclick:share,text:'Share or save the PDF'}))):null,
+      sh.pdf&&sh.pdf.state==='ok'?h('div',{class:'card',style:'gap:8px'},h('b',{text:'Two PDFs are ready'}),
+        h('div',{class:'f-hint',style:'margin:0',text:'Share copy: with the SLATE letterhead design, to send by email or WhatsApp. Print copy: the same pages without the letterhead, to print on the printed SLATE letterhead pad. Print it at actual size (100%, not “fit to page”).'}),
+        h('div',{class:'actions',style:'margin:0;flex-wrap:wrap'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>share('file'),text:'Share copy (letterhead)'}),sh.pdf.print?h('button',{class:'btn',type:'button',onclick:()=>share('print'),text:'Print copy (for the pad)'}):null)):null,
       sh.pdf&&sh.pdf.state==='err'?h('div',{class:'err',role:'alert',text:sh.pdf.err}):null,
       h('div',{class:'actions sticky-acts'},
-        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDF…':'Save and make PDF'}),
-        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:preview,text:'Preview'}),
+        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDFs…':'Save and make PDFs'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>preview(false),text:'Preview'}),h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>preview(true),text:'Preview print copy'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>save(false),text:'Save'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(id),text:'Close'})))]; }
 
@@ -8052,19 +8054,20 @@ async function pbPages(p,d){
     return pages;
   } finally { ifr.remove(); } }
 const fmtLong=s=>{ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return `${d} ${['January','February','March','April','May','June','July','August','September','October','November','December'][m-1]} ${y}`; };
-async function pbHTML(p,d,withBar){
+async function pbHTML(p,d,withBar,plain){
   const pages=await pbPages(p,d), ref=d.ref||'';
   return pbHead((p.name||'Proposal')+' · SLATE proposal')+`<body>${withBar?'<div class="bar"><button class="p" onclick="print()">Print or save as PDF</button><button onclick="close()">Close</button></div>':''}
-${pages.map((b,i)=>`<div class="page">${pbLetterhead()}${b.map(x=>`<div class="pb-blk">${x}</div>`).join('')}<div class="docref">${pbEsc(ref)} · page ${i+1} of ${pages.length}</div></div>`).join('')}
+${plain?'<style>.page{box-shadow:none}</style>':''}
+${pages.map((b,i)=>`<div class="page">${plain?'':pbLetterhead()}${b.map(x=>`<div class="pb-blk">${x}</div>`).join('')}<div class="docref">${pbEsc(ref)} · page ${i+1} of ${pages.length}</div></div>`).join('')}
 ${withBar?`<script>(function(){function fit(){var px=210*96/25.4,w=document.documentElement.clientWidth,z=Math.min(1,(w-16)/px);document.querySelectorAll('.page').forEach(function(p){p.style.zoom=z;});}addEventListener('resize',fit);fit();})();<\/script>`:''}
 </body></html>`; }
-async function pbPdf(p,d){
+async function pbPdf(p,d,plain){
   const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
   if(!tok) throw new Error('Your sign-in has expired. Reload SLATE OS and try again.');
-  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'},body:await pbHTML(p,d,false)}); }
+  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'},body:await pbHTML(p,d,false,plain)}); }
   catch(_){ throw new Error('Couldn’t reach the PDF printer. Check your connection and try again.'); }
   if(!r.ok){ let m=''; try{ m=(await r.json()).error; }catch(_){} throw new Error(m||'Couldn’t make the PDF. Try again in a moment.'); }
-  const name=('SLATE proposal '+(p.name||p.client||'')).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
+  const name=('SLATE proposal '+(p.name||p.client||'')+(plain?' - print on letterhead pad':'')).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
   return new File([await r.blob()],name,{type:'application/pdf'}); }
 
 function sheetPropView(){
