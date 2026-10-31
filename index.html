@@ -57,7 +57,7 @@ body.space-books{overflow:hidden}
 /* phones with the space switch: the centred logo makes way, so a small round SLATE mark sits at the far left */
 .mini-logo{display:none}
 @media (max-width:560px){body.has-spaces .top-in{--hic:30px}
-  body.has-spaces .mini-logo{display:block;position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:calc(50% + 4px);transform:translateY(-50%);width:var(--hic);height:var(--hic);border-radius:50%;background:#fff center/56% auto no-repeat;box-shadow:inset 0 0 0 1px #D1D1D6}
+  body.has-spaces .mini-logo{display:block;position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:calc(50% + 4px);transform:translateY(-50%);width:var(--hic);height:var(--hic);border-radius:50%;background:#fff center/56% auto no-repeat;filter:invert(1)}
   body.has-spaces .mebtn{left:calc(max(14px,env(safe-area-inset-left,0px)) + var(--hic) + 6px)}
   body.has-spaces #bell-slot .bell{left:calc(max(14px,env(safe-area-inset-left,0px)) + 2 * var(--hic) + 12px)}
   body.has-spaces .bell.has{background:none;padding-right:0}
