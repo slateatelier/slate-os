@@ -526,6 +526,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .n-sum span{font-size:11.5px;color:var(--muted);font-weight:600}
 .n-day{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 4px 0}
 .panel{grid-auto-rows:max-content}
+/* Save bars in long forms stay at the very bottom of the screen (the sheet's bottom padding no longer lifts them into the middle) */
+.sticky-acts{position:sticky;bottom:calc(-36px - env(safe-area-inset-bottom,0px));z-index:2;background:var(--group);padding-top:10px;padding-bottom:calc(46px + env(safe-area-inset-bottom,0px));margin-bottom:calc(-36px - env(safe-area-inset-bottom,0px));box-shadow:0 -1px 0 var(--line)}
 .n-list{display:grid;background:var(--group);border-radius:var(--r);overflow:hidden}
 .n-item{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:4px 10px;padding:12px 14px;border-bottom:1px solid var(--line);align-items:start}
 .n-item:last-child{border-bottom:0}
@@ -1074,7 +1076,7 @@ const TEAMS_DEFAULT=['Pod 1','Pod 2','Pod 3','Pod 4','Drafting Pool','Visualizat
 const pods=()=>teams().filter(t=>/^pod\b/i.test(t));
 const podsOfProject=p=>p?[...new Set([p.pod,p.pod2,...(Array.isArray(p.pods)?p.pods:[])].filter(x=>x&&x!=='Studio'))]:[];
 /* studio-work projects can hold several pods: each task then belongs to its assignee's pod, so pods aren't scored for each other's work */
-/* a pod leader changes tasks only on projects their pod runs (the database enforces the same) */
+/* a POD leader changes tasks only on projects their pod runs (the database enforces the same) */
 const leadsProj=pid=>amApprover()||(amMgr()&&!!myPod()&&podsOfProject(S.projects[pid]).includes(myPod()));
 const podsOf=t=>{ const p=t._p||S.projects[t.projectId], ps=podsOfProject(p);
   if(ps.length>1&&isInternalP(p)){ const tm=t._team||teamOf(t.assignee||(t.assignReq&&t.assignReq.to)); return [ps.includes(tm)?tm:ps[0]]; }
@@ -4560,7 +4562,7 @@ function approveRole(x){
   return run(async()=>{ await settingsRef().update({roster:{[x.pid]:{team:d.team||'',role:d.role||'',...((d.team||'')!==(roster(x.pid).team||'')?{teamAt:new Date().toISOString()}:{})}},managers:[...m]}); await S.db.doc(`rolereq/${x.author}/items/${x.pid}`).delete(); },'Role approved');
 }
 function rejectRole(x){ return run(()=>S.db.doc(`rolereq/${x.author}/items/${x.pid}`).delete(),'Role change rejected'); }
-const ROLE_SUGGEST=['Principal','COO','Pod Leader','Junior Architect','Design Associate Lead','Design Associate','Visualizer','Intern','Others'];
+const ROLE_SUGGEST=['Principal','COO','POD leader','Junior Architect','Design Associate Lead','Design Associate','Visualizer','Intern','Others'];
 const roleLabel=r=>/^drafter$/i.test(r||'')?'Design Associate':(r||'');
 function roleSelect(id,val,onPick){ const v=roleLabel(val); const opts=[['','No designation'],...ROLE_SUGGEST.map(x=>[x,x])]; if(v&&!ROLE_SUGGEST.includes(v)) opts.push([v,v+' (current)']);
   const el=h('select',{id,'aria-label':'Designation',onchange:e=>onPick(e.target.value)},opts.map(([a,b])=>h('option',{value:a,text:b}))); el.value=v; return el; }
@@ -5205,7 +5207,7 @@ function sheetProject(){
       field('Note (optional)',ta('note',{placeholder:!ap&&!id?'Anything the COO should know':''})),
       h('div',{class:'f-hint',text:'No fees or payment figures are kept here. Agreement status, date, reference, pro bono and document link are stored separately and only the Principal and the COO can read them.'}),
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save project':ap?'Add project':'Send for approval'}),!id&&S.canWrite?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:saveProjDraft,text:S.sheet.draftId?'Update draft':'Save draft'}):null,h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))];
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save project':ap?'Add project':'Send for approval'}),!id&&S.canWrite?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:saveProjDraft,text:S.sheet.draftId?'Update draft':'Save draft'}):null,h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))];
 }
 
 /* ---------- project team: several pods and named people on studio-work projects; extra people on any project ---------- */
@@ -5221,7 +5223,7 @@ function teamPickers(d,id){
   const personChip=pid=>{ const on=d.people.includes(pid);
     return h('button',{type:'button',class:'chip who'+(on?' on':''),style:'border:0;cursor:pointer;padding-right:12px','aria-pressed':String(on),onclick:()=>{ on?d.people.splice(d.people.indexOf(pid),1):d.people.push(pid); renderSheet(); }},avaEl(pid,false,'sm'),nameOf(pid)); };
   d.people=d.people.filter(pid=>!inPods(pid));
-  return [field('Pods on this project',h('div',{class:'chips'},pods().map(podChip)),'Tap every pod that works on it. Each pod leader manages their own pod’s tasks here.'),
+  return [field('Pods on this project',h('div',{class:'chips'},pods().map(podChip)),'Tap every pod that works on it. Each POD leader manages their own pod’s tasks here.'),
     id?h('div',{class:'f-hint',text:'People are added or removed from the project page, under Project team.'})
       :field('People (optional)',h('div',{style:'display:grid;gap:8px'},[...groups.entries()].map(([t,ids])=>h('div',{style:'display:grid;gap:4px'},h('span',{class:'f-hint',text:podLabel(t)}),h('div',{class:'chips'},ids.map(personChip))))),
         'Add individuals who are not in a chosen pod, e.g. one drafter or the visualizer.'+(ap?'':' The COO approves them with the project.'))];
@@ -5246,13 +5248,13 @@ function subsSection(p){
             save([...(Array.isArray(p.subs)?p.subs:[]),x]).then(ok=>{ if(ok){ sh.subAdd=null; renderSheet(); if(x.date&&x.date>=goLive()&&diff(x.date,today())<=7) celebrate('stamp',{title:x.what||'Submission',pid:p.id,sub:`${projShort(p.id)} · submitted ${fmtD(x.date)}`}); } }); },text:'Save'}),
           h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.subAdd=null; renderSheet(); },text:'Cancel'})))):null);
 }
-/* history entered by a pod leader (phases finished before SLATE OS, past submissions) waits for the COO */
+/* history entered by a POD leader (phases finished before SLATE OS, past submissions) waits for the COO */
 function historyReqs(){ const by=new Map(), add=(pid,k,x)=>{ if(!by.has(pid)) by.set(pid,{pid,tasks:[],subs:[]}); by.get(pid)[k].push(x); };
   Object.entries(S.tasks).forEach(([id,t])=>{ if(t&&t.legacy&&!t.legacyOk&&!t.archived&&S.projects[t.projectId]) add(t.projectId,'tasks',{...t,id}); });
   Object.entries(S.projects).forEach(([pid,p])=>{ (Array.isArray(p&&p.subs)?p.subs:[]).forEach(x=>{ if(x&&x.ok===false) add(pid,'subs',x); }); });
   return [...by.values()]; }
 function decideHistory(r,ok){ const p=S.projects[r.pid], note=(S.declineNote['hy:'+r.pid]||'').trim();
-  if(!ok&&!note) return toast('Add a note so the pod leader knows what to fix.');
+  if(!ok&&!note) return toast('Add a note so the POD leader knows what to fix.');
   return run(async()=>{
     for(const t of r.tasks) ok?await taskUpdate(t.id,{legacyOk:true},[{type:'approved',to:t.doneAt,note:'History approved'+(note?': '+note:'')}])
       :await taskUpdate(t.id,{doneAt:null,doneBy:null,stage:'todo',legacy:false,legacyNoDate:false,legacyOk:false},[{type:'reopened',from:t.doneAt,note:'History returned: '+note}]);
@@ -5310,7 +5312,7 @@ function teamSection(p){
   }
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project team'}),h('span',{class:'cnt',text:`${ps.length} pod${ps.length===1?'':'s'} · ${ms.filter(([k,m])=>m.status==='approved').length} people`})),
     h('div',{class:'list'},rows.length?rows:[h('div',{class:'card',style:'border-radius:0'},h('span',{class:'f-hint',text:'No pods or people yet.'}))]),form,
-    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Members see the project and its tasks, and its pod leaders can give them tasks directly. People from another pod join for a set time; drafting-pool and other support people join for good. The COO approves everyone added.'}));
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Members see the project and its tasks, and its POD leaders can give them tasks directly. People from another pod join for a set time; drafting-pool and other support people join for good. The COO approves everyone added.'}));
 }
 function memberReqs(){ const out=[]; for(const [pid,p] of Object.entries(S.projects)){ if(!isLive(p)) continue; for(const [uid,m] of projMembers(p)) if(m.status==='pending') out.push({pid,p:{...p,id:pid},uid,m}); } return out.sort((a,b)=>(a.m.at||'').localeCompare(b.m.at||'')); }
 function memberReqCards(){
@@ -6345,7 +6347,7 @@ function sheetPMeet(){
           a.taskId?h('div',{class:'f-hint',text:'Task created · '+nameOf(a.owner)}):h('div',{class:'form-row'},own,h('input',{id:'pa-d-'+i,type:'date',value:a.due||'',style:'background:var(--group)',oninput:e=>{a.due=e.target.value}}))); }),
       h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ d.actions.push({text:'',owner:'',due:''}); renderSheet(); setTimeout(()=>{const e=document.getElementById('pa-t-'+(d.actions.length-1));e&&e.focus()},30); },text:'+ Add action item'}),
       sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},
+      h('div',{class:'actions sticky-acts'},
         h('button',{class:'btn',type:'submit',style:'background:#fff',disabled:S.busy,text:'Save draft'}),
         h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>savePMeet(true),text:m&&m.status==='final'?'Save minutes':'Finalise minutes'}),
         m?h('button',{class:'btn',type:'button',onclick:()=>{sh.edit=false;renderSheet()},text:'Cancel'}):null),
@@ -6918,7 +6920,7 @@ const HOWDO=[
  ['projects',['lead','boss'],'Add people to a project team',['Open the project › Project team › + Add people.','Choose the person; for someone from another pod add Until (the end date).','Say what they will help with and tap Send for approval (or Add).'],'Once approved they see the project, and the pod lead can give them tasks directly.','Temporary members lose access after their Until date.'],
  ['projects','lead','Ask for someone to join my pod',['Tasks › your pod’s team card › Add a team member….','Choose the person and tap Request.'],'The COO approves or declines.',null],
  ['projects','boss','Set the pace of a project',['Open the project › Pace.','Choose Fast track (or Proposal sprint), Standard or Relaxed.'],'Fast track shortens dates and counts ×1.25. Relaxed gives longer dates and no bonus for finishing early.','Pod leads choose Standard or Relaxed at setup; only the Principal or COO sets fast track.'],
- ['projects','boss','Pause, close or reopen a project',['Open the project › Close project.','Choose how it ended: On hold, Completed, Closed after phase or Cancelled.','Give the reason and date (and the last phase reached, the scope delivered, or a review date for on hold), then save.'],'On hold freezes open tasks until you resume it; closing drops them. Neither counts against anyone, and finished work keeps its score.','Pod leaders can ask from the project page; requests arrive in Approvals. Only the Principal reopens an archived project.'],
+ ['projects','boss','Pause, close or reopen a project',['Open the project › Close project.','Choose how it ended: On hold, Completed, Closed after phase or Cancelled.','Give the reason and date (and the last phase reached, the scope delivered, or a review date for on hold), then save.'],'On hold freezes open tasks until you resume it; closing drops them. Neither counts against anyone, and finished work keeps its score.','POD leaders can ask from the project page; requests arrive in Approvals. Only the Principal reopens an archived project.'],
  ['projects','boss','Delete a project',['Principal: open the project › Delete project › Delete permanently (tap twice).','COO: Ask to delete project, give the reason, Send to the Principal.'],'The Principal approves or declines the COO’s request. The audit trail keeps a full copy.','Closing is usually better than deleting.'],
  ['projects','head','Check a project’s phases and checklist',['Open Projects and tap the project.','Phases and gates › Show checklist: the drafting items are your team’s.','Read Meetings for the client’s latest changes.'],'You can read every active project. Changing it stays with the pod lead and the COO.',null],
  ['projects','all','Read a project card',['Health: On track, At risk, Off track, Complete or Not started.','The dots show phases: filled = gate closed, outlined = in progress.','Below: the next deliverable and its date, and any overdue count.'],null,'Filter by pod and status, or search by code, name or client.'],
@@ -7534,7 +7536,7 @@ function sheetProp(){
       h('div',{class:'form-row'},field('Stage',sel('stage',Object.entries(PROP_STAGE))),field('Proposal sent on',inp('sentOn',{type:'date',max:today()}))),
       field('Next follow-up',inp('next',{type:'date'}),'You and the COO are reminded on this date, then every 3 days until a response is logged with a new date.'),
       field('Note',ta('note',{rows:3,placeholder:'Anything worth remembering about this client or proposal'})),
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:S.sheet.convert?'Move to Proposed':id?'Save proposal':'Add proposed project'}),
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:S.sheet.convert?'Move to Proposed':id?'Save proposal':'Add proposed project'}),
         h('button',{class:'btn',type:'button',onclick:()=>id?openPropView(id):closeSheet(),text:'Cancel'})))]; }
 function sheetPropView(){
   const id=S.sheet.id, p=(S.props||{})[id]?{...S.props[id],id}:null; if(!p) return [head('Proposed project','Not found')];
@@ -7625,7 +7627,7 @@ function sheetLead(){
       h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'}))),
       h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Next follow-up',inp('next',{type:'date'}))),
       field('Note',ta('note',{rows:3,placeholder:'What they want, budget, timing…'})),
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save lead':'Add lead'}),
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:id?'Save lead':'Add lead'}),
         h('button',{class:'btn',type:'button',onclick:()=>id?openPropView(id):closeSheet(),text:'Cancel'})))]; }
 function viewLeads(){
   const f=S.lf||(S.lf={q:'',ls:'open',src:''}), all=propList(), q=(f.q||'').trim().toLowerCase(), td=today();
@@ -7759,7 +7761,7 @@ function sheetSal(){
       rs.length?h('div',{},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px',text:'Salary history'}),
         h('div',{class:'list'},rs.map((x,i)=>{ const p=rs[i+1]; return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},
           h('div',{},h('b',{text:'From '+ymLabel(x.from)}),h('div',{class:'f-hint',style:'margin:0',text:[x.why||'',p?`${salGross(x)>=salGross(p)?'+':'−'}${taka(Math.abs(salGross(x)-salGross(p)))}`:'Starting salary'].filter(Boolean).join(' · ')})),h('span',{class:'mono',text:taka(salGross(x))})); }))):null,
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}),st?h('button',{class:'btn',type:'button',style:'margin-left:auto;color:var(--overdue)',disabled:S.busy,onclick:()=>delSal(st),text:'Delete'}):null))]; }
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}),st?h('button',{class:'btn',type:'button',style:'margin-left:auto;color:var(--overdue)',disabled:S.busy,onclick:()=>delSal(st),text:'Delete'}):null))]; }
 /* delete a salary record entered by mistake: only while no salary sheet or advance uses it (otherwise mark it inactive) */
 async function delSal(st){ if(!canBiz()) return fail('Only the Principal or the COO can do this.'); const sb=window.slateSupabase;
   const {data:used,error:e1}=await sb.from('fin_docs').select('coll,data').in('coll',['payruns','advances']); if(e1) return fail(e1.message);
@@ -7850,7 +7852,7 @@ function sheetRec(){
       id?h('div',{style:'display:flex;gap:10px;align-items:center'},h('input',{type:'checkbox',id:'rec-act',checked:d.active,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.active=e.target.checked}}),h('label',{for:'rec-act',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:'Running (untick to stop it; past payments stay)'})):null,
       hist.length?h('div',{},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px',text:'Payments'}),
         h('div',{class:'list'},hist.map(e=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},h('div',{},h('b',{text:ymLabel(e.month)}),h('div',{class:'f-hint',style:'margin:0',text:[e.paidOn?'paid '+fmtD(e.paidOn):'not paid yet',e.status==='pending'?'waiting for the Principal':''].filter(Boolean).join(' · ')})),h('span',{class:'mono',text:taka(e.amount)}))))):null,
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
 function openRecPay(id,ym){ const x=((S.feeFin||{}).rec2||[]).find(r=>r.id===id); if(!x) return; const accts=((S.feeFin||{}).accts||[]).filter(a=>a.active!==false);
   S.sheet={type:'recPay',id,ym,d:{amount:x.kind==='variable'?'':String(recExpect(x,ym)),paidOn:today(),acct:(accts.find(a=>a.kind==='bank')||accts[0]||{}).id||'',note:''},err:''}; renderSheet(); }
 function sheetRecPay(){
@@ -8342,7 +8344,7 @@ function sheetFee(){
         h('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:8px'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.ms.push({id:Math.random().toString(36).slice(2,9),label:'',pct:0}); renderSheet(); },text:'Add milestone'}),
           h('span',{id:'ms-sum',class:'f-hint',style:'margin:0;'+(msSum!==100?'color:var(--overdue)':''),text:msTxt()}))],
       ...costSection(d,fr,p,feeNow),
-      h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save fee'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save fee'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
 function viewProjects(){
   const f=S.pf||(S.pf={q:'',pod:'',st:'active',kind:'client'}); if(!f.kind) f.kind='client';
   if(f.kind==='proposed'){ f.kind='client'; if(canProps()){ S.biz={...(S.biz||{q:'',st:'active'}),tab:'proposed'}; S.view='biz'; return viewBiz(); } }
@@ -8460,7 +8462,7 @@ function sheetProjView(){
    `outcome` says how it ended and `closure` records the decision. Open tasks are never scored after it:
    on hold they are frozen (archived + held) and come back on resume; on closing they are dropped
    (archived + dropped). Finished work keeps its score. Only the Principal and the COO close, pause or
-   resume; only the Principal reopens an archived project. Pod leaders can ask (closeReq). */
+   resume; only the Principal reopens an archived project. POD leaders can ask (closeReq). */
 const OUTCOMES={
   onhold:{l:'On hold',pill:'s-late',btn:'Put on hold',d:'The client has stopped but may come back. Open tasks freeze: they leave every list and stop counting until the project resumes.'},
   completed:{l:'Completed',pill:'s-ontime',btn:'Mark completed',d:'All signed scope has been delivered. The project becomes a record.'},
@@ -8627,7 +8629,7 @@ async function doReopenProject(pid,note,restore){
     closeLog:[...(p.closeLog||[]),{type:held?'resumed':'reopened',from:p.outcome||'closed',note,by:S.uid,at:now}].slice(-40)});
 }
 
-/* a pod leader asks the Principal / COO to close or pause their project */
+/* a POD leader asks the Principal / COO to close or pause their project */
 function openCloseRequest(pid){ const p=S.projects[pid]; if(!p) return; const r=p.closeReq||{};
   S.sheet={type:'projCloseReq',id:pid,err:'',d:{outcome:r.outcome||'onhold',reason:r.reason||'',note:r.note||''}}; renderSheet(); }
 function sheetProjCloseReq(){

@@ -73,8 +73,8 @@
     let m = (err && (err.message || err.error_description || err.msg)) || String(err || 'Something went wrong');
     m = m.replace(/^(?:\w*Error:\s*)+/, '');
     if (/^(Failed to fetch|NetworkError|Load failed|network error)/i.test(m)) m = 'No connection, so this wasn’t saved. Check your signal and try again.';
-    // a pod leader acting outside their pod's projects
-    if (/Only the pod leader or COO (edits|reassigns) this task/.test(m)) m = 'You can change this only on your own pod’s projects. Ask the project’s pod leader or the COO.';
+    // a POD leader acting outside their pod's projects
+    if (/Only the POD leader or COO (edits|reassigns) this task/.test(m)) m = 'You can change this only on your own pod’s projects. Ask the project’s POD leader or the COO.';
     return new Error(m.replace(/^not-found:\s*/, 'Not found: '));
   }
 
@@ -971,7 +971,7 @@
       result.scrollIntoView({ block: 'nearest' });
     };
     // add a person
-    const roles = (() => { try { return ROLE_SUGGEST; } catch (_) { return ['COO', 'Pod Leader', 'Junior Architect', 'Design Associate Lead', 'Design Associate', 'Visualizer', 'Intern', 'Others']; } })()
+    const roles = (() => { try { return ROLE_SUGGEST; } catch (_) { return ['COO', 'POD leader', 'Junior Architect', 'Design Associate Lead', 'Design Associate', 'Visualizer', 'Intern', 'Others']; } })()
       .filter(r => r !== 'Principal' && (boss || r !== 'COO'));
     const tms = (() => { try { return teams(); } catch (_) { return []; } })();
     const fName = el('input', { type: 'text', maxlength: '80', autocomplete: 'off' });

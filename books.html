@@ -1306,7 +1306,9 @@ function roleOf(id) {
 const myRole = () => S.isOwner ? 'Principal' : roleOf(S.uid);
 /* An account (login) can be used by different people over time, e.g. account@slate-atelier.com.
    team[id].holders = [{ name, from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' | null }] records who held it when. */
-function holdersOf(id) { const t = (S.settings.team || {})[id]; return (t && Array.isArray(t.holders)) ? t.holders.slice().sort((a, b) => (a.from || '').localeCompare(b.from || '')) : []; }
+function holdersOf(id) { const t = (S.settings.team || {})[id]; if (t && Array.isArray(t.holders) && t.holders.length) return t.holders.slice().sort((a, b) => (a.from || '').localeCompare(b.from || ''));
+  const hr = Object.values(S.staff || {}).find(x => x && x.src === 'os' && x.userId === id && x.account && x.active !== false);
+  return hr ? [{ name: hr.name, from: hr.joined || '', to: null, fromHR: true }] : []; }
 function holderAt(id, at) {
   const hs = holdersOf(id); if (!hs.length) return null;
   const d = String(at || new Date().toISOString()).slice(0, 10);

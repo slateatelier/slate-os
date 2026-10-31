@@ -166,5 +166,11 @@ rep("""Viewer: 'Can look, can’t change anything.' };""", """Viewer: 'Sees ever
 
 rep("""h('li', {}, h('b', { text: k + ': ' }), v)""", """h('li', {}, h('b', { text: (k === 'None' ? 'No access' : k) + ': ' }), v)""")
 
+# ---------- account holder: when Books has none recorded, use the one set in Business › HR & salaries ----------
+rep("""function holdersOf(id) { const t = (S.settings.team || {})[id]; return (t && Array.isArray(t.holders)) ? t.holders.slice().sort((a, b) => (a.from || '').localeCompare(b.from || '')) : []; }""",
+    """function holdersOf(id) { const t = (S.settings.team || {})[id]; if (t && Array.isArray(t.holders) && t.holders.length) return t.holders.slice().sort((a, b) => (a.from || '').localeCompare(b.from || ''));
+  const hr = Object.values(S.staff || {}).find(x => x && x.src === 'os' && x.userId === id && x.account && x.active !== false);
+  return hr ? [{ name: hr.name, from: hr.joined || '', to: null, fromHR: true }] : []; }""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
