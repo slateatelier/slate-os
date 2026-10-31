@@ -52,8 +52,11 @@ export default {
         let host = ''; try { host = new URL(r.url()).hostname; } catch (_) {}
         if (r.url().startsWith('data:') || ALLOWED_HOSTS.has(host)) r.continue(); else r.abort();
       });
-      await page.setContent(html, { waitUntil: 'networkidle0', timeout: 20000 });
-      await page.evaluateHandle('document.fonts.ready');
+      // Wait for the page and its fonts, but never fail just because Google Fonts is slow: after the wait,
+      // print with whatever has loaded (the fallback fonts look almost the same).
+      try { await page.setContent(html, { waitUntil: 'load', timeout: 25000 }); }
+      catch (e) { if (!/timeout/i.test(String((e && e.message) || e))) throw e; }
+      await Promise.race([page.evaluate('document.fonts.ready.then(() => 1)').catch(() => 0), new Promise(r => setTimeout(r, 8000))]);
       await page.emulateMediaType('print');
       const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' } });
