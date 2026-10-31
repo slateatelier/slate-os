@@ -7876,7 +7876,7 @@ function sheetPropDoc(){
     const f=pbFee(d), cur=S.props[id]||p, doc={...d,total:Math.round(f.total),savedAt:new Date().toISOString()};
     const ok=await run(()=>propWrite(id,{...cur,doc,fee:f.total?String(Math.round(f.total)):cur.fee||'',feeBasis:'lump',feeNote:cur.feeNote||(d.tax==='excl'?'plus VAT and AIT':'')}),silent?null:'Proposal saved');
     return ok; };
-  const preview=async(plain)=>{ if(await save(true)===false) return; pbShowPreview(await pbHTML(S.props[id]||p,d,true,plain===true),plain===true); };
+  const preview=async(plain)=>{ if(await save(true)===false) return; pbShowPreview(await pbHTML(S.props[id]||p,d,true,plain===true),plain===true,()=>pbPdfRetry(S.props[id]||p,d,plain===true)); };
   const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
     try{ const file=await pbPdfRetry(S.props[id]||p,d,false); const print=await pbPdfRetry(S.props[id]||p,d,true); sh.pdf={state:'ok',file,print}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
   const share=async(which)=>{ const f=sh.pdf&&sh.pdf[which==='print'?'print':'file']; if(!f) return;
@@ -8062,14 +8062,22 @@ ${pages.map((b,i)=>`<div class="page">${plain?'':pbLetterhead()}${b.map(x=>`<div
 ${withBar?`<script>(function(){function fit(){var px=210*96/25.4,w=document.documentElement.clientWidth,z=Math.min(1,(w-16)/px);document.querySelectorAll('.page').forEach(function(p){p.style.zoom=z;});}addEventListener('resize',fit);fit();})();<\/script>`:''}
 </body></html>`; }
 /* the proposal preview opens over the app (an iPhone home-screen app can't close a pop-up window) */
-function pbShowPreview(html,plain){
+const pbIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+async function pbShareFile(f){
+  try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); }
+function pbShowPreview(html,plain,makePdf){
   document.getElementById('pb-prev')?.remove();
   html=html.replace(/<div class="bar">[\s\S]*?<\/div>/,'');
   const fr=h('iframe',{title:'Proposal preview',style:'flex:1;width:100%;border:0;background:#e6e6e6'}); fr.srcdoc=html;
   const close=()=>{ ov.remove(); document.removeEventListener('keydown',esc); }, esc=e=>{ if(e.key==='Escape') close(); };
   const ov=h('div',{id:'pb-prev',role:'dialog','aria-modal':'true','aria-label':'Proposal preview',style:'position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;background:#e6e6e6'},
     h('div',{style:'display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:#231f20'},
-      h('button',{type:'button',class:'btn',style:'background:#C41E29;color:#fff;border:0',onclick:()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){ toast('Use “Save and make PDFs” instead.'); } },text:'Print or save as PDF'}),
+      (()=>{ let file=null; const b=h('button',{type:'button',class:'btn',style:'background:#C41E29;color:#fff;border:0',text:'Make the PDF'});
+        b.onclick=async()=>{ if(file) return pbShareFile(file); b.disabled=true; b.textContent='Making the PDF…';
+          try{ file=await makePdf(); b.textContent='Share or save the PDF'; }catch(e){ b.textContent='Make the PDF'; toast(e.message||'Couldn’t make the PDF.'); } b.disabled=false; };
+        return b; })(),
+      pbIOS()?null:h('button',{type:'button',class:'btn',onclick:()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} },text:'Print'}),
       h('button',{type:'button',class:'btn',onclick:close,text:'Close'}),
       h('span',{style:'color:#bbb;font-size:13px;flex-basis:100%;text-align:center',text:plain?'Print copy: for the printed letterhead pad':'Share copy: with the letterhead design'})),
     fr);
