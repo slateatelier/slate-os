@@ -4937,7 +4937,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -8069,7 +8069,7 @@ const pbIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platfor
 async function pbShareFile(f){
   try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
   const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); }
-function pbShowPreview(html,plain,makePdf){
+function pbShowPreview(html,plain,makePdf,label){
   document.getElementById('pb-prev')?.remove();
   html=html.replace(/<div class="bar">[\s\S]*?<\/div>/,'');
   const fr=h('iframe',{title:'Proposal preview',style:'flex:1;width:100%;border:0;background:#e6e6e6'}); fr.srcdoc=html;
@@ -8082,7 +8082,7 @@ function pbShowPreview(html,plain,makePdf){
         return b; })(),
       pbIOS()?null:h('button',{type:'button',class:'btn',onclick:()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} },text:'Print'}),
       h('button',{type:'button',class:'btn',onclick:close,text:'Close'}),
-      h('span',{style:'color:#bbb;font-size:13px;flex-basis:100%;text-align:center',text:plain?'Print copy: for the printed letterhead pad':'Share copy: with the letterhead design'})),
+      h('span',{style:'color:#bbb;font-size:13px;flex-basis:100%;text-align:center',text:label||(plain?'Print copy: for the printed letterhead pad':'Share copy: with the letterhead design')})),
     fr);
   document.body.append(ov); document.addEventListener('keydown',esc); }
 async function pbPdfRetry(p,d,plain){
@@ -8103,6 +8103,217 @@ async function pbPdf(p,d,plain){
     const j=await r.json(), dec=b=>Uint8Array.from(atob(b),c=>c.charCodeAt(0));
     return {share:mk(dec(j.share),false),print:j.print?mk(dec(j.print),true):null}; }
   return mk(await r.blob(),plain===true); }
+
+/* ---------- Legal agreement (optional, after the proposal is accepted) ----------
+   A formal consultancy agreement made from the proposal: parties, recitals, clauses and three schedules
+   (scope, fee and payment, additional services). Printed on legal-size paper (8.5 × 14 in) — the first page
+   leaves room at the top for the printed stamp of the non-judicial stamp paper. No letterhead. Clauses are
+   editable per agreement; {placeholders} are filled from the proposal. */
+const AG_PAPER={legal:{w:215.9,h:355.6,label:'Legal (8.5 × 14 in)'},a4:{w:210,h:297,label:'A4'}};
+const AG_TOP=25, AG_BOT=32;
+const AG_RECITALS=[
+  'The CLIENT owns, or has the lawful right to develop, the land measuring about {katha} katha described as {land} (the “Site”), and intends to construct {use} building(s) of about {area} sft of total floor area on the Site (the “Project”).',
+  'The CONSULTANT is an architecture and design consultancy practising in Bangladesh.',
+  'The CONSULTANT submitted its proposal reference {ref} dated {refDate}, which the CLIENT has accepted, and the parties now wish to record the terms on which the CONSULTANT will provide its services for the Project.'];
+const AG_CLAUSES=[
+  ['Definitions','In this Agreement, “Services” means the services described in Schedule A; “Fee” means the professional fee stated in Clause 4 and Schedule B; “Approving Authority” means RAJUK or any other authority whose approval the Project needs; and “Drawings” means all drawings, models, images and documents prepared by the CONSULTANT for the Project. Headings are for convenience only. The Schedules form part of this Agreement.'],
+  ['Appointment','The CLIENT appoints the CONSULTANT, and the CONSULTANT agrees, to provide the Services for the Project on the terms of this Agreement.'],
+  ['Scope of services','The CONSULTANT shall provide the Services set out in Schedule A with the skill, care and diligence expected of a competent architectural practice in Bangladesh, and in accordance with the Bangladesh National Building Code and the building rules in force. Any service not listed in Schedule A is an additional service under Clause 9.'],
+  ['Professional fee','The CLIENT shall pay the CONSULTANT a total professional fee of {fee} ({feeWords}) for the Services, worked out as shown in Schedule B. {taxLine} The Fee is based on a total floor area of about {area} sft and shall be adjusted in proportion to the final approved design area.'],
+  ['Payment','The Fee shall be paid in the stages set out in Schedule B. The CONSULTANT shall raise an invoice when each stage is reached, and the CLIENT shall pay it within 7 (seven) days of receiving it, by cheque, pay order or bank transfer in the name of SLATE. The CONSULTANT is not obliged to start a stage until the payment for the previous stage has been received.'],
+  ['Obligations of the CLIENT','The CLIENT shall, at its own cost and in good time:\n(a) provide the land documents, the digital survey, the soil test report and any other information the CONSULTANT reasonably needs;\n(b) pay all fees, charges and deposits of the Approving Authorities;\n(c) give decisions and approvals on submitted designs within 7 (seven) days, through one authorised representative; and\n(d) appoint the contractor(s) and be responsible for construction.\nThe CONSULTANT may rely on the information the CLIENT provides.'],
+  ['Design revisions','The Fee includes up to {revFree} round(s) of design revision for the Project. Each further revision requested by the CLIENT after a design stage has been approved shall be charged at {revRate} per katha of land ({revTotal} for this Project).'],
+  ['Site visits','The Fee includes {vFree} site visits during construction. Further visits requested by the CLIENT shall be charged at the rates in Schedule C.'],
+  ['Additional services','Services outside Schedule A, changes to the brief, and work needed because of a change in law or in the requirements of an Approving Authority after the design is approved, shall be paid as additional services at the rates in Schedule C, or as agreed in writing before the work starts.'],
+  ['Time','The CONSULTANT shall carry out the Services with reasonable speed. Time taken by the CLIENT to give information, decisions or payments, and time taken by any Approving Authority, shall not count against the CONSULTANT.'],
+  ['Approvals','The CONSULTANT shall prepare and submit the drawings needed for approval and follow them up with the Approving Authorities. The CONSULTANT does not guarantee the grant of any approval or the time it takes, but shall revise the drawings to meet the lawful requirements of the Approving Authority.'],
+  ['Copyright','The copyright and all other intellectual property in the Drawings and designs remain with the CONSULTANT. On payment of the Fee in full, the CLIENT shall have a licence to use them to construct, market and maintain this Project only. They may not be used for any other project, or for an extension of this Project, without the written consent of the CONSULTANT. The CONSULTANT may photograph the Project and use the designs and images in its portfolio and publications.'],
+  ['Confidentiality','Each party shall keep confidential the business information of the other party received under this Agreement, and shall not disclose it except as required by law or for the Project.'],
+  ['Responsibility and liability','The CONSULTANT is responsible for its designs only. It is not responsible for the work, methods, materials, safety or delays of any contractor or supplier, nor for errors in information provided by the CLIENT or by others. The total liability of the CONSULTANT under or in connection with this Agreement shall not exceed the Fee actually received by it.'],
+  ['Suspension and termination','Either party may terminate this Agreement by giving 30 (thirty) days’ written notice. If the CLIENT fails to pay two consecutive invoices when due, the CONSULTANT may suspend the Services, or terminate this Agreement by giving 7 (seven) days’ written notice. On any termination, the CLIENT shall pay for all Services performed up to the date of termination, including any stage in progress in proportion to the work done, and any expenses incurred; the licence in Clause 12 then applies only to the work paid for.'],
+  ['Force majeure','Neither party is liable for delay or failure caused by events beyond its reasonable control, including natural disaster, fire, epidemic, strike, hartal, war or government action. The affected party shall notify the other promptly, and the time for performance shall be extended accordingly.'],
+  ['Settlement of disputes','The parties shall try to settle any dispute amicably within 30 (thirty) days. Any dispute not so settled shall be referred to arbitration under the Arbitration Act, 2001 of Bangladesh, by a sole arbitrator agreed by the parties or, failing agreement, by a tribunal of three arbitrators (one appointed by each party and the third by the two so appointed). The seat of arbitration shall be Dhaka and its language English. The award shall be final and binding on both parties.'],
+  ['Governing law','This Agreement is governed by the laws of Bangladesh. Subject to Clause 17, the courts at Dhaka shall have jurisdiction.'],
+  ['Notices','Notices under this Agreement shall be in writing and delivered by hand, by courier or by email to the addresses written above (CLIENT: {cEmail}; CONSULTANT: {sEmail}), or to any other address a party gives by notice.'],
+  ['Entire agreement','This Agreement, with its Schedules, is the entire agreement between the parties on its subject and replaces the proposal and all earlier discussions. It may be changed only in writing signed by both parties. If any provision is found invalid, the rest remains in force. This Agreement is signed in two originals, one for each party.']];
+function agDefaults(p){ const d=p.doc||{};
+  return {title:'Agreement for architectural design consultancy services',date:today(),place:'Dhaka',paper:'legal',stampIn:'5',stampAll:false,
+    cName:d.toCompany||p.client||'',cRep:d.toName||p.contact||'',cRepTitle:d.toTitle||'',cAddr:d.toAddress||'',cEmail:'',
+    land:d.site||p.location||'',sName:d.signName||'Syed Mohammed Imran',sTitle:d.signTitle||'Principal Architect',sAddr:PB_ADDR.split('\n').slice(0,2).join(', ').replace(/^SLATE,\s*/,''),sEmail:'info@slate-atelier.com',
+    recitals:AG_RECITALS.join('\n'),clauses:AG_CLAUSES.map(([t,x])=>({t,x})),special:''}; }
+function tkWords(n){ n=Math.round(+n||0); if(!n) return 'Taka Zero only';
+  const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'],
+    b=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  const two=x=>x<20?a[x]:b[Math.floor(x/10)]+(x%10?'-'+a[x%10]:''), three=x=>x>=100?a[Math.floor(x/100)]+' Hundred'+(x%100?' '+two(x%100):''):two(x);
+  const w=x=>{ const cr=Math.floor(x/1e7), lk=Math.floor(x/1e5)%100, th=Math.floor(x/1e3)%100, r=x%1000;
+    return [cr?w(cr)+' Crore':'',lk?two(lk)+' Lakh':'',th?two(th)+' Thousand':'',r?three(r):''].filter(Boolean).join(' '); };
+  return 'Taka '+w(n)+' only'; }
+const agOrd=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th');
+function agVars(p,a){ const d=p.doc||{}, f=pbFee(d), area=+d.area||0;
+  const tax=d.tax==='incl'?'The Fee includes Value Added Tax (VAT) and Advance Income Tax (AIT) at the rates in force on the date of this Agreement.'
+    :'The Fee does not include Value Added Tax (VAT) or Advance Income Tax (AIT), which shall be added to each invoice at the rates in force and borne by the CLIENT. Where the CLIENT deducts AIT at source, it shall give the CONSULTANT the tax deduction certificate within 30 (thirty) days.';
+  return {katha:d.katha||p.katha||'—',land:a.land||d.site||'—',use:(d.use||'residential').toLowerCase(),area:area?area.toLocaleString('en-IN'):'—',ref:d.ref||'—',refDate:d.date?fmtLong(d.date):'—',
+    fee:pbTk(f.total),feeWords:tkWords(f.total),taxLine:tax,revFree:String(+d.revFree||0),revRate:pbTk(d.revRate),revTotal:pbTk(pbRevFee(d)),vFree:String(+d.vFree||0),
+    cEmail:a.cEmail||'the CLIENT’s email',sEmail:a.sEmail||'info@slate-atelier.com'}; }
+const agFill=(s,v)=>String(s||'').replace(/\{(\w+)\}/g,(m,k)=>v[k]!=null?v[k]:m);
+const agPara=(t,cls)=>pbLines(t).map(x=>`<p class="${/^\([a-z]\)/.test(x)?'ag-sub':(cls||'ag-p')}">${pbEsc(x)}</p>`);
+function agBlocks(p,a){ const d=p.doc||{}, v=agVars(p,a), f=pbFee(d), B=[], add=(html,o={})=>B.push({html,keep:!!o.keep,brk:!!o.brk});
+  const dt=a.date?a.date.split('-').map(Number):null, MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  add(`<h1 class="ag-t">${pbEsc(a.title)}</h1>`,{keep:true});
+  add(`<p class="ag-p">This Agreement is made and entered into at ${pbEsc(a.place||'Dhaka')} on this ${dt?agOrd(dt[2])+' day of '+MON[dt[1]-1]+' '+dt[0]:'____ day of __________ 20__'}.</p>`);
+  add('<p class="ag-c">BETWEEN</p>',{keep:true});
+  add(`<p class="ag-p"><b>${pbEsc(a.cName||'__________')}</b>${a.cAddr?', of '+pbEsc(a.cAddr):''}${a.cRep?`, represented by ${pbEsc(a.cRep)}${a.cRepTitle?', '+pbEsc(a.cRepTitle):''}`:''} (hereinafter referred to as the “<b>CLIENT</b>”, which expression shall, unless repugnant to the context, include its successors-in-interest, legal representatives and permitted assigns) of the <b>FIRST PART</b>;</p>`);
+  add('<p class="ag-c">AND</p>',{keep:true});
+  add(`<p class="ag-p"><b>SLATE</b>, an architecture and design consultancy having its office at ${pbEsc(a.sAddr)}, represented by ${pbEsc(a.sName)}, ${pbEsc(a.sTitle)} (hereinafter referred to as the “<b>CONSULTANT</b>”, which expression shall, unless repugnant to the context, include its successors-in-interest and permitted assigns) of the <b>SECOND PART</b>.</p>`);
+  const rec=pbLines(a.recitals);
+  rec.forEach((x,i)=>add((i===0?'<p class="ag-h">WHEREAS</p>':'')+`<p class="ag-sub"><span>${String.fromCharCode(65+i)}.</span> ${pbEsc(agFill(x,v))}</p>`,{keep:i===0}));
+  add('<p class="ag-h">NOW, THEREFORE, THIS AGREEMENT WITNESSES AND THE PARTIES AGREE AS FOLLOWS:</p>',{keep:true});
+  const cl=[...(a.clauses||[]).filter(c=>c.t||c.x)]; if((a.special||'').trim()) cl.splice(Math.max(0,cl.length-1),0,{t:'Special conditions',x:a.special});
+  cl.forEach((c,i)=>{ const ps=agPara(agFill(c.x,v)); add(`<p class="ag-cl"><b>${i+1}. ${pbEsc(c.t)}</b></p>`+(ps[0]||''),{keep:ps.length>1}); ps.slice(1).forEach(x=>add(x)); });
+  add(`<p class="ag-p" style="margin-top:6mm">IN WITNESS WHEREOF the parties have signed this Agreement on the day, month and year first written above.</p>
+    <table class="ag-sig"><tr><td><div class="ag-line"></div><b>For and on behalf of the CONSULTANT</b>${pbEsc(a.sName)}<br>${pbEsc(a.sTitle)}, SLATE<br>Date:</td>
+    <td class="r"><div class="ag-line"></div><b>For and on behalf of the CLIENT</b>${pbEsc(a.cRep||'Name:')}<br>${pbEsc(a.cRepTitle||'Designation:')}${a.cName?', '+pbEsc(a.cName):''}<br>Date:</td></tr></table>
+    <p class="ag-h" style="margin-top:9mm">WITNESSES</p>
+    <table class="ag-sig"><tr><td><div class="ag-line"></div><b>1.</b>Name:<br>Address:</td><td class="r"><div class="ag-line"></div><b>2.</b>Name:<br>Address:</td></tr></table>`);
+  // Schedule A: scope
+  const A=pbScopeAuto(d), svc=A.svc;
+  add('<h2 class="ag-s">Schedule A · Scope of services</h2>',{keep:true,brk:true});
+  if(svc.length) svc.forEach(x=>add(`<p class="ag-cl"><b>A${x.n}. ${pbEsc(x.label)}</b></p>${x.desc?`<p class="ag-p">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="ag-ul">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}`));
+  else pbLines(d.scope).forEach(x=>add(`<ul class="ag-ul"><li>${pbEsc(x)}</li></ul>`));
+  if(A.more.length) add(`<p class="ag-cl"><b>Also included</b></p><ul class="ag-ul">${A.more.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`);
+  const dl=pbLines(d.deliv); if(dl.length) add(`<p class="ag-cl"><b>Deliverables</b></p><ul class="ag-ul">${dl.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`);
+  // Schedule B: fee and payment
+  const fee=d.feeMode==='parts'?`<table class="ag-tb"><thead><tr><th>Service</th><th class="n">Rate (Tk/sft)</th><th class="n">Amount (Tk)</th></tr></thead><tbody>
+      ${d.parts.filter(x=>x.label||+x.rate).map((x,i)=>`<tr><td>${i+1}. ${pbEsc(x.label)}</td>${+x.rate?`<td class="n">${(+x.rate).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate)*(+d.area||0)).toLocaleString('en-IN')}</td>`:'<td class="n">—</td><td class="n">Included</td>'}</tr>`).join('')}
+      ${f.disc?`<tr><td>Less special discount</td><td></td><td class="n">(${Math.round(f.disc).toLocaleString('en-IN')})</td></tr>`:''}
+      <tr class="tot"><td>Total Fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`
+    :`<table class="ag-tb"><tr class="tot"><td>Total Fee (package, all services in Schedule A)</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></table>`;
+  add(`<h2 class="ag-s">Schedule B · Fee and payment</h2><p class="ag-p">Total Fee: <b>${pbTk(f.total)}</b> (${pbEsc(tkWords(f.total))}), ${d.tax==='incl'?'including':'excluding'} VAT and AIT.</p>${fee}`,{brk:true});
+  const sc=(d.sched||[]).filter(x=>x.label||+x.pct);
+  if(sc.length) add(`<p class="ag-cl"><b>Payment stages</b></p><table class="ag-tb"><thead><tr><th style="width:9mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${Math.round((+x.pct||0)*100)/100}%</td><td class="n">${Math.round((+x.pct||0)/100*f.total).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((s,x)=>s+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`);
+  // Schedule C: additional services
+  const ex=[+d.vLead?['Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?['Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
+    d.asBuilt!==''&&d.asBuilt!=null?['As-built drawings',+d.asBuilt?pbTk(d.asBuilt)+' (fixed)':'Included in the Fee']:null,+d.extra3d?['Additional 3D view',pbTk(d.extra3d)+' per image']:null,
+    pbRevFee(d)?['Design revision beyond the '+(+d.revFree||0)+' included',pbTk(pbRevFee(d))+' per revision ('+pbTk(d.revRate)+' per katha)']:null,
+    ['Any other additional service','As agreed in writing before the work starts']].filter(Boolean);
+  add(`<h2 class="ag-s" style="margin-top:8mm">Schedule C · Additional services</h2><table class="ag-tb">${ex.map(([k,x])=>`<tr><td>${pbEsc(k)}</td><td class="n">${pbEsc(x)}</td></tr>`).join('')}</table>`);
+  return B; }
+const AG_CSS=pa=>`@page{size:${pa.w}mm ${pa.h}mm;margin:0}*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html,body{margin:0;background:#e6e6e6;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:"Tinos","Times New Roman",Times,serif;font-size:11.5pt;line-height:1.5;color:#000}
+.page{width:${pa.w}mm;height:${pa.h}mm;margin:8mm auto;background:#fff;padding:${AG_TOP}mm 20mm ${AG_BOT}mm 25mm;position:relative;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.12)}
+.ag-stamp{position:absolute;left:0;right:0;top:0;border-bottom:1px dashed #C41E29;color:#C41E29;font:9pt system-ui,sans-serif;text-align:center;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#fff,#fff 8px,#fdf2f2 8px,#fdf2f2 16px)}
+.ag-t{font-size:13.5pt;font-weight:700;text-transform:uppercase;text-align:center;letter-spacing:.04em;text-decoration:underline;text-underline-offset:3px;margin:0 0 5mm}
+.ag-p{margin:0 0 2.6mm;text-align:justify}.ag-c{text-align:center;font-weight:700;margin:3mm 0}
+.ag-h{font-weight:700;margin:4mm 0 2mm}.ag-cl{margin:3.5mm 0 1.2mm}
+.ag-sub{margin:0 0 2mm 7mm;text-align:justify;text-indent:-7mm;padding-left:0}.ag-sub span{display:inline-block;width:7mm;text-indent:0}
+.ag-s{font-size:12pt;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin:0 0 4mm;border-bottom:1pt solid #000;padding-bottom:1.5mm}
+.ag-ul{margin:0 0 2.5mm;padding-left:6mm}.ag-ul li{margin:0 0 .8mm}
+.ag-tb{width:100%;border-collapse:collapse;margin:1mm 0 3mm;font-size:10.5pt}.ag-tb th,.ag-tb td{border:.6pt solid #000;padding:1.6mm 2mm;text-align:left;vertical-align:top}
+.ag-tb th{font-weight:700;background:#f2f2f2}.ag-tb .n{text-align:right;white-space:nowrap}.ag-tb tr.tot td{font-weight:700}
+.ag-sig{width:100%;border-collapse:collapse;margin-top:16mm}.ag-sig td{width:50%;vertical-align:top;font-size:10.5pt;padding:0 6mm 0 0}.ag-sig td.r{padding:0 0 0 6mm;text-align:right}
+.ag-sig b{display:block}.ag-line{border-top:.75pt solid #000;margin-bottom:1.5mm;width:70mm;display:inline-block}
+.ag-foot{position:absolute;left:25mm;right:20mm;bottom:11mm;display:flex;justify-content:space-between;align-items:flex-end;font:8.5pt "Tinos",serif;color:#333}
+.ag-ini span{display:inline-block;width:26mm;border-bottom:.6pt solid #000;margin:0 6mm 0 2mm}
+.bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;justify-content:center;padding:10px;background:#231f20}.bar button{font:600 15px system-ui;padding:9px 16px;border-radius:10px;border:0}.bar .p{background:#C41E29;color:#fff}
+@media print{body{background:#fff}.bar,.ag-stamp{display:none}.page{margin:0;box-shadow:none;zoom:1!important;page-break-after:always}.page:last-child{page-break-after:auto}}`;
+const agHead=(t,pa)=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${pbEsc(t)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>${AG_CSS(pa)}</style></head>`;
+const agStampMm=a=>Math.max(0,Math.min(250,(+a.stampIn||0)*25.4));
+async function agPages(p,a){
+  const pa=AG_PAPER[a.paper]||AG_PAPER.legal, B=agBlocks(p,a), ifr=document.createElement('iframe');
+  ifr.setAttribute('aria-hidden','true'); ifr.style.cssText=`position:fixed;left:-10000px;top:0;width:${Math.ceil(pa.w*96/25.4)+40}px;height:1400px;border:0;visibility:hidden`;
+  document.body.append(ifr);
+  try{
+    const doc=ifr.contentDocument; doc.open(); doc.write(agHead('measure',pa)+`<body><div class="page" style="height:auto">${B.map((b,i)=>`<div class="ag-blk" data-i="${i}">${b.html}</div>`).join('')}</div></body></html>`); doc.close();
+    await new Promise(r=>{ if(doc.readyState==='complete') r(); else ifr.onload=()=>r(); setTimeout(r,2500); });
+    try{ await Promise.race([doc.fonts.ready,new Promise(r=>setTimeout(r,2500))]); }catch(_){}
+    const mm=96/25.4, hs=[...doc.querySelectorAll('.ag-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
+    const st=agStampMm(a), availOf=n=>(pa.h-AG_BOT-(n===0||a.stampAll?Math.max(AG_TOP,st):AG_TOP))*mm;
+    const pages=[[]]; let used=0;
+    B.forEach((b,i)=>{ const need=hs[i]+(b.keep&&i+1<B.length?hs[i+1]:0);
+      if(used>0&&(b.brk||used+need>availOf(pages.length-1))){ pages.push([]); used=0; } pages[pages.length-1].push(b.html); used+=hs[i]; });
+    return pages;
+  } finally { ifr.remove(); } }
+async function agHTML(p,a,withBar){
+  const pa=AG_PAPER[a.paper]||AG_PAPER.legal, pages=await agPages(p,a), st=agStampMm(a);
+  return agHead((p.name||'Agreement')+' · SLATE agreement',pa)+`<body>${withBar?'<div class="bar"><button class="p" onclick="print()">Print</button><button onclick="close()">Close</button></div>':''}
+${pages.map((b,i)=>{ const top=(i===0||a.stampAll)?Math.max(AG_TOP,st):AG_TOP;
+  return `<div class="page" style="padding-top:${top}mm">${withBar&&top>AG_TOP?`<div class="ag-stamp" style="height:${st}mm">Stamp paper’s printed area · left blank (not printed)</div>`:''}${b.join('')}<div class="ag-foot"><span class="ag-ini">CLIENT<span></span>CONSULTANT<span></span></span><span>Page ${i+1} of ${pages.length}</span></div></div>`; }).join('')}
+${withBar?`<script>(function(){function fit(){var px=${pa.w}*96/25.4,w=document.documentElement.clientWidth,z=Math.min(1,(w-16)/px);document.querySelectorAll('.page').forEach(function(p){p.style.zoom=z;});}addEventListener('resize',fit);fit();})();<\/script>`:''}
+</body></html>`; }
+async function agPdf(p,a){
+  const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
+  if(!tok) throw new Error('Your sign-in has expired. Reload SLATE OS and try again.');
+  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'},body:await agHTML(p,a,false)}); }
+  catch(_){ throw new Error('Couldn’t reach the PDF printer. Check your connection and try again.'); }
+  if(!r.ok){ let m=''; try{ m=(await r.json()).error; }catch(_){} const er=new Error(m||'Couldn’t make the PDF. Try again in a moment.'); er.busy=r.status===429||/429|rate limit|busy/i.test(m); throw er; }
+  return new File([await r.blob()],('SLATE agreement '+(p.name||p.client||'')).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf',{type:'application/pdf'}); }
+async function agPdfRetry(p,a){ for(let i=0;;i++){ try{ return await agPdf(p,a); }
+  catch(e){ if(i>=3||!e.busy) throw e; toast('The PDF printer is busy. Trying again in '+(20*(i+1))+' seconds…'); await new Promise(r=>setTimeout(r,20000*(i+1))); } } }
+function openAgrDoc(id){ const p=(S.props||{})[id]; if(!p) return;
+  if(!p.doc) return toast('Build the proposal document first: the agreement takes its scope, fee and payment stages from it.');
+  const a=p.agr?JSON.parse(JSON.stringify(p.agr)):agDefaults(p); if(!Array.isArray(a.clauses)) a.clauses=AG_CLAUSES.map(([t,x])=>({t,x}));
+  S.sheet={type:'agrDoc',id,d:a,err:'',pdf:null}; renderSheet(); }
+function sheetAgrDoc(){
+  const sh=S.sheet, a=sh.d, id=sh.id, p=(S.props||{})[id]; if(!p) return [head('Agreement','Not found')];
+  const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:10px',text:t});
+  const pd=p.doc||{}, f=pbFee(pd);
+  const save=async(silent)=>{ if(!canProps()) return fail('Only the Principal or the COO makes agreements.');
+    if(!(a.cName||'').trim()) return fail('Enter the client’s full legal name.');
+    const cur=S.props[id]||p; return run(()=>propWrite(id,{...cur,agr:{...a,savedAt:new Date().toISOString()}}),silent?null:'Agreement saved'); };
+  const preview=async()=>{ if(await save(true)===false) return; pbShowPreview(await agHTML(S.props[id]||p,a,true),false,()=>agPdfRetry(S.props[id]||p,a),'Legal agreement · the shaded band is the stamp paper’s printed area (not printed)'); };
+  const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
+    try{ sh.pdf={state:'ok',file:await agPdfRetry(S.props[id]||p,a)}; }catch(e){ sh.pdf={state:'err',err:e.message||String(e)}; } renderSheet(); };
+  const clauseEd=h('details',{},h('summary',{style:'cursor:pointer;font-weight:600;font-size:15px',text:`Edit the clauses (${a.clauses.length})`}),
+    h('div',{style:'display:grid;gap:10px;padding-top:8px'},
+      h('div',{class:'f-hint',style:'margin:0',text:'Words in {braces} are filled in from the proposal: {fee} {feeWords} {area} {katha} {land} {revFree} {revRate} {revTotal} {vFree} {ref} {refDate} {cEmail} {sEmail}. Lines starting (a), (b)… are indented.'}),
+      ...a.clauses.map((c,i)=>h('div',{style:'display:grid;gap:6px;padding:8px;border:1px solid var(--border);border-radius:12px'},
+        h('div',{style:'display:grid;grid-template-columns:auto minmax(0,1fr) 30px;gap:8px;align-items:center'},h('b',{text:(i+1)+'.'}),
+          h('input',{type:'text',value:c.t,oninput:e=>{ c.t=e.target.value; }}),
+          h('button',{type:'button',class:'icon-btn','aria-label':'Remove clause',onclick:()=>{ if(confirm('Remove clause '+(i+1)+'?')){ a.clauses.splice(i,1); renderSheet(); } },text:'×'})),
+        h('textarea',{rows:Math.min(10,Math.max(3,Math.ceil((c.x||'').length/45))),value:c.x,oninput:e=>{ c.x=e.target.value; }}))),
+      h('div',{class:'actions',style:'margin:0;flex-wrap:wrap'},
+        h('button',{type:'button',class:'btn btn-sm',onclick:()=>{ a.clauses.push({t:'New clause',x:''}); renderSheet(); },text:'+ Add a clause'}),
+        h('button',{type:'button',class:'btn btn-sm',onclick:()=>{ if(confirm('Put back SLATE’s standard clauses? Your edits to the clauses will be lost.')){ a.clauses=AG_CLAUSES.map(([t,x])=>({t,x})); a.recitals=AG_RECITALS.join('\n'); renderSheet(); } },text:'Reset to SLATE’s standard'}))));
+  return [head('Legal agreement · only you and the COO',p.name||p.client||'Agreement'),
+    h('p',{class:'lead',style:'margin:0',text:'A formal agreement made from the accepted proposal, for printing on stamp paper. The scope, fee, payment stages and extras come from the proposal document; change them there.'}),
+    h('div',{class:'form'},
+      sec('Paper'),
+      h('div',{class:'form-row'},field('Paper size',sel('paper',Object.entries(AG_PAPER).map(([k,x])=>[k,x.label]))),field('Space for the stamp (inches)',inp('stampIn',{type:'number',min:0,max:9,step:'0.25',inputmode:'decimal'}),'Blank space at the top of page 1 for the stamp paper’s printed part')),
+      h('div',{style:'display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center'},h('input',{type:'checkbox',id:'ag-all',style:'width:20px;height:20px',checked:!!a.stampAll,onchange:e=>{ a.stampAll=e.target.checked; }}),h('label',{for:'ag-all',style:'font-size:15px',text:'Every page is stamp paper (leave the space on every page)'})),
+      sec('Agreement'),
+      field('Title',inp('title',{maxlength:120})),
+      h('div',{class:'form-row'},field('Date signed',inp('date',{type:'date'})),field('Place',inp('place',{maxlength:40}))),
+      sec('Client (first part)'),
+      field('Full legal name (person or company)',inp('cName',{maxlength:160,placeholder:'e.g. ABC Developers Ltd.'})),
+      h('div',{class:'form-row'},field('Represented by',inp('cRep',{maxlength:80})),field('Designation',inp('cRepTitle',{maxlength:80,placeholder:'e.g. Managing Director'}))),
+      field('Address',ta('cAddr',{rows:2})),field('Email for notices',inp('cEmail',{type:'email',maxlength:120})),
+      field('Land described as',ta('land',{rows:2,placeholder:'e.g. Plot 12, Road 5, Block D, Bashundhara R/A, Dhaka'}),'Plot, road, block, area; add mouza and dag numbers if the client wants them'),
+      sec('SLATE (second part)'),
+      h('div',{class:'form-row'},field('Signed by',inp('sName',{maxlength:80})),field('Designation',inp('sTitle',{maxlength:80}))),
+      field('SLATE’s address',inp('sAddr',{maxlength:200})),field('SLATE email for notices',inp('sEmail',{type:'email',maxlength:120})),
+      sec('From the proposal'),
+      h('div',{class:'card',style:'gap:4px;font-size:14px'},
+        h('div',{text:`Fee ${pbTk(f.total)} · ${tkWords(f.total)}`}),
+        h('div',{class:'f-hint',style:'margin:0',text:`${(pd.parts||[]).filter(x=>x.label).length} services · ${(pd.sched||[]).length} payment stages · ${pd.tax==='incl'?'VAT and AIT included':'plus VAT and AIT'} · proposal ${pd.ref||''}`}),
+        h('button',{type:'button',class:'btn btn-sm',style:'justify-self:start;margin-top:4px',onclick:()=>openPropDoc(id),text:'Open the proposal document'})),
+      sec('Recitals and clauses'),
+      field('Recitals (WHEREAS) · one per line',ta('recitals',{rows:5})),
+      clauseEd,
+      field('Special conditions (optional) · added as a clause',ta('special',{rows:3})),
+      h('div',{class:'f-hint',text:'This is SLATE’s standard form. Have a lawyer read it once before the first signing, and whenever you change a clause.'}),
+      sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
+      sh.pdf&&sh.pdf.state==='ok'?h('div',{class:'card',style:'gap:8px'},h('b',{text:'The agreement PDF is ready'}),
+        h('div',{class:'f-hint',style:'margin:0',text:'Print page 1 on the stamp paper and the rest on '+(a.stampAll?'stamp paper':'plain legal paper')+', at actual size (100%). Both parties initial every page and sign the last page with two witnesses. Make two originals.'}),
+        h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>pbShareFile(sh.pdf.file),text:'Share or save the PDF'}))):null,
+      sh.pdf&&sh.pdf.state==='err'?h('div',{class:'err',role:'alert',text:sh.pdf.err}):null,
+      h('div',{class:'actions sticky-acts'},
+        h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDF…':'Save and make PDF'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:preview,text:'Preview'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>save(false),text:'Save'}),
+        h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Close'})))]; }
 
 function sheetPropView(){
   const id=S.sheet.id, p=(S.props||{})[id]?{...S.props[id],id}:null; if(!p) return [head('Proposed project','Not found')];
@@ -8153,6 +8364,7 @@ function sheetPropView(){
   if(S.canWrite) out.push(h('div',{class:'actions'},
     open&&ld?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(id,true),text:'Make a proposal →'}):null,
     open&&!ld?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openPropDoc(id),text:p.doc?'Open the proposal document':'Build the proposal document'}):null,
+    p.doc&&!ld?h('button',{class:'btn',type:'button',onclick:()=>openAgrDoc(id),text:p.agr?'Open the legal agreement':'Make the legal agreement (optional)'}):null,
     open&&!ld?h('button',{class:'btn btn-primary',type:'button',onclick:confirmIt,text:'Client confirmed → make it a client project'}):null,
     open?h('button',{class:'btn',type:'button',onclick:()=>ld?openLead(id):openProp(id),text:'Edit'}):null,
     open?h('button',{class:'btn',type:'button',onclick:()=>outcome('lost'),text:'Lost'}):null,
