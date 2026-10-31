@@ -369,5 +369,13 @@ rep(""".track span{display:block;height:100%;background:var(--c,var(--ink));bord
 .hb .v small.v-fut{display:block;font-size:11px;font-weight:600;color:#D7263D;line-height:1.1}
 .hbars>.hb{font-size:14px}""")
 
+# vendor kinds: add 3D visualisation, staff paid through a firm, and referral incentive
+rep("""const VK = { consultant: 'Consultant', supplier: 'Supplier', service: 'Service', jv: 'Joint-venture partner' };""",
+    """const VK = { consultant: 'Consultant', viz: '3D visualisation', supplier: 'Supplier', service: 'Service', staff: 'Staff paid through a firm', referral: 'Referral incentive', jv: 'Joint-venture partner' };""")
+rep("""field('Kind', sel('newVk', [['consultant', 'Consultant'], ['supplier', 'Supplier'], ['service', 'Service']]))""",
+    """field('Kind', sel('newVk', [['consultant', 'Consultant'], ['viz', '3D visualisation'], ['supplier', 'Supplier'], ['service', 'Service'], ['staff', 'Staff paid through a firm'], ['referral', 'Referral incentive']]))""")
+rep("""['consultant', 'Consultant: professional work on a project'], ['supplier', 'Supplier: goods, equipment, printing'], ['service', 'Service: insurance, software, commission'],""",
+    """['consultant', 'Consultant: design or engineering work on a project'], ['viz', '3D visualisation: renders and animation'], ['supplier', 'Supplier: goods, equipment, printing, insurance'], ['service', 'Service: site measurement, software, maintenance'], ['staff', 'Staff paid through a firm'], ['referral', 'Referral incentive: commission for bringing a project'],""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))

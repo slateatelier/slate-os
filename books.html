@@ -2331,7 +2331,7 @@ function sheetMoney() {
           myRole() === 'Accountant' ? h('span', { class: 'f-hint', text: 'You can use it now. The COO approves the new category when checking.' }) : null));
         const vNew = canAddLedger() ? [['__newv', '+ New consultant or vendor…']] : [];
         fields.push(field('Paid to', sel('vendor', [['', 'Not a consultant or vendor']].concat(vendorOpts(d.vendor), vNew)), 'Pick the consultant or vendor, so Spending by project shows who was paid.'));
-        if (d.vendor === '__newv') fields.push(h('div', { class: 'form-row' }, field('New consultant or vendor name', inp('newVendor', { placeholder: 'Name as on their bill' })), field('Kind', sel('newVk', [['consultant', 'Consultant'], ['supplier', 'Supplier'], ['service', 'Service']]))));
+        if (d.vendor === '__newv') fields.push(h('div', { class: 'form-row' }, field('New consultant or vendor name', inp('newVendor', { placeholder: 'Name as on their bill' })), field('Kind', sel('newVk', [['consultant', 'Consultant'], ['viz', '3D visualisation'], ['supplier', 'Supplier'], ['service', 'Service'], ['staff', 'Staff paid through a firm'], ['referral', 'Referral incentive']]))));
         if (!d.vendor) fields.push(field('Name of the person or shop', inp('party', { placeholder: 'Who received the money', list: 'dl-party' })));
       } else {
         fields.push(field('Paid to', sel('cat', [['', 'Choose…']].concat(oweOpts(d.cat)))));
@@ -3495,7 +3495,7 @@ function sheetLedger() {
   const B = id ? (SB.balances(P(), null, today())[id] || {}) : null;
   const groups = SB.GROUPS.map(g => [g.id, `${g.name} — ${GROUP_HELP[g.id] || ''}`]);
   const fields = [field('Name', inp('name', { required: true, disabled: ro })), field('Kind of account', sel('group', groups, { disabled: ro }), used ? 'Changing the kind moves every entry in this account to the new heading in the reports.' : null),
-    D().group === 'pay' ? field('Kind of vendor', sel('vk', [['', 'Not set'], ['consultant', 'Consultant: professional work on a project'], ['supplier', 'Supplier: goods, equipment, printing'], ['service', 'Service: insurance, software, commission'], ['jv', 'Joint-venture partner: shares fees and costs']], { disabled: ro })) : null,
+    D().group === 'pay' ? field('Kind of vendor', sel('vk', [['', 'Not set'], ['consultant', 'Consultant: design or engineering work on a project'], ['viz', '3D visualisation: renders and animation'], ['supplier', 'Supplier: goods, equipment, printing, insurance'], ['service', 'Service: site measurement, software, maintenance'], ['staff', 'Staff paid through a firm'], ['referral', 'Referral incentive: commission for bringing a project'], ['jv', 'Joint-venture partner: shares fees and costs']], { disabled: ro })) : null,
     ['pc', 'staff', 'occ', 'adm', 'fin'].includes(D().group) ? h('div', { class: 'form-row' }, field('Usual project', sel('defProj', [['', 'None: pick each time']].concat(projOpts().slice(1)), { disabled: ro }), 'Filled in when this is picked for money out, unless another project is chosen.'),
       h('div', { style: 'align-self:end' }, chk('noJvShare', 'On joint ventures SLATE pays this alone'))) : null,
     D().group === 'inc' ? field('Developer', inp('dev', { disabled: ro, list: 'dl-dev', placeholder: 'e.g. Edison Real Estate' }), 'The company behind this building. Home adds up money from all its buildings together.') : null,
@@ -4221,7 +4221,7 @@ const devOf = l => ((S.ledgers[l] || {}).dev || '').trim();
 const devNames = () => [...new Set(Object.values(S.ledgers).map(l => (l.dev || '').trim()).filter(Boolean))].sort();
 
 /* kinds of vendor: consultant (project work), supplier (goods and equipment), service (insurance, software, commissions) */
-const VK = { consultant: 'Consultant', supplier: 'Supplier', service: 'Service', jv: 'Joint-venture partner' };
+const VK = { consultant: 'Consultant', viz: '3D visualisation', supplier: 'Supplier', service: 'Service', staff: 'Staff paid through a firm', referral: 'Referral incentive', jv: 'Joint-venture partner' };
 const vkOf = l => groupOf(l) === 'pay' ? ((S.ledgers[l] || {}).vk || '') : '';
 const vkName = l => VK[vkOf(l)] || (groupOf(l) === 'pay' ? 'Vendor' : 'Direct cost');
 function kindSplit(rows) { const t = {}; rows.forEach(x => { const k = vkName(x.who); t[k] = (t[k] || 0) + x.billed; }); return ['Consultant', 'Supplier', 'Service', 'Joint-venture partner', 'Vendor', 'Direct cost'].filter(k => Math.abs(t[k] || 0) > 0.5).map(k => `${k === 'Direct cost' ? 'Direct' : k + 's'} ${tkShort(t[k])}`).join(' · '); }
