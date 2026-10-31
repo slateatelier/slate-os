@@ -1433,7 +1433,7 @@ async function run(fn,ok){
   if(S.busy){ toast('Still saving the last change…'); return false; }
   S.busy=true; if(S.sheet) renderSheet();
   const slow=setTimeout(()=>{ if(S.busy) toast('Saving…'); },1500);
-  try{ await fn(); if(ok) toast(ok); return true; }
+  try{ await fn(); if(ok) toast(typeof ok==='function'?ok():ok); return true; }
   catch(e){ sfx('error'); toast(errMsg(e)); return false; }
   finally{ clearTimeout(slow); S.busy=false; render(true); if(S.sheet) renderSheet(); }
 }
@@ -2206,8 +2206,10 @@ if(window.SlatePin){
     let n=0; const open=()=>{ if((S.state!=='ready'||!S.settings)&&n++<60) return setTimeout(open,250); if(S.state==='ready'&&canProps()){ S.view='biz'; render(true); } }; setTimeout(open,200); }
   /* someone whose work is only in Books (the accountant, petty cash staff) goes straight there */
   { let n=0; const route=async()=>{ if(!(S.state==='ready'&&S.uid&&S.settings)){ if(n++<240) setTimeout(route,250); return; }
-      if(roleGroup(S.uid)!=='other'||amApprover()||S.isOwner) return;
-      try{ const sb=window.slateSupabase; if(!sb) return; const {data}=await sb.rpc('books_role'); if(['Accountant','Office staff'].includes(data)) location.replace('/books'); }catch(_){} };
+      if(S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||'')) return;
+      try{ const sb=window.slateSupabase; if(!sb) return; const {data}=await sb.rpc('books_role');
+        if(roleGroup(S.uid)==='other'&&!amApprover()&&['Accountant','Office staff'].includes(data)) return location.replace('/books');
+        if(data&&data!==S.booksRole){ S.booksRole=data; render(true); } }catch(_){} };
     setTimeout(route,400); }
   if(q.get('next')==='books'){ let n=0; const back=()=>{ if(S.state==='ready'&&S.uid) return location.replace('/books'); if(n++<240) setTimeout(back,250); }; setTimeout(back,300); }
   if(go){ q.delete('go'); try{ history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash); }catch(e){} setTimeout(()=>slateGo(go),300); }
@@ -2454,6 +2456,7 @@ function viewMore(){
     ...grp('Daily',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null),
     ...grp('Reference',item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
     ...grp('Tools',item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
+      S.booksRole&&!(S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||''))?h('a',{class:'more-i',href:'/books?solo=1',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Books'}),h('div',{class:'mi-d',text:S.booksRole==='Office staff'?'Petty cash: submit the bills you paid':S.booksRole==='Accountant'?'SLATE’s accounts':'SLATE’s accounts · view only'})),h('span',{class:'mi-a',text:'›'})):null,
       FIN_UI&&window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
     ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
@@ -4598,19 +4601,20 @@ function viewSetup(){
   const pend=id=>{ const p=proposalFor(id); return p?p.d:null; };
   const teamSel=id=>{ const s=h('select',{id:'tm-'+id,'aria-label':'Team',onchange:e=>run(()=>settingsRef().update({roster:{[id]:{team:e.target.value,teamAt:new Date().toISOString()}}}),'Team updated')},h('option',{value:'',text:'No team set'}),teams().map(t=>h('option',{value:t,text:podLabel(t)}))); s.value=roster(id).team||''; return s; };
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'People'}),h('span',{class:'cnt',text:String(ids.length)})),
-    h('p',{class:'f-hint',style:'margin:0',text:own?'Everyone with a SLATE OS account is listed here. Set a display name if theirs doesn’t look right.':prop?'Set each person’s team, designation and manager right. Your changes go to the Principal for approval.':'Only the owner can change teams, designations and manager rights.'}),
+    h('div',{style:'display:flex;gap:10px;align-items:center;flex-wrap:wrap'},h('p',{class:'f-hint',style:'margin:0;flex:1;min-width:220px',text:'Roles, PODs and rights are set in one place: each person’s card in Business › HR & salaries.'+(own?' You can still set a display name here.':'')}),
+      canBiz()?h('button',{class:'btn btn-sm',type:'button',onclick:goHR,text:'Set in Business › HR'}):null),
     h('datalist',{id:'role-list'},ROLE_SUGGEST.map(x=>h('option',{value:x}))),
     h('div',{class:'tbl-wrap'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Person'}),h('th',{text:'Display name'}),h('th',{text:'Team'}),h('th',{text:'Designation'}),h('th',{text:'Manager'}),h('th',{text:'Approver'}),h('th',{text:'Private tasks'}),h('th',{text:'Chalk lead'}))),
       h('tbody',{},ids.map(id=>{ const r=roster(id); const isOwn=id===ownerId(); const joined=S.members[id]&&S.members[id].joinedAt;
         return h('tr',{},
           h('td',{},h('div',{text:(S.profiles[id]&&S.profiles[id].name)||nameOf(id)}),h('div',{class:'sub2',text:[isOwn?'Owner':'',id===S.uid?'You':'',joined?'Joined '+fmtD(joined.slice(0,10)):''].filter(Boolean).join(' · ')})),
           h('td',{},own?h('input',{id:'lb-'+id,value:r.label||'',placeholder:'Use account name',onchange:e=>run(()=>settingsRef().update({roster:{[id]:{label:e.target.value.trim()}}}),'Name updated')}):(r.label||'—')),
-          h('td',{},own?teamSel(id):prop&&!isOwn?(()=>{ const pd=pend(id); const el=h('select',{id:'ptm-'+id,'aria-label':'Team',onchange:e=>proposeRole(id,{team:e.target.value})},h('option',{value:'',text:'No team set'}),teams().map(t=>h('option',{value:t,text:podLabel(t)}))); el.value=pd?pd.team||'':r.team||''; return [el,pd?h('div',{class:'sub2',style:'color:var(--late)',text:'Pending approval'}):null]; })():(r.team?podLabel(r.team):'—')),
-          h('td',{},prop&&!isOwn?(()=>{ const pd=pend(id); return [roleSelect('prl-'+id,pd?pd.role||'':r.role||'',v=>proposeRole(id,{role:v})),pd&&pd.role!==(r.role||'')?h('div',{class:'sub2',style:'color:var(--late)',text:'Pending approval'}):null]; })():own?roleSelect('rl-'+id,r.role||'',v=>run(()=>settingsRef().update({roster:{[id]:{role:v}}}),'Designation updated')):(r.role||'—')),
-          h('td',{},isOwn?h('span',{class:'muted',text:'Always'}):prop?(()=>{ const pd=pend(id); return h('input',{type:'checkbox',id:'pmg-'+id,'aria-label':'Manager',checked:pd?!!pd.manager:isMgr(id),style:'width:auto',onchange:e=>proposeRole(id,{manager:e.target.checked})}); })():own?h('input',{type:'checkbox',id:'mg-'+id,'aria-label':'Manager',checked:isMgr(id),style:'width:auto',onchange:e=>{const m=new Set((S.settings&&S.settings.managers)||[]); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({managers:[...m]}),'Manager rights updated');}}):(isMgr(id)?'Yes':'—')),
-          h('td',{},isOwn?h('span',{class:'muted',text:'Always'}):own?h('input',{type:'checkbox',id:'ap-'+id,'aria-label':'Approver',checked:isApprover(id),style:'width:auto',onchange:e=>{const m=new Set((S.settings&&S.settings.approvers)||[]); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({approvers:[...m]}),'Approver rights updated');}}):(isApprover(id)?'Yes':'—')),
-          h('td',{},isOwn?h('span',{class:'muted',text:'—'}):own?h('input',{type:'checkbox',id:'pv-'+id,'aria-label':'Private tasks',checked:isPriv(id),style:'width:auto',onchange:e=>{const m=new Set(privIds()); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({privateIds:[...m]}),e.target.checked?'Their new tasks are now private':'Private setting removed');}}):(isPriv(id)?'Yes':'—')),
-          h('td',{},isOwn?h('span',{class:'muted',text:'—'}):own?h('input',{type:'checkbox',id:'cl-'+id,'aria-label':'Chalk Create lead',title:'Runs Chalk Create: assigns Chalk work without COO approval',checked:isChalkLead(id),style:'width:auto',onchange:e=>{const m=new Set(chalkLeads()); e.target.checked?m.add(id):m.delete(id); run(()=>settingsRef().update({chalkLeads:[...m]}),e.target.checked?`${nameOf(id)} now leads Chalk Create`:'Chalk lead removed');}}):(isChalkLead(id)?'Yes':'—')));
+          h('td',{text:r.team?podLabel(r.team):'—'}),
+          h('td',{text:roleLabel(r.role)||'—'}),
+          h('td',{},isOwn?h('span',{class:'muted',text:'Always'}):(isMgr(id)?'Yes':'—')),
+          h('td',{},isOwn?h('span',{class:'muted',text:'Always'}):(isApprover(id)?'Yes':'—')),
+          h('td',{text:!isOwn&&isPriv(id)?'Yes':'—'}),
+          h('td',{text:!isOwn&&isChalkLead(id)?'Yes':'—'}));
       }))))));
 
   if(canTypes()&&S.canWrite){ const types=Object.entries(T());
@@ -7713,7 +7717,59 @@ function openSal(sid,uid){ const F=S.feeFin, st=sid?(F.staff||[]).find(x=>x.id==
   const d={uid:uid||(st&&st.userId)||'',name:(st&&st.name)||(uid?nameOf(uid):''),designation:(st&&st.designation)||(uid?roleOf(uid):''),joinDate:(st&&st.joinDate)||'',careerStart:(st&&st.careerStart)||'',payMethod:(st&&st.payMethod)||'cash',bankInfo:(st&&st.bankInfo)||'',bankPart:st&&st.bankPart?String(st.bankPart):'',
     probationEnd:(st&&st.probationEnd)||'',confirmedOn:(st&&st.confirmedOn)||'',incrementDue:(st&&st.incrementDue)||'',active:!st||st.active!==false,note:(st&&st.note)||'',holder:(st&&st.holder)||'',empId:(st&&st.empId)||nextEmpId(),from:today().slice(0,7),why:'',tax:r.tax!=null?String(r.tax):'0'};
   SAL_P.forEach(([k])=>{ d[k]=r[k]!=null?String(r[k]):''; });
-  S.sheet={type:'sal',sid:sid||null,d,err:''}; renderSheet(); }
+  const acc=d.uid?accOf(d.uid):null;
+  S.sheet={type:'sal',sid:sid||null,d,err:'',acc,acc0:acc?{...acc}:null,wasActive:d.active}; renderSheet();
+  if(acc) loadBooksRole(d.uid); }
+/* ---------- one place for access: the HR card sets what each person can open ----------
+   SLATE OS role, POD, Books role and (Principal only) the manager / approver / private-tasks / Chalk-lead rights.
+   Saved by the database function hr_set_access, which checks who is asking (Principal, or the COO within limits)
+   and the PIN. Studio › Settings and Books › People and roles only show the result. */
+const accOf=uid=>{ const r=roster(uid); return {role:roleLabel(r.role||''),team:r.team||'',manager:isMgr(uid),approver:isApprover(uid),private:isPriv(uid),chalkLead:isChalkLead(uid),books:null}; };
+async function loadBooksRole(uid){ const x=S.sheet; if(!x||!x.acc) return;
+  try{ const {data,error}=await window.slateSupabase.from('books_docs').select('data').eq('path','settings/main').maybeSingle(); if(error) throw error;
+    const b=(((data&&data.data&&data.data.team)||{})[uid]||{}).role||''; if(S.sheet===x){ x.acc.books=b; x.acc0.books=b; renderSheet(); } }
+  catch(e){ if(S.sheet===x){ x.acc.books=''; x.acc0.books=''; x.booksErr=true; renderSheet(); } } }
+/* who may change this person's access from here */
+function accCan(uid){ if(!uid||!canBiz()) return {any:false,why:'Only the Principal or the COO sets access.'};
+  if(uid===ownerId()) return {any:false,why:'The Principal has every access.'};
+  if(S.isOwner) return {any:true,flags:true};
+  if(uid===S.uid) return {any:false,why:'Only the Principal changes your access.'};
+  if(isCOO(uid)) return {any:false,why:'Only the Principal changes the COO’s access.'};
+  return {any:true,flags:false}; }
+const accDiff=x=>{ if(!x||!x.acc) return {}; const p={}; ['role','team','manager','approver','private','chalkLead'].forEach(k=>{ if(x.acc[k]!==x.acc0[k]) p[k]=x.acc[k]; });
+  if(x.acc.books!=null&&x.acc.books!==x.acc0.books) p.books=x.acc.books; return p; };
+const BOOKS_ROLES=[['','No access'],['Office staff','Office staff · petty cash'],['Accountant','Accountant'],['Viewer','Viewer · sees everything, changes nothing']];
+function accSection(){ const x=S.sheet, a=x.acc, uid=x.d.uid, c=accCan(uid);
+  const lbl=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
+  if(!c.any){ const r=roster(uid);
+    return [lbl('Access'),h('div',{class:'card',style:'gap:4px'},h('div',{text:uid===ownerId()?'Principal · Studio, Business and Books':[roleLabel(r.role)||'No designation',r.team?podLabel(r.team):''].filter(Boolean).join(' · ')}),h('div',{class:'f-hint',style:'margin:0',text:c.why}))]; }
+  const roles=ROLE_SUGGEST.filter(v=>v!=='Principal'&&(S.isOwner||v!=='COO'));
+  const rSel=h('select',{id:'acc-role','aria-label':'SLATE OS role',onchange:e=>{ a.role=e.target.value; renderSheet(); }},h('option',{value:'',text:'No designation'}),roles.map(v=>h('option',{value:v,text:v})),a.role&&!roles.includes(a.role)?h('option',{value:a.role,text:a.role+' (current)'}):null); rSel.value=a.role;
+  const tSel=h('select',{id:'acc-team','aria-label':'POD or team',onchange:e=>{ a.team=e.target.value; }},h('option',{value:'',text:'No team set'}),teams().map(t=>h('option',{value:t,text:podLabel(t)})),a.team&&!teams().includes(a.team)?h('option',{value:a.team,text:a.team}):null); tSel.value=a.team;
+  const bSel=a.books==null?h('select',{disabled:true,'aria-label':'Books'},h('option',{text:'Loading…'})):(()=>{ const s=h('select',{id:'acc-books','aria-label':'Books',onchange:e=>{ a.books=e.target.value; renderSheet(); }},BOOKS_ROLES.map(([v,l])=>h('option',{value:v,text:l}))); s.value=a.books; return s; })();
+  const box=(k,l,hint)=>h('label',{style:'display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',checked:!!a[k],style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{ a[k]=e.target.checked; }}),h('span',{},l,h('span',{class:'f-hint',style:'display:block;margin:0',text:hint})));
+  const biz=a.role==='COO'?'Business and Books: yes, with their own PIN':'Business: no (only the Principal and the COO)';
+  return [lbl('Access'),
+    h('p',{class:'f-hint',style:'margin:-2px 0 0',text:'Set here only. Studio and Books show what you set. Saved with the Save button below.'}),
+    h('div',{class:'form-row'},field('SLATE OS role',rSel),field('POD or team',tSel)),
+    h('div',{class:'form-row',style:'align-items:start'},field('Books',bSel,x.booksErr?'Couldn’t read Books just now.':a.books==='Accountant'?'Opens straight into Books, with a PIN.':a.books==='Office staff'?'Submits petty cash bills only.':a.books==='Viewer'?'Can see every record and salary in Books.':''),field('Business',h('div',{class:'f-hint',style:'margin:10px 0 0',text:biz}))),
+    c.flags?h('div',{style:'display:grid;gap:10px;padding-top:4px'},box('manager','Manager','Assigns tasks and proposes dates for their POD'),box('approver','Approver','Approves timelines, date changes and support'),box('private','Private tasks','Their tasks are seen only by them, you and the COO'),box('chalkLead','Chalk Create lead','Assigns Chalk work without COO approval'))
+      :h('p',{class:'f-hint',style:'margin:0',text:'Manager, approver, private-task and Chalk-lead rights are set by the Principal.'})]; }
+const accOk=x=>{ const p=accDiff(x); return !(p.books==='Viewer'&&!confirm('Viewer can see every record in Books, including salaries. Give '+nameOf(x.d.uid)+' Viewer?')); };
+async function saveAccess(x){ const p=accDiff(x); if(!Object.keys(p).length) return true;
+  const {error}=await window.slateSupabase.rpc('hr_set_access',{p_user:x.d.uid,p});
+  if(error) throw new Error(/hr_set_access|function .* does not exist|schema cache/i.test(error.message)?'Access needs the latest database update (m_access.sql).':error.message);
+  x.acc0={...x.acc}; try{ if(window.slateReload) await window.slateReload(); }catch(e){}
+  try{ const f=document.querySelector('#books-pane iframe'); if(f&&f.contentWindow&&f.contentWindow.BooksHost&&f.contentWindow.BooksHost.refresh) f.contentWindow.BooksHost.refresh(); }catch(e){}
+  return true; }
+/* leaving: unticking Active also switches off their sign-in; ticking it again switches it back on */
+async function syncLogin(x){ const uid=x.d.uid; if(!uid||uid===ownerId()||!window.slateAdminCall) return '';
+  if(!S.isOwner&&(uid===S.uid||isCOO(uid))) return '';
+  const on=!(S.members[uid]&&S.members[uid].active===false);
+  if(!x.d.active&&on){ await window.slateAdminCall({action:'deactivate',user_id:uid}); return ' · sign-in switched off'; }
+  if(x.d.active&&!on&&!x.wasActive){ await window.slateAdminCall({action:'reactivate',user_id:uid}); return ' · sign-in switched on again'; }
+  return ''; }
+async function goHR(){ if(window.SlatePin&&!(await SlatePin.ensure())) return; S.books=false; S.view='biz'; S.biz={...(S.biz||{q:'',st:'active'}),tab:'hr'}; render(true); window.scrollTo(0,0); }
 function sheetSal(){
   const sid=S.sheet.sid, d=S.sheet.d, F=S.feeFin, st=sid?(F.staff||[]).find(x=>x.id===sid):null, cur=salRate(st)||{};
   const n=(k,ph)=>h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d[k],placeholder:ph||'',oninput:e=>{ d[k]=e.target.value; const t=document.getElementById('sal-tot'); if(t) t.textContent=totT(); }});
@@ -7721,6 +7777,9 @@ function sheetSal(){
   const save=async e=>{ e.preventDefault(); if(!canBiz()) return fail('Only the Principal or the COO sets salaries.');
     if(!(d.name||'').trim()) return fail('Enter the name.');
     const nr={from:d.from,tax:+d.tax||0}; SAL_P.forEach(([k])=>{ nr[k]=+d[k]||0; });
+    const x=S.sheet, accCh=Object.keys(accDiff(x)).length>0;
+    if(accCh&&!accOk(x)) return;
+    if(!st&&!salGross(nr)&&accCh){ const ok=await run(()=>saveAccess(x),'Access saved'); if(ok){ closeSheet(); render(true); } return; }
     if(!salGross(nr)) return fail('Enter the salary.'); if(!/^\d{4}-\d{2}$/.test(d.from||'')) return fail('Choose the month this salary applies from.');
     if(d.payMethod==='split'&&!(+d.bankPart>0)) return fail('Enter how much goes to the bank each month.');
     const same=salGross(cur)&&SAL_P.every(([k])=>(+cur[k]||0)===nr[k])&&(+cur.tax||0)===nr.tax;
@@ -7728,10 +7787,15 @@ function sheetSal(){
     const data={userId:d.uid,name:d.name.trim(),designation:(d.designation||'').trim(),joinDate:d.joinDate||'',careerStart:d.careerStart||'',payMethod:d.payMethod,bankInfo:d.payMethod!=='cash'?(d.bankInfo||'').trim():'',bankPart:d.payMethod==='split'?+d.bankPart||0:0,
       rates,active:!!d.active,note:(d.note||'').trim(),holder:(d.holder||'').trim(),empId:(d.empId||'').trim().toUpperCase(),probationEnd:d.probationEnd||'',confirmedOn:d.confirmedOn||'',incrementDue:d.incrementDue||'',hrSetAt:new Date().toISOString(),hrSetBy:S.uid};
     const sb=window.slateSupabase;
+    if(d.uid&&!d.active&&x.wasActive&&accCan(d.uid).any&&!(S.members[d.uid]&&S.members[d.uid].active===false)&&!confirm(nameOf(d.uid)+' will no longer be able to sign in to SLATE OS. Their records and salary history stay. Continue?')) return;
+    let extra='';
     const ok=await run(async()=>{
+      // access first: if it is refused, nothing is saved and the card stays open as it was
+      if(accCh&&accCan(d.uid).any){ await saveAccess(x); extra+=' · access updated'; }
       if(st){ const {id,...rest}=st; const {data:o,error}=await sb.from('fin_docs').update({data:{...rest,...data}}).eq('path','staff/'+st.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Finance is limited to the Principal and the COO.'); }
       else { const id=finId(); const {error}=await sb.from('fin_docs').insert({path:'staff/'+id,coll:'staff',doc_id:id,data}); if(error) throw error; }
-    },'Salary saved');
+      if(d.uid&&d.active!==x.wasActive&&accCan(d.uid).any){ extra+=await syncLogin(x); if(extra.includes('sign-in')) try{ if(window.slateReload) await window.slateReload(); }catch(_){} }
+    },()=>'Saved'+extra);
     if(ok){ await loadFeeFin(true); closeSheet(); } };
   const rs=((st&&st.rates)||[]).slice().sort((a,b)=>b.from.localeCompare(a.from));
   const cap=(t,el,hint)=>field(t,el,hint);
@@ -7741,6 +7805,7 @@ function sheetSal(){
       h('div',{class:'form-row'},d.uid?field('Name',h('input',{value:d.name,readonly:true,style:'color:var(--muted)'})):cap('Name *',h('input',{value:d.name,oninput:e=>{d.name=e.target.value}})),cap('Designation',h('input',{value:d.designation,oninput:e=>{d.designation=e.target.value}}))),
       h('div',{class:'form-row'},cap('Employee ID',h('input',{value:d.empId,maxlength:12,placeholder:'SL8021',oninput:e=>{d.empId=e.target.value}}),'As on the salary sheet. A new person gets the next number.'),
       cap('Held by',h('input',{value:d.holder,maxlength:80,placeholder:'For a shared account such as Accounts: who holds it now',oninput:e=>{d.holder=e.target.value}}),'Shown as a tag on the card. When someone new takes over, change the name here.')),
+      S.sheet.acc?accSection():null,
       h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:'Monthly salary (Tk)'}),
       h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center'},h('input',{id:'sal-gross',type:'number',min:0,step:'1',inputmode:'numeric','aria-label':'Gross salary',placeholder:'Gross a month',value:SAL_P.reduce((a,[k])=>a+(+d[k]||0),0)||'',style:'width:100%;min-width:0'}),
         h('button',{class:'btn',type:'button',style:'white-space:nowrap',onclick:()=>{ const g=Math.round(+((document.getElementById('sal-gross')||{}).value)||0); if(!(g>0)) return fail('Enter the gross salary first.'); Object.assign(d,salSplit(g)); S.sheet.err=''; renderSheet(); },text:'Standard split'})),
@@ -7756,7 +7821,7 @@ function sheetSal(){
         cap('Joined SLATE',h('input',{type:'date',value:d.joinDate,oninput:e=>{d.joinDate=e.target.value; const x=document.getElementById('sal-exp'); if(x) x.textContent=expHint(d); }}))),
       h('div',{class:'form-row'},cap('Probation ends',h('input',{type:'date',value:d.probationEnd,oninput:e=>{d.probationEnd=e.target.value}}))),
       h('div',{class:'form-row',style:'align-items:start'},cap('Confirmed on',h('input',{type:'date',value:d.confirmedOn,oninput:e=>{d.confirmedOn=e.target.value}})),cap('Next increment due',h('input',{type:'month',value:d.incrementDue,oninput:e=>{d.incrementDue=e.target.value}}),'Flagged to you and the COO from this month')),
-      h('div',{style:'display:flex;gap:10px;align-items:center;grid-column:1/-1'},h('input',{type:'checkbox',id:'sal-act',checked:d.active,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.active=e.target.checked}}),h('label',{for:'sal-act',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:'Active (untick when someone leaves; their salary history stays)'})),
+      h('div',{style:'display:flex;gap:10px;align-items:center;grid-column:1/-1'},h('input',{type:'checkbox',id:'sal-act',checked:d.active,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.active=e.target.checked}}),h('label',{for:'sal-act',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:d.uid&&d.uid!==ownerId()?'Active (untick when someone leaves: their SLATE OS sign-in is switched off too; their records and salary history stay)':'Active (untick when someone leaves; their salary history stays)'})),
       field('Note',h('input',{value:d.note,oninput:e=>{d.note=e.target.value}})),
       rs.length?h('div',{},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px',text:'Salary history'}),
         h('div',{class:'list'},rs.map((x,i)=>{ const p=rs[i+1]; return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},

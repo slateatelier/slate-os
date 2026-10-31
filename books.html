@@ -3507,10 +3507,10 @@ function peopleIds() {
 function morePeople() {
   const own = can.settings(), team = S.settings.team || {};
   const ids = peopleIds().sort((a, b) => (roleOf(a) === 'Principal' ? -1 : 0) - (roleOf(b) === 'Principal' ? -1 : 0) || nameOf(a).localeCompare(nameOf(b)));
-  const out = [pageH('People and roles', own ? 'Everyone with a SLATE OS account is listed. Give each person a role; without one they see nothing in Books.' : 'Only the Principal can change roles.')];
+  const out = [pageH('People and roles', own ? 'Everyone with a SLATE OS account is listed. Roles are set on each person’s card in SLATE OS › Business › HR & salaries; without one they see nothing in Books.' : 'Roles are set by the Principal and the COO in SLATE OS › Business › HR & salaries.')];
   out.push(h('div', { class: 'list' }, ids.map(id => {
     const tr = (team[id] || {}).role, r = id === ownerId() ? 'Principal' : (tr && ROLES.includes(tr)) ? tr : (window.BooksHost && BooksHost.isCOO(id) ? 'COO' : 'None'), seen = (S.members[id] || {}).seen;
-    const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto;max-width:150px', onchange: e => setRole(id, e.target.value) }, [['COO', 'COO'], ['Accountant', 'Accountant'], ['Office staff', 'Office staff'], ['Viewer', 'Viewer'], ['None', 'No access']].map(([v, t]) => h('option', { value: v, text: t }))); s.value = r; return s; })() : h('span', { class: 'tag', text: r === 'None' ? 'No access' : r });
+    const pick = false ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto;max-width:150px', onchange: e => setRole(id, e.target.value) }, [['COO', 'COO'], ['Accountant', 'Accountant'], ['Office staff', 'Office staff'], ['Viewer', 'Viewer'], ['None', 'No access']].map(([v, t]) => h('option', { value: v, text: t }))); s.value = r; return s; })() : h('span', { class: 'tag', text: r === 'None' ? 'No access' : r });
     const hd = holderAt(id), hs = holdersOf(id), acct = (team[id] || {}).account;
     const holdBtn = own && id !== ownerId() ? h('button', { class: 'linkish', type: 'button', style: 'font-size:12.5px', onclick: () => openSheet({ type: 'holders', id }), text: hs.length ? 'Account holder' : 'Set account holder' }) : null;
     return h('div', { class: 'row' }, ava(id), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: nameOf(id) }), id === S.uid ? h('span', { class: 'tag', text: 'You' }) : null, hs.length ? h('span', { class: 'tag', text: 'Shared account' }) : null),

@@ -172,5 +172,12 @@ rep("""function holdersOf(id) { const t = (S.settings.team || {})[id]; return (t
   const hr = Object.values(S.staff || {}).find(x => x && x.src === 'os' && x.userId === id && x.account && x.active !== false);
   return hr ? [{ name: hr.name, from: hr.joined || '', to: null, fromHR: true }] : []; }""")
 
+# ---------- one place for access: roles are set on each person's card in SLATE OS › Business › HR & salaries ----------
+rep("""    const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto;max-width:150px',""",
+    """    const pick = false ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto;max-width:150px',""")
+rep("""'Everyone with a SLATE OS account is listed. Give each person a role; without one they see nothing in Books.'""",
+    """'Everyone with a SLATE OS account is listed. Roles are set on each person’s card in SLATE OS › Business › HR & salaries; without one they see nothing in Books.'""")
+rep("""without one they see nothing in Books.' : 'Only the Principal can change roles.')];""", """without one they see nothing in Books.' : 'Roles are set by the Principal and the COO in SLATE OS › Business › HR & salaries.')];""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
