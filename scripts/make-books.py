@@ -230,5 +230,15 @@ function moreConv() {
 }
 function moreItem(t, d, onclick, right) {""")
 
+# ---------- tab icons (same line style as SLATE OS Studio and Business) ----------
+rep("""function tabsFor() {""", """const BK_TAB_ICO = {"home": "M3 11l9-7 9 7M5 10v10h14V10M10 20v-5h4v5", "money": "M4 6h13a1 1 0 0 1 1 1v2M4 6a1 1 0 0 0-1 1v11a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2M16 14h.01", "requests": "M4 5h16l1 8v6H3v-6zM3 13h5l1.5 3h5l1.5-3h5", "invoices": "M5 3h14v18l-2.3-1.5L14.3 21 12 19.5 9.7 21l-2.4-1.5L5 21zM9 8h6M9 12h6M9 16h3.5", "docs": "M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z", "reports": "M20.5 13.5A8.5 8.5 0 1 1 10.5 3.5v10zM14 3a7.5 7.5 0 0 1 7 7h-7z", "more": "M5 12h.01M12 12h.01M19 12h.01", "petty": "M3 6h18v12H3zM12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5M6.5 12h.01M17.5 12h.01"};
+function tabIco(k) { const d = BK_TAB_ICO[k]; if (!d) return null; const ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg');
+  [['viewBox', '0 0 24 24'], ['class', 'tab-ic'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '2'], ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']].forEach(([a, v]) => s.setAttribute(a, v));
+  const p = document.createElementNS(ns, 'path'); p.setAttribute('d', d); s.append(p); return s; }
+function tabsFor() {""")
+rep("""onclick: () => go(k) }, l, n ? h('span', { class: 'badge',""", """onclick: () => go(k) }, tabIco(k), l, n ? h('span', { class: 'badge',""")
+rep(""".tab{appearance:none;border:0;background:none;font-size:14px;""", """.tab .tab-ic{width:15px;height:15px;flex:none;opacity:.85}.tab[aria-current="page"] .tab-ic{opacity:1}
+.tab{appearance:none;border:0;background:none;font-size:14px;""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
