@@ -3141,6 +3141,10 @@ function viewMineBody(){
   const first=(nameOf(S.uid)||'').split(' ')[0];
   const out=[h('div',{class:'page-h home-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
     h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap)))];
+  /* the Principal and the COO add a lead or start a proposal straight from Home */
+  if(canProps()&&S.canWrite) out.push(h('div',{class:'actions home-biz',style:'margin:-4px 0 0'},
+    h('button',{class:'btn btn-sm',type:'button',onclick:()=>openLead(),text:'+ New lead'}),
+    h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openProp(),text:'+ New proposal'})));
   /* first visit: three lines on how this Home works for their role, until they close it */
   if(!pref.helpSeen&&!amChalkMember()){ const st=homeTour();
     out.push(h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'pc-row'},h('b',{text:st[0]}),h('button',{class:'h-x',type:'button','aria-label':'Close',onclick:()=>{ savePref('helpSeen',1); render(true); },text:'×'})),
@@ -8485,7 +8489,7 @@ function feeRows(){ const F=S.feeFin;
   const noFee=rows.filter(r=>!r.p.closed&&!r.pb&&!r.s.tba&&!(r.s.fee>0)), tbaRows=rows.filter(r=>!r.p.closed&&!r.pb&&r.s.tba);
   return {rows,orphan,live,sum,noFee,tbaRows}; }
 function viewBizOver(){
-  const B=S.biz, out=[...bizHead('',null)], ym=today().slice(0,7), td=today();
+  const B=S.biz, out=[...bizHead('',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openLead(),text:'+ New lead'}),h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProp(),text:'+ New proposal'})):null)], ym=today().slice(0,7), td=today();
   const all=propList(), leads=all.filter(p=>isLead(p)&&propOpen(p)), props=all.filter(p=>!isLead(p)&&propOpen(p));
   const dueL=leads.filter(propDue), dueP=props.filter(propDue), won=all.filter(p=>!isLead(p)&&p.status==='won'), lost=all.filter(p=>!isLead(p)&&['lost','dropped'].includes(p.status));
   const propV=props.reduce((a,p)=>a+(p.feeBasis==='sft'?0:+p.fee||0),0);
