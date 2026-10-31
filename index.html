@@ -22,8 +22,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
-/* header fixed to the top on every device, slightly see-through */
-.chrome{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.62);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border)}
+/* header fixed to the top on every device, slightly see-through: the same see-through (82%) and blur in Studio, Business and Books;
+   only the tint and the line under it change (Studio white with a grey line, Business pink with red, Books green with green) */
+.chrome{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border)}
 .top-in{display:flex;align-items:center;justify-content:center;gap:12px;padding-block:14px 6px}
 .logo{height:40px;width:auto;display:block}
 .divider{width:1px;height:26px;background:var(--border)}
@@ -40,7 +41,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .space-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 body.space-biz .space-b.on{background:#D7262B;color:#fff;box-shadow:none}
 .space-lock{padding-inline:9px!important;margin-left:2px}
-body.space-biz .chrome{background:rgba(253,236,236,.86);border-bottom:2px solid #D7262B}
+body.space-biz::before{background:rgba(253,236,236,.92)}
+body.space-biz .chrome{background:rgba(253,236,236,.82);border-bottom:2px solid #D7262B}
 body.space-biz .tab[aria-current="page"]{color:#B71C21;border-bottom-color:#D7262B}
 /* Books opens inside SLATE OS: the same header, Books' own tabs and screens below it (kept loaded once opened) */
 #books-pane{position:fixed;left:0;right:0;bottom:0;z-index:4;background:#fff;display:none}
@@ -48,7 +50,8 @@ body.space-biz .tab[aria-current="page"]{color:#B71C21;border-bottom-color:#D726
 body.space-books #books-pane{display:block}
 body.space-books #view,body.space-books #fab{display:none!important}
 body.space-books .chrome nav{display:none}
-body.space-books .chrome{background:rgba(231,241,234,.88);border-bottom:0}
+body.space-books::before{background:rgba(231,241,234,.92)}
+body.space-books .chrome{background:rgba(231,241,234,.82);border-bottom:0}
 body.space-books .space-b.on{background:#3F7F5A;color:#fff;box-shadow:none}
 body.space-books{overflow:hidden}
 #books-pane .bk-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:14px}
