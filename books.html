@@ -1496,22 +1496,25 @@ function nextInvNo(date) {
 async function uploadFile(file) {
   if (!assetsCap) throw { userMsg: 'File uploads aren’t available in this view.' };
   let blob = file, name = file.name || 'file';
-  if (/^image\/(jpeg|png|webp|heic)/i.test(file.type) && file.size > 900000) {
-    try { blob = await shrinkImage(file); name = name.replace(/\.\w+$/, '') + '.jpg'; } catch (e) { blob = file; }
+  if ((file.type === 'application/pdf' || /\.pdf$/i.test(name)) && file.size > PDF_MAX) throw { userMsg: `${name} is ${(file.size / 1048576).toFixed(1)} MB. PDFs can be up to 2 MB: take a photo of the bill instead, or save the PDF smaller.` };
+  if (/^image\/(jpeg|png|webp|heic|heif)/i.test(file.type) && file.size > 250000) {
+    try { blob = await shrinkImage(file); if (blob.size >= file.size && /^image\/(jpeg|webp)/i.test(file.type)) blob = file; else name = name.replace(/\.\w+$/, '') + (blob.type === 'image/webp' ? '.webp' : '.jpg'); } catch (e) { blob = file; }
   }
   const r = await assetsCap.upload(blob);
   return { id: r.id, url: location.protocol === 'file:' ? r.url : null, name, type: r.contentType || blob.type || '', size: r.sizeBytes || blob.size || 0 };
 }
 /* stored asset ids serve from the artifact at /_blob/<id> */
 const fileUrl = f => f ? (f.id ? BooksHost.fileUrl(f.id) : f.url || '') : '';
+const PDF_MAX = 2 * 1024 * 1024;
 function shrinkImage(file) {
   return new Promise((res, rej) => {
     const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
-      const max = 1800, k = Math.min(1, max / Math.max(img.width, img.height));
+      const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
-      c.toBlob(b => b ? res(b) : rej(new Error('shrink')), 'image/jpeg', 0.82);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      /* WebP where the browser can write it (smaller at the same legibility); Safari falls back to JPEG */
+      c.toBlob(b => { if (b && b.type === 'image/webp') return res(b); c.toBlob(j => j ? res(j) : rej(new Error('shrink')), 'image/jpeg', 0.72); }, 'image/webp', 0.72);
     };
     img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('img')); };
     img.src = url;
@@ -2261,7 +2264,7 @@ function attachBlock(listKey) {
 async function addFiles(listKey, files) {
   const list = [...(files || [])]; if (!list.length) return;
   const sh = S.sheet; sh.uploading = true; renderSheet();
-  try { for (const f of list) { if (f.size > 20 * 1024 * 1024) { toast(f.name + ' is over 20 MB'); continue; } const a = await uploadFile(f); if (S.sheet === sh) { sh.d[listKey] = (sh.d[listKey] || []).concat([a]); } } }
+  try { for (const f of list) { if (f.size > 20 * 1024 * 1024) { toast(f.name + ' is over 20 MB'); continue; } if ((f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')) && f.size > PDF_MAX) { toast(`${f.name} is over 2 MB. Take a photo of the bill instead, or save the PDF smaller.`); continue; } const a = await uploadFile(f); if (S.sheet === sh) { sh.d[listKey] = (sh.d[listKey] || []).concat([a]); } } }
   catch (e) { console.error(e); toast((e && e.userMsg) || (e && e.code === 'not_granted' ? 'Allow file uploads for SLATE Books to attach files.' : 'Couldn’t upload. Try again.')); }
   finally { if (S.sheet === sh) { sh.uploading = false; renderSheet(); } }
 }
@@ -2538,7 +2541,7 @@ function sheetVoucher() {
   }
   out.push(h('div', { class: 'sec' }, secH('Bills and receipts', (v.files || []).length ? String(v.files.length) : ''),
     (v.files || []).length ? h('div', { class: 'files' }, v.files.map((f, i) => fileTile(f, () => openSheet({ type: 'doc', id: 'v:' + v.id + ':' + i }), null, can.enter() && (['pending', 'returned'].includes(st) || myRole() === 'Principal') ? () => run(() => Store.patch('vouchers', v.id, { files: v.files.filter((_, j) => j !== i) }), 'Removed') : null))) : h('p', { class: 'muted', style: 'margin:0', text: 'No files attached yet.' }),
-    can.enter() && assetsCap && st !== 'void' ? h('label', { class: 'btn btn-sm', style: 'justify-self:start' }, '+ Attach files', h('input', { type: 'file', multiple: true, accept: 'image/*,application/pdf', hidden: true, onchange: async e => { const fl = [...e.target.files]; if (!fl.length) return; toast('Uploading…'); try { const add = []; for (const f of fl) add.push(await uploadFile(f)); run(() => Store.patch('vouchers', v.id, { files: (S.vouchers[v.id].files || []).concat(add) }), 'Attached'); } catch (er) { toast('Couldn’t upload. Try again.'); } } })) : null));
+    can.enter() && assetsCap && st !== 'void' ? h('label', { class: 'btn btn-sm', style: 'justify-self:start' }, '+ Attach files', h('input', { type: 'file', multiple: true, accept: 'image/*,application/pdf', hidden: true, onchange: async e => { const fl = [...e.target.files]; if (!fl.length) return; toast('Uploading…'); try { const add = []; for (const f of fl) add.push(await uploadFile(f)); run(() => Store.patch('vouchers', v.id, { files: (S.vouchers[v.id].files || []).concat(add) }), 'Attached'); } catch (er) { toast((er && er.userMsg) || 'Couldn’t upload. Try again.'); } } })) : null));
   if (st === 'tally' && !(v.trail || []).some(e => ['created', 'checked', 'approved'].includes(e.act))) out.push(h('p', { class: 'f-hint', text: 'Imported from Tally. There is no digital sign-off for entries made before SLATE Books.' }));
   out.push(timeline(v.trail));
   return out;

@@ -393,5 +393,28 @@ rep("""  openMoney('out', { amount: String(amt), cat: convLedger(), proj,""",
     """  const growL = Object.keys(S.ledgers).find(k => S.ledgers[k] && S.ledgers[k].cat === 'grow' && S.ledgers[k].active !== false);
   openMoney('out', { amount: String(amt), cat: uid === S.settings.ownerId && growL ? growL : convLedger(), proj,""")
 
+# attachments: photos saved smaller (WebP where the browser can, else JPEG), PDFs over 2 MB refused
+rep("""  if (/^image\\/(jpeg|png|webp|heic)/i.test(file.type) && file.size > 900000) {
+    try { blob = await shrinkImage(file); name = name.replace(/\\.\\w+$/, '') + '.jpg'; } catch (e) { blob = file; }
+  }""", """  if ((file.type === 'application/pdf' || /\\.pdf$/i.test(name)) && file.size > PDF_MAX) throw { userMsg: `${name} is ${(file.size / 1048576).toFixed(1)} MB. PDFs can be up to 2 MB: take a photo of the bill instead, or save the PDF smaller.` };
+  if (/^image\\/(jpeg|png|webp|heic|heif)/i.test(file.type) && file.size > 250000) {
+    try { blob = await shrinkImage(file); if (blob.size >= file.size && /^image\\/(jpeg|webp)/i.test(file.type)) blob = file; else name = name.replace(/\\.\\w+$/, '') + (blob.type === 'image/webp' ? '.webp' : '.jpg'); } catch (e) { blob = file; }
+  }""")
+rep("""      const max = 1800, k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      c.toBlob(b => b ? res(b) : rej(new Error('shrink')), 'image/jpeg', 0.82);""",
+    """      const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      /* WebP where the browser can write it (smaller at the same legibility); Safari falls back to JPEG */
+      c.toBlob(b => { if (b && b.type === 'image/webp') return res(b); c.toBlob(j => j ? res(j) : rej(new Error('shrink')), 'image/jpeg', 0.72); }, 'image/webp', 0.72);""")
+rep("""function shrinkImage(file) {""", """const PDF_MAX = 2 * 1024 * 1024;
+function shrinkImage(file) {""")
+rep("""for (const f of list) { if (f.size > 20 * 1024 * 1024) { toast(f.name + ' is over 20 MB'); continue; }""",
+    """for (const f of list) { if (f.size > 20 * 1024 * 1024) { toast(f.name + ' is over 20 MB'); continue; } if ((f.type === 'application/pdf' || /\\.pdf$/i.test(f.name || '')) && f.size > PDF_MAX) { toast(`${f.name} is over 2 MB. Take a photo of the bill instead, or save the PDF smaller.`); continue; }""")
+rep("""for (const f of fl) add.push(await uploadFile(f)); run(() => Store.patch('vouchers', v.id, { files: (S.vouchers[v.id].files || []).concat(add) }), 'Attached'); } catch (er) { toast('Couldn’t upload. Try again.'); }""",
+    """for (const f of fl) add.push(await uploadFile(f)); run(() => Store.patch('vouchers', v.id, { files: (S.vouchers[v.id].files || []).concat(add) }), 'Attached'); } catch (er) { toast((er && er.userMsg) || 'Couldn’t upload. Try again.'); }""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
