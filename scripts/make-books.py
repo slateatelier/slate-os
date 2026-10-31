@@ -384,5 +384,14 @@ rep("""  const sug = k => Math.round((k === 'fees' ? avg.fees : (avg.spend[k] ||
 rep("""h('span', { class: 'f-hint', text: 'last 6 months: ' + fmt(sug(k)) + ' a month' }));""",
     """h('span', { class: 'f-hint', text: ONE_OFF.includes(k) ? (raw(k) ? 'last 6 months: ' + fmt(raw(k)) + ' a month, from one-off payments (' + (k === 'owner' ? 'a partner settlement' : 'advances') + '). Plan 0 unless you expect more.' : 'last 6 months: 0') : 'last 6 months: ' + fmt(sug(k)) + ' a month' }));""")
 
+# a fixed monthly budget for SLATE's growth: the Principal's travel and client acquisition
+rep("""{ id: 'mkt', name: 'Marketing', group: 'adm' }, { id: 'bank', name: 'Bank charges', group: 'fin' },""",
+    """{ id: 'mkt', name: 'Marketing', group: 'adm' }, { id: 'grow', name: 'SLATE growth (Principal)', group: 'adm' }, { id: 'bank', name: 'Bank charges', group: 'fin' },""")
+rep("""const PLAN_LINES = ['proj', 'staff', 'rent', 'office', 'it', 'lic', 'mkt', 'bank', 'equip', 'owe', 'owner', 'other'];""",
+    """const PLAN_LINES = ['proj', 'staff', 'rent', 'office', 'it', 'lic', 'mkt', 'grow', 'bank', 'equip', 'owe', 'owner', 'other'];""")
+rep("""  openMoney('out', { amount: String(amt), cat: convLedger(), proj,""",
+    """  const growL = Object.keys(S.ledgers).find(k => S.ledgers[k] && S.ledgers[k].cat === 'grow' && S.ledgers[k].active !== false);
+  openMoney('out', { amount: String(amt), cat: uid === S.settings.ownerId && growL ? growL : convLedger(), proj,""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))

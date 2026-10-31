@@ -982,7 +982,7 @@ html.embed .top-in{display:none}html.embed .chrome{top:0}
     { id: 'proj', name: 'Consultants and project work', group: 'pc' }, { id: 'staff', name: 'Salaries and staff', group: 'staff' },
     { id: 'rent', name: 'Office rent and running', group: 'occ' }, { id: 'office', name: 'Office supplies and travel', group: 'adm' },
     { id: 'it', name: 'IT and software', group: 'adm' }, { id: 'lic', name: 'Licences, insurance and legal', group: 'adm' },
-    { id: 'mkt', name: 'Marketing', group: 'adm' }, { id: 'bank', name: 'Bank charges', group: 'fin' },
+    { id: 'mkt', name: 'Marketing', group: 'adm' }, { id: 'grow', name: 'SLATE growth (Principal)', group: 'adm' }, { id: 'bank', name: 'Bank charges', group: 'fin' },
     { id: 'equip', name: 'Equipment and furniture', group: 'fa' }, { id: 'owe', name: 'Paying off what SLATE owes', group: 'pay' },
     { id: 'adv', name: 'Advances and deposits', group: 'adv' }, { id: 'owner', name: 'Owner', group: 'cap' }
   ];
@@ -3408,7 +3408,8 @@ function convLedger() { return Object.keys(S.ledgers).find(k => activeL(k) && !i
 function convPay(uid, xs) {
   const ids = xs.map(r => r.id), amt = xs.reduce((a, r) => a + (+r.amount || 0), 0), months = [...new Set(xs.map(r => monthName(r.trip_date.slice(0, 7))))].join(', ');
   const projs = [...new Set(xs.map(r => convProjOf(r.project_id)))], proj = projs.length === 1 ? projs[0] : '';
-  openMoney('out', { amount: String(amt), cat: convLedger(), proj, party: nameOf(uid), narr: `Expense claims ${months} for ${nameOf(uid)}: ${ids.join(', ')}`,
+  const growL = Object.keys(S.ledgers).find(k => S.ledgers[k] && S.ledgers[k].cat === 'grow' && S.ledgers[k].active !== false);
+  openMoney('out', { amount: String(amt), cat: uid === S.settings.ownerId && growL ? growL : convLedger(), proj, party: nameOf(uid), narr: `Expense claims ${months} for ${nameOf(uid)}: ${ids.join(', ')}`,
     after: async (vid, vdoc) => { const { error } = await BooksHost.sb.rpc('conv_mark_paid', { p_ids: ids, p_voucher: vid, p_voucher_no: vdoc.no || '' });
       if (error) throw new Error('The payment is entered, but the claims could not be marked paid: ' + error.message + '. Tell the Principal before paying again.');
       S.conv.state = 'idle'; } });
@@ -4062,7 +4063,7 @@ function depBox() {
 Object.assign(SHEETS, { settle: sheetSettle });
 
 /* ---------- Home: where money comes from and goes, what is coming, plan against actual ---------- */
-const PLAN_LINES = ['proj', 'staff', 'rent', 'office', 'it', 'lic', 'mkt', 'bank', 'equip', 'owe', 'owner', 'other'];
+const PLAN_LINES = ['proj', 'staff', 'rent', 'office', 'it', 'lic', 'mkt', 'grow', 'bank', 'equip', 'owe', 'owner', 'other'];
 const PLAN_NAME = k => k === 'fees' ? 'Fees from clients' : k === 'other' ? 'Everything else' : k === 'owe' ? 'Loans, bills and tax paid off' : (SB.CAT[k] || {}).name || k;
 const fyKey = (d) => fyOf(d || today()).short;
 const monthsOfFY = fy => { const out = []; let m = fy.from.slice(0, 7); while (m <= fy.to.slice(0, 7)) { out.push(m); m = SB.addMonths(m, 1); } return out; };
