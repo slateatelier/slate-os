@@ -42,7 +42,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 #space-slot{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:calc(50% + 4px);transform:translateY(-50%)}
 .space-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 body.space-biz .space-b.on{background:#D7262B;color:#fff;box-shadow:none}
-.space-lock{padding-inline:9px!important;margin-left:2px}
+.space-lock{padding-inline:9px!important;margin-left:2px}.space-lock:not(.is-open){opacity:.55}
 body.space-biz::before{background:rgba(253,236,236,.92)}
 body.space-biz .chrome{background:rgba(253,236,236,.82);border-bottom:2px solid #D7262B}
 body.space-biz .tab[aria-current="page"]{color:#B71C21;border-bottom-color:#D7262B}
@@ -2426,7 +2426,14 @@ function renderHeader(){
       onclick:async()=>{ if(k!=='studio'&&window.SlatePin&&!(await SlatePin.ensure())) return; if(k==='books'){ openBooks(); return; } if(S.books){ S.books=false; if((k==='biz')===inBiz){ render(true); window.scrollTo(0,0); return; } } if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
   /* the switch stays put at the left edge whichever space is open; the tabs scroll beside it */
   /* the switch sits in the top-right corner; Business tints the top bar so it is clear which space is open */
-  if(sw&&(inBiz||S.books)&&window.SlatePin&&SlatePin.required()) sw.append(h('button',{type:'button',class:'space-b space-lock','aria-label':'Lock Business and Books',title:'Lock Business and Books',onclick:()=>{ SlatePin.lock(); S.books=false; if(S.view==='biz') S.view=S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'; render(true); window.scrollTo(0,0); toast('Business and Books locked'); }},svgEl('svg',{viewBox:'0 0 24 24',width:'14',height:'14',fill:'none',stroke:'currentColor','stroke-width':'2.2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('rect',{x:'4',y:'11',width:'16',height:'10',rx:'2'}),svgEl('path',{d:'M8 11V7a4 4 0 0 1 8 0v4'}))));
+  /* the lock sits in the switch in every space (so the switch never changes size): open padlock while Business and Books are
+     unlocked on this device (tap to lock), closed when locked (tap to enter the PIN) */
+  if(sw&&window.SlatePin&&!SlatePin.known()&&!S.pinAsked){ S.pinAsked=true; SlatePin.status().then(()=>render(true),()=>{}); }
+  if(sw&&window.SlatePin&&SlatePin.required()){ const open=SlatePin.unlocked();
+    sw.append(h('button',{type:'button',class:'space-b space-lock'+(open?' is-open':''),'aria-label':open?'Lock Business and Books':'Business and Books are locked. Enter your PIN',title:open?'Business and Books are open on this device. Tap to lock.':'Business and Books are locked. Tap to enter your PIN.',
+      onclick:()=>{ if(!open){ SlatePin.ensure().then(ok=>{ if(ok) render(true); }); return; }
+        SlatePin.lock(); S.books=false; if(S.view==='biz') S.view=S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'; render(true); window.scrollTo(0,0); toast('Business and Books locked'); }},
+      svgEl('svg',{viewBox:'0 0 24 24',width:'14',height:'14',fill:'none',stroke:'currentColor','stroke-width':'2.2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('rect',{x:'4',y:'11',width:'16',height:'10',rx:'2'}),svgEl('path',{d:open?'M8 11V7a4 4 0 0 1 7.75-1.4':'M8 11V7a4 4 0 0 1 8 0v4'})))); }
   if((inBiz||S.books)&&window.SlatePin) pinGate();
   { const slot=$('#space-slot'); if(slot) slot.replaceChildren(...(sw?[sw]:[])); if(!spaces) S.books=false; document.body.classList.toggle('space-biz',!!inBiz&&!S.books); document.body.classList.toggle('space-books',!!S.books); document.body.classList.toggle('has-spaces',!!spaces); if(S.books) placeBooks(); }
   const dock=null;
