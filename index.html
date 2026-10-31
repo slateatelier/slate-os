@@ -600,6 +600,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 @media (max-width:560px){.facts{grid-template-columns:minmax(0,1fr)}.h1{font-size:24px}.tab{padding-inline:8px}}
 /* ---- standard phases: gates and checklists ---- */
 .kpis.kpis5{grid-template-columns:repeat(5,minmax(0,1fr))}.kpis.kpis4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:1000px){.kpis.kpis5{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.kpi{min-width:0}.kpi .num{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:640px){.kpis.kpis5{grid-template-columns:repeat(3,minmax(0,1fr))}.kpis.kpis4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .pj-kind .seg button{white-space:nowrap}
 .biz-bar{flex-wrap:nowrap;margin-top:-4px}.biz-seg{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.biz-seg::-webkit-scrollbar{display:none}.biz-seg .seg{width:max-content}
@@ -8423,8 +8425,8 @@ function viewValue(){
   /* leadership: the COO, measured against the firm */
   if(D.lead){ const L=D.lead, waiting=(()=>{ try{ return queueGroups().reduce((a,g)=>a+g.n,0); }catch(e){ return null; } })();
     out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Leadership'}),h('span',{class:'cnt',text:'the COO, measured against the whole firm'})),
-      h('div',{class:'kpis kpis5'},kpi('COO cost',L.noSal?'no salary':tk(Math.round(L.ctc))),kpi('Management share earned',tk(Math.round(L.feeM+L.feeW)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:R.coo+'% of every fee billed'})),
-        kpi('Multiple',x2(L.mult),L.mult==null?'':L.mult>=R.bench?'ontime':L.mult>=1.5?'late':'overdue'),kpi('Studio on time',pc(D.onTime),D.onTime==null?'':D.onTime>=target()/100?'ontime':'late'),kpi('Approvals waiting now',waiting==null?'—':String(waiting),waiting>5?'late':'')),
+      h('div',{class:'kpis kpis5'},kpi('COO cost',L.noSal?'no salary':tk(Math.round(L.ctc)),null,L.noSal?null:h('div',{class:'f-hint',style:'margin:2px 0 0',text:`salary ${bdt(Math.round(L.sal))} + Eid bonus ${bdt(Math.round(L.bonus))}`+(L.oh>1?` + overhead share ${bdt(Math.round(L.oh))}`:'')+(D.months.length>1?` · ${D.months.length} months`:' · this month')})),kpi('Management share earned',tk(Math.round(L.feeM+L.feeW)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:R.coo+'% of every fee billed'})),
+        kpi('Multiple',L.fee>0?x2(L.mult):'—',!(L.fee>0)||L.mult==null?'':L.mult>=R.bench?'ontime':L.mult>=1.5?'late':'overdue',!(L.fee>0)?h('div',{class:'f-hint',style:'margin:2px 0 0',text:'nothing billed yet'}):null),kpi('Studio on time',pc(D.onTime),D.onTime==null?'':D.onTime>=target()/100?'ontime':'late'),kpi('Approvals waiting now',waiting==null?'—':String(waiting),waiting>5?'late':'')),
       h('p',{class:'f-hint',style:'margin:0 2px 6px',text:'Most of the COO’s work (coordination, approvals, clients, running the office) never becomes a task, so the COO is not ranked by points. Judge this block on fees billed against leadership cost, the studio’s on-time rate and how fast approvals clear.'})); }
   if(D.supTot>1) out.push(h('p',{class:'f-hint',style:'margin:4px 2px 10px',text:`Support staff cost ${bdt(Math.round(D.supTot))} in this period (${D.payTot?Math.round(D.supTot/D.payTot*100):0}% of team cost). They are not ranked: their cost is shared into everyone’s cost to company, like rent.`}));
   /* matrix */

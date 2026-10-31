@@ -66,7 +66,7 @@ main>*{min-width:0}
 .row:last-child{border-bottom:0}
 .row:hover{background:rgba(0,0,0,.03)}
 .row:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
-.row-main{min-width:0}
+.row-main{min-width:0}.row>.row-main:first-child{grid-column:1/3}
 .row-title{font-weight:500;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;overflow-wrap:anywhere}
 .row-meta{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 6px;margin-top:2px}
 .row-amt{text-align:right;display:grid;gap:2px;justify-items:end}
@@ -3489,9 +3489,10 @@ function nextId(prefix, coll) { let n = 0; Object.keys(coll).forEach(k => { cons
 /* projects */
 function moreProjects() {
   const ids = Object.keys(S.projects).sort((a, b) => projLabel(a).localeCompare(projLabel(b)));
-  const by = { Active: [], 'On hold': [], Closed: [] }; ids.forEach(k => (by[S.projects[k].status] || by.Active).push(k));
+  const by = { Active: [], 'On hold': [], Completed: [], Closed: [], Cancelled: [] }; ids.forEach(k => (by[S.projects[k].status] || by.Active).push(k));
   const out = [pageH('Projects', 'Projects come from SLATE OS: open one in Studio and set its fee in Business › Fees, and it appears here. Tag fees and costs to a project to see what each one earns.')];
   Object.entries(by).forEach(([st, list]) => { if (list.length) out.push(h('div', { class: 'sec' }, secH(st, String(list.length)), h('div', { class: 'list' }, list.map(k => { const p = S.projects[k]; return h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'project', id: k, d: projDraft(k) }) },
+    h('span', { class: 'pst-dot ' + pstCls(p.status), style: 'justify-self:center;margin:0', title: p.status || 'Active', 'aria-hidden': 'true' }),
     h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: p.name }), p.overhead ? h('span', { class: 'tag', text: 'Overheads' }) : null), h('div', { class: 'row-meta', text: [p.code, p.client].filter(Boolean).join(' · ') })),
     h('div', { class: 'row-amt' }, h('span', { class: 'a', text: +p.contract ? fmt(p.contract) : '' }), +p.contract ? h('span', { class: 'b', text: 'fee agreed' }) : null)); })))); });
   return out;

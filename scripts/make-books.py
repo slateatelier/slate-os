@@ -259,5 +259,17 @@ rep(""".wl .t{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space
 .pst-chip.pst-h{background:#FFF4DE}.pst-chip.pst-x{background:#FDECEC}.pst-chip.pst-c{background:#F2F2F7;color:#6E6E73}
 .pst-key{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--muted);margin-top:2px}""")
 
+# ---------- More › Projects: rows had no first column, so names were squeezed into the icon slot; status dot fills it ----------
+rep("""const by = { Active: [], 'On hold': [], Closed: [] }; ids.forEach(k => (by[S.projects[k].status] || by.Active).push(k));""",
+    """const by = { Active: [], 'On hold': [], Completed: [], Closed: [], Cancelled: [] }; ids.forEach(k => (by[S.projects[k].status] || by.Active).push(k));""")
+rep("""return h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'project', id: k, d: projDraft(k) }) },
+    h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: p.name }),""",
+    """return h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'project', id: k, d: projDraft(k) }) },
+    h('span', { class: 'pst-dot ' + pstCls(p.status), style: 'justify-self:center;margin:0', title: p.status || 'Active', 'aria-hidden': 'true' }),
+    h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: p.name }),""")
+
+# any row with no icon: its text takes the icon's column too (Accounts, Fixed assets and the like)
+rep(""".row-main{min-width:0}""", """.row-main{min-width:0}.row>.row-main:first-child{grid-column:1/3}""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
