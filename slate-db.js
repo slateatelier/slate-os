@@ -961,12 +961,13 @@
     const showResult = (title, email, pw, name) => {
       const copy = el('button', { class: 'primary', type: 'button' }, 'Copy password');
       copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(pw); copy.textContent = 'Copied'; } catch (_) { copy.textContent = 'Select and copy it above'; } });
-      const msgTxt = `SLATE OS: sign in at ${location.origin} with ${email} and the temporary password ${pw}. You'll choose your own password straight after.`;
+      const msgTxt = `SLATE OS · your sign-in\n\n1. Open ${location.origin}\n2. Email: ${email}\n3. Temporary password: ${pw}\n4. Choose your own password when asked.\n\nOn your phone, add it to the Home Screen (iPhone: Share › Add to Home Screen; Android: ⋮ › Add to Home screen). Please don't share this message.`;
       const share = el('button', { class: 'link', type: 'button' }, 'Share…');
       share.addEventListener('click', async () => { try { if (navigator.share) await navigator.share({ text: msgTxt }); else { await navigator.clipboard.writeText(msgTxt); share.textContent = 'Message copied'; } } catch (_) {} });
+      const wa = el('a', { class: 'link', href: 'https://wa.me/?text=' + encodeURIComponent(msgTxt), target: '_blank', rel: 'noopener' }, 'Send on WhatsApp');
       result.replaceChildren(el('div', { class: 'slate-acc-res', role: 'status' },
         el('b', {}, title), el('span', {}, `${name} · ${email}`),
-        el('code', {}, pw), el('div', { class: 'row', style: 'justify-content:flex-start;gap:16px' }, copy, share),
+        el('code', {}, pw), el('div', { class: 'row', style: 'justify-content:flex-start;gap:16px;flex-wrap:wrap' }, copy, wa, share),
         el('span', { class: 'f' }, 'Shown only this once. Give it to them in person or on WhatsApp. When they sign in, SLATE OS makes them choose their own password, so you never know it. This is in the audit trail.')));
       result.scrollIntoView({ block: 'nearest' });
     };
