@@ -243,6 +243,13 @@ async function signOut() { try { await sb.auth.signOut(); } catch (_) {} (EMBED 
 const ready = (async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return { signedOut: true };
+  /* the PIN: inside SLATE OS the app asks for it; on its own (the accountant) Books asks here */
+  if (!EMBED && window.SlatePin) {
+    SlatePin.init(sb);
+    if (!(await SlatePin.ensure({ cancelText: 'Sign out' }))) { await signOut(); return new Promise(() => {}); }
+    SlatePin.onLock(async () => { if (await SlatePin.ensure({ cancelText: 'Sign out' })) refreshAll(); else signOut(); });
+    ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => SlatePin.activity(), { passive: true }));
+  }
   const pAll = loadAll(); all = pAll; pAll.catch(() => { all = null; });
   const [, r] = await Promise.all([loadPeople().then(() => loadMyIcon(session.user.id)).catch(() => {}), sb.rpc('books_role')]);
   ROLE = (r && r.data) || null;
@@ -255,7 +262,7 @@ const ready = (async () => {
 })();
 
 window.BooksHost = {
-  ready, sb, fileUrl, embed: EMBED, spaceSwitch, signOut, headLeft,
+  ready, sb, fileUrl, embed: EMBED, refresh: () => refreshAll(), spaceSwitch, signOut, headLeft,
   onChange(fn) { rerender = fn; },
   isCOO: id => !!(PEOPLE[id] && PEOPLE[id].designation === 'coo'),
   peopleIds: () => Object.values(PEOPLE).filter(p => p.active !== false).map(p => p.id),

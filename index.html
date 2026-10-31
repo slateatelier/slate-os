@@ -39,6 +39,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 #space-slot{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:calc(50% + 4px);transform:translateY(-50%)}
 .space-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 body.space-biz .space-b.on{background:#D7262B;color:#fff;box-shadow:none}
+.space-lock{padding-inline:9px!important;margin-left:2px}
 body.space-biz .chrome{background:rgba(253,236,236,.86);border-bottom:2px solid #D7262B}
 body.space-biz .tab[aria-current="page"]{color:#B71C21;border-bottom-color:#D7262B}
 /* Books opens inside SLATE OS: the same header, Books' own tabs and screens below it (kept loaded once opened) */
@@ -1052,6 +1053,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/config.js"></script>
+<script src="/pin.js"></script>
 <script src="/slate-db.js"></script>
 <script>
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2154,15 +2156,34 @@ function slateGo(go){
 /* Books: its own page (/books), shown inside SLATE OS under the same header; loaded the first time it is opened, then kept */
 function placeBooks(){ const pane=document.getElementById('books-pane'), ti=document.querySelector('.chrome .top-in'); if(pane&&ti) pane.style.top=Math.round(ti.getBoundingClientRect().bottom)+'px'; }
 function openBooks(){
+  if(window.SlatePin&&!SlatePin.unlocked()){ SlatePin.ensure().then(ok=>{ if(ok) openBooks(); }); return; }
   let pane=document.getElementById('books-pane');
   if(!pane){ pane=h('div',{id:'books-pane'},h('div',{class:'bk-wait',text:'Opening Books…'})); const f=document.createElement('iframe'); f.title='SLATE Books'; f.src='/books?embed=1';
-    f.addEventListener('load',()=>{ const w=pane.querySelector('.bk-wait'); if(w) w.remove(); }); pane.append(f); document.body.append(pane);
+    f.addEventListener('load',()=>{ const w=pane.querySelector('.bk-wait'); if(w) w.remove();
+      try{ ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>f.contentWindow.addEventListener(ev,()=>{ if(window.slatePinActivity) window.slatePinActivity(); },{passive:true})); }catch(e){} }); pane.append(f); document.body.append(pane);
     /* if Books cannot show here (blocked or offline), say so and offer it on its own page instead of a blank screen */
     setTimeout(()=>{ let ok=false; try{ const d=f.contentDocument; ok=!!(d&&d.getElementById('view')); }catch(e){}
       if(!ok&&!pane.querySelector('.bk-wait')) pane.append(h('div',{class:'bk-wait'},h('div',{style:'text-align:center;padding:24px'},h('div',{text:'Books didn’t open here.'}),h('a',{href:'/books?solo=1',style:'color:var(--ink);text-decoration:underline',text:'Open Books on its own page'})))); },8000); }
   S.books=true; render(true); placeBooks();
 }
 addEventListener('resize',()=>{ if(S.books) placeBooks(); });
+/* Business and Books PIN: ask when they are open and locked; keep them open while in use; reload what they show */
+function pinGate(){
+  if(!window.SlatePin||S.pinAsking) return;
+  if(!SlatePin.known()){ SlatePin.status().then(()=>{ if(!SlatePin.unlocked()) pinGate(); }); return; }
+  if(SlatePin.unlocked()) return;
+  S.pinAsking=true;
+  SlatePin.ensure().then(ok=>{ S.pinAsking=false; if(!ok){ S.books=false; if(S.view==='biz') S.view=S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'; render(true); window.scrollTo(0,0); } });
+}
+function pinReload(){ S.feeFin=null; try{ if(window.slateReload) window.slateReload(); }catch(e){}
+  try{ const f=document.querySelector('#books-pane iframe'); if(f&&f.contentWindow&&f.contentWindow.BooksHost&&f.contentWindow.BooksHost.refresh) f.contentWindow.BooksHost.refresh(); }catch(e){} }
+if(window.SlatePin){
+  SlatePin.onUnlock(()=>{ pinReload(); render(true); });
+  SlatePin.onLock(()=>{ pinReload(); if(S.view==='biz'||S.books) pinGate(); else render(true); });
+  const act=()=>{ if(S.view==='biz'||S.books) SlatePin.activity(); };
+  ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>addEventListener(ev,act,{passive:true}));
+  window.slatePinActivity=act;
+}
 { const q=new URLSearchParams(location.search), go=q.get('go');
   if(q.get('space')==='books'){ q.delete('space'); try{ history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash); }catch(e){}
     let n=0; const open=()=>{ if((S.state!=='ready'||!S.settings)&&n++<60) return setTimeout(open,250); if(S.state==='ready'&&canProps()&&S.canWrite) openBooks(); }; setTimeout(open,200); }
@@ -2378,9 +2399,11 @@ function renderHeader(){
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
   const sw=spaces?h('div',{class:'space-sw',role:'group','aria-label':'Space'},[['studio','Studio'],['biz','Business',propList().filter(propDue).length],['books','Books']].map(([k,l,n])=>h('button',{type:'button',class:'space-b'+((k==='books'?!!S.books:(!S.books&&(k==='biz')===inBiz))?' on':''),'aria-pressed':String(k==='books'?!!S.books:(!S.books&&(k==='biz')===inBiz)),
-      onclick:()=>{ if(k==='books'){ openBooks(); return; } if(S.books){ S.books=false; if((k==='biz')===inBiz){ render(true); window.scrollTo(0,0); return; } } if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
+      onclick:async()=>{ if(k!=='studio'&&window.SlatePin&&!(await SlatePin.ensure())) return; if(k==='books'){ openBooks(); return; } if(S.books){ S.books=false; if((k==='biz')===inBiz){ render(true); window.scrollTo(0,0); return; } } if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
   /* the switch stays put at the left edge whichever space is open; the tabs scroll beside it */
   /* the switch sits in the top-right corner; Business tints the top bar so it is clear which space is open */
+  if(sw&&(inBiz||S.books)&&window.SlatePin&&SlatePin.required()) sw.append(h('button',{type:'button',class:'space-b space-lock','aria-label':'Lock Business and Books',title:'Lock Business and Books',onclick:()=>{ SlatePin.lock(); S.books=false; if(S.view==='biz') S.view=S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'; render(true); window.scrollTo(0,0); toast('Business and Books locked'); }},svgEl('svg',{viewBox:'0 0 24 24',width:'14',height:'14',fill:'none',stroke:'currentColor','stroke-width':'2.2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('rect',{x:'4',y:'11',width:'16',height:'10',rx:'2'}),svgEl('path',{d:'M8 11V7a4 4 0 0 1 8 0v4'}))));
+  if((inBiz||S.books)&&window.SlatePin) pinGate();
   { const slot=$('#space-slot'); if(slot) slot.replaceChildren(...(sw?[sw]:[])); if(!spaces) S.books=false; document.body.classList.toggle('space-biz',!!inBiz&&!S.books); document.body.classList.toggle('space-books',!!S.books); document.body.classList.toggle('has-spaces',!!spaces); if(S.books) placeBooks(); }
   const dock=null;
   if(inBiz){ S.biz=S.biz||{tab:'over',q:'',st:'active'}; const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
@@ -4648,7 +4671,9 @@ function viewSetup(){
   return out;
 }
 /* Settings › Salaries only I see (Principal only): hidden from the COO in SLATE OS and Finance, enforced in the database */
-function salPrivSec(){ loadFeeFin(); const F=S.feeFin;
+function salPrivSec(){
+  if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlocked()) return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Salaries only I see'})),h('div',{class:'card'},h('p',{class:'muted',style:'margin:0',text:'Salaries are in Business, which needs your PIN on this device.'}),h('button',{class:'btn',type:'button',style:'justify-self:start',onclick:()=>SlatePin.ensure().then(ok=>{ if(ok) render(true); }),text:'Enter PIN'})));
+  loadFeeFin(); const F=S.feeFin;
   const body=!F||F.state!=='ok'?h('p',{class:'muted',style:'margin:0',text:F&&F.state==='err'?'Couldn’t load Finance.':'Loading…'}):(()=>{ const rows=hrRows().filter(r=>r.st);
     if(!rows.length) return h('p',{class:'muted',style:'margin:0',text:'No salaries recorded yet. Set them in Business › HR first.'});
     return h('div',{class:'list'},rows.map(r=>h('label',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;cursor:pointer'},

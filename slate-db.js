@@ -217,6 +217,7 @@
     me = people.get(authUser.id) || null;
     if (peopleChanged) touchPeople();
   }
+  window.slateReload = () => loadAll().catch(() => {});   // after the Business PIN is entered or locks again
   let channel = null;
   function goLive() {
     channel = sb.channel('slate-os-live')

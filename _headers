@@ -52,3 +52,5 @@
   Cache-Control: no-cache
 /books-host.js
   Cache-Control: no-cache
+/pin.js
+  Cache-Control: no-cache

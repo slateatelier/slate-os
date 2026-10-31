@@ -110,7 +110,7 @@ html.embed .top-in{display:none}html.embed .chrome{top:0}
 # ---------- the profile icons, the same list Studio uses ----------
 _ix = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'index.html'), encoding='utf-8').read()
 _ic = _ix[_ix.index('const ICONS=') + len('const ICONS='):_ix.index('\nconst ICON=')].rstrip().rstrip(';')
-rep('<script src="/books-host.js"></script>', '<script>window.SLATE_ICONS=' + _ic + ';</script>\n<script src="/books-host.js"></script>')
+rep('<script src="/books-host.js"></script>', '<script>window.SLATE_ICONS=' + _ic + ';</script>\n<script src="/pin.js"></script>\n<script src="/books-host.js"></script>')
 # ---------- staff and projects come from SLATE OS (Business › HR & salaries, Studio and Business › Fees) ----------
 _a = s.index('function sheetProject() {'); _b = s.index('\n}\n', _a)
 _f = s[_a:_b]
