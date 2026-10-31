@@ -8006,7 +8006,7 @@ function pbBlocks(p,d){
   if(pr.length) add(`<h2>Project</h2><table>${pr.map(([k,v])=>`<tr><td class="pb-k">${pbEsc(k)}</td><td>${pbEsc(v)}</td></tr>`).join('')}</table>`);
   if(!d.scopeAuto) list('Scope of work',pbLines(d.scope));
   const A=pbScopeAuto(d), sv=A.svc.filter(x=>d.scopeAuto||x.desc||x.items.length), num=d.scopeAuto;
-  sv.forEach((x,i)=>add((i===0?`<h2>${num?'Scope of work':'Services in detail'}</h2>`:'')+`<div class="pb-svc"><b>${num?x.n+'. ':''}${pbEsc(x.label)}</b>${x.desc?`<p class="pb-small" style="margin:0.5mm 0 1mm">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="pb-ul pb-chk">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}</div>`,i===0));
+  sv.forEach((x,i)=>add((i===0?`<h2>${num?'Scope of work':'Services in detail'}</h2>`:'')+`<div class="pb-svc"><b>${num?x.n+'. ':''}${pbEsc(x.label)}</b>${x.desc?`<p class="pb-small" style="margin:0.5mm 0 1mm">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="pb-ul pb-chk">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}</div>`));
   if(num&&A.more.length) add(`<div class="pb-svc"><b>Also included</b><ul class="pb-ul">${A.more.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul></div>`);
   const dl=pbLines(d.deliv); if(dl.length) list('Deliverables',dl);
 
@@ -8047,7 +8047,7 @@ async function pbPages(p,d){
     const doc=ifr.contentDocument; doc.open(); doc.write(pbHead('measure')+`<body><div class="page" id="pg">${B.map((b,i)=>`<div class="pb-blk" data-i="${i}">${b.html}</div>`).join('')}</div></body></html>`); doc.close();
     await new Promise(r=>{ if(doc.readyState==='complete') r(); else ifr.onload=()=>r(); setTimeout(r,2500); });
     try{ await Promise.race([doc.fonts.ready,new Promise(r=>setTimeout(r,2500))]); }catch(_){}
-    const mm=96/25.4, avail=(297-43.5-34)*mm, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
+    const mm=96/25.4, avail=(236-43.5)*mm /* stop above the DESIGN WITH PURPOSE mark (it starts 239.6 mm down) */, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
     const pages=[[]]; let used=0;
     B.forEach((b,i)=>{ const need=hs[i]+(b.keep&&i+1<B.length?hs[i+1]:0);
       if(used>0&&used+need>avail){ pages.push([]); used=0; } pages[pages.length-1].push(b.html); used+=hs[i]; });
