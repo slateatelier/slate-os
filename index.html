@@ -7805,8 +7805,8 @@ const ymLabel=ym=>ym?MON[+ym.slice(5,7)-1]+' '+ym.slice(0,4):'';
 const staffOfUser=uid=>{ const F=S.feeFin; return F&&F.state==='ok'?(F.staff||[]).find(x=>x.userId===uid)||null:null; };
 function hrRows(){ const F=S.feeFin, staff=(F&&F.staff)||[];
   const chalk=id=>isChalkP(id), priv=(F&&F.priv)||[];
-  const os=people().filter(id=>(S.members[id]||id===ownerId())&&!chalk(id)).map(id=>({uid:id,name:nameOf(id),role:roleOf(id),team:id===ownerId()?'Principal':teamOf(id),st:staff.find(x=>x.userId===id)||null,hid:priv.includes(id)&&!staff.some(x=>x.userId===id)}));
-  const extra=staff.filter(x=>(!x.userId||!os.some(o=>o.uid===x.userId))&&!(x.userId&&chalk(x.userId))).map(x=>({uid:'',name:x.name,role:x.designation||'',team:x.userId?'Left SLATE OS':'Not in SLATE OS',st:x}));
+  const os=people().filter(id=>(S.members[id]||id===ownerId())&&!chalk(id)).map(id=>({uid:id,name:nameOf(id),role:roleOf(id),team:teamOf(id)||(id===ownerId()?"Principal's Office":''),st:staff.find(x=>x.userId===id)||null,hid:priv.includes(id)&&!staff.some(x=>x.userId===id)}));
+  const extra=staff.filter(x=>(!x.userId||!os.some(o=>o.uid===x.userId))&&!(x.userId&&chalk(x.userId))).map(x=>({uid:'',name:x.name,role:x.designation||'',team:x.team||(x.userId?'Left SLATE OS':'Not in SLATE OS'),st:x}));
   return [...os,...extra].map(r=>({...r,rate:salRate(r.st),gross:salGross(salRate(r.st)),active:!r.st||r.st.active!==false})); }
 function viewHR(){
   const B=S.biz, out=[...bizHead('Salaries and HR details, set here. Finance payroll uses these numbers; edit them here, not in Finance. Chalk Create is kept separate. Add person is for someone who isn’t in SLATE OS.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>openSal(null,''),text:'Add person',title:'Add someone who is not in SLATE OS'})):null)];
@@ -7818,9 +7818,13 @@ function viewHR(){
   const total=act.reduce((a,r)=>a+r.gross,0), tax=act.reduce((a,r)=>a+(+((r.rate||{}).tax)||0),0);
   const noSal=rows.filter(r=>r.uid&&r.uid!==ownerId()&&!r.gross&&!r.hid), incDue=rows.filter(r=>r.st&&r.active&&r.st.incrementDue&&r.st.incrementDue<=ym), prob=rows.filter(r=>r.st&&r.active&&r.st.probationEnd&&r.st.probationEnd<=in30&&!r.st.confirmedOn);
   out.push(h('div',{class:'kpis kpis5'},kpi('Monthly payroll',bdt(total)),kpi('People paid',act.length),kpi('Tax deducted',bdt(tax)),kpi('No salary set',noSal.length,noSal.length?'late':''),kpi('Increment or probation due',incDue.length+prob.length,incDue.length+prob.length?'overdue':'')));
-  const teams=[...new Set(act.map(r=>r.team))].sort();
-  if(teams.length) out.push(h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line);margin-bottom:12px'},h('table',{},h('thead',{},h('tr',{},['Team','People','Monthly gross','Share'].map((x,i)=>h('th',{style:i?'text-align:right':'',text:x})))),
-    h('tbody',{},teams.map(t=>{ const xs=act.filter(r=>r.team===t), g=xs.reduce((a,r)=>a+r.gross,0); return h('tr',{},h('td',{text:podLabel(t)||t}),h('td',{class:'mono',style:'text-align:right',text:String(xs.length)}),h('td',{class:'mono',style:'text-align:right',text:taka(g)}),h('td',{class:'mono',style:'text-align:right',text:total?Math.round(g/total*100)+'%':'—'})); })))));
+  const grs=payGroups(act);
+  if(grs.length){ const pc=g=>total?Math.round(g/total*100)+'%':'—', num=(t,b)=>h('td',{class:'mono',style:'text-align:right'+(b?';font-weight:600':''),text:t});
+    out.push(h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line);margin-bottom:12px'},h('table',{},h('thead',{},h('tr',{},['Group','Team','People','Monthly gross','Share'].map((x,i)=>h('th',{style:i>1?'text-align:right':'',text:x})))),
+      h('tbody',{},grs.flatMap(G=>{ const one=G.teams.length===1;
+        return [h('tr',{style:'background:var(--group)'},h('td',{style:'font-weight:600',text:G.name}),h('td',{class:'muted',text:one?(podLabel(G.teams[0].t)||G.teams[0].t):G.teams.length+' teams'}),num(String(G.n),1),num(taka(G.g),1),num(pc(G.g),1)),
+          ...(one?[]:G.teams.map(T=>h('tr',{},h('td'),h('td',{text:podLabel(T.t)||T.t}),num(String(T.n)),num(taka(T.g)),num(pc(T.g)))))]; })))));
+    out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 12px',text:grs.map(G=>`${G.name} ${pc(G.g)}`).join(' · ')})); }
   const q=(B.hq||'').trim().toLowerCase(), hs=B.hs||'active';
   const sSel=h('select',{'aria-label':'Show',onchange:e=>{B.hs=e.target.value;render(true)}},[['active','Active'],['nosal','No salary set'],['due','Increment or probation due'],['inactive','Left or inactive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); sSel.value=hs;
   out.push(...accDash());
@@ -7836,6 +7840,12 @@ function viewHR(){
       h('div',{class:'pc-meta',text:[st&&st.empId,r.role||(st&&st.designation),st&&st.careerStart?expLen(st.careerStart)+' experience':'',st&&st.joinDate?expLen(st.joinDate)+' at SLATE':''].filter(Boolean).join(' · ')}),
       h('div',{class:'pc-row'},h('b',{text:r.gross?taka(r.gross)+' a month':'—'}),h('span',{class:'muted',text:last&&prev?`+${taka(salGross(last)-salGross(prev))} from ${ymLabel(last.from)}`:last?'since '+ymLabel(last.from):''}))); })));
   return out; }
+/* payroll by group: Architecture PODs (every POD), Drafting, Visualization, Leadership (Principal's Office), Office Support */
+const PAY_GROUPS=[['Architecture PODs',t=>/^pod\b/i.test(t)],['Drafting',t=>/drafting/i.test(t)],['Visualization',t=>/visuali|chalk/i.test(t)],['Leadership',t=>/principal/i.test(t)],['Office Support',t=>/office support/i.test(t)]];
+const payGroupOf=t=>(PAY_GROUPS.find(([,f])=>f(t||''))||['Other'])[0];
+function payGroups(rows){ const out=[...PAY_GROUPS.map(([n])=>n),'Other'].map(name=>{ const rs=rows.filter(r=>payGroupOf(r.team)===name);
+    const ts=[...new Set(rs.map(r=>r.team))].sort((a,b)=>(a||'').localeCompare(b||'')).map(t=>{ const xs=rs.filter(r=>r.team===t); return {t:t||'No team set',n:xs.length,g:xs.reduce((a,r)=>a+r.gross,0)}; });
+    return {name,teams:ts,n:rs.length,g:rs.reduce((a,r)=>a+r.gross,0)}; }); return out.filter(G=>G.n); }
 /* experience counts from the month someone started working professionally, up to today, so it grows by itself */
 function expMonths(from){ if(!from) return null; const [y,m]=from.slice(0,7).split('-').map(Number), t=today(), n=(+t.slice(0,4)-y)*12+(+t.slice(5,7)-m); return Math.max(0,n); }
 function expLen(from){ const n=expMonths(from); if(n==null) return ''; const y=Math.floor(n/12), mo=n%12; return y?`${y} yr${y>1?'s':''}`+(mo?` ${mo} mo`:''):`${mo} mo`; }
@@ -7844,7 +7854,7 @@ function expHint(d){ if(!d.careerStart) return 'Total experience is counted from
 function nextEmpId(){ let n=19; ((S.feeFin&&S.feeFin.staff)||[]).forEach(x=>{ const m=/^SL8(\d+)$/.exec((x.empId||'').replace(/\s|\./g,'')); if(m) n=Math.max(n,+m[1]); }); return 'SL8'+String(n+1).padStart(3,'0'); }
 function openSal(sid,uid){ const F=S.feeFin, st=sid?(F.staff||[]).find(x=>x.id===sid):null, r=salRate(st)||{};
   const d={uid:uid||(st&&st.userId)||'',name:(st&&st.name)||(uid?nameOf(uid):''),designation:(st&&st.designation)||(uid?roleOf(uid):''),joinDate:(st&&st.joinDate)||'',careerStart:(st&&st.careerStart)||'',payMethod:(st&&st.payMethod)||'cash',bankInfo:(st&&st.bankInfo)||'',bankPart:st&&st.bankPart?String(st.bankPart):'',
-    probationEnd:(st&&st.probationEnd)||'',confirmedOn:(st&&st.confirmedOn)||'',incrementDue:(st&&st.incrementDue)||'',active:!st||st.active!==false,note:(st&&st.note)||'',holder:(st&&st.holder)||'',empId:(st&&st.empId)||nextEmpId(),from:today().slice(0,7),why:'',tax:r.tax!=null?String(r.tax):'0'};
+    probationEnd:(st&&st.probationEnd)||'',confirmedOn:(st&&st.confirmedOn)||'',incrementDue:(st&&st.incrementDue)||'',team:(st&&st.team)||'',active:!st||st.active!==false,note:(st&&st.note)||'',holder:(st&&st.holder)||'',empId:(st&&st.empId)||nextEmpId(),from:today().slice(0,7),why:'',tax:r.tax!=null?String(r.tax):'0'};
   SAL_P.forEach(([k])=>{ d[k]=r[k]!=null?String(r[k]):''; });
   const acc=d.uid?accOf(d.uid):null;
   S.sheet={type:'sal',sid:sid||null,d,err:'',acc,acc0:acc?{...acc}:null,wasActive:d.active}; renderSheet();
@@ -7967,7 +7977,7 @@ function sheetSal(){
     const same=salGross(cur)&&SAL_P.every(([k])=>(+cur[k]||0)===nr[k])&&(+cur.tax||0)===nr.tax;
     let rates=((st&&st.rates)||[]).slice(); if(!same){ if(d.why.trim()) nr.why=d.why.trim(); nr.setBy=S.uid; rates=rates.filter(x=>x.from!==nr.from); rates.push(nr); rates.sort((a,b)=>a.from.localeCompare(b.from)); }
     const data={userId:d.uid,name:d.name.trim(),designation:(d.designation||'').trim(),joinDate:d.joinDate||'',careerStart:d.careerStart||'',payMethod:d.payMethod,bankInfo:d.payMethod!=='cash'?(d.bankInfo||'').trim():'',bankPart:d.payMethod==='split'?+d.bankPart||0:0,
-      rates,active:!!d.active,note:(d.note||'').trim(),holder:(d.holder||'').trim(),empId:(d.empId||'').trim().toUpperCase(),probationEnd:d.probationEnd||'',confirmedOn:d.confirmedOn||'',incrementDue:d.incrementDue||'',hrSetAt:new Date().toISOString(),hrSetBy:S.uid};
+      rates,active:!!d.active,note:(d.note||'').trim(),holder:(d.holder||'').trim(),empId:(d.empId||'').trim().toUpperCase(),probationEnd:d.probationEnd||'',confirmedOn:d.confirmedOn||'',incrementDue:d.incrementDue||'',...(d.uid?{}:{team:d.team||''}),hrSetAt:new Date().toISOString(),hrSetBy:S.uid};
     const sb=window.slateSupabase;
     let extra='';
     const ok=await run(async()=>{
@@ -7985,7 +7995,7 @@ function sheetSal(){
       h('div',{class:'form-row'},d.uid?field('Name',h('input',{value:d.name,readonly:true,style:'color:var(--muted)'})):cap('Name *',h('input',{value:d.name,oninput:e=>{d.name=e.target.value}})),cap('Designation',h('input',{value:d.designation,oninput:e=>{d.designation=e.target.value}}))),
       h('div',{class:'form-row'},cap('Employee ID',h('input',{value:d.empId,maxlength:12,placeholder:'SL8021',oninput:e=>{d.empId=e.target.value}}),'As on the salary sheet. A new person gets the next number.'),
       cap('Held by',h('input',{value:d.holder,maxlength:80,placeholder:'For a shared account such as Accounts: who holds it now',oninput:e=>{d.holder=e.target.value}}),'Shown as a tag on the card. When someone new takes over, change the name here.')),
-      S.sheet.acc?accSection():null,
+      S.sheet.acc?accSection():!d.uid?h('div',{class:'form-row'},cap('Team',(()=>{ const ts=[...new Set([...teams().filter(t=>!/^pod\b/i.test(t)),...teams().filter(t=>/^pod\b/i.test(t))])]; const el=h('select',{'aria-label':'Team',onchange:e=>{d.team=e.target.value}},h('option',{value:'',text:'No team set'}),ts.map(t=>h('option',{value:t,text:podLabel(t)||t})),d.team&&!ts.includes(d.team)?h('option',{value:d.team,text:d.team}):null); el.value=d.team||''; return el; })(),'For payroll by team. Office staff go in Office Support.'),h('span')):null,
       h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:'Monthly salary (Tk)'}),
       h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center'},h('input',{id:'sal-gross',type:'number',min:0,step:'1',inputmode:'numeric','aria-label':'Gross salary',placeholder:'Gross a month',value:SAL_P.reduce((a,[k])=>a+(+d[k]||0),0)||'',style:'width:100%;min-width:0'}),
         h('button',{class:'btn',type:'button',style:'white-space:nowrap',onclick:()=>{ const g=Math.round(+((document.getElementById('sal-gross')||{}).value)||0); if(!(g>0)) return fail('Enter the gross salary first.'); Object.assign(d,salSplit(g)); S.sheet.err=''; renderSheet(); },text:'Standard split'})),
@@ -8212,7 +8222,7 @@ function viewBizOver(){
       const cash=on.reduce((a,x)=>a+recExpect(x,ym),0), paid=on.reduce((a,x)=>a+recPaid(x,ym).reduce((u,e)=>u+(+e.amount||0),0),0);
       const lateBills=on.filter(x=>!recPaid(x,ym).length&&x.dueDay&&+td.slice(8,10)>+x.dueDay);
       money=[sec('Coming in','fees',go('fees')),h('div',{class:'kpis kpis4'},kpi('Collected in '+ymLabel(ym).split(' ')[0],bdt(col),'early'),kpi('Unpaid',bdt(sum('due')),sum('due')>1?'overdue':''),kpi('Not yet billed',bdt(sum('unb')),'late'),kpi('Total fees',bdt(sum('fee')))),
-        sec('Going out','every month',null),h('div',{class:'kpis kpis4'},kpi('Payroll',bdt(pay)),kpi('Running costs',bdt(run)),kpi('Monthly spend',bdt(pay+run)),kpi('Bills still to pay',bdt(Math.max(0,cash-paid)),cash-paid>1?'late':''))];
+        sec('Going out','every month',null),pay?h('p',{class:'f-hint',style:'margin:-4px 4px 8px',text:'Payroll: '+payGroups(act).map(G=>`${G.name} ${Math.round(G.g/pay*100)}%`).join(' · ')}):null,h('div',{class:'kpis kpis4'},kpi('Payroll',bdt(pay)),kpi('Running costs',bdt(run)),kpi('Monthly spend',bdt(pay+run)),kpi('Bills still to pay',bdt(Math.max(0,cash-paid)),cash-paid>1?'late':''))];
       if(toCol.length) needs.push(['overdue',toCol.length+' project'+(toCol.length>1?'s':'')+' with fees to collect',bdt(sum('due'))+' unpaid',go('fees',()=>{B.st='due';})]);
       if(lateBills.length) needs.push(['overdue',lateBills.length+' bill'+(lateBills.length>1?'s':'')+' past the due day',lateBills.map(x=>x.name).join(', '),go('admin',()=>{B.am=ym;})]);
       if(noFee.length) needs.push(['late',noFee.length+' project'+(noFee.length>1?'s':'')+' with no fee set',noFee.slice(0,3).map(r=>r.p.name).join(', '),go('fees',()=>{B.st='nofee';})]);
