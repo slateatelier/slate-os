@@ -7952,6 +7952,7 @@ function sheetPropDoc(){
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(id),text:'Close'})))]; }
 
 /* the proposal as letterhead pages: blocks are measured in a hidden frame and packed onto A4 pages */
+const PB_TOP=53.5; /* mm from the top of the page to the first line: 10 mm of air below the letterhead */
 const PB_CSS=`@page{size:A4;margin:0}*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:#E6E8EA;color:#000;font:10pt/1.42 "Didact Gothic","Century Gothic",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
 .bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;justify-content:center;padding:10px;background:#231f20}.bar button{font:500 13px system-ui;padding:8px 14px;border-radius:6px;border:0;cursor:pointer}.bar .p{background:#C41E29;color:#fff}
@@ -7988,7 +7989,9 @@ h2{color:#C41E29;display:flex;align-items:center;gap:3mm}h2:after{content:'';fle
 th{border-bottom-color:#C41E29}
 tr.tot td{border-top-color:#C41E29;color:#C41E29}
 .amtbox{border-color:#C41E29}.amtbox b{color:#C41E29}
-.ref span b{color:#C41E29}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
+.ref span b{color:#C41E29}
+.page{padding-top:${PB_TOP}mm}
+.pb-acc{justify-content:space-between;margin-top:24mm}.pb-acc div:last-child{text-align:right}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
 .pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:14mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}`;
 const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
@@ -8047,7 +8050,7 @@ async function pbPages(p,d){
     const doc=ifr.contentDocument; doc.open(); doc.write(pbHead('measure')+`<body><div class="page" id="pg">${B.map((b,i)=>`<div class="pb-blk" data-i="${i}">${b.html}</div>`).join('')}</div></body></html>`); doc.close();
     await new Promise(r=>{ if(doc.readyState==='complete') r(); else ifr.onload=()=>r(); setTimeout(r,2500); });
     try{ await Promise.race([doc.fonts.ready,new Promise(r=>setTimeout(r,2500))]); }catch(_){}
-    const mm=96/25.4, avail=(236-43.5)*mm /* stop above the DESIGN WITH PURPOSE mark (it starts 239.6 mm down) */, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
+    const mm=96/25.4, avail=(263-PB_TOP)*mm /* text may run over the DESIGN WITH PURPOSE watermark */, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
     const pages=[[]]; let used=0;
     B.forEach((b,i)=>{ const need=hs[i]+(b.keep&&i+1<B.length?hs[i+1]:0);
       if(used>0&&used+need>avail){ pages.push([]); used=0; } pages[pages.length-1].push(b.html); used+=hs[i]; });
