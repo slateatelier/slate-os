@@ -35,10 +35,16 @@ export default {
     if (html.length > MAX_HTML) return fail(413, 'The invoice was too large to print.');
     if (!/^<!doctype html>/i.test(html) || !html.includes('class="page"')) return fail(400, 'That isn’t an invoice page.');
 
-    let browser;
+    // Reuse a browser that is already open and idle, so several PDFs in a row don't hit the free plan's
+    // limit on starting new browsers; start a new one (kept open for a minute) only when none is free.
+    let browser, page;
     try {
-      browser = await puppeteer.launch(env.BROWSER);
-      const page = await browser.newPage();
+      try {
+        const idle = (await puppeteer.sessions(env.BROWSER)).filter(s => !s.connectionId).map(s => s.sessionId);
+        if (idle.length) browser = await puppeteer.connect(env.BROWSER, idle[Math.floor(Math.random() * idle.length)]);
+      } catch (_) { browser = null; }
+      if (!browser) browser = await puppeteer.launch(env.BROWSER, { keep_alive: 60000 });
+      page = await browser.newPage();
       await page.setViewport({ width: 900, height: 1300 });
       await page.setJavaScriptEnabled(false);
       await page.setRequestInterception(true);
@@ -55,9 +61,11 @@ export default {
       const why = String((e && e.message) || e || 'unknown error').slice(0, 300);
       console.error('invoice-pdf', why);
       // Only the Principal and the COO reach this point, so the reason is shown to help fix it
-      return fail(500, `Couldn’t print the invoice (${why}). Try again in a moment.`);
+      const busy = /429|rate limit/i.test(why);
+      return fail(busy ? 429 : 500, busy ? 'The PDF printer is busy. Try again in a minute.' : `Couldn’t make the PDF (${why}). Try again in a moment.`);
     } finally {
-      if (browser) await browser.close().catch(() => {});
+      if (page) await page.close().catch(() => {});
+      if (browser) { try { browser.disconnect(); } catch (_) {} }
     }
   }
 };
