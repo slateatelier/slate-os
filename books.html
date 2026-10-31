@@ -3507,8 +3507,8 @@ function morePeople() {
   const ids = peopleIds().sort((a, b) => (roleOf(a) === 'Principal' ? -1 : 0) - (roleOf(b) === 'Principal' ? -1 : 0) || nameOf(a).localeCompare(nameOf(b)));
   const out = [pageH('People and roles', own ? 'Everyone with a SLATE OS account is listed. Give each person a role; without one they see nothing in Books.' : 'Only the Principal can change roles.')];
   out.push(h('div', { class: 'list' }, ids.map(id => {
-    const r = roleOf(id), seen = (S.members[id] || {}).seen;
-    const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto', onchange: e => setRole(id, e.target.value) }, ROLES.filter(x => x !== 'Principal').map(x => h('option', { value: x, text: x === 'Viewer' ? 'No role (view only)' : x }))); s.value = r === 'Principal' ? 'Viewer' : r; return s; })() : h('span', { class: 'tag', text: r });
+    const tr = (team[id] || {}).role, r = id === ownerId() ? 'Principal' : (tr && ROLES.includes(tr)) ? tr : (window.BooksHost && BooksHost.isCOO(id) ? 'COO' : 'None'), seen = (S.members[id] || {}).seen;
+    const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto', onchange: e => setRole(id, e.target.value) }, [['COO', 'COO'], ['Accountant', 'Accountant'], ['Office staff', 'Office staff'], ['Viewer', 'Viewer (sees all, changes nothing)'], ['None', 'No access']].map(([v, t]) => h('option', { value: v, text: t }))); s.value = r; return s; })() : h('span', { class: 'tag', text: r === 'None' ? 'No access' : r });
     const hd = holderAt(id), hs = holdersOf(id), acct = (team[id] || {}).account;
     const holdBtn = own && id !== ownerId() ? h('button', { class: 'linkish', type: 'button', style: 'font-size:12.5px', onclick: () => openSheet({ type: 'holders', id }), text: hs.length ? 'Account holder' : 'Set account holder' }) : null;
     return h('div', { class: 'row' }, ava(id), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: nameOf(id) }), id === S.uid ? h('span', { class: 'tag', text: 'You' }) : null, hs.length ? h('span', { class: 'tag', text: 'Shared account' }) : null),
@@ -3516,7 +3516,7 @@ function morePeople() {
       h('div', { class: 'row-meta', text: (ROLE_HELP[r] || '') + (seen ? ' · last opened ' + fmtTs(seen) : '') })), h('div', { class: 'row-amt' }, pick, holdBtn));
   })));
   out.push(h('div', { class: 'card' }, h('b', { text: 'Shared accounts' }), h('p', { class: 'muted', style: 'margin:0', text: 'A login such as account@slate-atelier.com stays with the job. Record who is using it under Account holder. Every entry, sign-off, count and PDF carries the name of the person who held the account on that day, so history stays correct after a handover.' })));
-  out.push(h('div', { class: 'card' }, h('b', { text: 'What each role can do' }), h('ul', { class: 'plain' }, Object.entries(ROLE_HELP).map(([k, v]) => h('li', {}, h('b', { text: k + ': ' }), v)))));
+  out.push(h('div', { class: 'card' }, h('b', { text: 'What each role can do' }), h('ul', { class: 'plain' }, Object.entries(ROLE_HELP).map(([k, v]) => h('li', {}, h('b', { text: (k === 'None' ? 'No access' : k) + ': ' }), v)))));
   return out;
 }
 function prevDay(d) { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); }
@@ -3548,9 +3548,12 @@ function sheetHolders() {
     ['Close or reassign everything ' + cur.name + ' has pending.', 'Count the petty cash with a witness and save the count.', 'Change the password of the account, sign out all its sessions, and move its recovery phone to the new person.'].map(x => h('li', { text: x })))));
   return out;
 }
-const ROLE_HELP = { Principal: 'Sees everything, approves payments, sets roles and rules.', COO: 'Checks every entry and request, sees the books, can approve up to a limit.', Accountant: 'Enters money in and out, raises invoices, posts approved bills, runs reports.', 'Office staff': 'Records petty cash bills with photos and asks for top-ups. Doesn’t see the books.', Viewer: 'Can look, can’t change anything.' };
+const ROLE_HELP = { Principal: 'Sees everything, approves payments, sets roles and rules.', COO: 'Checks every entry and request, sees the books, can approve up to a limit.', Accountant: 'Enters money in and out, raises invoices, posts approved bills, runs reports.', 'Office staff': 'Records petty cash bills with photos and asks for top-ups. Doesn’t see the books.', Viewer: 'Sees everything in Books, including salaries, but changes nothing.', None: 'No access to Books. Sees nothing there.' };
 function setRole(id, role) {
-  const team = Object.assign({}, S.settings.team || {}); team[id] = Object.assign({}, team[id] || {}, { role });
+  if (role === 'Viewer' && !confirm('A Viewer sees everything in Books, including every salary. Give ' + nameOf(id) + ' this role?')) { render(); return; }
+  const team = Object.assign({}, S.settings.team || {}); team[id] = Object.assign({}, team[id] || {});
+  if (role === 'None') delete team[id].role; else team[id].role = role;
+  if (!Object.keys(team[id]).length) delete team[id];
   run(() => Store.patch('settings', 'main', { team }), 'Role saved');
 }
 

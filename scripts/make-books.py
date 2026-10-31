@@ -150,5 +150,21 @@ rep("""  const ids = new Set(Object.keys(S.members)); Object.keys(S.settings.tea
 rep("""'Give each person a role. Share SLATE Books first: the COO and the accountant as Editors, office staff as Contributors. They appear here after they open it once.'""",
     """'Everyone with a SLATE OS account is listed. Give each person a role; without one they see nothing in Books.'""")
 
+# ---------- People and roles: say what each choice really does; "No access" removes the role ----------
+rep("""    const r = roleOf(id), seen = (S.members[id] || {}).seen;
+    const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto', onchange: e => setRole(id, e.target.value) }, ROLES.filter(x => x !== 'Principal').map(x => h('option', { value: x, text: x === 'Viewer' ? 'No role (view only)' : x }))); s.value = r === 'Principal' ? 'Viewer' : r; return s; })() : h('span', { class: 'tag', text: r });""",
+"""    const tr = (team[id] || {}).role, r = id === ownerId() ? 'Principal' : (tr && ROLES.includes(tr)) ? tr : (window.BooksHost && BooksHost.isCOO(id) ? 'COO' : 'None'), seen = (S.members[id] || {}).seen;
+    const pick = own && id !== ownerId() ? (() => { const s = h('select', { 'aria-label': 'Role for ' + nameOf(id), style: 'width:auto', onchange: e => setRole(id, e.target.value) }, [['COO', 'COO'], ['Accountant', 'Accountant'], ['Office staff', 'Office staff'], ['Viewer', 'Viewer (sees all, changes nothing)'], ['None', 'No access']].map(([v, t]) => h('option', { value: v, text: t }))); s.value = r; return s; })() : h('span', { class: 'tag', text: r === 'None' ? 'No access' : r });""")
+rep("""function setRole(id, role) {
+  const team = Object.assign({}, S.settings.team || {}); team[id] = Object.assign({}, team[id] || {}, { role });""",
+"""function setRole(id, role) {
+  if (role === 'Viewer' && !confirm('A Viewer sees everything in Books, including every salary. Give ' + nameOf(id) + ' this role?')) { render(); return; }
+  const team = Object.assign({}, S.settings.team || {}); team[id] = Object.assign({}, team[id] || {});
+  if (role === 'None') delete team[id].role; else team[id].role = role;
+  if (!Object.keys(team[id]).length) delete team[id];""")
+rep("""Viewer: 'Can look, can’t change anything.' };""", """Viewer: 'Sees everything in Books, including salaries, but changes nothing.', None: 'No access to Books. Sees nothing there.' };""")
+
+rep("""h('li', {}, h('b', { text: k + ': ' }), v)""", """h('li', {}, h('b', { text: (k === 'None' ? 'No access' : k) + ': ' }), v)""")
+
 open(out, 'w', encoding='utf-8').write(s)
 print('ok', len(s))
