@@ -7854,17 +7854,29 @@ function pbDefaults(p,kind){
     site:p.location||'',katha:p.katha||'',area:area===''?'':String(area),storeys:'',use:'Residential',
     scopeAuto:true,scopeExtra:'',scope:PB_SCOPE[k].join('\n'),deliv:PB_DELIV.join('\n'),
     feeMode:k==='det'?'parts':'lump',parts:PB_PARTS[k].map(([label,rate])=>({label,rate:String(rate)})),disc:'',discMode:'amt',
-    lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabJur:'0',tl:{on:true,start:'',rows:pbTlRows(p.type)},
+    lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabJur:'0',tl:{on:true,start:'',setup:'3',rows:pbTlRows(p.type)},
     sched:PB_SCHED[k].map(([label,pct])=>({label,pct:String(pct)})),
     vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',validDays:'30',revFree:'2',revRate:'10000',
     terms:PB_TERMS.join('\n'),signName:'Syed Mohammed Imran',signTitle:'Principal Architect'}; }
 /* project timeline in the proposal: SLATE's standard phases for the project type, in working days (SLATE days + client review days) */
+/* what the client receives at the end of each stage */
+const PB_TL_DEL={'0':'Design brief, site analysis and FAR / area feasibility report',
+  '1':'Two to three concept options: plans, massing and 3D views',
+  '2':'Developed floor plans, sections, elevations and facade 3D, with structural and MEP concepts',
+  '3':'Design freeze set for signature: final plans, elevations and outline specification',
+  '4':'Signed RAJUK submission set: planning permit and building approval drawings',
+  '5':'Exterior and interior 3D renders, walk-through animation and brochure floor plans',
+  '6':'WD-1: setting-out, foundation and basement drawings, with structural and below-ground MEP',
+  '7':'WD-2: floor plans, sections, elevations, stair and lift details, structural and MEP drawings',
+  '8':'WD-3: door and window schedules, toilet and kitchen details, flooring, facade details and finishing schedule'};
+const pbTlDel=x=>x.del!=null?x.del:(PB_TL_DEL[Object.keys(PB_TL_DEL).find(k=>PH[k]&&PH[k].n===x.label)]||'');
 function pbTlRows(type){ const t=STD_DEF[type]&&type!=='proposal'?type:'dev', off=STD_DEF[t].off||[];
-  return STD_DEF[t].phases.filter(k=>!off.includes(k)&&PH[k]&&PH[k].d).map(k=>({label:PH[k].n,w:String(PH[k].d[0]),r:String(PH[k].d[1])})); }
-function pbTl(d){ const tl=d.tl||{}, rows=(tl.rows||[]).filter(x=>x.label||+x.w||+x.r); let at=0;
-  const out=rows.map(x=>{ const n=(+x.w||0)+(+x.r||0), a=at; at+=n; return {...x,n,from:a,to:at}; });
+  return STD_DEF[t].phases.filter(k=>!off.includes(k)&&PH[k]&&PH[k].d).map(k=>({label:PH[k].n,w:String(PH[k].d[0]),r:String(PH[k].d[1]),del:PB_TL_DEL[k]||''})); }
+/* timeline: the work order date, then setup days, then the stages (working days, five a week) */
+function pbTl(d){ const tl=d.tl||{}, setup=tl.setup==null||tl.setup===''?3:Math.max(0,+tl.setup||0), rows=(tl.rows||[]).filter(x=>x.label||+x.w||+x.r); let at=setup;
+  const out=rows.map(x=>{ const n=(+x.w||0)+(+x.r||0), a=at; at+=n; return {...x,del:pbTlDel(x),n,from:a,to:at}; });
   const start=tl.start||'', dt=n=>start?addWorkDays(start,n):'';
-  return {rows:out,total:at,weeks:Math.ceil(at/5),start,end:start&&at?dt(at):'',dt}; }
+  return {rows:out,setup,total:at,weeks:Math.ceil(at/5),start,end:start&&at?dt(at):'',dt}; }
 const pbRevFee=d=>Math.round((+d.katha||0)*(+d.revRate||0));
 function pbFee(d){ const area=+d.area||0;
   if(d.feeMode==='lump'){ const t=+d.lump||0; return {sub:t,disc:0,total:t,rate:area?t/area:0,area}; }
@@ -7872,6 +7884,7 @@ function pbFee(d){ const area=+d.area||0;
   return {sub,disc,total,rate:area?total/area:0,rawRate:rate,area}; }
 function openPropDoc(id,kind,fresh){ const p=(S.props||{})[id]||fresh; if(!p) return; if(fresh&&!(S.props||{})[id]) (S.props=S.props||{})[id]=fresh;
   const d=p.doc&&!kind?JSON.parse(JSON.stringify(p.doc)):pbDefaults(p,kind);
+  if(d.tl&&Array.isArray(d.tl.rows)) d.tl.rows.forEach(x=>{ if(x.del==null) x.del=pbTlDel(x); });
   if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revRate==null) d.revRate='10000'; delete d.revFee;
   if(p.doc&&kind){ d.ref=p.doc.ref||d.ref; d.date=p.doc.date||d.date; }
   S.sheet={type:'propDoc',id,d,err:'',pdf:null}; renderSheet(); }
@@ -7963,17 +7976,19 @@ function sheetPropDoc(){
         return h('div',{style:'display:grid;gap:8px'},
           h('div',{style:'display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center'},h('input',{type:'checkbox',id:'pb-tl',style:'width:20px;height:20px',checked:!!d.tl.on,onchange:e=>{ d.tl.on=e.target.checked; renderSheet(); }}),h('label',{for:'pb-tl',style:'font-size:15px',text:'Show the project timeline in the proposal'})),
           d.tl.on?h('div',{style:'display:grid;gap:8px'},
-            field('Work starts',h('input',{type:'date',value:d.tl.start||'',onchange:e=>{ d.tl.start=e.target.value; renderSheet(); }}),'Leave empty to show weeks from signing and the advance; with a date, each stage shows its dates'),
+            h('div',{class:'form-row'},field('Work order date',h('input',{type:'date',value:d.tl.start||'',onchange:e=>{ d.tl.start=e.target.value; renderSheet(); }}),'Empty: weeks counted from the work order'),field('Setup days after it',h('input',{type:'number',min:0,step:1,inputmode:'numeric',value:d.tl.setup==null?'3':d.tl.setup,onchange:e=>{ d.tl.setup=e.target.value; renderSheet(); }}),'Team, files and kick-off before stage 1')),
             h('div',{class:'f-hint',style:'margin:0',text:'Working days per stage (5-day week): SLATE’s days plus the client’s review days. Taken from SLATE’s standard phases; change any number.'}),
             h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 62px 62px 30px;gap:6px;font-size:12px;color:var(--muted)'},h('span',{text:'Stage'}),h('span',{text:'SLATE'}),h('span',{text:'Client'}),h('span')),
-            ...d.tl.rows.map((x,i)=>h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 62px 62px 30px;gap:6px;align-items:center'},
-              h('input',{type:'text',value:x.label,oninput:e=>{ x.label=e.target.value; }}),
-              h('input',{type:'number',min:0,step:1,inputmode:'numeric',value:x.w,onchange:e=>{ x.w=e.target.value; renderSheet(); }}),
-              h('input',{type:'number',min:0,step:1,inputmode:'numeric',value:x.r,onchange:e=>{ x.r=e.target.value; renderSheet(); }}),
-              h('button',{type:'button',class:'icon-btn','aria-label':'Remove stage',onclick:()=>{ d.tl.rows.splice(i,1); renderSheet(); },text:'×'}))),
+            ...d.tl.rows.map((x,i)=>h('div',{style:'display:grid;gap:4px;padding:8px;border:1px solid var(--border);border-radius:12px'},
+              h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 62px 62px 30px;gap:6px;align-items:center'},
+                h('input',{type:'text',value:x.label,oninput:e=>{ x.label=e.target.value; }}),
+                h('input',{type:'number',min:0,step:1,inputmode:'numeric',value:x.w,onchange:e=>{ x.w=e.target.value; renderSheet(); }}),
+                h('input',{type:'number',min:0,step:1,inputmode:'numeric',value:x.r,onchange:e=>{ x.r=e.target.value; renderSheet(); }}),
+                h('button',{type:'button',class:'icon-btn','aria-label':'Remove stage',onclick:()=>{ d.tl.rows.splice(i,1); renderSheet(); },text:'×'})),
+              h('textarea',{rows:2,placeholder:'What the client receives at the end of this stage',value:x.del||'',style:'font-size:16px',oninput:e=>{ x.del=e.target.value; }}))),
             h('div',{style:'display:flex;gap:6px;flex-wrap:wrap'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.tl.rows.push({label:'',w:'',r:''}); renderSheet(); },text:'+ Add a stage'}),
               h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.tl.rows=pbTlRows(p.type); renderSheet(); },text:'Reset to SLATE’s standard'})),
-            h('b',{text:`Total ${T.total} working days, about ${T.weeks} weeks`+(T.end?` · ${fmtD(T.start)} to ${fmtD(T.end)}`:'')+'. Authority approval time is extra.'})):null); })(),
+            h('b',{text:`Total ${T.total} working days (${T.setup} setup + stages), about ${T.weeks} weeks`+(T.end?` · work order ${fmtD(T.start)}, last stage ends ${fmtD(T.end)}`:'')+'. Authority approval time is extra.'})):null); })(),
       sec('Payment schedule'),
       rowsEd(d.sched,[{k:'pct',w:'72px',ph:'%'}],()=>({label:'',pct:''}),'+ Add a stage'),
       h('div',{id:'pb-sum',class:'f-hint',style:Math.round(schSum)!==100?'color:var(--overdue)':'',text:`${Math.round(schSum*100)/100}% of the fee`+(Math.round(schSum)!==100?' · should total 100%':'')}),
@@ -8027,7 +8042,7 @@ tr.tot td{border-bottom:0;border-top:1pt solid #000;font-weight:600}tr.sub td{co
 .amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #000;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font-size:16pt;font-weight:600}
 .docref{position:absolute;left:12.6mm;right:14mm;bottom:7mm;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9A9A9A;text-align:right}
 .iab-t tr.on td{background:#C41E29;color:#fff;font-weight:600}.iab-t td{padding:1.4mm 1.5mm}.iab-t th{padding-left:1.5mm}
-.pb-tl td{vertical-align:middle}.pb-tl td.n,.pb-tl th.n{padding-right:4mm;white-space:nowrap}.pb-tl td:last-child,.pb-tl th:last-child{padding-left:2mm}.pb-bar{position:relative;height:3.2mm;background:#f2f2f2}.pb-bar span{position:absolute;top:0;bottom:0;background:#f3c7ca;display:block}.pb-bar i{display:block;height:100%;background:#C41E29}
+.pb-tl td{vertical-align:middle}.pb-tl td b{font-weight:600}.pb-del{display:block;font-size:8.5pt;color:#545454;line-height:1.35;margin-top:.6mm}.pb-tl td.n,.pb-tl th.n{padding-right:4mm;white-space:nowrap}.pb-tl td:last-child,.pb-tl th:last-child{padding-left:2mm}.pb-bar{position:relative;height:3.2mm;background:#f2f2f2}.pb-bar span{position:absolute;top:0;bottom:0;background:#f3c7ca;display:block}.pb-bar i{display:block;height:100%;background:#C41E29}
 .pb-ul{margin:0;padding:0 0 0 5mm}.pb-svc{margin:0 0 2.5mm}.pb-svc>b{display:block;font-size:10pt}.pb-chk{list-style:none;padding:0;columns:2;column-gap:6mm}.pb-chk li{padding-left:4.5mm;text-indent:-4.5mm;break-inside:avoid}.pb-chk li:before{content:'✓';color:#C41E29;display:inline-block;width:4.5mm;text-indent:0}
 /* SLATE red marks the hierarchy: the subject, section headings, totals and the amount to pay */
 h1{border-left:1.6mm solid #C41E29;padding-left:3mm}
@@ -8079,10 +8094,13 @@ function pbBlocks(p,d){
       <tr class="tot"><td>SLATE’s fee (${I.pct}% of the IAB minimum)</td><td class="n">${pbTk(f.total)}</td></tr></table>`); }
   if(d.tl&&d.tl.on){ const T=pbTl(d);
     if(T.rows.length&&T.total){ const pc=n=>Math.round(n/T.total*1000)/10;
-      add(`<h2>Project timeline</h2><table class="pb-tl"><thead><tr><th>Stage</th><th class="n">${T.start?'Dates':'Weeks'}</th><th style="width:44%">${T.start?fmtD(T.start)+' – '+fmtD(T.end):'Week 1 – '+T.weeks}</th></tr></thead><tbody>
-        ${T.rows.map((x,i)=>`<tr><td>${i+1}. ${pbEsc(x.label)}</td><td class="n">${T.start?fmtD(T.dt(x.from))+' – '+fmtD(T.dt(x.to)):'Wk '+(Math.floor(x.from/5)+1)+'–'+Math.max(Math.floor(x.from/5)+1,Math.ceil(x.to/5))}</td><td><div class="pb-bar"><span style="left:${pc(x.from)}%;width:${Math.max(1,pc(x.n))}%"><i style="width:${x.n?Math.round((+x.w||0)/x.n*100):100}%"></i></span></div></td></tr>`).join('')}
-        <tr class="tot"><td>Total</td><td class="n">${T.start?fmtD(T.end):'about '+T.weeks+' weeks'}</td><td class="pb-small">${T.total} working days</td></tr></tbody></table>
-        <p class="pb-small">Working days, five a week. The darker part of each bar is SLATE’s work, the lighter part the client’s review. The timeline starts ${T.start?'on '+fmtLong(T.start):'when the agreement is signed and the advance is received'}; time taken by RAJUK and other authorities, and delays in the client’s decisions or payments, are extra.</p>`); } }
+      const wk=(a,b)=>'Wk '+(Math.floor(a/5)+1)+(Math.ceil(b/5)>Math.floor(a/5)+1?'–'+Math.ceil(b/5):''), when=(a,b)=>T.start?fmtD(T.dt(a))+' – '+fmtD(T.dt(b)):wk(a,b);
+      const bar=(a,n,w)=>`<div class="pb-bar"><span style="left:${pc(a)}%;width:${Math.max(1,pc(n))}%"><i style="width:${n?Math.round(w/n*100):100}%"></i></span></div>`;
+      add(`<h2>Project timeline</h2><table class="pb-tl"><thead><tr><th>Stage and what you receive</th><th class="n">Days</th><th class="n">${T.start?'Dates':'Weeks'}</th><th style="width:26%"></th></tr></thead><tbody>
+        ${T.setup?`<tr><td><b>0. Work order and setup</b><span class="pb-del">Work order${T.start?' on '+fmtD(T.start):''}; project team, files and kick-off meeting</span></td><td class="n">${T.setup}</td><td class="n">${T.start?fmtD(T.start)+' – '+fmtD(T.dt(T.setup)):wk(0,T.setup)}</td><td>${bar(0,T.setup,T.setup)}</td></tr>`:''}
+        ${T.rows.map((x,i)=>`<tr><td><b>${i+1}. ${pbEsc(x.label)}</b>${x.del?`<span class="pb-del">${pbEsc(x.del)}</span>`:''}</td><td class="n">${+x.w||0} + ${+x.r||0}</td><td class="n">${when(x.from,x.to)}</td><td>${bar(x.from,x.n,+x.w||0)}</td></tr>`).join('')}
+        <tr class="tot"><td>Total</td><td class="n">${T.total}</td><td class="n">${T.start?fmtD(T.end):'about '+T.weeks+' weeks'}</td><td></td></tr></tbody></table>
+        <p class="pb-small">Days are working days, five a week: SLATE’s days + the client’s review days. In each bar the darker part is SLATE’s work and the lighter part the client’s review. The programme starts ${T.start?'with the work order on '+fmtLong(T.start):'from the work order (signed agreement and advance)'}, with ${T.setup} setup day${T.setup===1?'':'s'} before stage 1. Time taken by RAJUK and other authorities, and delays in the client’s decisions or payments, are extra.</p>`); } }
   const sc=d.sched.filter(x=>x.label||+x.pct);
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
   const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?['Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?['Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
@@ -8251,7 +8269,7 @@ function agBlocks(p,a){ const d=p.doc||{}, v=agVars(p,a), f=pbFee(d), B=[], add=
     pbRevFee(d)?['Design revision beyond the '+(+d.revFree||0)+' included',pbTk(pbRevFee(d))+' per revision ('+pbTk(d.revRate)+' per katha)']:null,
     ['Any other additional service','As agreed in writing before the work starts']].filter(Boolean);
   add(`<h2 class="ag-s" style="margin-top:8mm">Schedule C · Additional services</h2><table class="ag-tb">${ex.map(([k,x])=>`<tr><td>${pbEsc(k)}</td><td class="n">${pbEsc(x)}</td></tr>`).join('')}</table>`);
-  if(d.tl&&d.tl.on){ const T=pbTl(d); if(T.rows.length&&T.total) add(`<h2 class="ag-s" style="margin-top:8mm">Schedule D · Programme</h2><table class="ag-tb"><thead><tr><th>Stage</th><th class="n">Working days (SLATE + client)</th><th class="n">${T.start?'Dates':'Weeks'}</th></tr></thead><tbody>${T.rows.map((x,i)=>`<tr><td>${i+1}. ${pbEsc(x.label)}</td><td class="n">${+x.w||0} + ${+x.r||0}</td><td class="n">${T.start?fmtD(T.dt(x.from))+' – '+fmtD(T.dt(x.to)):'Wk '+(Math.floor(x.from/5)+1)+'–'+Math.max(Math.floor(x.from/5)+1,Math.ceil(x.to/5))}</td></tr>`).join('')}<tr class="tot"><td>Total</td><td class="n">${T.total}</td><td class="n">${T.start?fmtD(T.end):'about '+T.weeks+' weeks'}</td></tr></tbody></table><p class="ag-p">The programme runs from ${T.start?fmtLong(T.start):'the signing of this Agreement and receipt of the advance'}, in working days of five a week. Clause 10 applies to any delay.</p>`); }
+  if(d.tl&&d.tl.on){ const T=pbTl(d); if(T.rows.length&&T.total) add(`<h2 class="ag-s" style="margin-top:8mm">Schedule D · Programme</h2><table class="ag-tb"><thead><tr><th>Stage and submission to the CLIENT</th><th class="n">Working days (SLATE + client)</th><th class="n">${T.start?'Dates':'Weeks'}</th></tr></thead><tbody>${T.setup?`<tr><td>0. Work order and setup</td><td class="n">${T.setup}</td><td class="n">${T.start?fmtD(T.start)+' – '+fmtD(T.dt(T.setup)):'Wk 1'}</td></tr>`:''}${T.rows.map((x,i)=>`<tr><td>${i+1}. ${pbEsc(x.label)}${x.del?'<br><i>'+pbEsc(x.del)+'</i>':''}</td><td class="n">${+x.w||0} + ${+x.r||0}</td><td class="n">${T.start?fmtD(T.dt(x.from))+' – '+fmtD(T.dt(x.to)):'Wk '+(Math.floor(x.from/5)+1)+'–'+Math.max(Math.floor(x.from/5)+1,Math.ceil(x.to/5))}</td></tr>`).join('')}<tr class="tot"><td>Total</td><td class="n">${T.total}</td><td class="n">${T.start?fmtD(T.end):'about '+T.weeks+' weeks'}</td></tr></tbody></table><p class="ag-p">The programme runs from the work order (${T.start?fmtLong(T.start):'the signing of this Agreement and receipt of the advance'}), with ${T.setup} setup working day${T.setup===1?'':'s'} before stage 1, in working days of five a week. Clause 10 applies to any delay.</p>`); }
   return B; }
 const AG_CSS=pa=>`@page{size:${pa.w}mm ${pa.h}mm;margin:0}*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 html,body{margin:0;background:#e6e6e6;-webkit-print-color-adjust:exact;print-color-adjust:exact}
