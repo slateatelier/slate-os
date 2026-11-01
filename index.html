@@ -1,4 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name="robots" content="noindex"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#d7262b"><link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SLATE OS"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>@media (max-width:820px){input,select,textarea{font-size:16px!important}}.sec-desc{margin:-4px 4px 8px;font-size:13px;line-height:1.4;color:var(--muted,#6e6e73)}
+.cl-stick{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;background:#fff;margin:0 -16px;padding:8px 16px;border-bottom:1px solid var(--line);box-shadow:0 4px 8px -6px rgba(0,0,0,.18)}
+.cl-stick b{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -5695,7 +5697,7 @@ function stdSection(p){
     return h('div',{},h('span',{text:lbl}),extra||h('b',{style:t&&!t.doneAt&&status(t)==='overdue'?'color:var(--overdue)':'',text:v}),!extra&&sub?h('span',{style:'font-weight:500',text:sub}):null); };
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'}),h('span',{class:'cnt',text:`${closed}/${ks.length} gates closed`})),
     paceRow(p),prioRow(p),tlSection(p),
-    h('div',{class:'list'},ks.map(k=>{ const s=stdState(p,k), c=clCount(p,k), isOpen=open===k, fb=((p.std&&p.std.fb)||{})[k]||'', fbGot=((p.std&&p.std.fbGot)||{})[k]||'';
+    h('div',{class:'list',style:'overflow:clip'},ks.map(k=>{ const s=stdState(p,k), c=clCount(p,k), isOpen=open===k, fb=((p.std&&p.std.fb)||{})[k]||'', fbGot=((p.std&&p.std.fbGot)||{})[k]||'';
       const stat=s.done?h('span',{class:'pill s-ontime',text:'Gate closed'}):!s.created?h('span',{class:'pill s-open',text:'Not set up'}):act.includes(k)?h('span',{class:'pill s-late',text:'In progress'}):h('span',{class:'pill s-open',text:'Not started'});
       const fbEl=fbEdit&&!s.done?h('input',{id:'fb-'+k,type:'date',value:fb,style:'background:var(--group);padding:4px 6px;font-size:13px','aria-label':'Client feedback due',onchange:e=>run(()=>S.db.doc('projects/'+p.id).update({std:{fb:{[k]:e.target.value||''}}}),'Client feedback date saved')}):h('b',{text:fb?fmtD(fb):'—'});
       const items=clItems(k), main=items.filter(i=>!i.cost), cost=items.filter(i=>i.cost);
@@ -5715,6 +5717,8 @@ function stdSection(p){
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>{ S.sheet.openPh=isOpen?null:k; renderSheet(); },text:isOpen?'Hide checklist':'Show checklist'}):null),
         h('div',{class:'pc-bar'},h('span',{style:`width:${c.tot-c.na?Math.round(c.done/(c.tot-c.na)*100):100}%`})),
+        isOpen&&det?h('div',{class:'cl-stick',role:'note'},h('b',{text:'Phase '+phLabel(k,p)}),h('span',{class:'f-hint',style:'margin:0',text:`${c.done} of ${c.tot-c.na} done`}),
+          h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',onclick:()=>{ S.sheet.openPh=null; renderSheet(); },text:'Hide'})):null,
         isOpen&&det?h('div',{class:'cl'},main.map(it=>clRow(p,k,it,manage)),cost.length?[h('div',{class:'cl-h',text:'Cost checks'}),cost.map(it=>clRow(p,k,it,manage))]:null):null,
         s.created&&!s.done&&manage&&today()<addDays(goLive(),60)?preBox(p,k):null); })),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Gate deliverables carry the dates and count on the dashboard. Checklist items are ticked, not dated. Client feedback dates are for planning and never count against the pod.'}),
