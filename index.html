@@ -2198,7 +2198,7 @@ function onSubErr(){ toast('Lost the live connection to the register. Reload the
 function mergeTasks(){
   S.tasks={}; S.paths={};
   for(const [id,t] of Object.entries(S.shared)){ S.tasks[id]=t; S.paths[id]='tasks/'+id; }
-  for(const [uid,docs] of Object.entries(S.priv)) for(const [id,t] of Object.entries(docs)){ S.tasks[id]=t; S.paths[id]=`lead/${uid}/tasks/${id}`; }
+  S.privW=new WeakSet(); for(const [uid,docs] of Object.entries(S.priv)) for(const [id,t] of Object.entries(docs)){ S.tasks[id]=t; S.paths[id]=`lead/${uid}/tasks/${id}`; if(t&&typeof t==='object') S.privW.add(t); }
   refreshProfiles(); schedule();
 }
 function syncPrivate(){
@@ -8036,7 +8036,7 @@ function farFacts(d,x,fact){
 /* ---------- projects page: the studio list and every project's progress ---------- */
 const HEALTH={ok:['On track','ontime'],risk:['At risk','late'],off:['Off track','overdue'],none:['Not started','open'],done:['Complete','early']};
 function projStats(p){
-  const td=today(), ts=Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived), w=t=>t.kind==='Deliverable'?3:1;
+  const td=today(), ts=Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!(isStudioWP(p)&&isCooT(t))), w=t=>t.kind==='Deliverable'?3:1;
   let tot=0,done=0; ts.forEach(t=>{ tot+=w(t); if(t.doneAt) done+=w(t); });
   const open=ts.filter(t=>!t.doneAt), over=open.filter(t=>t.target&&t.target<td), overDel=over.filter(t=>t.kind==='Deliverable');
   const c=count(ts.filter(t=>t.target),'approved'), rt=rate(c);
@@ -9447,6 +9447,8 @@ function sheetRecPay(){
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Record payment'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
 const cooId=()=>people().find(id=>isCOO(id)&&isPriv(id))||'';
 const seeCooWork=()=>!!cooId()&&(S.isOwner||S.uid===cooId());
+/* a task in the COO's private list: it shows under COO work only, never in the shared studio areas */
+const isCooT=t=>!!t&&!!S.privW&&S.privW.has(t)&&t.assignee===cooId();
 function pjKindSeg(f){ return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work'],...(seeCooWork()?[['coo','COO work']]:[])],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })); }
 /* COO work: every task on the COO, kept in her private task list, so only the Principal and the COO ever see it */
 function viewCooWork(out){
@@ -10146,7 +10148,7 @@ function viewProjects(){
   const hold=all.filter(p=>isOnHold(p));
   out.push(pjKindSeg(f));
   if(f.kind==='coo'){ if(seeCooWork()) return viewCooWork(out); f.kind='client'; }
-  if(sv) out.push(h('div',{class:'kpis'},kpi('Studio areas',act.length),kpi('Open tasks',act.reduce((a,p)=>a+Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!t.doneAt).length,0))));
+  if(sv) out.push(h('div',{class:'kpis'},kpi('Studio areas',act.length),kpi('Open tasks',act.reduce((a,p)=>a+Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!t.doneAt&&!isCooT(t)).length,0))));
   else out.push(h('div',{class:'kpis kpis5'},kpi('Total',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On hold',hold.length,'late'),kpi('Cancelled',clientAll.filter(p=>p.closed&&outcomeOf(p)==='cancelled').length,'overdue')),
     h('div',{class:'lbl',style:'margin:-4px 0 -6px;text-transform:uppercase;letter-spacing:.05em',text:'Active projects'}),
     h('div',{class:'kpis kpis4'},kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open')));
