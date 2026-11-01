@@ -8,10 +8,11 @@
 .pod-card>summary b{font-size:15px}.pod-n{display:flex;gap:10px;align-items:center;font-size:13px;flex-wrap:wrap;justify-content:flex-end}
 .pod-c{display:inline-flex;align-items:center;gap:4px;font-weight:600}.pod-c i,.pod-p>i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
 .pod-list{display:grid;padding:0 6px 6px}
-.pod-p{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:0;border-top:1px solid var(--line);padding:9px 10px;font:inherit;color:inherit;cursor:pointer}
+.pod-p{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#fff;border:0;border-top:1px solid var(--line);padding:7px 10px;font:inherit;color:inherit;cursor:pointer;min-height:36px}
 .pod-p:first-child{border-radius:10px 10px 0 0;border-top:0}.pod-p:last-child{border-radius:0 0 10px 10px}.pod-p:only-child{border-radius:10px}
-.pod-pn{flex:1;min-width:0;display:grid}.pod-pn>span{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pod-pn small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pod-ph{font-size:12px;color:var(--muted);flex:none}
+.pod-pn{flex:1;min-width:0;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pod-pn em{font-style:normal;font-weight:500;color:var(--muted);font-size:12px}
+.pod-modo{font-size:9.5px;letter-spacing:.1em;background:#231f20;color:#fff;border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:1px}
+.pod-ph{flex:none;min-width:26px;text-align:center;font-size:11.5px;font-weight:600;color:#3a3a3c;background:var(--group);border-radius:6px;padding:2px 6px;font-variant-numeric:tabular-nums}
 .cstep{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1.5px solid var(--line);border-left:3px solid var(--late);border-radius:10px;padding:8px 10px}
 .cstep-l{font-size:13.5px;font-weight:600;flex:1 1 140px}.cstep input[type=date]{background:#fff;padding:5px 8px;font-size:13px;width:auto}
 .tag-modo{background:#231f20;color:#fff;letter-spacing:.12em;font-weight:700}
@@ -2403,7 +2404,7 @@ function capPods(root){
 /* one-line descriptions under section headings, so it is clear what each area is for. Added after every render, in one place. */
 const SEC_INFO={
   'Interior space':'The MODO interior: where it is, its size, the rooms SLATE designs, and whether SLATE builds it too.',
-  'By POD':'Each POD’s active projects, worst first: off track, at risk, on track, not started. Tap a project to open it; tap a POD to fold it.',
+  'By POD':'Each POD’s active projects, worst first. The dot is health (red off track, orange at risk, green on track, grey not started); the box is the phase now running. Tap a project to open it; tap a POD to fold it.',
   'Building and FAR':'The plot and building this project is designed for. The plot size in katha sets the standard days for each phase.',
   'Landowner and developer units':'How the units are shared between the landowner and the developer in this joint venture.',
   'Submissions log':'Everything sent to the client or authority: what, when and which revision. Marking a phase submitted (or a set issued) adds it here by itself; add sets sent before SLATE OS or extra sets by hand. Record only, never scored.',
@@ -9933,17 +9934,18 @@ function podBoard(act,stats){
   const ps=pods(); if(!ps.length||!act.length) return null;
   const S_=S.podBoard||(S.podBoard={}), ord={off:0,risk:1,ok:2,none:3,done:4};
   const grp=[...ps.map(x=>[x,podLabel(x)]),['','No POD']].map(([k,l])=>{ const xs=act.filter(p=>k?(p.pod===k||p.pod2===k):!ps.includes(p.pod)).sort((a,b)=>(ord[stats.get(a.id).health]??9)-(ord[stats.get(b.id).health]??9)||String(a.name).localeCompare(String(b.name))); return {k,l,xs}; }).filter(g=>g.xs.length);
-  const nowPh=p=>{ if(p.std){ const a=activePhases(p); if(a.length) return 'Phase '+phLabel(a[0],p); } return stats.get(p.id).phase||''; };
+  const nowPh=p=>{ if(p.std){ const a=activePhases(p); if(a.length){ const n=phNo(a[0]); return [/^\d/.test(n)?'P'+n:n,'Phase '+phLabel(a[0],p)]; } } const x=stats.get(p.id).phase||''; return [x?'•':'',x]; };
   const card=g=>{ const c=k=>g.xs.filter(p=>stats.get(p.id).health===k).length, open=S_[g.k||'-']!==false;
     return h('details',{class:'pod-card',open,ontoggle:e=>{ S_[g.k||'-']=e.target.open; }},
       h('summary',{},h('b',{text:g.l}),h('span',{class:'pod-n'},
         ...[['off','overdue'],['risk','late'],['ok','ontime'],['none','open']].filter(([k])=>c(k)).map(([k,cl])=>h('span',{class:'pod-c',title:HEALTH[k][0]},h('i',{style:`background:var(--${cl})`}),String(c(k)))),
         h('span',{class:'muted',text:`${g.xs.length} project${g.xs.length===1?'':'s'}`}))),
       h('div',{class:'pod-list'},g.xs.map(p=>{ const st=stats.get(p.id), hl=HEALTH[st.health]||HEALTH.none, shared=g.k&&p.pod2===g.k&&p.pod!==g.k;
-        return h('button',{type:'button',class:'pod-p',onclick:()=>openProjectView(p.id)},
-          h('i',{style:`background:var(--${hl[1]})`,title:hl[0]}),
-          h('span',{class:'pod-pn'},h('span',{},(isIntP(p)?'MODO · ':'')+p.name+(shared?' (shared)':'')),h('small',{text:[p.code,nowPh(p)].filter(Boolean).join(' · ')})),
-          h('span',{class:'pod-ph',text:hl[0]})); }))); };
+        const [no,ph]=nowPh(p);
+        return h('button',{type:'button',class:'pod-p',title:[p.code,ph,hl[0]].filter(Boolean).join(' · '),onclick:()=>openProjectView(p.id)},
+          h('i',{style:`background:var(--${hl[1]})`}),
+          h('span',{class:'pod-pn'},p.name,shared?h('em',{text:' shared'}):null,isIntP(p)?h('b',{class:'pod-modo',text:'MODO'}):null),
+          h('span',{class:'pod-ph',text:no})); }))); };
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'By POD'}),h('span',{class:'cnt',text:`${act.length} active`})),
     h('div',{class:'pod-grid'},grp.map(card)));
 }
