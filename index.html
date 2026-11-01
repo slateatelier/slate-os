@@ -1157,9 +1157,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .now-pill::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--c)}
 .now-chips{display:flex;gap:4px;flex-wrap:wrap}
 .now-chip{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 6px;border-radius:7px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;box-sizing:border-box}
-.now-chip.done{background:var(--ink);color:#fff}
-.now-chip.now{background:#fff;color:var(--c);box-shadow:inset 0 0 0 2px var(--c);animation:nowPulse 2.4s ease-in-out infinite}
-.now-chip.later{background:var(--group);color:var(--faint)}
+.now-chip.done{background:var(--group);color:var(--muted)}
+.now-chip.now{background:#fff;color:var(--c);box-shadow:inset 0 0 0 1.5px var(--c);animation:nowPulse 2.4s ease-in-out infinite}
+.now-chip.later{background:transparent;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line)}
 @keyframes nowPulse{50%{box-shadow:inset 0 0 0 2px var(--c),0 0 0 3px color-mix(in srgb,var(--c) 18%,transparent)}}
 @media (prefers-reduced-motion:reduce){.now-chip.now{animation:none}}
 .now-lines{display:grid;gap:4px}
@@ -4141,7 +4141,8 @@ function endOf(t){ const td=today(); if(t.doneAt) return t.target&&t.doneAt<t.ta
 /* ---------- plain-language project status (Principal, 1 Nov 2026: the timeline must read at a glance) ----------
    one strip of phase chips (done / now / later) and one sentence: what is happening now, the next date, and whose turn it is.
    Dates are the approved gate dates the team is scored on. */
-const NOW_ST={late:['Late','var(--overdue)'],soon:['Due soon','var(--late)'],client:['With the client','var(--early)'],clate:['Client is late','var(--early)'],ok:['On track','var(--ontime)'],idle:['No dates yet','var(--muted)'],wait:['Waiting for site','var(--muted)'],pause:['Paused','var(--muted)'],done:['All phases done','var(--ink)']};
+/* three signals only: red = we are late, amber = needs attention soon, green = fine; everything else is calm grey */
+const NOW_ST={late:['Late','var(--overdue)'],soon:['Due soon','var(--late)'],client:['With the client','var(--muted)'],clate:['Client is late','var(--late)'],ok:['On track','var(--ontime)'],idle:['No dates yet','var(--muted)'],wait:['Waiting for site','var(--muted)'],pause:['Paused','var(--muted)'],done:['All phases done','var(--ink)']};
 function projNow(p){
   const ks=stdPhases(p).filter(k=>PH[k]||String(k).startsWith('x')), td=today();
   let live=null; try{ if(tlOf(p)) live=tlCompute(p,tlOf(p).start,true); }catch(_){}
@@ -4169,7 +4170,7 @@ function projNow(p){
 function nowStrip(p,o={}){ const n=projNow(p), [lbl,col]=NOW_ST[n.st];
   return h('div',{class:'now-box'},
     h('div',{class:'now-top'},o.title?h('b',{class:'now-name',text:o.title}):h('b',{class:'now-name',text:'Where it stands'}),h('span',{class:'now-pill',style:`--c:${col}`,text:lbl})),
-    h('div',{class:'now-chips','aria-label':'Phases'},n.chips.map(c=>h('span',{class:'now-chip '+c.state,style:c.state==='now'?`--c:${col}`:'',title:`${phNo(c.k)} ${phName(c.k,p)} · ${c.state}`,text:c.state==='done'?'✓':String(phNo(c.k))}))),
+    h('div',{class:'now-chips','aria-label':'Phases'},n.chips.map(c=>h('span',{class:'now-chip '+c.state,style:c.state==='now'?`--c:${['late','soon','clate'].includes(n.st)?col:'var(--ink)'}`:'',title:`${phNo(c.k)} ${phName(c.k,p)} · ${c.state}`,text:c.state==='done'?'✓':String(phNo(c.k))}))),
     h('div',{class:'now-lines'},n.line.map(t=>h('div',{class:'now-line',text:t}))),
     n.next?h('div',{class:'now-next',text:n.next}):null); }
 function viewPhaseMap(){
@@ -4183,7 +4184,7 @@ function viewPhaseMap(){
       h('div',{class:'bar'},seg('View',[['map','Projects'],['bars','Task bars']],'map',v=>{ g.mode=v; render(true); })))];
   out.push(h('div',{class:'bar'},podSel));
   out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site'],['pause','Paused']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
-  out.push(h('div',{class:'now-legend'},h('span',{class:'now-chip done',text:'✓'}),'done',h('span',{class:'now-chip now',style:'--c:var(--ink);margin-left:8px',text:'2'}),'now',h('span',{class:'now-chip later',style:'margin-left:8px',text:'3'}),'later · tap a project to open it'));
+  out.push(h('div',{class:'now-legend'},h('span',{class:'now-chip done',text:'✓'}),'done',h('span',{class:'now-chip now',style:'--c:var(--ink);margin-left:8px;animation:none',text:'2'}),'now',h('span',{class:'now-chip later',style:'margin-left:8px',text:'3'}),'later · tap a project to open it'));
   out.push(rows.length?h('div',{class:'now-list'},rows.map(({p})=>h('button',{type:'button',class:'now-card',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }},nowStrip(p,{title:projLabel(p)}),h('div',{class:'now-meta',text:podText(p)})))):h('div',{class:'empty'},h('h3',{text:'No live projects here'})));
   return out;
 }
