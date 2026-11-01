@@ -1175,6 +1175,34 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .now-sum{display:flex;gap:14px;flex-wrap:wrap;margin:-4px 2px 0}
 .now-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 2px}
 .now-legend .now-chip{min-width:20px;height:20px;font-size:11px;animation:none}
+.tv-key{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--c)}
+.tv-key.late,.tv-chip.late{--c:var(--overdue)}.tv-key.soon,.tv-chip.soon{--c:var(--late)}.tv-key.open,.tv-chip.open{--c:#3A3A3C}.tv-key.done,.tv-chip.done{--c:var(--ontime)}
+.tv-chip{all:unset;box-sizing:border-box;position:relative;display:grid;gap:2px;width:100%;padding:6px 22px 6px 9px;margin:0 0 6px;border-radius:8px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);border-left:3px solid var(--c);cursor:pointer;font-size:12.5px;line-height:1.3}
+.tv-chip b{font-weight:600;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tv-chip span{color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-chip.done{background:#F3FAF5}.tv-chip.done b{color:#555;font-weight:500}
+.tv-chip:hover{box-shadow:inset 0 0 0 1px var(--faint)}.tv-chip:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.tv-del{position:absolute;top:9px;right:8px;width:7px;height:7px;transform:rotate(45deg);box-shadow:inset 0 0 0 1.5px var(--muted);display:inline-block}
+.tv-more{all:unset;cursor:pointer;font-size:12px;color:var(--muted);padding:2px 4px}.tv-more:hover{color:var(--ink)}
+.tv-grid{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#fff}
+.tv-row{display:grid;grid-template-columns:170px repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line)}.tv-row:last-child{border-bottom:0}
+.tv-row>div{padding:10px;border-right:1px solid var(--line);min-width:0}.tv-row>div:last-child{border-right:0}
+.tv-h>div{background:var(--group);font-size:12.5px;font-weight:600;color:var(--muted);padding:9px 10px}
+.tv-who{display:grid;align-content:start;gap:2px}.tv-who b{font-size:14px}.tv-who span{font-size:12px;color:var(--muted)}
+.tv-cell.hot{background:#FFF6F5}
+.tv-cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.tv-col{background:var(--group);border-radius:12px;padding:10px}.tv-col h3{margin:2px 4px 10px;font-size:14px;display:flex;justify-content:space-between}.tv-col h3 span{color:var(--muted);font-weight:500}
+.tv-col.late h3{color:var(--overdue)}.tv-none{font-size:12.5px;color:var(--faint);padding:4px}
+@media (max-width:760px){
+  .tv-h{display:none}.tv-row{grid-template-columns:1fr}.tv-row>div{border-right:0}
+  .tv-cell.tv-e{display:none}.tv-cell::before{content:attr(data-l);display:block;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+  .tv-who{background:var(--group)}
+  .tv-cols{grid-template-columns:1fr}}
+.wl{display:grid;gap:2px}.wl-r{display:grid;grid-template-columns:150px repeat(4,minmax(0,1fr));gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.wl-h{font-size:12px;color:var(--muted);font-weight:600}.wl-n{display:grid;min-width:0}.wl-n b{font-size:13.5px}.wl-n small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl-c{display:grid;grid-template-columns:1fr 22px;gap:6px;align-items:center;font-size:12px;color:var(--muted);text-align:right}
+.wl-b{position:relative;height:14px;border-radius:4px;background:var(--group)}.wl-b i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}.wl-b em{position:absolute;left:var(--cap);top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+@media (max-width:760px){.wl-r{grid-template-columns:90px repeat(4,minmax(0,1fr));gap:6px}.wl-h span{font-size:10.5px}.wl-c{grid-template-columns:1fr}.wl-c span{display:none}}
 .pg-trk{height:40px}
 .pg-bar{position:absolute;top:9px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;font-weight:600;overflow:hidden;box-sizing:border-box}
 .pg-bar.pre{background:#C7C7CC;color:#fff}
@@ -4045,6 +4073,7 @@ function viewDash(){
     const m=new Map(); cross.forEach(t=>{ const k=`${teamLabel(t.assignee)} → ${podLabel(podOf(t))}`; if(!m.has(k)) m.set(k,{n:0,open:0}); const x=m.get(k); x.n++; if(!t.doneAt) x.open++; });
     if(cross.length) W.push(widget('Cross-pod support','approved help between pods',h('div',{class:'wl'},[...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,x])=>h('div',{style:'display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:14px'},h('span',{text:k}),h('span',{class:'mono',text:`${x.n} task${x.n>1?'s':''}${x.open?` · ${x.open} open`:''}`}))))));
   }
+  { const wl=workloadW(); if(wl) W.push(wl); }
   // status donut
   W.push(widget('Status',`${c.total} due this ${D.kind}`,c.total?h('div',{class:'donut-wrap'},donut(c),legendList(c)):h('div',{class:'w-empty',text:'Nothing is due in this period.'})));
   // completed over time
@@ -4196,13 +4225,57 @@ function viewPhaseMap(){
   rows.sort((a,b)=>rank.indexOf(a.n.st)-rank.indexOf(b.n.st)||(a.p.code||a.p.name||'').localeCompare(b.p.code||b.p.name||''));
   const cnt=k=>rows.filter(r=>r.n.st===k).length;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:g.pmPod?podLabel(g.pmPod):'All PODs'}),h('h1',{class:'h1',text:'Timeline'})),
-      h('div',{class:'bar'},seg('View',[['map','Projects'],['gantt','Gantt'],['bars','Tasks']],'map',v=>{ g.mode=v; render(true); })))];
+      h('div',{class:'bar'},TV_SEG(g)))];
   out.push(h('div',{class:'bar'},podSel));
   out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site'],['pause','Paused']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
   out.push(h('div',{class:'now-legend'},h('span',{class:'now-chip pre',text:'2'}),'done before SLATE OS',h('span',{class:'now-chip done',style:'margin-left:8px',text:'✓'}),'done in SLATE OS',h('span',{class:'now-chip now',style:'--c:var(--ink);margin-left:8px;animation:none',text:'2'}),'now',h('span',{class:'now-chip later',style:'margin-left:8px',text:'3'}),'later · tap a project to open it'));
   out.push(rows.length?h('div',{class:'now-list'},rows.map(({p})=>h('button',{type:'button',class:'now-card',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }},nowStrip(p,{title:projLabel(p)}),h('div',{class:'now-meta',text:podText(p)})))):h('div',{class:'empty'},h('h3',{text:'No live projects here'})));
   return out;
 }
+/* ---------- Tasks by person and by date (Principal, 1 Nov 2026): tasks sit on their due date, no invented bar lengths ----------
+   Same marks everywhere: red late, amber due within 3 days, dark open, green done. */
+const TV_SEG=g=>seg('View',[['map','Projects'],['gantt','Gantt'],['people','People'],['due','By date']],g.mode||'map',v=>{ g.mode=v; render(true); });
+function tvTasks(g){ const td=today(), lim=addDays(td,60);
+  return activeTasks().filter(t=>t.target&&t.assignee&&!t.legacy&&!isChalkTask(t)&&!t.repeat&&!(isCooT(t)&&!seeCooWork())&&(!t.doneAt||String(t.doneAt).slice(0,10)>=addDays(td,-6))&&(t.doneAt||t.target<=lim)
+    &&(!g.pmPod||podsOf(t).includes(g.pmPod)||teamOf(t.assignee)===g.pmPod)); }
+const tvCls=t=>t.doneAt?'done':status(t)==='overdue'?'late':status(t)==='soon'?'soon':'open';
+function tvChip(t,o={}){ const p=S.projects[t.projectId];
+  return h('button',{type:'button',class:'tv-chip '+tvCls(t),onclick:()=>openTask(t.id)},h('b',{text:t.title}),h('span',{text:[o.who?nameOf(t.assignee).split(' ')[0]:'',p?p.name:'',fmtD(t.target)].filter(Boolean).join(' · ')}),t.kind==='Deliverable'||t.gate?h('i',{class:'tv-del',title:'Deliverable','aria-label':'Deliverable'}):null); }
+function tvCell(key,list,o={}){ const g=S.gantt, ex=(g.ex||(g.ex={}))[key], n=list.length, show=ex?list:list.slice(0,3);
+  return [...show.map(t=>tvChip(t,o)),n>3?h('button',{type:'button',class:'tv-more',onclick:()=>{ g.ex[key]=!ex; render(true); },text:ex?'Show less':`+ ${n-3} more`}):null]; }
+function tvHead(g,title,lead){ if(g.pmPod===undefined) g.pmPod=fullView()?'':(myPod()||'');
+  const podSel=h('select',{id:'tv-pod','aria-label':'POD',onchange:e=>{g.pmPod=e.target.value;render(true)}},h('option',{value:'',text:'All PODs and teams'}),pods().map(v=>h('option',{value:v,text:podLabel(v)}))); podSel.value=g.pmPod||'';
+  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:g.pmPod?podLabel(g.pmPod):'Everyone'}),h('h1',{class:'h1',text:title})),h('div',{class:'bar'},TV_SEG(g))),
+    h('div',{class:'bar'},podSel),
+    h('div',{class:'now-legend'},h('span',{class:'tv-key late'}),'late',h('span',{class:'tv-key soon',style:'margin-left:8px'}),'due soon',h('span',{class:'tv-key open',style:'margin-left:8px'}),'open',h('span',{class:'tv-key done',style:'margin-left:8px'}),'done',h('i',{class:'tv-del',style:'position:static;margin-left:10px'}),'deliverable',lead?' · '+lead:'')]; }
+function viewTvPeople(){ const g=S.gantt, td=today(), w1=addDays(td,6), w2=addDays(td,13), xs=tvTasks(g);
+  const out=tvHead(g,'Who’s doing what','a tinted week is a heavy week');
+  const col=[['Late',t=>!t.doneAt&&t.target<td],['This week',t=>t.target>=td&&t.target<=w1||(t.doneAt&&t.target<td)],['Next week',t=>!t.doneAt&&t.target>w1&&t.target<=w2],['Later',t=>!t.doneAt&&t.target>w2]];
+  const lbl=[`Late`,`This week · to ${fmtD(w1)}`,`Next week · to ${fmtD(w2)}`,'Later'];
+  const ppl=[...new Set(xs.map(t=>t.assignee))].map(id=>({id,ts:xs.filter(t=>t.assignee===id)})).map(x=>({...x,late:x.ts.filter(t=>!t.doneAt&&t.target<td).length,open:x.ts.filter(t=>!t.doneAt).length}))
+    .sort((a,b)=>(b.id===S.uid)-(a.id===S.uid)||b.late-a.late||b.open-a.open);
+  if(!ppl.length){ out.push(h('div',{class:'empty'},h('h3',{text:'Nothing dated here'}),h('p',{class:'muted',style:'margin:0',text:'Tasks appear here once they have a due date.'}))); return out; }
+  out.push(h('div',{class:'tv-grid'},h('div',{class:'tv-row tv-h'},h('div',{text:'Person'}),...lbl.map(l=>h('div',{text:l}))),
+    ppl.map(x=>h('div',{class:'tv-row'},h('div',{class:'tv-who'},h('b',{text:nameOf(x.id)}),h('span',{text:`${teamLabel(x.id)} · ${x.open} open`+(x.late?` · ${x.late} late`:'')})),
+      ...col.map(([c,f],i)=>{ const l=xs.filter(t=>t.assignee===x.id&&f(t)).sort((a,b)=>a.target.localeCompare(b.target)); return h('div',{class:'tv-cell'+(l.filter(t=>!t.doneAt).length>=6&&(i===1||i===2)?' hot':'')+(l.length?'':' tv-e'),'data-l':lbl[i]},tvCell(`p:${x.id}:${i}`,l)); })))));
+  return out; }
+function viewTvDue(){ const g=S.gantt, td=today(), w1=addDays(td,6), w2=addDays(td,13), xs=tvTasks(g).filter(t=>!t.doneAt);
+  const out=tvHead(g,'When it’s due','');
+  const B=[['Late',t=>t.target<td],['Today',t=>t.target===td],['This week',t=>t.target>td&&t.target<=w1],['Next week',t=>t.target>w1&&t.target<=w2],['Later',t=>t.target>w2]];
+  out.push(h('div',{class:'tv-cols'},B.map(([l,f],i)=>{ const c=xs.filter(f).sort((a,b)=>a.target.localeCompare(b.target)); return h('section',{class:'tv-col'+(i===0&&c.length?' late':'')},h('h3',{},l,h('span',{text:String(c.length)})),c.length?tvCell('d:'+i,c,{who:true}):h('div',{class:'tv-none',text:'Nothing'})); })));
+  return out; }
+/* workload by person and week: for the Principal and the COO only (Dashboard). settings.loadCap = a normal week */
+function workloadW(){ if(!canSeeScoring()) return null; const td=today(), cap=+((S.settings||{}).loadCap)||6;
+  const xs=activeTasks().filter(t=>t.target&&t.assignee&&!t.doneAt&&!t.legacy&&!isChalkTask(t)&&t.target<addDays(td,28));
+  const ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&(xs.some(t=>t.assignee===id)||/^pod\b/i.test(teamOf(id)||''))).filter(id=>!isChalkP(id));
+  const wk=i=>[addDays(td,i*7),addDays(td,i*7+6)], cnt=(id,i)=>{ const [a,b]=wk(i); return xs.filter(t=>t.assignee===id&&(i===0?t.target<=b:t.target>=a&&t.target<=b)).length; };
+  const rows=ids.map(id=>({id,n:[0,1,2,3].map(i=>cnt(id,i))})).sort((a,b)=>Math.max(...b.n)-Math.max(...a.n));
+  const bar=n=>{ const max=cap*1.6, col=n>cap?'var(--overdue)':n>=cap*0.8?'var(--late)':'var(--ontime)'; return h('div',{class:'wl-c'},h('div',{class:'wl-b',style:`--cap:${cap/max*100}%`},h('i',{style:`width:${Math.min(100,n/max*100)}%;background:${col}`}),h('em')),h('span',{text:n?String(n):'—'})); };
+  const capIn=S.canWrite?h('label',{class:'f-hint',style:'display:flex;gap:6px;align-items:center;margin:0'},'A normal week:',h('input',{type:'number',min:'1',max:'40',value:String(cap),style:'width:56px;padding:3px 6px',onchange:e=>{ const v=Math.max(1,Math.min(40,parseInt(e.target.value,10)||6)); run(()=>settingsRef().update({loadCap:v}),'Normal week saved'); }}),'items'):null;
+  return widget('Workload','open items due per person and week · only you and the COO see this',h('div',{},
+    h('div',{class:'wl'},h('div',{class:'wl-r wl-h'},h('span',{text:''}),...['This week (and late)','Next week','Week 3','Week 4'].map(l=>h('span',{text:l}))),
+      rows.map(r=>h('div',{class:'wl-r'},h('span',{class:'wl-n',title:teamLabel(r.id)},h('b',{text:nameOf(r.id)}),h('small',{text:teamLabel(r.id)})),...r.n.map(bar)))),
+    h('div',{style:'display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px'},h('span',{class:'f-hint',style:'margin:0',text:'Green under a normal week, amber near it, red over it. Only dated tasks and deliverables count; give checklist items as dated tasks to see juniors’ load.'}),capIn)),true); }
 /* Gantt by phase (Principal, 1 Nov 2026): one row per project, one bar per phase, the same marks as the project cards:
    grey = done before SLATE OS, green = done in SLATE OS, outlined = now (amber due soon, red late), faint = later. */
 function viewPhaseGantt(){
@@ -4210,7 +4283,7 @@ function viewPhaseGantt(){
   const s0=addDays(td,-Math.round(z.days*0.2)+g.offset*Math.round(z.days/2)), e0=addDays(s0,z.days-1), W=Math.round(z.days*z.px), x=d=>Math.round(diff(s0,d)*z.px);
   const podSel=h('select',{id:'pg-pod','aria-label':'POD',onchange:e=>{g.pmPod=e.target.value;render(true)}},h('option',{value:'',text:'All PODs'}),pods().map(v=>h('option',{value:v,text:podLabel(v)}))); podSel.value=g.pmPod||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${fmtD(s0)} – ${fmtD(e0)}`}),h('h1',{class:'h1',text:'Timeline'})),
-    h('div',{class:'bar'},seg('View',[['map','Projects'],['gantt','Gantt'],['bars','Tasks']],'gantt',v=>{ g.mode=v; render(true); }),seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
+    h('div',{class:'bar'},TV_SEG(g),seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Earlier',onclick:()=>{g.offset--;render(true)},text:'‹'}),
       g.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{g.offset=0;render(true)},text:'Today'}),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Later',onclick:()=>{g.offset++;render(true)},text:'›'})))];
@@ -4246,8 +4319,11 @@ function viewPhaseGantt(){
   return out;
 }
 function viewGantt(){
+  if(S.gantt.mode==='bars') S.gantt.mode='people';
   if(S.gantt.mode==='gantt') return viewPhaseGantt();
-  if(S.gantt.mode!=='bars') return viewPhaseMap();
+  if(S.gantt.mode==='people') return viewTvPeople();
+  if(S.gantt.mode==='due') return viewTvDue();
+  return viewPhaseMap();
   const g=S.gantt, z=GZ[g.zoom], td=today();
   const s0=addDays(td,-Math.round(z.days*0.2)+g.offset*Math.round(z.days/2)), e0=addDays(s0,z.days-1), W=Math.round(z.days*z.px);
   const x=d=>Math.round(diff(s0,d)*z.px);
