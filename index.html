@@ -5607,6 +5607,14 @@ function phaseReqCards(){
           h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>decidePhase(r,true),text:'Approve'}),
           h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>decidePhase(r,false),text:'Return'}))); })));
 }
+/* opening or closing a phase keeps that phase where it was on screen (other phases folding above it no longer move the page);
+   closing from the pinned bar far down brings the phase's own heading back to the top */
+function phKeep(k,change){ const sc=document.querySelector('#sheet .panel'), c=sc&&sc.querySelector(`[data-ph="${k}"]`), r0=c?c.getBoundingClientRect().top:null;
+  change(); renderSheet();
+  if(r0==null) return; const fix=()=>{ const sc2=document.querySelector('#sheet .panel'), c2=sc2&&sc2.querySelector(`[data-ph="${k}"]`); if(!c2) return;
+    const top=sc2.getBoundingClientRect().top, want=r0<top+4?top+8:r0; sc2.scrollTop+=c2.getBoundingClientRect().top-want; };
+  fix(); requestAnimationFrame(fix); }
+function phToggle(k,next){ phKeep(k,()=>{ S.sheet.openPh=next; }); }
 function phaseSection(p){
   const names=phaseList(p); if(!names.length) return null;
   const st=projStats(p), ap=amApprover()&&S.canWrite, rec=canRecordPhase(p), ed=S.sheet.phEdit||null;
@@ -5702,11 +5710,11 @@ function stdSection(p){
       const fbEl=fbEdit&&!s.done?h('input',{id:'fb-'+k,type:'date',value:fb,style:'background:var(--group);padding:4px 6px;font-size:13px','aria-label':'Client feedback due',onchange:e=>run(()=>S.db.doc('projects/'+p.id).update({std:{fb:{[k]:e.target.value||''}}}),'Client feedback date saved')}):h('b',{text:fb?fmtD(fb):'—'});
       const items=clItems(k), main=items.filter(i=>!i.cost), cost=items.filter(i=>i.cost);
       /* a closed phase folds to one line; tap it to see its dates and checklist */
-      const unfold=!!(S.sheet&&S.sheet.phX&&S.sheet.phX[k]), tg=()=>{ S.sheet.phX={...(S.sheet.phX||{}),[k]:!unfold}; if(unfold&&isOpen) S.sheet.openPh=null; renderSheet(); };
+      const unfold=!!(S.sheet&&S.sheet.phX&&S.sheet.phX[k]), tg=()=>phKeep(k,()=>{ S.sheet.phX={...(S.sheet.phX||{}),[k]:!unfold}; if(unfold&&isOpen) S.sheet.openPh=null; });
       if(s.done&&!unfold&&!isOpen){ const on=s.fin&&s.fin.doneAt?(s.fin.legacyNoDate?'before go-live':fmtD(s.fin.doneAt)):'';
-        return h('div',{class:'card',role:'button',tabindex:'0',style:'border-radius:0;border-bottom:1px solid var(--line);padding-block:10px;cursor:pointer',onclick:tg,onkeydown:e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); tg(); } }},
+        return h('div',{class:'card','data-ph':k,role:'button',tabindex:'0',style:'border-radius:0;border-bottom:1px solid var(--line);padding-block:10px;cursor:pointer',onclick:tg,onkeydown:e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); tg(); } }},
           h('div',{class:'pc-row'},h('span',{style:'font-size:14px'},h('span',{style:'color:var(--ontime);font-weight:700',text:'✓ '}),'Phase '+phLabel(k,p)),h('span',{class:'f-hint',style:'margin:0',text:(on?'closed '+on:'closed')+' ›'}))); }
-      return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
+      return h('div',{class:'card','data-ph':k,style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
         h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),s.done?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:tg,text:'Fold ‹'}):stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
         PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysFor(p,k)} working days`}),h('span',{text:'·'}),
@@ -5715,10 +5723,10 @@ function stdSection(p){
         kwOf(k)&&s.created&&!s.done?kwRow(p,k,fbEdit):null,
         s.created?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
-          det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>{ S.sheet.openPh=isOpen?null:k; renderSheet(); },text:isOpen?'Hide checklist':'Show checklist'}):null),
+          det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>phToggle(k,isOpen?null:k),text:isOpen?'Hide checklist':'Show checklist'}):null),
         h('div',{class:'pc-bar'},h('span',{style:`width:${c.tot-c.na?Math.round(c.done/(c.tot-c.na)*100):100}%`})),
         isOpen&&det?h('div',{class:'cl-stick',role:'note'},h('b',{text:'Phase '+phLabel(k,p)}),h('span',{class:'f-hint',style:'margin:0',text:`${c.done} of ${c.tot-c.na} done`}),
-          h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',onclick:()=>{ S.sheet.openPh=null; renderSheet(); },text:'Hide'})):null,
+          h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',onclick:()=>phToggle(k,null),text:'Hide'})):null,
         isOpen&&det?h('div',{class:'cl'},main.map(it=>clRow(p,k,it,manage)),cost.length?[h('div',{class:'cl-h',text:'Cost checks'}),cost.map(it=>clRow(p,k,it,manage))]:null):null,
         s.created&&!s.done&&manage&&today()<addDays(goLive(),60)?preBox(p,k):null); })),
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Gate deliverables carry the dates and count on the dashboard. Checklist items are ticked, not dated. Client feedback dates are for planning and never count against the pod.'}),
