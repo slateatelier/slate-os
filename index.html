@@ -2583,11 +2583,12 @@ function render(force){
   if(!force&&isTyping(view)){ S.pendingRender=true; return; }
   const k=keepFocus(view);
   renderHeader();
-  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal'].includes(S.view)?' wide':'');
+  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal','risk'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView())); secInfo(view);
   view.classList.toggle('wrap-desk',S.view==='mine'&&!!view.querySelector('.desk'));
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
   try{ daySplash(); }catch(e){}
+  try{ if(S.view==='mine') checkinArm(); }catch(e){}
   restoreFocus(k);
   dashCount(view);
 }
@@ -2633,7 +2634,7 @@ function renderHeader(){
   const spaces=!cmem&&canProps()&&S.canWrite, inBiz=spaces&&S.view==='biz';
   if(spaces){ const i=list.findIndex(x=>x[0]==='biz'); if(i>=0) list.splice(i,1); }
   if(!inBiz&&S.view!=='biz') S.lastStudio=S.view;
-  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays'];
+  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
@@ -2673,7 +2674,7 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
   if(NAV_SUB.includes(S.view)) out.push(amChalkMember()?navBack('Home',()=>{ S.view='mine'; render(true); }):navBack('More',()=>{ S.view='more'; render(true); }));
   return out.concat(v());
@@ -2831,7 +2832,7 @@ function viewMore(){
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
       item('reports','Issue reports',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
-    ...grp('Admin',amApprover()?item('holidays','Holidays','Public holidays and office closures: no timeline counts them as working days'):null,amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
+    ...grp('Admin',canSeeScoring()?item('risk','Risk and grace',(()=>{ try{ const r=riskScan(), n=r.grace.length+r.risk.length+r.deem.length+r.shift.length; return n?`${n} decision${n===1?'':'s'} waiting · workload, grace and projects at risk`:'Workload, grace used and every project at risk'; }catch(_){ return 'Workload, grace used and every project at risk'; } })()):null,amApprover()?item('holidays','Holidays','Public holidays and office closures: no timeline counts them as working days'):null,amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
@@ -4277,7 +4278,96 @@ function workloadW(){ if(!canSeeScoring()) return null; const td=today(), cap=+(
   return widget('Workload','open items due per person and week · only you and the COO see this',h('div',{},
     h('div',{class:'wl'},h('div',{class:'wl-r wl-h'},h('span',{text:''}),...['This week (and late)','Next week','Week 3','Week 4'].map(l=>h('span',{text:l}))),
       rows.map(r=>h('div',{class:'wl-r'},h('span',{class:'wl-n',title:teamLabel(r.id)},h('b',{text:nameOf(r.id)}),h('small',{text:teamLabel(r.id)})),...r.n.map(bar)))),
+    S.view!=='risk'?h('button',{class:'linkish',type:'button',style:'font-size:13px;margin-top:8px',onclick:()=>{ S.view='risk'; render(true); window.scrollTo(0,0); },text:'Risk and grace: decisions waiting and grace used ›'}):null,
     h('div',{style:'display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px'},h('span',{class:'f-hint',style:'margin:0',text:'Green under a normal week, amber near it, red over it. Only dated tasks and deliverables count; give checklist items as dated tasks to see juniors’ load.'}),capIn)),true); }
+/* ---------- morning check-in (Principal, 1 Nov 2026): two minutes after the day's greeting, on Home, one prompt a day:
+   "Is your work in progress up to date?" with the person's open work that is in progress or due within two working days ---------- */
+const CI_MS=120000;
+function ciItems(){ const td=today(), soon=addWorkDays(td,2);
+  return activeTasks().filter(t=>t.assignee===S.uid&&!t.doneAt&&!t.verify&&!t.legacy&&!t.held&&(stageOf(t)==='doing'||(t.target&&t.target<=soon))).sort((a,b)=>(a.target||'9').localeCompare(b.target||'9')); }
+function checkinArm(){ if(S.state!=='ready'||!S.uid||S.isOwner) return; const key=today()+':'+S.uid;
+  if(pref.checkin===key||pref.daySplash!==key||window.slateCiTimer||[5,6].includes(new Date().getDay())) return;
+  const at=+(pref.ciArm&&pref.ciArm.k===key?pref.ciArm.at:0)||Date.now(); if(!(pref.ciArm&&pref.ciArm.k===key)) savePref('ciArm',{k:key,at});
+  window.slateCiTimer=setTimeout(function fire(){ window.slateCiTimer=null;
+    if(pref.checkin===key) return;
+    if(document.hidden||S.sheet||S.view!=='mine'||document.getElementById('day-splash')){ window.slateCiTimer=setTimeout(fire,30000); return; }
+    const xs=ciItems(); if(!xs.length){ savePref('checkin',key); return; }
+    savePref('checkin',key); S.sheet={type:'checkin',err:''}; renderSheet(); },Math.max(1000,at+CI_MS-Date.now())); }
+function sheetCheckin(){ const key=today()+':'+S.uid, xs=ciItems(), td=today(), done=()=>{ savePref('checkin',key); closeSheet(); };
+  const row=t=>{ const p=S.projects[t.projectId], st=status(t);
+    return h('div',{class:'card',style:'display:grid;gap:8px;border-radius:0;border-bottom:1px solid var(--line)'},
+      h('div',{},h('b',{style:'font-size:14.5px',text:t.title}),h('div',{class:'f-hint',style:'margin:2px 0 0',text:[p?p.name:'',t.target?(st==='overdue'?`was due ${fmtD(t.target)}`:t.target===td?'due today':`due ${fmtD(t.target)}`):'no date',stageOf(t)==='doing'?'in progress':''].filter(Boolean).join(' · ')})),
+      h('div',{class:'actions',style:'margin:0'},
+        h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>run(()=>finishTask(t,td,'From the morning check-in'),'Marked done').then(()=>renderSheet()),text:'✓ Done'}),
+        stageOf(t)!=='doing'?h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>run(()=>taskUpdate(t.id,{stage:'doing'},[{type:'stage',from:stageOf(t),to:'doing',note:'Morning check-in'}]),'In progress').then(()=>renderSheet()),text:'Working on it'}):null,
+        h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ savePref('checkin',key); openTask(t.id); },text:t.target&&t.target<td?'Ask for a new date':'Open'}))); };
+  return [head('Morning check-in','Is your work in progress up to date?'),
+    h('p',{class:'lead',style:'margin:0',text:xs.length?'These are in progress or due in the next two working days. Mark what is finished, so your POD leader and the COO see where things stand.':'Everything is up to date. Thank you.'}),
+    xs.length?h('div',{class:'list'},xs.map(row)):null,
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:done,text:xs.length?'All up to date':'Close'}))]; }
+
+/* ---------- Risk and grace (Principal and COO only): every project that needs a decision or is at risk, on one page,
+   and how much POD-load grace each POD has used ---------- */
+async function giveGrace(p,add){ const g0=(p.std&&p.std.grace)||{}, g={...g0}; add.forEach(k=>{ g[k]=GRACE; });
+  await S.db.doc('projects/'+p.id).update({std:{grace:g,graceAt:{...((p.std&&p.std.graceAt)||{}),...Object.fromEntries(add.map(k=>[k,{by:S.uid,at:new Date().toISOString()}]))}}});
+  const np={...p,std:{...p.std,grace:g}}, pl=tlCompute(np,tlOf(np).start,true);
+  for(const k of tlPhases(np)){ const f=pl[k], st=stdState(np,k); if(!f||f.none) continue;
+    for(const [g2,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(g2&&!g2.doneAt&&g2.target&&date&&date>g2.target) await taskUpdate(g2.id,{target:date},[{type:'scheduled',from:g2.target,to:date,note:'POD-load grace +20%'}]); } }
+function riskScan(){ const out={grace:[],risk:[],deem:[],shift:[],late:[],client:[],kons:[],buffer:[],used:[]}, td=today();
+  for(const p0 of projects()){ const p={...S.projects[p0.id],id:p0.id}; if(!p.std||p.closed||p.pod==='Studio'||isInternalP(p)||!tlOf(p)) continue;
+    let live; try{ live=tlCompute(p,tlOf(p).start,true); }catch(_){ continue; }
+    const ks=tlPhases(p).filter(k=>live[k]&&!live[k].none), g0=(p.std.grace)||{}, no=(p.std.graceNo)||{};
+    try{ if(paceOf(p)!=='fast'){ const gr=graceFor(p,tlCompute({...p,std:{...p.std,grace:{}}},tlOf(p).start,true)); const add=Object.keys(gr).filter(k=>!g0[k]&&!no[k]&&!stdState(p,k).done&&!(live[k]&&live[k].subA)); if(add.length) out.grace.push({p,add,gr}); } }catch(_){}
+    tlRisk(p).filter(x=>!x.ok).forEach(x=>out.risk.push({p,...x}));
+    ks.filter(k=>live[k].deemDue&&!(p.std.deemed&&p.std.deemed[k])).forEach(k=>out.deem.push({p,k,live:live[k]}));
+    const sh=tlShiftable(p,live); if(sh.length) out.shift.push({p,xs:sh});
+    ks.filter(k=>live[k].submitted&&!live[k].approved&&!isWD(k)&&td>live[k].due).forEach(k=>out.client.push({p,k,f:live[k]}));
+    ks.filter(k=>live[k].kd&&live[k].kx&&!live[k].subA).forEach(k=>KDISC.forEach(([d,l])=>{ const x=live[k].kx[d]; if(!x.got&&x.late) out.kons.push({p,k,l,x}); }));
+    const n=projNow(p); if(n.st==='late') out.late.push({p,n});
+    const base=tlBase(p)||{}, lastB=maxD(...ks.map(k=>base[k]&&base[k].fin)), lastF=maxD(...ks.map(k=>live[k].fin));
+    if(p.dueDate&&lastB&&lastF&&p.dueDate>lastB){ const buf=wdBetween(lastB,p.dueDate), used=wdBetween(lastB,lastF); if(used>0&&used*3>=buf*2) out.buffer.push({p,buf,used,lastF}); }
+    Object.keys(g0).filter(k=>g0[k]&&tlPhases(p).includes(k)).forEach(k=>out.used.push({p,k,days:graceDays(p,k),done:stdState(p,k).done,at:((p.std.graceAt||{})[k]||{}).at||''})); }
+  return out; }
+function viewRisk(){
+  if(!canSeeScoring()) return [h('p',{text:'Only the Principal and the COO can see this.'})];
+  const R=riskScan(), can=S.canWrite, op=p=>()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
+  const pn=p=>h('button',{class:'linkish',type:'button',style:'font-weight:600;text-decoration:none',onclick:op(p),text:p.name});
+  const card=(p,title,detail,...btns)=>h('div',{class:'card',style:'display:grid;gap:6px;border-radius:0;border-bottom:1px solid var(--line)'},
+    h('div',{class:'pc-row'},h('span',{},pn(p),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+podText(p)})),null),
+    h('b',{style:'font-size:14px',text:title}),detail?h('div',{class:'f-hint',style:'margin:0',text:detail}):null,
+    btns.filter(Boolean).length&&can?h('div',{class:'actions',style:'margin:0'},...btns.filter(Boolean)):null);
+  const sec=(title,sub,xs)=>xs.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:title}),h('span',{class:'cnt',text:String(xs.length)})),sub?h('p',{class:'f-hint',style:'margin:-4px 4px 0',text:sub}):null,h('div',{class:'list'},xs)):null;
+  const B=(t,fn,primary)=>h('button',{class:'btn btn-sm'+(primary?' btn-primary':''),type:'button',disabled:S.busy,onclick:fn,text:t});
+  const decide=[
+    ...R.grace.map(x=>card(x.p,`Grace +20% suggested: ${x.add.map(k=>'phase '+phNo(k)).join(', ')}`,'POD carries 6 or more heavy phases on '+x.add.map(k=>`${x.gr[k].hit} of ${x.gr[k].days} days of phase ${phNo(k)}`).join(', ')+'. Only the team’s dates move; the client’s don’t.',
+      B('Give the grace',()=>run(()=>giveGrace(x.p,x.add),'Grace given: the team’s dates moved').then(()=>render(true)),true),
+      B('Not needed',()=>run(()=>S.db.doc('projects/'+x.p.id).update({std:{graceNo:Object.fromEntries(x.add.map(k=>[k,{by:S.uid,at:new Date().toISOString()}]))}}),'Noted: no grace').then(()=>render(true))))),
+    ...R.risk.map(x=>card(x.p,`At risk: phase ${phNo(x.k)} started before phase ${phNo(x.d)} was approved`,'Starting the next phase before the client’s approval needs your approval (R5).',
+      B('Approve at-risk start',()=>run(()=>S.db.doc('projects/'+x.p.id).update({std:{risk:{[x.k]:{by:S.uid,at:new Date().toISOString()}}}}),'At-risk start approved').then(()=>render(true)),true))),
+    ...R.deem.map(x=>card(x.p,`Deemed approval due: phase ${phLabel(x.k,x.p)}`,`No reply from the client for ${DEEMED_WD} working days since the submission on ${fmtD(x.live.subA||x.live.sub)}.`,
+      B('Confirm deemed approval',()=>{ if(!confirm(`Confirm deemed approval of phase ${phLabel(x.k,x.p)} today?`)) return; run(()=>S.db.doc('projects/'+x.p.id).update({std:{deemed:{[x.k]:{on:today(),by:S.uid,at:new Date().toISOString()}}}}),'Deemed approval confirmed').then(()=>render(true)); },true))),
+    ...R.shift.map(x=>card(x.p,`${x.xs.length} gate date${x.xs.length===1?'':'s'} behind a client or consultant delay`,'Moving them keeps the delay off the team’s score (D8, R8).',
+      B('Move these dates',()=>run(async()=>{ for(const y of x.xs) await taskUpdate(y.t.id,{target:y.date,clientShift:(y.t.clientShift||0)+wdBetween(y.t.target,y.date)},[{type:'target',from:y.t.target,to:y.date,note:'Moved for a client or consultant delay (D8, R8)'}]); },'Dates moved').then(()=>render(true)),true)))];
+  const watch=[
+    ...R.late.map(x=>card(x.p,'Late on our side',x.n.line.join(' '))),
+    ...R.client.map(x=>card(x.p,`Client late on phase ${phLabel(x.k,x.p)}`,`Review was due ${fmtD(x.f.due)}; ${x.f.lateC} working day${x.f.lateC===1?'':'s'} over. Later dates move with it and count as client time.`)),
+    ...R.kons.map(x=>card(x.p,`${x.l} consultant late on phase ${phLabel(x.k,x.p)}`,`Drawings were due ${fmtD(x.x.due)}; ${x.x.late} working day${x.x.late===1?'':'s'} over`+(x.x.fu.length?`, followed up ${x.x.fu.length}×.`:', not followed up yet.'))),
+    ...R.buffer.map(x=>card(x.p,x.used>=x.buf?'Past the client’s date':'Client buffer two-thirds used',`Promised ${fmtD(x.p.dueDate)}; forecast ${fmtD(x.lastF)}. ${x.used} of ${x.buf} working days of buffer used.`))];
+  /* grace used, by POD */
+  const byPod=new Map(); R.used.forEach(u=>{ podsOfProject(u.p).forEach(pd=>{ if(!byPod.has(pd)) byPod.set(pd,{n:0,days:0,list:[]}); const b=byPod.get(pd); b.n++; b.days+=u.days; b.list.push(u); }); });
+  const lead=pd=>{ const id=people().find(x=>isPodLead(x,pd)); return id?nameOf(id):''; };
+  const usedTbl=byPod.size?h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'POD'}),h('th',{text:'POD leader'}),h('th',{class:'n',text:'Phases with grace'}),h('th',{class:'n',text:'Extra working days'}),h('th',{text:'Where'}))),
+    h('tbody',{},[...byPod.entries()].sort((a,b)=>b[1].days-a[1].days).map(([pd,b])=>h('tr',{},h('td',{text:podLabel(pd)}),h('td',{text:lead(pd)}),h('td',{class:'n',text:String(b.n)}),h('td',{class:'n',style:'font-weight:600',text:'+'+b.days}),
+      h('td',{class:'sub2',text:b.list.map(u=>`${u.p.name} ${phNo(u.k)} (+${u.days}${u.done?', done':''})`).join(' · ')})))))):h('div',{class:'f-hint',text:'No grace given yet.'});
+  const kp=(l,n,c)=>h('div',{class:'kpi'},h('div',{class:'lbl',text:l}),h('div',{class:'num',style:n&&c?`color:${c}`:'',text:String(n)}));
+  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and the COO see this'}),h('h1',{class:'h1',text:'Risk and grace'}),h('p',{class:'lead',text:'Every project that needs a decision or is at risk, in one place. Decide here; the project and the team’s dates update at once.'}))),
+    h('div',{class:'kpis'},kp('Decisions waiting',decide.length,'var(--late)'),kp('Late on our side',R.late.length,'var(--overdue)'),kp('Client or consultants late',R.client.length+R.kons.length,'var(--late)'),kp('Grace given',R.used.length),kp('Extra days given',R.used.reduce((a,u)=>a+u.days,0))),
+    (()=>{ const w=workloadW(); return w?h('div',{class:'widgets'},w):null; })(),
+    sec('Needs your decision','Grace suggestions, at-risk starts, deemed approvals and dates behind a client delay.',decide),
+    sec('Watch','Late on our side, late clients and consultants, and client buffers running out.',watch),
+    !decide.length&&!watch.length?h('div',{class:'empty'},h('h3',{text:'Nothing at risk'}),h('p',{class:'muted',style:'margin:0',text:'No decisions waiting and nothing late.'})):null,
+    h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Grace used'}),h('span',{class:'cnt',text:String(R.used.length)})),h('p',{class:'f-hint',style:'margin:-4px 4px 0',text:'POD-load grace (+20% SLATE days) given so far, by POD. A POD that keeps needing grace is a capacity question, not a timeline one.'}),usedTbl)];
+}
 /* Gantt by phase (Principal, 1 Nov 2026): one row per project, one bar per phase, the same marks as the project cards:
    grey = done before SLATE OS, green = done in SLATE OS, outlined = now (amber due soon, red late), faint = later. */
 /* phase families give the Gantt its colour; the state shows as the mark: solid = done, outlined = now, faded = later;
@@ -5483,7 +5573,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -11326,7 +11416,7 @@ function sheetChalkProj(){
    Back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
    back and the buttons never disagree. */
 const NAV={i:0,stack:[],snap:[],ready:false,applying:false,pending:0,pendT:0,hintAt:0};
-const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','tlstatus','holidays'];   /* pages reached from More */
+const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','tlstatus','holidays','risk'];   /* pages reached from More */
 const NAV_TASKV=['all','board','gantt'];                                                      /* one tab, three layouts */
 const NAV_VIEWER=['task','projView','notif','profile','myprofile','meeting','pmeet','timeline','chalkProj','rota'];  /* sheets that open other sheets */
 const NAV_OV='.slate-sheet:not(#slate-auth),#share-card';                                     /* popups laid over everything */
