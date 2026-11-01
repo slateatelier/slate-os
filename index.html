@@ -7566,7 +7566,7 @@ const HOWDO=[
  ['biz','boss','Set a project’s fee, costs and site visit terms',['Business › Fees › open the project.','Choose per sft or lump sum, set the payment milestones (they add up to 100%), cost budget lines and site visit terms.','Tap Save.'],'Finance uses the same numbers; they are edited here, not in Finance.','Milestones can be changed until one has been invoiced.'],
  ['biz','boss','Set or change a salary',['Business › HR › open the person (or Add person for someone without a SLATE OS login).','Type the gross and tap Standard split: Basic 60%, House rent 30%, Medical 6%, Conveyance 4%.','Choose when it applies from and how it is paid. Add the month they started working professionally; total experience then grows by itself.','Tap Save.'],'Finance payroll uses it. A change starts a new line in the history; earlier months keep the old salary.','The Eid bonus is one month’s basic. A record made by mistake can be deleted until it is on a salary sheet.'],
  ['biz','boss','Record the studio’s running costs',['Business › Admin › Add running cost (rent, electricity, internet…).','Each month, tap Record payment on each bill.'],'Payments go into Finance as expenses, and the cash forecast uses these amounts.','Rent can carry an advance adjusted each month and a security deposit.'],
- ['biz','boss','Make a proposal (the quick way)',['Home › + New proposal (or Business › Proposals › New proposal).','Pick the client from the list (a repeat client fills in their details) or type a new name; add the project name, site, land size and type.','Tap Next: choose the plan →.','Choose the service plan and the fee tier, enter the built area (from the FAR calculator).','Tap Make the PDFs, then Share copy (letterhead) to send it.'],'Everything else (services, payment stages, site visits, revisions, terms, timeline) is filled in from the plan. Open a folded section only to change it.','Built area: from the FAR calculator; if the case is unusual, ask the POD leader first, then the Principal.'],
+ ['biz','boss','Make a proposal (the quick way)',['Home › + New proposal (or Business › Proposals › New proposal).','Pick the client from the list (a repeat client fills in their details) or type a new name; add the project name, site, land size and type.','Tap Next: choose the plan →. Not ready? Tap Save draft at any step and continue later from Business › Proposals.','Choose the service plan and the fee tier, enter the built area (from the FAR calculator).','Tap Make the PDFs, then Share copy (letterhead) to send it.'],'Everything else (services, payment stages, site visits, revisions, terms, timeline) is filled in from the plan. Open a folded section only to change it.','Built area: from the FAR calculator; if the case is unusual, ask the POD leader first, then the Principal.'],
  ['biz','boss','Choose the plan and fee tier',['In the proposal builder › Plan and fee.','Service plan: Feasibility, Essentials + Build, Complete (recommended) or Signature; Essentials and Launch are on request.','Fee tier: Competitive, Standard or Premium (Signature is always Premium).','Check the adjustments: developer +10%, Jolshiri or Cantonment +10% on the authority stage, Chittagong 85%.','Tap Fill the proposal from this plan if you changed the plan.'],'The fee is worked out from the rate card and shown step by step. The client sees only the plan and the final fee.','Compare plans in the proposal adds a page with the plan below and above.'],
  ['biz','boss','Send the proposal and follow up',['Make the PDFs › Share copy (letterhead) by WhatsApp or email; Print copy goes on the printed letterhead pad at 100%.','On the proposal › Next steps › I’ve sent it: follow up in 3 days.','After each call or meeting: Log what the client said, with the next follow-up date.'],'You and the COO are reminded on the follow-up date.','Every card in Leads and Proposals shows “Next:” — the one thing to do.'],
  ['biz','boss','Give the COO (or yourself) a task for a proposal',['Open the proposal › Next steps › Schedule it as a task (to send it), or Tasks › + Give someone a task.','Check what needs doing, who and by when.','Tap Give the task.'],'It is a normal task on their Home and calendar, listed on the proposal with Open, Late or Done.',null],
@@ -8084,9 +8084,11 @@ function flowStrip(at){ const all=propList().filter(propOpen), L=all.filter(isLe
 const propFee=p=>{ const n=+p.fee||0; if(!n) return p.feeNote||''; return (p.feeBasis==='sft'?taka(n)+' per sft':bdt(n)+' lump sum')+(p.feeNote?' · '+p.feeNote:''); };
 const propTypeName=k=>k&&STD_DEF[k]?STD_DEF[k].name:'';
 const propLine=e=>e?[(PROP_KIND.find(x=>x[0]===e.kind)||[])[1]||'',(PROP_RESP.find(x=>x[0]===e.resp&&x[0])||[])[1]||''].filter(Boolean).join(' · '):'';
-const propWrite=(id,p)=>S.db.doc('proposals/'+id).set({...p,updatedAt:new Date().toISOString(),updatedBy:S.uid});
+async function propPin(){ if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlocked()){ const ok=await SlatePin.ensure(); if(!ok) throw new Error('Unlock Business with your PIN to save proposals.'); } }
+const propWrite=async(id,p)=>{ await propPin(); return S.db.doc('proposals/'+id).set({...p,updatedAt:new Date().toISOString(),updatedBy:S.uid}); };
 function openPropView(id){ S.sheet={type:'propView',id,lg:{kind:'call',resp:'',note:'',next:''},err:''}; renderSheet(); }
-function openProp(id,convert){ const p=id?(S.props||{})[id]:null;
+function openProp(id,convert){ if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlocked()){ SlatePin.ensure().then(ok=>{ if(ok) openProp(id,convert); }); return; }
+  const p=id?(S.props||{})[id]:null;
   const d={name:'',client:'',contact:'',phone:'',location:'',katha:'',type:'',scope:[],feeBasis:'lump',fee:'',feeNote:'',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:'',...(p?JSON.parse(JSON.stringify(p)):{})};
   if(!Array.isArray(d.scope)) d.scope=[];
   if(convert){ d.stage='prep'; d.next=addWorkDays(today(),3); }
@@ -8116,8 +8118,8 @@ function clientPick(d,opt){ const box=h('div',{style:'display:grid;gap:6px'}), l
 function sheetProp(){
   const d=S.sheet.d, id=S.sheet.id, quick=!id&&!S.sheet.convert;
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
-  const submit=e=>{ e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds proposed projects.');
-    const name=(d.name||'').trim().toUpperCase(), client=(d.client||'').trim();
+  const submit=(e,draft)=>{ if(e) e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds proposed projects.');
+    const name=(d.name||'').trim().toUpperCase()||(draft?'UNTITLED PROPOSAL':''), client=(d.client||'').trim();
     if(!name) return fail('Give the project a name.'); if(!client) return fail('Who is the client?');
     if(d.katha!==''&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     if(d.fee!==''&&!(+d.fee>0)) return fail('Fee should be a number, or leave it empty.');
@@ -8127,7 +8129,8 @@ function sheetProp(){
       src:d.src||'',status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid,proposedAt:now}),...(S.sheet.convert?{lead:false,proposedAt:now}:{})};
     if(!id&&!S.sheet.convert&&!v.next) v.next=addWorkDays(today(),3); delete v._title; delete v._addr; delete v._picked;
     if(!id&&!S.sheet.convert&&(d._title||d._addr)) v._hint={title:d._title||'',address:d._addr||''};
-    run(()=>propWrite(pid,v),S.sheet.convert?'Moved to Proposed':id?'Proposal updated':'Proposal added: now choose the plan').then(ok=>{ if(!ok) return; if(!id||S.sheet.convert) openPropDoc(pid,null,v); else openPropView(pid); }); };
+    if(draft&&!old.doc) v.draft=true;
+    run(()=>propWrite(pid,v),draft?'Draft saved. Continue any time from Business › Proposals':S.sheet.convert?'Moved to Proposed':id?'Proposal updated':'Proposal added: now choose the plan').then(ok=>{ if(!ok) return; if(draft){ S.sheet.id=pid; return openPropView(pid); } if(!id||S.sheet.convert) openPropDoc(pid,null,v); else openPropView(pid); }); };
   const chip=(x)=>{ const on=d.scope.includes(x); return h('button',{type:'button',class:'chip','aria-pressed':String(on),style:'border:0;cursor:pointer;padding:6px 12px;'+(on?'background:var(--ink);color:#fff':''),onclick:()=>{ d.scope=on?d.scope.filter(y=>y!==x):[...d.scope,x]; renderSheet(); },text:x}); };
   return [head(S.sheet.convert?'Make a proposal':id?'Edit proposal':'New proposal',id?(d.name||d.client||'Proposal'):'Only you and the COO see this'),
     h('p',{class:'lead',style:'margin:0',text:'Just what you need while proposing. When the client confirms, it becomes a client project and the team sees it.'}),
@@ -8152,6 +8155,7 @@ function sheetProp(){
       field('Next follow-up',inp('next',{type:'date'}),'You and the COO are reminded on this date, then every 3 days until a response is logged with a new date.'),
       field('Note',ta('note',{rows:3,placeholder:'Anything worth remembering about this client or proposal'}))]),
       h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:S.sheet.convert?'Move to Proposed':id?'Save proposal':'Next: choose the plan →'}),
+        !id||S.sheet.convert?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>submit(null,true),text:'Save draft'}):null,
         h('button',{class:'btn',type:'button',onclick:()=>id?openPropView(id):closeSheet(),text:'Cancel'})))]; }
 /* ---------- proposal builder: the client-facing proposal on the SLATE letterhead ----------
    Built inside a proposal (Business › Proposals › open one › Build the proposal). The draft lives in the proposal's
@@ -8542,8 +8546,9 @@ function sheetPropDoc(){
       h('div',{class:'actions sticky-acts'},
         h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDFs…':'Make the PDFs'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>preview(false),text:'Preview'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:async()=>{ if(await save(true)!==false) toast('Draft saved'); },text:'Save draft'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:async()=>{ if(await save(true)!==false){ toast('Proposal saved'); openPropView(id); } },text:'Done'})),
-      h('div',{class:'f-hint',style:'margin:0',text:'Every button saves your changes. Done takes you back to the proposal.'}))]; }
+      h('div',{class:'f-hint',style:'margin:0',text:'Every button saves your changes. Save draft keeps you here; Done takes you back to the proposal.'}))]; }
 
 /* the proposal as letterhead pages: blocks are measured in a hidden frame and packed onto A4 pages */
 const PB_TOP=53.5; /* mm from the top of the page to the first line: 10 mm of air below the letterhead */
@@ -8921,8 +8926,9 @@ function sheetAgrDoc(){
       h('div',{class:'actions sticky-acts'},
         h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||(sh.pdf&&sh.pdf.state==='making'),onclick:makePdf,text:sh.pdf&&sh.pdf.state==='making'?'Making the PDF…':'Make the PDF'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:preview,text:'Preview'}),
+        h('button',{class:'btn',type:'button',disabled:S.busy,onclick:async()=>{ if(await save(true)!==false) toast('Draft saved'); },text:'Save draft'}),
         h('button',{class:'btn',type:'button',disabled:S.busy,onclick:async()=>{ if(await save(true)!==false){ toast('Agreement saved'); openPropView(id); } },text:'Done'})),
-      h('div',{class:'f-hint',style:'margin:0',text:'Every button saves your changes. Done takes you back to the proposal.'}))]; }
+      h('div',{class:'f-hint',style:'margin:0',text:'Every button saves your changes. Save draft keeps you here; Done takes you back to the proposal.'}))]; }
 
 function sheetPropView(){
   const id=S.sheet.id, p=(S.props||{})[id]?{...S.props[id],id}:null; if(!p) return [head('Proposed project','Not found')];
@@ -9050,7 +9056,8 @@ const isLead=p=>!!p&&p.lead===true;
 const pTitle=p=>p.name||p.client||'Lead';
 const lastTouch=p=>{ const l=propLast(p); return ((l&&l.at)||p.createdAt||'').slice(0,10); };
 const leadStale=p=>propOpen(p)&&isLead(p)&&!!lastTouch(p)&&diff(lastTouch(p),today())>14;
-function openLead(id){ const p=id?(S.props||{})[id]:null;
+function openLead(id){ if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlocked()){ SlatePin.ensure().then(ok=>{ if(ok) openLead(id); }); return; }
+  const p=id?(S.props||{})[id]:null;
   const d={client:'',contact:'',phone:'',email:'',src:'',name:'',location:'',katha:'',heat:'warm',next:addWorkDays(today(),2),note:'',...(p?JSON.parse(JSON.stringify(p)):{})};
   S.sheet={type:'lead',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-client'); el&&el.focus(); },30); }
 function sheetLead(){
