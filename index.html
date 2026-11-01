@@ -1,6 +1,17 @@
 <!doctype html><html><head><meta charset=utf8><meta name="robots" content="noindex"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#d7262b"><link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SLATE OS"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>@media (max-width:820px){input,select,textarea{font-size:16px!important}}.sec-desc{margin:-4px 4px 8px;font-size:13px;line-height:1.4;color:var(--muted,#6e6e73)}
 .cl-stick{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;background:#fff;margin:0 -16px;padding:8px 16px;border-bottom:1px solid var(--line);box-shadow:0 4px 8px -6px rgba(0,0,0,.18)}
 .cl-stick b{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.pod-card{background:var(--group);border-radius:14px;padding:4px 0;align-self:start}
+.pod-card>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px}
+.pod-card>summary::-webkit-details-marker{display:none}
+.pod-card>summary b{font-size:15px}.pod-n{display:flex;gap:10px;align-items:center;font-size:13px;flex-wrap:wrap;justify-content:flex-end}
+.pod-c{display:inline-flex;align-items:center;gap:4px;font-weight:600}.pod-c i,.pod-p>i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.pod-list{display:grid;padding:0 6px 6px}
+.pod-p{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:0;border-top:1px solid var(--line);padding:9px 10px;font:inherit;color:inherit;cursor:pointer}
+.pod-p:first-child{border-radius:10px 10px 0 0;border-top:0}.pod-p:last-child{border-radius:0 0 10px 10px}.pod-p:only-child{border-radius:10px}
+.pod-pn{flex:1;min-width:0;display:grid}.pod-pn>span{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pod-pn small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod-ph{font-size:12px;color:var(--muted);flex:none}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -2389,6 +2400,7 @@ function capPods(root){
   if(document.body) go(); else document.addEventListener('DOMContentLoaded',go); })();
 /* one-line descriptions under section headings, so it is clear what each area is for. Added after every render, in one place. */
 const SEC_INFO={
+  'By POD':'Each POD’s active projects, worst first: off track, at risk, on track, not started. Tap a project to open it; tap a POD to fold it.',
   'Building and FAR':'The plot and building this project is designed for. The plot size in katha sets the standard days for each phase.',
   'Landowner and developer units':'How the units are shared between the landowner and the developer in this joint venture.',
   'Submissions log':'A record of sets sent to the client or authority: what, when and which revision. Use it for sets sent before SLATE OS or extra sets. New phase submissions are recorded by their gate deliverables. Record only, never scored.',
@@ -9851,6 +9863,25 @@ function sheetFee(){
           h('span',{id:'ms-sum',class:'f-hint',style:'margin:0;'+(msSum!==100?'color:var(--overdue)':''),text:msTxt()}))],
       ...costSection(d,fr,p,feeNow),
       h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save fee'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+/* POD dashboard: each POD's active projects by name, with health and the phase now running. Tap a name to open the project. */
+function podBoard(act,stats){
+  const ps=pods(); if(!ps.length||!act.length) return null;
+  const S_=S.podBoard||(S.podBoard={}), ord={off:0,risk:1,ok:2,none:3,done:4};
+  const grp=[...ps.map(x=>[x,podLabel(x)]),['','No POD']].map(([k,l])=>{ const xs=act.filter(p=>k?(p.pod===k||p.pod2===k):!ps.includes(p.pod)).sort((a,b)=>(ord[stats.get(a.id).health]??9)-(ord[stats.get(b.id).health]??9)||String(a.name).localeCompare(String(b.name))); return {k,l,xs}; }).filter(g=>g.xs.length);
+  const nowPh=p=>{ if(p.std){ const a=activePhases(p); if(a.length) return 'Phase '+phLabel(a[0],p); } return stats.get(p.id).phase||''; };
+  const card=g=>{ const c=k=>g.xs.filter(p=>stats.get(p.id).health===k).length, open=S_[g.k||'-']!==false;
+    return h('details',{class:'pod-card',open,ontoggle:e=>{ S_[g.k||'-']=e.target.open; }},
+      h('summary',{},h('b',{text:g.l}),h('span',{class:'pod-n'},
+        ...[['off','overdue'],['risk','late'],['ok','ontime'],['none','open']].filter(([k])=>c(k)).map(([k,cl])=>h('span',{class:'pod-c',title:HEALTH[k][0]},h('i',{style:`background:var(--${cl})`}),String(c(k)))),
+        h('span',{class:'muted',text:`${g.xs.length} project${g.xs.length===1?'':'s'}`}))),
+      h('div',{class:'pod-list'},g.xs.map(p=>{ const st=stats.get(p.id), hl=HEALTH[st.health]||HEALTH.none, shared=g.k&&p.pod2===g.k&&p.pod!==g.k;
+        return h('button',{type:'button',class:'pod-p',onclick:()=>openProjectView(p.id)},
+          h('i',{style:`background:var(--${hl[1]})`,title:hl[0]}),
+          h('span',{class:'pod-pn'},h('span',{text:p.name+(shared?' (shared)':'')}),h('small',{text:[p.code,nowPh(p)].filter(Boolean).join(' · ')})),
+          h('span',{class:'pod-ph',text:hl[0]})); }))); };
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'By POD'}),h('span',{class:'cnt',text:`${act.length} active`})),
+    h('div',{class:'pod-grid'},grp.map(card)));
+}
 function viewProjects(){
   const f=S.pf||(S.pf={q:'',pod:'',st:'active',kind:'client'}); if(!f.kind) f.kind='client';
   if(f.kind==='proposed'){ f.kind='client'; if(canProps()){ S.biz={...(S.biz||{q:'',st:'active'}),tab:'proposed'}; S.view='biz'; return viewBiz(); } }
@@ -9867,6 +9898,7 @@ function viewProjects(){
   else out.push(h('div',{class:'kpis kpis5'},kpi('Total',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On hold',hold.length,'late'),kpi('Cancelled',clientAll.filter(p=>p.closed&&outcomeOf(p)==='cancelled').length,'overdue')),
     h('div',{class:'lbl',style:'margin:-4px 0 -6px;text-transform:uppercase;letter-spacing:.05em',text:'Active projects'}),
     h('div',{class:'kpis kpis4'},kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open')));
+  if(!sv){ const pd=podBoard(act.filter(p=>!isOnHold(p)),stats); if(pd) out.push(pd); }
   if(!sv){ const ds=draftsSec(); if(ds) out.push(ds); }
   const crq=ap?closeReqCards():null; if(crq) out.push(crq);
   const pr=ap?projReqCards():null; if(pr) out.push(pr);
