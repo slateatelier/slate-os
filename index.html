@@ -2438,7 +2438,6 @@ function capPods(root){
   if(document.body) go(); else document.addEventListener('DOMContentLoaded',go); })();
 /* one-line descriptions under section headings, so it is clear what each area is for. Added after every render, in one place. */
 const SEC_INFO={
-  'My to-do':'Your own planning list. Only you see it; it isn’t scored. Ticked items clear away after a day.',
   'Support from other teams':'Ask another POD or team (drafting pool, visualizers…) for one piece of work in a phase. The COO confirms the person and the date; it then becomes their task here.',
   'Interior space':'The MODO interior: where it is, its size, the rooms SLATE designs, and whether SLATE builds it too.',
   'By POD':'Each POD’s active projects, worst first. The dot is health (red off track, orange at risk, green on track, grey not started); the box is the phase now running. Tap a project to open it; tap a POD to fold it.',
@@ -3250,7 +3249,7 @@ function todoSec(){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My to-do'}),h('span',{class:'cnt',text:open.length?`${open.length} open`:''})),
     h('div',{class:'td-box'},
       h('div',{class:'td-add'},inp,dSel,h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:todoAdd,text:'Add'})),
-      open.length||done.length?h('div',{class:'td-list'},[...open.map(row),...done.map(row)]):h('div',{class:'f-hint',style:'margin:2px 4px',text:'Plan your day: add the things you mean to do, tick them off as you go.'})));
+      open.length||done.length?h('div',{class:'td-list'},[...open.map(row),...done.map(row)]):h('div',{class:'f-hint',style:'margin:2px 4px',text:'Plan your day: add what you mean to do and tick it off. Only you see this list.'})));
 }
 /* ---------- Home at a glance: submissions due this week and this month (gate deliverables and deliverables), tap for the full list ---------- */
 function subsScope(){ const ap=amApprover()||S.isOwner, lead=amPodLead()&&!ap;
@@ -3306,23 +3305,25 @@ function viewMineBody(){
   if(new Date().getHours()>=17&&isWorkDay(td)&&S.canWrite) mine.filter(t=>!t.doneAt&&!t.verify&&!t.archived&&t.target===td&&stageOf(t)!=='review'&&!t.request).forEach(t=>today_.push(hRow({dot:'var(--late)',strong:'Before you leave',title:t.title,meta:projLabel(S.projects[t.projectId])+' · due today',onclick:()=>openTask(t.id),
     right:h('div',{style:'display:flex;gap:6px'},h('button',{class:'btn btn-sm btn-primary h-btn',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done'}),h('button',{class:'btn btn-sm h-btn',type:'button',onclick:()=>{ openTask(t.id); setMode('request',{date:'',reason:''}); },text:'New date'}))})));
   const tg=hGroup('Today',today_); if(tg) out.push(tg);
-  { const gl=glanceTiles(); if(gl) out.push(gl); }
+  const SL={}; const head_=out.length;
+  SL.glance=glanceTiles();
 
   /* 3 · Meetings: each one stays here from the invite until its minutes are published */
-  { const rows=homeMeetRows(td,ap);
-    if(rows.length) out.push(hGroup('Meetings',rows,h('button',{class:'linkish h-all',type:'button',onclick:()=>{ S.mhub='up'; goView('meet'); },text:'All'}))); }
+  { const rows=homeMeetRows(td,ap); SL.meetNow=rows.some(r=>r&&/Today/.test(r.textContent||''));
+    if(rows.length) SL.meet=hGroup('Meetings',rows,h('button',{class:'linkish h-all',type:'button',onclick:()=>{ S.mhub='up'; goView('meet'); },text:'All'})); }
 
   /* 4 · Notice board: the top unread one in full (it needs “Got it”), the rest as lines */
   { const live=nAll().filter(nLive), unseen=live.filter(n=>!nSeen(n)).sort((a,b)=>(b.important-a.important)||(b.pinned-a.pinned)||b.created_at.localeCompare(a.created_at)), pinned=live.filter(n=>n.pinned&&nSeen(n));
     if(unseen.length||pinned.length){ const go=()=>{ S.view='notice'; render(true); window.scrollTo(0,0); };
       const rows=[...unseen.slice(1),...pinned].slice(0,4).map(n=>hRow({dot:!nSeen(n)?(n.important?'#D7262B':'var(--early)'):'var(--faint)',strong:n.title,meta:`${nSeen(n)?'Pinned':'Unread'} · ${nameOf(n.created_by)} · ${fmtD(n.created_at.slice(0,10))}`,onclick:go}));
-      out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notice board'}),h('button',{class:'linkish h-all',type:'button',onclick:go,text:'All'})),
-        unseen.length?noticeCard(unseen[0],{clamp:true}):null,rows.length?h('div',{class:'h-list'},rows):null)); } }
+      SL.notice=h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Notice board'}),h('button',{class:'linkish h-all',type:'button',onclick:go,text:'All'})),
+        unseen.length?noticeCard(unseen[0],{clamp:true}):null,rows.length?h('div',{class:'h-list'},rows):null); SL.noticeNew=unseen.length>0; } }
 
   /* 4a · POD leader: the POD's projects at a glance, and work the team has put in review */
-  if(amPodLead()&&!ap){ const sec=podGlance(td); if(sec) out.push(sec); const rv=podReview(); if(rv) out.push(rv); }
+  if(amPodLead()&&!ap){ SL.pod=podGlance(td); SL.review=podReview(); }
   /* 4b · Drafting queue (Design Associate Lead) */
-  { const dq=draftQueueSec(); if(dq) out.push(dq); }
+  SL.draft=draftQueueSec();
+  const w0=out.length;
   /* 5 · My work */
   if(mine.length){
     const r=range('month',0), c=count(mine.filter(t=>t.target>=r.s&&t.target<=r.e),'approved'), nOpen=mine.filter(t=>!t.doneAt).length, nOver=mine.filter(t=>status(t)==='overdue').length;
@@ -3347,12 +3348,15 @@ function viewMineBody(){
       body,
       later.length&&tab!=='done'?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px;margin:0 4px',onclick:()=>{ S.fInit=1; S.f.person=S.uid; S.f.project=''; S.f.status='active'; S.f.q=''; goView('all'); },text:`${later.length} more due later · open in Tasks`}):null));
   }
-  /* 5b · my own to-do list: private planning, only the person sees it */
-  out.push(todoSec());
+  SL.work=out.splice(w0);
+  SL.todo=todoSec();
   /* 6 · My checklist */
   const mcl=myChecklist(); if(mcl.length){ const all=!!(S.homeMore&&S.homeMore.cl), el=myChecklistSec(mcl,mcl.length>5?(all||S.clSel?{grouped:true}:{limit:5}):{});
     if(mcl.length>5){ el.querySelectorAll('.f-hint').forEach(x=>x.remove()); el.append(h('button',{class:'h-more',type:'button',style:'justify-self:start',onclick:()=>{ S.homeMore={...(S.homeMore||{}),cl:!(S.homeMore&&S.homeMore.cl)}; render(true); },text:S.homeMore&&S.homeMore.cl?'Show less':`Show all ${mcl.length}`})); }
-    out.push(el); }
+    SL.cl=el; }
+  /* the order that gets work done: what is waiting on you, an unread notice, your work and what your team put in review,
+     your own plan, meetings, then the week and month at a glance, your checklist and the POD overview */
+  [SL.glance,SL.noticeNew?SL.notice:null,SL.meetNow?SL.meet:null,...(SL.work||[]),SL.review,SL.draft,SL.todo,SL.meetNow?null:SL.meet,SL.cl,SL.pod,SL.noticeNew?null:SL.notice].forEach(x=>{ if(x) out.push(x); });
   if(!mine.length&&!mcl.length&&!tg&&!homeMeetRows(td,ap).length) out.push(onboarding());
   return out;
 }
