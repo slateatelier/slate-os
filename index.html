@@ -2596,7 +2596,7 @@ function render(force){
   if(!force&&isTyping(view)){ S.pendingRender=true; return; }
   const k=keepFocus(view);
   renderHeader();
-  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal','risk'].includes(S.view)?' wide':'');
+  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','all','projects','team','cal','risk'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView())); secInfo(view);
   view.classList.toggle('wrap-desk',S.view==='mine'&&!!view.querySelector('.desk'));
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
