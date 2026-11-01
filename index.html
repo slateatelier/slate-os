@@ -19,6 +19,19 @@
 .int-rooms{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 .int-room{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px 4px 4px 10px;font-size:14px}
 .int-room.on{border-color:#111;font-weight:600}.int-room input{width:56px;text-align:center;padding:6px}
+.shg{display:inline-block;width:18px;height:18px;flex:none}.shg svg{width:100%;height:100%;display:block}.shg.big{width:30px;height:30px}
+.shg-board{background:linear-gradient(135deg,#FFF6E5,#FFFBF3);border:1px solid #F1D9A8;border-radius:16px;padding:6px 12px 12px}
+.shg-board>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 2px}
+.shg-board>summary::-webkit-details-marker{display:none}
+.shg-t{display:flex;align-items:center;gap:10px}.shg-t>span{display:grid}.shg-t b{font-size:16px}.shg-t small,.shg-tot small,.shg-nm small{color:#8a6a35;font-size:12px}
+.shg-tot{display:grid;justify-items:end;line-height:1.1}.shg-tot b{font-size:22px;color:#9A5B13}
+.shg-list{display:grid;gap:6px}
+.shg-p{display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:8px 10px;box-shadow:0 1px 0 #F1D9A8}
+.shg-p.top{box-shadow:0 0 0 1.5px #E0A23B}
+.shg-rank{width:26px;text-align:center;font-size:18px;font-weight:700;color:#8a6a35;flex:none}
+.shg-nm{flex:1;min-width:0;display:grid}.shg-nm>span{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shg-row{display:flex;gap:1px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:52%}.shg-row b{font-size:12px;color:#9A5B13;margin-left:3px}
+.shg-empty{display:flex;align-items:center;gap:10px;font-size:14px;color:#8a6a35;padding:6px 2px}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -4121,6 +4134,31 @@ function meetingCard(date,compact){
     h('div',{class:'f-hint',text:`${carriedActions(date).filter(t=>!t.doneAt).length} open actions to review`}),
     h('div',{class:'actions'},h('button',{class:'btn btn-sm'+(mine?' btn-primary':''),type:'button',style:mine?'':(compact?'background:#fff':'background:var(--group)'),onclick:()=>openMeeting(date),text:canEditMeeting(date)?(m&&m.updatedAt?'Open the minutes':'Start the minutes'):'Open'})));
 }
+/* ---------- the Shingara board: SLATE's one funny corner. Late to any meeting = one shingara for the office. Resets every quarter. ---------- */
+const SHINGARA_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22 20.5H2Z" fill="#E0A23B" stroke="#9A5B13" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 2.5 15.2 20.5" fill="none" stroke="#9A5B13" stroke-width="1" opacity=".55"/><path d="M4.6 17.6l1.5 1.4M7 17.6l1.5 1.4M9.4 17.6l1.5 1.4M11.8 17.6l1.5 1.4M14.2 17.6l1.5 1.4M16.6 17.6l1.5 1.4" stroke="#9A5B13" stroke-width=".9" stroke-linecap="round"/><circle cx="10" cy="12" r=".8" fill="#9A5B13" opacity=".6"/><circle cx="13" cy="14.5" r=".7" fill="#9A5B13" opacity=".6"/></svg>';
+const shIcon=(cls)=>{ const x=h('span',{class:'shg'+(cls?' '+cls:'')}); x.innerHTML=SHINGARA_SVG; return x; };
+const qOf=d=>{ const y=+d.slice(0,4), q=Math.floor((+d.slice(5,7)-1)/3); return {y,q,from:`${y}-${String(q*3+1).padStart(2,'0')}-01`,to:q===3?`${y+1}-01-01`:`${y}-${String(q*3+4).padStart(2,'0')}-01`,lbl:`Q${q+1} ${y}`,months:['Jan–Mar','Apr–Jun','Jul–Sep','Oct–Dec'][q]}; };
+function shingaraTally(from,to){ const c={}, add=(id,d,what)=>{ if(!id) return; (c[id]=c[id]||[]).push({d,what}); };
+  for(const [d,m] of Object.entries(S.meetings||{})) if(d>=from&&d<to&&m&&m.status!=='cancelled') for(const [id,v] of Object.entries(m.attendance||{})) if(v==='late') add(id,d,'Weekly meeting');
+  for(const m of Object.values(S.pmeet||{})) if(m&&m.date>=from&&m.date<to&&m.status==='final'&&Array.isArray(m.late)) m.late.forEach(id=>add(id,m.date,m.title||'Meeting'));
+  return Object.entries(c).filter(([id])=>S.members[id]||id===ownerId()).map(([id,xs])=>({id,n:xs.length,xs:xs.sort((a,b)=>b.d.localeCompare(a.d))})).sort((a,b)=>b.n-a.n||nameOf(a.id).localeCompare(nameOf(b.id))); }
+function shingaraBoard(){
+  const Q=qOf(today()), rows=shingaraTally(Q.from,Q.to), tot=rows.reduce((a,r)=>a+r.n,0);
+  const pq=qOf(addDays(Q.from,-1)), prev=shingaraTally(pq.from,pq.to), champ=prev[0];
+  const left=diff(today(),Q.to), open=S.shBoard!==false, MED=['🥇','🥈','🥉'];
+  let rank=0, last=null;
+  const row=(r,i)=>{ if(r.n!==last){ rank=i; last=r.n; } const med=rank<3?MED[rank]:'';
+    const ic=h('span',{class:'shg-row'},...Array.from({length:Math.min(r.n,8)},()=>shIcon()),r.n>8?h('b',{text:'+'+(r.n-8)}):null);
+    return h('div',{class:'shg-p'+(rank===0?' top':''),title:r.xs.map(x=>`${fmtD(x.d)} · ${x.what}`).join('\n')},
+      h('span',{class:'shg-rank',text:med||String(rank+1)}),avaEl(r.id,false,'sm'),
+      h('span',{class:'shg-nm'},h('span',{text:nameOf(r.id)}),h('small',{text:`owes ${r.n} shingara${r.n===1?'':'s'}`+(rank===0&&r.n>1?' · Shingara champion':'')})),ic); };
+  return h('details',{class:'sec shg-board',open,ontoggle:e=>{ S.shBoard=e.target.open; }},
+    h('summary',{},h('span',{class:'shg-t'},shIcon('big'),h('span',{},h('b',{text:'Shingara board'}),h('small',{text:`${Q.lbl} · ${Q.months} · resets in ${left} day${left===1?'':'s'}`}))),
+      h('span',{class:'shg-tot'},h('b',{text:String(tot)}),h('small',{text:'owed'}))),
+    h('p',{class:'f-hint',style:'margin:0 2px 8px',text:'Late to a meeting = one shingara for the office. Counted from the late marks in weekly minutes and in finalised meeting minutes. Starts again from zero every quarter.'}),
+    rows.length?h('div',{class:'shg-list'},rows.map(row)):h('div',{class:'shg-empty'},shIcon('big'),h('span',{text:'Nobody late this quarter. The shingara jar is empty.'})),
+    champ?h('div',{class:'f-hint',style:'margin:8px 2px 0'},`Last quarter (${pq.lbl}) champion: `,h('b',{text:`${nameOf(champ.id)}, ${champ.n} shingara${champ.n===1?'':'s'}`}),' 🏆'):null);
+}
 function viewMeetings(){
   const up=upcomingSunday(), r=rota(), tab=S.mtab||'meet';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`Every Sunday · ${fmtHM(r.time)} · ${r.venue}`}),h('h2',{style:'margin:2px 0 4px;font-size:19px;font-weight:600',text:'Weekly studio meeting'}),h('p',{class:'lead',text:'The organiser rotates each week and writes the minutes in SLATE OS; one junior architect is invited. Last meeting’s actions come up for review automatically. The COO approves the minutes; then everyone can read them and each new action becomes a task.'})),
@@ -4134,7 +4172,7 @@ function viewMeetings(){
   out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Next meeting'})),meetingCard(up)));
   if(r.ids.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Coming up'})),
     h('div',{class:'mt-strip'},[1,2,3,4,5,6].map(k=>{ const d=addDays(up,7*k), o=organiserFor(d); return h('div',{class:'mt-wk'+(o===S.uid?' me':'')},h('div',{class:'f-hint',text:fmtD(d)}),o?avaEl(o,false):h('span',{class:'ava',text:'?'}),h('div',{class:'mt-nm',text:o?nameOf(o).split(' ')[0]:'—'}),guestFor(d)?h('div',{class:'mt-g'+(guestFor(d)===S.uid?' me':''),text:'+ '+nameOf(guestFor(d)).split(' ')[0]}):null); }))));
-  { const lc=Object.entries(lateCounts(today().slice(0,7))).sort((a,b)=>b[1]-a[1]); if(lc.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Late to the meeting this month'})),h('div',{class:'chips'},lc.map(([id,n])=>h('span',{class:'chip who',style:'padding-right:12px;background:#fff'},avaEl(id,false,'sm'),`${nameOf(id)} · ${n}×`))),h('div',{class:'f-hint',text:'From the attendance in each set of minutes.'}))); }
+  out.push(shingaraBoard());
   const ta=amApprover()?minutesToApprove():[];
   if(ta.length) out.splice(2,0,h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Minutes to approve'}),h('span',{class:'cnt',text:String(ta.length)})),h('div',{class:'list'},ta.map(([d,m])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openMeeting(d)},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:`${meetTitle(d)} · ${wd(d)} ${fmtD(d)}`}),h('div',{class:'row-meta who'},avaEl(organiserFor(d),false,'sm'),`Submitted by ${nameOf(m.submittedBy||organiserFor(d))}`)),h('span',{class:'mi-a',text:'›'}))))));
   const past=Object.entries(S.meetings).filter(([d,m])=>(d<up||(d===up&&m.status))&&canSeeMinutes(d)&&m&&(m.status||m.updatedAt)).sort((a,b)=>b[0].localeCompare(a[0]));
@@ -6616,7 +6654,7 @@ function openPMeet(id,pid){
   if(!m) return openNewMeeting({projectId:pid||'',mode:'log',back});
   const p=mProj(m), cur=p&&p.std?curPhase(p):'', c=mCat(m);
   S.sheet={type:'pmeet',id,projectId:m.projectId||'',back,edit:false,mode:null,err:'',
-    d:{cat:c,leadId:m.leadId||'',projectId:c==='project'?m.projectId:'',title:m.title||'',type:m.type||'client',date:m.date,time:m.time||'',venue:m.venue||'',phase:m.phase||(m.status==='scheduled'?cur||'':''),attendees:[...(m.attendees||[])],cc:[...(m.cc||[])],agendaItems:m.agendaItems||(m.status==='scheduled'?m.agenda||'':''),agendaDone:[...(m.agendaDone||[])],external:m.external||'',agenda:m.agenda||'',decisions:m.decisions||'',changes:m.changes||'',extraAsk:!!m.extra,issues:m.issues||'',fbGot:m.status==='scheduled'?true:!!m.fbGot,actions:(m.actions||[]).map(a=>({...a})),cancelNote:''}};
+    d:{cat:c,leadId:m.leadId||'',projectId:c==='project'?m.projectId:'',title:m.title||'',type:m.type||'client',date:m.date,time:m.time||'',venue:m.venue||'',phase:m.phase||(m.status==='scheduled'?cur||'':''),attendees:[...(m.attendees||[])],late:[...(m.late||[])],cc:[...(m.cc||[])],agendaItems:m.agendaItems||(m.status==='scheduled'?m.agenda||'':''),agendaDone:[...(m.agendaDone||[])],external:m.external||'',agenda:m.agenda||'',decisions:m.decisions||'',changes:m.changes||'',extraAsk:!!m.extra,issues:m.issues||'',fbGot:m.status==='scheduled'?true:!!m.fbGot,actions:(m.actions||[]).map(a=>({...a})),cancelNote:''}};
   renderSheet();
 }
 function backToProject(){ const b=S.sheet&&S.sheet.back; if(b) openProjectView(b); else closeSheet(); }
@@ -6635,7 +6673,7 @@ function savePMeet(final){
     let extra=m&&m.extra||null; if(isProj&&d.extraAsk&&(d.changes||'').trim()&&!extra) extra={status:ap?'approved':'pending',by:S.uid,at:now,...(ap?{decidedBy:S.uid,decidedAt:now}:{})}; if(!d.extraAsk) extra=null;
     const title=(d.title||'').trim()||(isProj?`${PMT[d.type]||'Project'} meeting`:`${mCatName(d.cat)} meeting`), from=`From the ${isProj?(PMT[d.type]||'').toLowerCase()+' meeting':'“'+title+'”'} on ${fmtD(d.date)}`;
     if(final) for(const a of acts) if(!a.taskId){ a.taskId=await createTask({projectId:pid,title:a.text.trim(),kind:'Task',assignee:a.owner,phase:isProj&&d.phase?phLabel(d.phase):'Meeting actions',target:ap?(a.due||''):'',proposed:ap?'':(a.due||''),note:from}); }
-    await ref.set({projectId:pid,cat:d.cat,leadId:canProps()?(d.leadId||''):((m&&m.leadId)||''),title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,cc:(d.cc||[]).filter(x=>!d.attendees.includes(x)),agendaItems:d.agendaItems||(m&&m.agendaItems)||'',agendaDone:(d.agendaDone||[]).filter(x=>agLines(d.agendaItems||'').includes(x)),external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot),
+    await ref.set({projectId:pid,cat:d.cat,leadId:canProps()?(d.leadId||''):((m&&m.leadId)||''),title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,late:(d.late||[]).filter(x=>d.attendees.includes(x)),cc:(d.cc||[]).filter(x=>!d.attendees.includes(x)),agendaItems:d.agendaItems||(m&&m.agendaItems)||'',agendaDone:(d.agendaDone||[]).filter(x=>agLines(d.agendaItems||'').includes(x)),external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot),
       actions:acts.map(a=>({text:a.text.trim(),owner:a.owner||'',due:a.due||'',taskId:a.taskId||''})),status:final?'final':(m&&m.status==='final'?'final':'draft'),sentAt:m&&m.sentAt||'',
       createdAt:m&&m.createdAt||now,createdBy:m&&m.createdBy||S.uid,updatedAt:now,updatedBy:S.uid,finalAt:final?(m&&m.finalAt||now):(m&&m.finalAt||''),
       ...(m&&m.schedAt?{schedAt:m.schedAt}:{}),history:[...((m&&m.history)||[]),{at:now,by:S.uid,type:final?'final':'draft'}].slice(-20)});
@@ -6712,6 +6750,9 @@ function sheetPMeet(){
       ks.length?field('Phase',phSel):null,
       isProj&&p&&isClientMT(d.type)&&d.phase&&canSeeProjectDetail(p)?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pm-fb',checked:d.fbGot,onchange:e=>{d.fbGot=e.target.checked}}),`The client gave feedback on the phase ${PH[d.phase]?PH[d.phase].no:''} submission (records the feedback-received date)`):null,
       invite,
+      d.attendees.length?(()=>{ if(!d.late) d.late=[]; const ls=new Set(d.late);
+        return field('Came late (one shingara each)',h('div',{class:'chips'},d.attendees.map(id=>h('button',{type:'button',class:'chip who'+(ls.has(id)?' on':''),style:'border:0;cursor:pointer;padding-right:12px',
+          onclick:()=>{ ls.has(id)?ls.delete(id):ls.add(id); d.late=[...ls]; renderSheet(); }},avaEl(id,false,'sm'),nameOf(id)))),'Tap anyone who arrived after the start. It goes on the Shingara board.'); })():null,
       (()=>{ if(!d.cc) d.cc=[]; const cs=new Set(d.cc), all=team;
         return field('Share the minutes with (did not attend)',h('div',{class:'chips'},all.filter(id=>!set.has(id)).map(id=>h('button',{type:'button',class:'chip who'+(cs.has(id)?' on':''),style:'border:0;cursor:pointer;padding-right:12px',
           onclick:()=>{ cs.has(id)?cs.delete(id):cs.add(id); d.cc=[...cs]; renderSheet(); }},avaEl(id,false,'sm'),nameOf(id)))),'They get the minutes when they are finalised, without being recorded as attending.'); })(),
@@ -6949,6 +6990,7 @@ function viewMeetHub(){
     const up=upcomingSunday(), next=ms.filter(m=>m.status==='scheduled'&&!mHeld(m)).sort((a,b)=>(a.date+(a.time||'99')).localeCompare(b.date+(b.time||'99')));
     const mine=next.filter(m=>(m.attendees||[]).includes(S.uid)||m.createdBy===S.uid), rest=next.filter(m=>!mine.includes(m));
     if(!amChalkMember()&&organiserFor(up)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Weekly meeting'}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{ S.mhub='weekly'; render(true); },text:'Minutes and rotation'})),meetingCard(up,true)));
+    if(!amChalkMember()) out.push(shingaraBoard());
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Your scheduled meetings'}),h('span',{class:'cnt',text:String(mine.length)})),
       mine.length?h('div',{class:'list'},mine.map(m=>mRow(m))):h('p',{class:'muted',style:'margin:0 4px',text:'Nothing scheduled for you. Use + New meeting to set one up.'})));
     if(rest.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Other scheduled meetings'}),h('span',{class:'cnt',text:String(rest.length)})),h('div',{class:'list'},rest.map(m=>mRow(m)))));
