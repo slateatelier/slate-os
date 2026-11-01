@@ -1539,7 +1539,7 @@ async function createTask(d){
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
   const ask=d.support?(!!d.assignee&&!amApprover()):d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
-  const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
+  const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,target:String(d.doneAt||'').slice(0,10)||null,originalTarget:String(d.doneAt||'').slice(0,10)||null,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
   const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
   fxMark('task:'+ref.id,'in');
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:null,support:d.support?{...d.support,by:S.uid,at:now}:null,
@@ -4023,8 +4023,8 @@ function viewGantt(){
     rows.push(h('div',{class:'g-row proj'},h('div',{class:'g-lab'},h('div',{class:'t',text:projLabel(p)}),h('div',{class:'m',text:[p&&p.pod?podLabel(p.pod):'',`${list.length} task${list.length>1?'s':''}`].filter(Boolean).join(' · ')})),
       h('div',{class:'g-trk',style:`width:${W}px;${grid}`},h('div',{class:'g-span',style:`left:${sp.l}px;width:${sp.w}px`,'data-tip':`${projLabel(p)}\n${fmtD(ps)} – ${fmtD(pe)}`}))));
     for(const t of list){
-      const st=status(t), s=startOf(t), e=endOf(t)||s, tg=t.target||e, col=`var(--${st==='soon'?'late':st==='open'?'muted':st})`;
-      const tip=`${t.title}\n${nameOf(t.assignee)}\nStart ${fmtD(s)} · Target ${t.target?fmtD(t.target):'—'}`+(t.doneAt?`\nDone ${fmtD(t.doneAt)}`:'')+`\n${ST[st]}`;
+      const leg=!!(t.legacy&&t.doneAt), st=leg?'open':status(t), s=startOf(t), e=endOf(t)||s, tg=leg?t.doneAt.slice(0,10):(t.target||e), col=leg?'var(--faint,#aeaeb2)':`var(--${st==='soon'?'late':st==='open'?'muted':st})`;
+      const tip=leg?`${t.title}\n${nameOf(t.assignee)}\nFinished before SLATE OS`+(t.legacyNoDate?' (date not recorded)':` · ${fmtD(t.doneAt)}`):`${t.title}\n${nameOf(t.assignee)}\nStart ${fmtD(s)} · Target ${t.target?fmtD(t.target):'—'}`+(t.doneAt?`\nDone ${fmtD(t.doneAt)}`:'')+`\n${ST[st]}`;
       const parts=[]; const baseEnd=tg<e?tg:e;
       const bs=clip(s<s0?s0:s,baseEnd>e0?e0:baseEnd);
       const segs=[];
@@ -6148,7 +6148,7 @@ function tlAdjPlan(p,d){ const ks=tlPhases(p), t=tlOf(p)||{};
   return {pv,plan,done}; }
 async function saveTlAdj(pid,d){ const p={...S.projects[pid],id:pid}, ks=tlPhases(p); const td=today(), now=new Date().toISOString(), t=tlOf(p)||{};
           for(const k of ks.filter(k=>d.close[k]&&!stdState(p,k).done)){
-            for(const g of gateTasks(p.id).filter(g=>g.gate.k===k&&!g.doneAt)) await taskUpdate(g.id,{doneAt:preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:true,...(amApprover()?{legacyOk:true}:{}),request:null},[{type:'done',to:preLive(),note:'Finished before SLATE OS (date not recorded)'}]);
+            for(const g of gateTasks(p.id).filter(g=>g.gate.k===k&&!g.doneAt)) await taskUpdate(g.id,{doneAt:preLive(),target:preLive(),originalTarget:preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:true,...(amApprover()?{legacyOk:true}:{}),request:null},[{type:'done',to:preLive(),note:'Finished before SLATE OS (date not recorded)'}]);
             const m={}; clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(!x.done&&!x.na) m[it.id]={...x,done:preLive(),legacy:true}; });
             if(Object.keys(m).length) await S.db.doc('projects/'+p.id).update({cl:{[k]:m}}); }
           const q={...S.projects[p.id],id:p.id}, live=tlAdjPlan(q,d);
@@ -6430,7 +6430,7 @@ function preBox(p,k){
     h('div',{class:'f-hint',text:'Its gate shows as closed with these dates and its checklist is closed. It never counts in scores.'}),
     h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{
         for(const t of gateTasks(p.id).filter(t=>t.gate.k===k&&!t.doneAt)){ const dt=f[t.gate.step]||(t.gate.step==='sub'?f.final:f.sub)||'';
-          await taskUpdate(t.id,{doneAt:dt||preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:!dt,...(amApprover()?{legacyOk:true}:{}),request:null},[{type:'done',to:dt||preLive(),note:'Finished before SLATE OS'+(dt?'':' (date not recorded)')}]); }
+          await taskUpdate(t.id,{doneAt:dt||preLive(),target:dt||preLive(),originalTarget:dt||preLive(),doneBy:S.uid,stage:'done',legacy:true,legacyNoDate:!dt,...(amApprover()?{legacyOk:true}:{}),request:null},[{type:'done',to:dt||preLive(),note:'Finished before SLATE OS'+(dt?'':' (date not recorded)')}]); }
         const m={}; clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(!x.done&&!x.na) m[it.id]={...x,done:f.final||f.sub||preLive(),legacy:true}; });
         if(Object.keys(m).length) await S.db.doc('projects/'+p.id).update({cl:{[k]:m}});
       },'Phase recorded as finished before SLATE OS').then(ok=>{ if(ok){ sh.preEdit=null; renderSheet(); } }),text:'Close phase'}),
