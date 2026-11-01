@@ -1150,6 +1150,29 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .panel>.sh-head:first-child{position:sticky;top:calc(-18px - env(safe-area-inset-top,0px));z-index:3;background:#fff;margin-top:calc(-18px - env(safe-area-inset-top,0px));padding-top:calc(18px + env(safe-area-inset-top,0px));padding-bottom:10px;margin-bottom:-10px}
 @media (max-width:640px){.panel>.sh-head:first-child{top:calc(-12px - env(safe-area-inset-top,0px));margin-top:calc(-12px - env(safe-area-inset-top,0px));padding-top:calc(12px + env(safe-area-inset-top,0px))}}
 @media (prefers-reduced-motion:reduce){.nav-back{transition:none}}
+.now-box{display:grid;gap:8px;text-align:left}
+.now-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.now-name{font-size:15px;min-width:0;overflow-wrap:anywhere}
+.now-pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--c);white-space:nowrap}
+.now-pill::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--c)}
+.now-chips{display:flex;gap:4px;flex-wrap:wrap}
+.now-chip{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 6px;border-radius:7px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;box-sizing:border-box}
+.now-chip.done{background:var(--ink);color:#fff}
+.now-chip.now{background:#fff;color:var(--c);box-shadow:inset 0 0 0 2px var(--c);animation:nowPulse 2.4s ease-in-out infinite}
+.now-chip.later{background:var(--group);color:var(--faint)}
+@keyframes nowPulse{50%{box-shadow:inset 0 0 0 2px var(--c),0 0 0 3px color-mix(in srgb,var(--c) 18%,transparent)}}
+@media (prefers-reduced-motion:reduce){.now-chip.now{animation:none}}
+.now-lines{display:grid;gap:4px}
+.now-line{font-size:14px;line-height:1.45}
+.now-next,.now-meta{font-size:12.5px;color:var(--muted)}
+.now-list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+@media (max-width:420px){.now-list{grid-template-columns:1fr}}
+.now-card{all:unset;box-sizing:border-box;display:grid;gap:8px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;cursor:pointer}
+.now-card:hover{border-color:var(--faint)}
+.now-card:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.now-sum{display:flex;gap:14px;flex-wrap:wrap;margin:-4px 2px 0}
+.now-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 2px}
+.now-legend .now-chip{min-width:20px;height:20px;font-size:11px;animation:none}
 </style>
 
 <div class="chrome">
@@ -4108,19 +4131,68 @@ function viewBoard(){
 const GZ={month:{days:42,px:28,step:1},quarter:{days:91,px:11,step:7},half:{days:182,px:5.5,step:14}};
 function startOf(t){ let s=t.start||(t.createdAt?ymd(new Date(t.createdAt)):null)||t.target; const e=t.target||t.doneAt; if(s&&e&&s>e) s=e; return s; }
 function endOf(t){ const td=today(); if(t.doneAt) return t.target&&t.doneAt<t.target?t.target:t.doneAt; if(t.target&&t.target<td) return td; return t.target; }
+/* ---------- plain-language project status (Principal, 1 Nov 2026: the timeline must read at a glance) ----------
+   one strip of phase chips (done / now / later) and one sentence: what is happening now, the next date, and whose turn it is.
+   Dates are the approved gate dates the team is scored on. */
+const NOW_ST={late:['Late','var(--overdue)'],soon:['Due soon','var(--late)'],client:['With the client','var(--early)'],clate:['Client is late','var(--early)'],ok:['On track','var(--ontime)'],idle:['No dates yet','var(--muted)'],wait:['Waiting for site','var(--muted)'],done:['All phases done','var(--ink)']};
+function projNow(p){
+  const ks=stdPhases(p).filter(k=>PH[k]||String(k).startsWith('x')), td=today();
+  let live=null; try{ if(tlOf(p)) live=tlCompute(p,tlOf(p).start,true); }catch(_){}
+  const st=Object.fromEntries(ks.map(k=>[k,stdState(p,k)]));
+  const open=ks.filter(k=>!st[k].done);
+  let cur=open.filter(k=>(st[k].sub&&st[k].sub.doneAt)||(live&&live[k]&&!live[k].none&&live[k].s&&live[k].s<=td));
+  if(!cur.length&&open.length) cur=[open[0]];
+  const chips=ks.map(k=>({k,state:st[k].done?'done':cur.includes(k)?'now':'later'}));
+  if(!open.length) return {chips,cur:[],st:'done',line:['Every phase is finished.'],next:''};
+  const wdl=(a,b)=>Math.max(0,wdBetween(a,b)), pl=n=>`${n} working day${n===1?'':'s'}`;
+  const one=k=>{ const s=st[k], sub=s.sub, fin=s.fin, nm=`${phNo(k)} ${phName(k,p)}`;
+    const ours=sub&&!sub.doneAt?sub:(!sub&&fin&&!fin.doneAt?fin:null);
+    if(ours){ const tg=ours.target; if(!tg) return k==='9'?{st:'wait',txt:`${nm}: starts when construction is finished.`}:{st:'idle',txt:`${nm}: our work, no date set yet.`};
+      if(tg<td) return {st:'late',txt:`${nm}: our ${sub?'submission':'work'} was due ${fmtD(tg)}, ${pl(wdl(tg,td))} late.`};
+      const n=wdl(td,tg); return {st:n<=3?'soon':'ok',txt:`${nm}: we ${sub?'submit':'finish'} by ${fmtD(tg)}${n?` (${pl(n)} left)`:' (today)'}`+(sub&&fin&&fin.target?`, then the client reviews; approval expected ${fmtD(fin.target)}.`:'.')}; }
+    if(fin&&!fin.doneAt){ const since=sub&&sub.doneAt?String(sub.doneAt).slice(0,10):''; const tg=fin.target;
+      if(tg&&tg<td) return {st:'clate',txt:`${nm}: with the client${since?' since '+fmtD(since):''}. Their reply was expected ${fmtD(tg)}, ${pl(wdl(tg,td))} over.`};
+      return {st:'client',txt:`${nm}: with the client${since?' since '+fmtD(since):''}${tg?`; approval expected ${fmtD(tg)}`:''}.`}; }
+    return {st:'idle',txt:`${nm}: no gate set.`}; };
+  const xs=cur.map(one), rank=['late','clate','soon','idle','client','ok','wait'], top=xs.slice().sort((a,b)=>rank.indexOf(a.st)-rank.indexOf(b.st))[0];
+  const nx=open.find(k=>!cur.includes(k));
+  return {chips,cur,st:top.st,line:xs.map(x=>x.txt),next:nx?`Next: ${phNo(nx)} ${phName(nx,p)}`:''};
+}
+function nowStrip(p,o={}){ const n=projNow(p), [lbl,col]=NOW_ST[n.st];
+  return h('div',{class:'now-box'},
+    h('div',{class:'now-top'},o.title?h('b',{class:'now-name',text:o.title}):h('b',{class:'now-name',text:'Where it stands'}),h('span',{class:'now-pill',style:`--c:${col}`,text:lbl})),
+    h('div',{class:'now-chips','aria-label':'Phases'},n.chips.map(c=>h('span',{class:'now-chip '+c.state,style:c.state==='now'?`--c:${col}`:'',title:`${phNo(c.k)} ${phName(c.k,p)} · ${c.state}`,text:c.state==='done'?'✓':String(phNo(c.k))}))),
+    h('div',{class:'now-lines'},n.line.map(t=>h('div',{class:'now-line',text:t}))),
+    n.next?h('div',{class:'now-next',text:n.next}):null); }
+function viewPhaseMap(){
+  const g=S.gantt; if(g.pmPod===undefined) g.pmPod=fullView()?'':(myPod()||'');
+  const podSel=h('select',{id:'pm-pod','aria-label':'POD',onchange:e=>{g.pmPod=e.target.value;render(true)}},h('option',{value:'',text:'All PODs'}),pods().map(x=>h('option',{value:x,text:podLabel(x)}))); podSel.value=g.pmPod||'';
+  const ps=projects().filter(p=>p.std&&!p.closed&&p.pod!=='Studio'&&!isInternalP(p)&&stdPhases(p).length&&(!g.pmPod||podsOfProject(p).includes(g.pmPod)));
+  const rows=ps.map(p=>({p,n:projNow(p)})), rank=['late','clate','soon','client','idle','ok','wait','done'];
+  rows.sort((a,b)=>rank.indexOf(a.n.st)-rank.indexOf(b.n.st)||(a.p.code||a.p.name||'').localeCompare(b.p.code||b.p.name||''));
+  const cnt=k=>rows.filter(r=>r.n.st===k).length;
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:g.pmPod?podLabel(g.pmPod):'All PODs'}),h('h1',{class:'h1',text:'Timeline'})),
+      h('div',{class:'bar'},seg('View',[['map','Projects'],['bars','Task bars']],'map',v=>{ g.mode=v; render(true); })))];
+  out.push(h('div',{class:'bar'},podSel));
+  out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
+  out.push(h('div',{class:'now-legend'},h('span',{class:'now-chip done',text:'✓'}),'done',h('span',{class:'now-chip now',style:'--c:var(--ink);margin-left:8px',text:'2'}),'now',h('span',{class:'now-chip later',style:'margin-left:8px',text:'3'}),'later · tap a project to open it'));
+  out.push(rows.length?h('div',{class:'now-list'},rows.map(({p})=>h('button',{type:'button',class:'now-card',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }},nowStrip(p,{title:projLabel(p)}),h('div',{class:'now-meta',text:podText(p)})))):h('div',{class:'empty'},h('h3',{text:'No live projects here'})));
+  return out;
+}
 function viewGantt(){
+  if(S.gantt.mode!=='bars') return viewPhaseMap();
   const g=S.gantt, z=GZ[g.zoom], td=today();
   const s0=addDays(td,-Math.round(z.days*0.2)+g.offset*Math.round(z.days/2)), e0=addDays(s0,z.days-1), W=Math.round(z.days*z.px);
   const x=d=>Math.round(diff(s0,d)*z.px);
   const podSel=h('select',{id:'g-pod','aria-label':'Pod',style:'flex:0 1 160px',onchange:e=>{g.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),pods().map(p=>h('option',{value:p,text:podLabel(p)}))); podSel.value=g.pod;
   const [pSel,uSel]=scopeFilters(g,'g');
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${fmtD(s0)} – ${fmtD(e0)}`}),h('h1',{class:'h1',text:'Timeline'})),
-    h('div',{class:'bar'},seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
+    h('div',{class:'bar'},seg('View',[['map','Projects'],['bars','Task bars']],'bars',v=>{ g.mode=v; render(true); }),seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Earlier',onclick:()=>{g.offset--;render(true)},text:'‹'}),
       g.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{g.offset=0;render(true)},text:'Today'}),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Later',onclick:()=>{g.offset++;render(true)},text:'›'})))];
   out.push(h('div',{class:'bar'},fullView()?podSel:null,pSel,uSel));
-  const ts=activeTasks().filter(t=>(!g.project||t.projectId===g.project)&&(!g.person||t.assignee===g.person)&&(!g.pod||podsOf(t).includes(g.pod)));
+  const ts=activeTasks().filter(t=>!(t.legacy&&t.doneAt)&&!(t.doneAt&&t.doneAt.slice(0,10)<addDays(today(),-14))&&(!g.project||t.projectId===g.project)&&(!g.person||t.assignee===g.person)&&(!g.pod||podsOf(t).includes(g.pod)));
   const undated=ts.filter(t=>!t.target&&!t.doneAt);
   const dated=ts.filter(t=>t.target||t.doneAt).filter(t=>{ const s=startOf(t), e=endOf(t)||s; return e>=s0&&s<=e0; });
   // header: months + ticks
@@ -6440,6 +6512,9 @@ function tlSection(p){
     h('button',{class:'btn btn-sm',type:'button',onclick:()=>run(async()=>{ for(const x of shift) await taskUpdate(x.t.id,{target:x.date,clientShift:(x.t.clientShift||0)+wdBetween(x.t.target,x.date)},[{type:'target',from:x.t.target,to:x.date,note:'Moved for a client or consultant delay (D8, R8)'}]); },'Dates moved for the delay'),text:'Move these dates'})));
   const open=S.sheet&&S.sheet.tlLog;
   return h('div',{class:'card tl-card'},
+    nowStrip(p),
+    (ap||S.sheet&&S.sheet.tlFull)?null:h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ S.sheet.tlFull=true; renderSheet(); },text:'Show the full timeline'}),
+    ...(!(ap||S.sheet&&S.sheet.tlFull)?[]:[
     h('div',{class:'pc-row'},h('b',{text:'Timeline'}),h('span',{class:'pill '+(cLate||kLate?'s-late':slip>0?'s-overdue':'s-ontime'),text:cLate||kLate?[cLate?`Client +${cLate}`:'',kLate?`Consultants +${kLate}`:''].filter(Boolean).join(' · ')+' days':slip>0?`${slip} days behind plan`:'On plan'})),
     h('div',{class:'tl-sum'},
       h('div',{},h('span',{text:'Planned finish'}),h('b',{text:lastB?fmtD(lastB):'—'})),
@@ -6448,6 +6523,7 @@ function tlSection(p){
       ks.some(k=>live[k].kd)?h('div',{},h('span',{text:'Consultant time over'}),h('b',{text:`${kLate} days`})):null,
       h('div',{},h('span',{text:'SLATE time over'}),h('b',{style:sLate?'color:var(--overdue)':'',text:`${sLate} days`}))),
     tlChart(p,live,base,ks),
+    ]),
     flags.length?h('div',{class:'tl-flags'},flags):null,
     h('div',{class:'bar',style:'justify-content:space-between'},h('span',{class:'f-hint',style:'margin:0',text:`Started ${fmtD(t.start)} · working days, Sunday to Thursday`}),
       h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ S.sheet.tlLog=!open; renderSheet(); },text:open?'Hide project log':'Project log'}),
