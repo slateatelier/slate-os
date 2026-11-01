@@ -19,19 +19,25 @@
 .int-rooms{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 .int-room{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px 4px 4px 10px;font-size:14px}
 .int-room.on{border-color:#111;font-weight:600}.int-room input{width:56px;text-align:center;padding:6px}
-.shg{display:inline-block;width:18px;height:18px;flex:none}.shg svg{width:100%;height:100%;display:block}.shg.big{width:30px;height:30px}
-.shg-board{background:linear-gradient(135deg,#FFF6E5,#FFFBF3);border:1px solid #F1D9A8;border-radius:16px;padding:6px 12px 12px}
-.shg-board>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 2px}
-.shg-board>summary::-webkit-details-marker{display:none}
-.shg-t{display:flex;align-items:center;gap:10px}.shg-t>span{display:grid}.shg-t b{font-size:16px}.shg-t small,.shg-tot small,.shg-nm small{color:#8a6a35;font-size:12px}
-.shg-tot{display:grid;justify-items:end;line-height:1.1}.shg-tot b{font-size:22px;color:#9A5B13}
-.shg-list{display:grid;gap:6px}
-.shg-p{display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:8px 10px;box-shadow:0 1px 0 #F1D9A8}
-.shg-p.top{box-shadow:0 0 0 1.5px #E0A23B}
-.shg-rank{width:26px;text-align:center;font-size:18px;font-weight:700;color:#8a6a35;flex:none}
-.shg-nm{flex:1;min-width:0;display:grid}.shg-nm>span{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.shg-row{display:flex;gap:1px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:52%}.shg-row b{font-size:12px;color:#9A5B13;margin-left:3px}
-.shg-empty{display:flex;align-items:center;gap:10px;font-size:14px;color:#8a6a35;padding:6px 2px}
+.shg{display:inline-block;width:14px;height:14px;flex:none}.shg svg{width:100%;height:100%;display:block}
+.shg-board{border:1px solid #F1D9A8;background:#FFFBF3;border-radius:12px;padding:8px 10px;gap:4px;max-width:420px}
+.shg-h{display:flex;align-items:center;gap:7px;font-size:13.5px}.shg-h .shg{width:18px;height:18px}
+.shg-q{color:#8a6a35;font-size:11.5px;flex:1}.shg-tot{font-weight:700;color:#9A5B13;background:#FBE9C8;border-radius:999px;padding:1px 8px;font-size:12px}
+.shg-list{display:grid}
+.shg-p{display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;border-top:1px dashed #F1D9A8}
+.shg-p:first-child{border-top:0}.shg-p.top .shg-nm{font-weight:700}
+.shg-rank{width:20px;text-align:center;font-size:13px;color:#8a6a35;font-weight:600;flex:none}
+.shg-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shg-n{display:flex;align-items:center;gap:3px;color:#9A5B13;font-size:12px}
+.shg-empty{font-size:12.5px;color:#8a6a35;padding:2px}
+.shg-champ{font-size:11.5px;color:#8a6a35;padding-top:2px}
+@keyframes shgBob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2px) rotate(-8deg)}}
+@keyframes shgIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+@keyframes shgWig{0%,100%{transform:rotate(0)}25%{transform:rotate(-12deg)}75%{transform:rotate(12deg)}}
+.shg.bob{animation:shgBob 2.6s ease-in-out infinite}
+.shg-board.anim .shg-p{animation:shgIn .35s ease-out both}
+.shg-p.top .shg{animation:shgWig 1.2s ease-in-out 2 .6s}
+@media (prefers-reduced-motion:reduce){.shg.bob,.shg-board.anim .shg-p,.shg-p.top .shg{animation:none}}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -4141,23 +4147,20 @@ const qOf=d=>{ const y=+d.slice(0,4), q=Math.floor((+d.slice(5,7)-1)/3); return 
 function shingaraTally(from,to){ const c={}, add=(id,d,what)=>{ if(!id) return; (c[id]=c[id]||[]).push({d,what}); };
   for(const [d,m] of Object.entries(S.meetings||{})) if(d>=from&&d<to&&m&&m.status!=='cancelled') for(const [id,v] of Object.entries(m.attendance||{})) if(v==='late') add(id,d,'Weekly meeting');
   for(const m of Object.values(S.pmeet||{})) if(m&&m.date>=from&&m.date<to&&m.status==='final'&&Array.isArray(m.late)) m.late.forEach(id=>add(id,m.date,m.title||'Meeting'));
-  return Object.entries(c).filter(([id])=>S.members[id]||id===ownerId()).map(([id,xs])=>({id,n:xs.length,xs:xs.sort((a,b)=>b.d.localeCompare(a.d))})).sort((a,b)=>b.n-a.n||nameOf(a.id).localeCompare(nameOf(b.id))); }
+  return Object.entries(c).filter(([id])=>S.members[id]&&id!==ownerId()).map(([id,xs])=>({id,n:xs.length,xs:xs.sort((a,b)=>b.d.localeCompare(a.d))})).sort((a,b)=>b.n-a.n||nameOf(a.id).localeCompare(nameOf(b.id))); }
 function shingaraBoard(){
   const Q=qOf(today()), rows=shingaraTally(Q.from,Q.to), tot=rows.reduce((a,r)=>a+r.n,0);
-  const pq=qOf(addDays(Q.from,-1)), prev=shingaraTally(pq.from,pq.to), champ=prev[0];
-  const left=diff(today(),Q.to), open=S.shBoard!==false, MED=['🥇','🥈','🥉'];
+  const pq=qOf(addDays(Q.from,-1)), champ=shingaraTally(pq.from,pq.to)[0];
+  const left=diff(today(),Q.to), MED=['🥇','🥈','🥉'], anim=!S.shgPlayed; S.shgPlayed=true;
   let rank=0, last=null;
-  const row=(r,i)=>{ if(r.n!==last){ rank=i; last=r.n; } const med=rank<3?MED[rank]:'';
-    const ic=h('span',{class:'shg-row'},...Array.from({length:Math.min(r.n,8)},()=>shIcon()),r.n>8?h('b',{text:'+'+(r.n-8)}):null);
-    return h('div',{class:'shg-p'+(rank===0?' top':''),title:r.xs.map(x=>`${fmtD(x.d)} · ${x.what}`).join('\n')},
-      h('span',{class:'shg-rank',text:med||String(rank+1)}),avaEl(r.id,false,'sm'),
-      h('span',{class:'shg-nm'},h('span',{text:nameOf(r.id)}),h('small',{text:`owes ${r.n} shingara${r.n===1?'':'s'}`+(rank===0&&r.n>1?' · Shingara champion':'')})),ic); };
-  return h('details',{class:'sec shg-board',open,ontoggle:e=>{ S.shBoard=e.target.open; }},
-    h('summary',{},h('span',{class:'shg-t'},shIcon('big'),h('span',{},h('b',{text:'Shingara board'}),h('small',{text:`${Q.lbl} · ${Q.months} · resets in ${left} day${left===1?'':'s'}`}))),
-      h('span',{class:'shg-tot'},h('b',{text:String(tot)}),h('small',{text:'owed'}))),
-    h('p',{class:'f-hint',style:'margin:0 2px 8px',text:'Late to a meeting = one shingara for the office. Counted from the late marks in weekly minutes and in finalised meeting minutes. Starts again from zero every quarter.'}),
-    rows.length?h('div',{class:'shg-list'},rows.map(row)):h('div',{class:'shg-empty'},shIcon('big'),h('span',{text:'Nobody late this quarter. The shingara jar is empty.'})),
-    champ?h('div',{class:'f-hint',style:'margin:8px 2px 0'},`Last quarter (${pq.lbl}) champion: `,h('b',{text:`${nameOf(champ.id)}, ${champ.n} shingara${champ.n===1?'':'s'}`}),' 🏆'):null);
+  const row=(r,i)=>{ if(r.n!==last){ rank=i; last=r.n; }
+    return h('div',{class:'shg-p'+(rank===0?' top':''),style:anim?`animation-delay:${80+i*60}ms`:'',title:r.xs.map(x=>`${fmtD(x.d)} · ${x.what}`).join('\n')},
+      h('span',{class:'shg-rank',text:rank<3?MED[rank]:String(rank+1)}),h('span',{class:'shg-nm',text:nameOf(r.id)}),
+      h('span',{class:'shg-n'},shIcon(),h('b',{text:'×'+r.n}))); };
+  return h('section',{class:'sec shg-board'+(anim?' anim':''),title:'Late to a meeting = one shingara for the office. From the late marks in weekly and finalised meeting minutes. Resets every quarter.'},
+    h('div',{class:'shg-h'},shIcon('bob'),h('b',{text:'Shingara board'}),h('span',{class:'shg-q',text:`${Q.lbl} · resets in ${left}d`}),h('span',{class:'shg-tot',text:String(tot)})),
+    rows.length?h('div',{class:'shg-list'},rows.slice(0,8).map(row)):h('div',{class:'shg-empty',text:'Nobody late this quarter.'}),
+    champ?h('div',{class:'shg-champ',text:`🏆 ${pq.lbl}: ${nameOf(champ.id)} · ${champ.n}`}):null);
 }
 function viewMeetings(){
   const up=upcomingSunday(), r=rota(), tab=S.mtab||'meet';
