@@ -51,6 +51,13 @@
 .mw-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:0 2px 2px}.mw-tabs::-webkit-scrollbar{display:none}
 .mw-tab{appearance:none;border:0;background:var(--group);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;color:#3a3a3c;cursor:pointer;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
 .mw-tab span{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}.mw-tab.on{background:#111;color:#fff}.mw-tab.on span{color:#c7c7cc}
+.hol-chart{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;background:var(--group);border-radius:14px;padding:10px}
+.hol-m{display:grid;justify-items:center;gap:4px;background:#fff;border-radius:8px;padding:6px 2px;min-height:76px;align-content:start}
+.hol-mn{font-size:11px;color:var(--muted);font-weight:600}.hol-dots{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;max-width:34px}
+.hol-dots i{width:8px;height:8px;border-radius:50%;background:#111;display:inline-block}.hol-dots i.ex{background:var(--late)}.hol-dots i.wk{background:transparent;box-shadow:inset 0 0 0 1.5px #8e8e93}.hol-dots i.wk.ex{box-shadow:inset 0 0 0 1.5px var(--late)}
+.hol-c{font-size:12px;font-weight:600;margin-top:auto}
+.hol-row{display:flex;align-items:center;gap:10px;padding-block:9px;flex-direction:row}.hol-d{min-width:96px;font-size:13px}
+@media (max-width:520px){.hol-chart{grid-template-columns:repeat(6,minmax(0,1fr))}}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -1820,7 +1827,18 @@ const KDISC=[['str','Structural'],['mep','MEP']];
 const kxOf=(p,k,d)=>{ const st=(p&&p.std)||{}, x=((st.kx||{})[k]||{})[d]||{}; return {on:x.on||(st.kShare||{})[k]||'',got:x.got||(st.kGot||{})[k]||'',fu:Array.isArray(x.fu)?x.fu:[]}; };
 const DEF_PH=JSON.parse(JSON.stringify(PH));
 /* working days: SLATE works Sunday to Thursday (Friday and Saturday off) */
-const isWorkDay=d=>{ const w=new Date(d+'T00:00:00').getDay(); return w!==5&&w!==6; };
+/* Bangladesh public holidays and SLATE office closures: not working days for any timeline. The COO keeps the list (More › Holidays).
+   2026: the government list; 2027: expected dates until the Cabinet Division publishes the list (usually Oct–Nov). */
+const HOL_DEFAULT=[['2026-12-16','Victory Day'],['2026-12-25','Christmas Day'],
+  ['2027-01-24','Shab-e-Barat (expected)'],['2027-02-21','Shaheed Dibosh'],['2027-03-05','Jumatul Wida (expected)'],['2027-03-07','Shab-e-Qadr (expected)'],
+  ['2027-03-10','Eid-ul-Fitr (expected)'],['2027-03-11','Eid-ul-Fitr (expected)'],['2027-03-12','Eid-ul-Fitr (expected)'],['2027-03-26','Independence Day'],['2027-04-14','Pohela Boishakh'],['2027-05-01','May Day'],
+  ['2027-05-17','Eid-ul-Adha (expected)'],['2027-05-18','Eid-ul-Adha (expected)'],['2027-05-19','Eid-ul-Adha (expected)'],['2027-05-20','Buddha Purnima (expected)'],['2027-06-16','Ashura (expected)'],
+  ['2027-08-05','July Mass Uprising Day'],['2027-08-15','Eid-e-Milad-un-Nabi (expected)'],['2027-08-25','Janmashtami (expected)'],['2027-10-08','Durga Puja (expected)'],['2027-10-09','Durga Puja (expected)'],
+  ['2027-12-16','Victory Day'],['2027-12-25','Christmas Day']].map(([d,n])=>({d,n}));
+let HOL_REF=null, HOL_SET=new Set();
+const holidays=()=>{ const x=typeof S!=='undefined'&&S.settings&&Array.isArray(S.settings.holidays)?S.settings.holidays:HOL_DEFAULT; if(x!==HOL_REF){ HOL_REF=x; HOL_SET=new Set(x.map(y=>y&&y.d).filter(Boolean)); } return x; };
+const isHoliday=d=>{ holidays(); return HOL_SET.has(d); };
+const isWorkDay=d=>{ const w=new Date(d+'T00:00:00').getDay(); return w!==5&&w!==6&&!isHoliday(d); };
 function addWorkDays(d,n){ let x=d, k=0; while(k<n){ x=addDays(x,1); if(isWorkDay(x)) k++; } return x; }
 /* a phase's standard days; the client's review days can be set per project (agreed in the fee proposal) */
 const slateDaysOf=k=>(PH[k]&&PH[k].d)?PH[k].d[0]:null;
@@ -2562,7 +2580,7 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
   if(NAV_SUB.includes(S.view)) out.push(amChalkMember()?navBack('Home',()=>{ S.view='mine'; render(true); }):navBack('More',()=>{ S.view='more'; render(true); }));
   return out.concat(v());
@@ -2720,7 +2738,7 @@ function viewMore(){
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
       item('reports','Issue reports',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
-    ...grp('Admin',amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
+    ...grp('Admin',amApprover()?item('holidays','Holidays','Public holidays and office closures: no timeline counts them as working days'):null,amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'})))];
 }
@@ -6157,6 +6175,44 @@ function tlsApply(p){ const {st,r,ord}=tlsState(p), ks=tlPhases(p), i=r.cur?ord.
   const d={from:st.from,close,sd:Object.fromEntries(ks.map(k=>[k,String(k===r.cur&&r.left!==''?+r.left:stdSlateDays(p,k))])),
     cd:Object.fromEntries(ks.map(k=>[k,String(stdClientDays(p,k))])),kd:Object.fromEntries(ks.filter(kwOf).map(k=>[k,String(kwOf(k)[1])]))};
   return saveTlAdj(p.id,d); }
+function viewHolidays(){
+  if(!amApprover()) return [h('p',{text:'Only the Principal and the COO can see this.'})];
+  const all=holidays().slice().sort((a,b)=>a.d.localeCompare(b.d)), td=today(), custom=!!(S.settings&&Array.isArray(S.settings.holidays));
+  const yrs=[...new Set([td.slice(0,4),...all.map(x=>x.d.slice(0,4))])].filter(y=>y>=td.slice(0,4)).sort().slice(0,6);
+  const yr=S.holYr&&yrs.includes(S.holYr)?S.holYr:yrs[0], xs=all.filter(x=>x.d.slice(0,4)===yr), f=S.holAdd||(S.holAdd={d:'',to:'',n:''}), ed=S.holEd||null;
+  const save=list=>run(()=>settingsRef().update({holidays:list.map(x=>({d:x.d,n:x.n||''})).sort((a,b)=>a.d.localeCompare(b.d))}),'Holidays saved');
+  const dow=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()], wkend=d=>[5,6].includes(new Date(d+'T00:00:00').getDay());
+  const exp=x=>/\(expected\)/i.test(x.n||''), off=xs.filter(x=>!wkend(x.d)).length;
+  /* the year at a glance: twelve months, a dot for each holiday (hollow when it falls on a Friday or Saturday anyway) */
+  const chart=h('div',{class:'hol-chart'},MON.map((m,i)=>{ const ms=xs.filter(x=>+x.d.slice(5,7)===i+1);
+    return h('div',{class:'hol-m'},h('div',{class:'hol-mn',text:m}),h('div',{class:'hol-dots'},ms.map(x=>h('i',{class:(wkend(x.d)?'wk ':'')+(exp(x)?'ex':''),title:`${dow(x.d)} ${fmtD(x.d)} · ${x.n}`}))),h('div',{class:'hol-c',text:ms.length?String(ms.length):''})); }));
+  const row=x=>{ const k=x.d+'|'+x.n, on=ed&&ed.k===k;
+    if(on) return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);display:grid;gap:8px'},
+      h('div',{class:'form-row'},h('input',{type:'date',value:ed.d,oninput:e=>{ ed.d=e.target.value; }}),h('input',{maxlength:60,value:ed.n,oninput:e=>{ ed.n=e.target.value; }})),
+      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',checked:!ed.exp,onchange:e=>{ ed.exp=!e.target.checked; }}),'Confirmed by the government list'),
+      h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!ed.d) return toast('Choose the date.'); const n=(ed.n||'').replace(/\s*\(expected\)\s*/i,'').trim()||'Holiday';
+          save([...all.filter(y=>!(y.d===x.d&&y.n===x.n)),{d:ed.d,n:ed.exp?n+' (expected)':n}]).then(ok=>{ if(ok) S.holEd=null; }); },text:'Save'}),
+        h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ S.holEd=null; render(true); },text:'Cancel'}),
+        h('button',{class:'btn btn-sm',type:'button',style:'margin-left:auto;color:var(--overdue)',disabled:S.busy,onclick:()=>save(all.filter(y=>!(y.d===x.d&&y.n===x.n))).then(ok=>{ if(ok) S.holEd=null; }),text:'Remove'})));
+    return h('div',{class:'card hol-row',role:'button',tabindex:'0',style:'border-radius:0;border-bottom:1px solid var(--line);cursor:pointer',onclick:()=>{ if(!S.canWrite) return; S.holEd={k,d:x.d,n:(x.n||'').replace(/\s*\(expected\)\s*/i,''),exp:exp(x)}; render(true); }},
+      h('span',{class:'mono hol-d',text:`${dow(x.d)} ${fmtD(x.d)}`}),h('span',{style:'flex:1;min-width:0',text:(x.n||'Holiday').replace(/\s*\(expected\)\s*/i,'')}),
+      wkend(x.d)?h('span',{class:'pill s-open',text:'Weekend'}):null,exp(x)?h('span',{class:'pill s-late',text:'Expected'}):h('span',{class:'pill s-ontime',text:'Confirmed'})); };
+  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Admin'}),h('h1',{class:'h1',text:'Holidays'}),
+      h('p',{class:'lead',text:'Government holidays and SLATE office closures for the next five years. Every timeline skips them like Fridays and Saturdays. Expected dates follow the calendar; when the Cabinet Division publishes a year’s list (usually October or November), tap a date to correct it and mark it confirmed, and add any extra Eid days the office takes.'}))),
+    seg('Year',yrs.map(y=>[y,y]),yr,v=>{ S.holYr=v; S.holEd=null; render(true); }),
+    h('div',{class:'kpis'},kpi('Holidays',xs.length),kpi('On working days',off,'late'),kpi('Still expected',xs.filter(exp).length)),
+    h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:yr+' at a glance'})),chart,h('div',{class:'f-hint',style:'margin:0 4px',text:'● a holiday on a working day · ○ on a Friday or Saturday · orange: expected date'})),
+    S.canWrite?h('details',{class:'sec',open:!!(f.d||f.n)},h('summary',{class:'sec-h',style:'cursor:pointer'},h('h2',{text:'+ Add a holiday or closure'})),
+      h('div',{class:'card',style:'display:grid;gap:8px'},
+        h('div',{class:'form-row',style:'grid-template-columns:repeat(3,minmax(0,1fr))'},
+          h('label',{class:'field'},h('span',{class:'lbl',text:'From'}),h('input',{type:'date',value:f.d,oninput:e=>{ f.d=e.target.value; }})),
+          h('label',{class:'field'},h('span',{class:'lbl',text:'To (optional)'}),h('input',{type:'date',value:f.to,oninput:e=>{ f.to=e.target.value; }})),
+          h('label',{class:'field'},h('span',{class:'lbl',text:'Name'}),h('input',{maxlength:60,placeholder:'e.g. Eid office closure',value:f.n,oninput:e=>{ f.n=e.target.value; }}))),
+        h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!f.d) return toast('Choose the date.'); const to=f.to&&f.to>f.d?f.to:f.d; const add=[]; let x=f.d; while(x<=to){ add.push({d:x,n:(f.n||'').trim()||'Holiday'}); x=addDays(x,1); } if(add.length>31) return toast('That’s more than a month: check the dates.');
+            save([...all.filter(y=>!add.some(a=>a.d===y.d)),...add]).then(ok=>{ if(ok){ S.holAdd=null; S.holYr=add[0].d.slice(0,4); } }); },text:'Add'}),
+          !custom?h('span',{class:'f-hint',style:'margin:0',text:'Showing SLATE’s starting list; your first change saves it as yours.'}):null))):null,
+    h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Holidays in '+yr}),h('span',{class:'cnt',text:'tap one to change it'})),xs.length?h('div',{class:'list'},xs.map(row)):h('p',{class:'muted',style:'margin:0 4px',text:'None for this year.'}))];
+}
 function viewTlStatus(){
   if(!amApprover()) return [h('p',{text:'Only the Principal and the COO can see this.'})];
   const ps=tlsList(), st=S.tlS||(S.tlS={from:maxD(today(),goLive()),rows:{}});
