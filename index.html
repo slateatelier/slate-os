@@ -4906,7 +4906,7 @@ const siteReq=(id,d)=>{ const p=id&&S.projects[id]; return p?!(p.closed||p.legac
 /* typed as "C" or "4": a letter reads as a block (Bashundhara), a number as a sector (Uttara); anything named in full stays as typed */
 const siteBlock=b=>!b?'':/^[A-Z]{1,2}$/i.test(b)?'Block '+b:/^\d+[A-Z]?$/i.test(b)?'Sector '+b:b.replace(/^(BLOCK|SECTOR|SECTION)\b/i,m=>m[0].toUpperCase()+m.slice(1).toLowerCase());
 const siteAddr=p=>!p?'':[p.plotNo?'Plot '+p.plotNo:'',p.roadNo?'Road '+p.roadNo:'',siteBlock(p.blockSector),p.location||''].filter(Boolean).join(', ');
-const PFIELDS=['entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note'];
+const PFIELDS=['plan','entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
 const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
 /* outsourced services: the consultant or vendor doing the work */
@@ -5297,7 +5297,7 @@ function sheetProject(){
   if(!d.pods) d.pods=[]; if(!d.people) d.people=[];
   const pSet=id&&S.projects[id]&&S.projects[id].std?S.projects[id]:null, phType=pSet?(pSet.std.type||pSet.type):d.type;
   const showPh=!!(d.ph&&!internal&&!isStudio&&phType&&T()[phType]&&T()[phType].std&&(id?!(S.projects[id]||{}).closed:(d.entry||'upcoming')!=='completed'));
-  if(showPh&&!pSet&&(d.ph.sel===null||d.ph.type!==d.type)){ d.ph.sel=typeDefSel(d.type); d.ph.type=d.type; }
+  if(showPh&&!pSet&&(d.ph.sel===null||d.ph.type!==d.type)){ d.ph.sel=spPhaseSel(d.type,d.plan); d.ph.type=d.type; }
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
   // standard services, plus any custom services typed in below (stored in scope like the rest)
   const scGrid=h('div',{style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 12px'});
@@ -6057,7 +6057,7 @@ function openStdPlan(pid,type,pod){
   const p=S.projects[pid]||{}, tp=T()[type]; if(!tp||!tp.std) return;
   if(p.std) return openPhEdit(pid);
   const plan=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null;
-  const m={sel:plan?phaseOrder(type,plan.sel):typeDefSel(type),ed:JSON.parse(JSON.stringify((plan&&plan.ed)||{})),open:null};
+  const m={sel:plan?phaseOrder(type,plan.sel):spPhaseSel(type,p.plan),ed:JSON.parse(JSON.stringify((plan&&plan.ed)||{})),open:null};
   S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pre:{},running:p.entry==='running',pace:paceOf(p),lead:personFor('lead',pod||p.pod)||'',m};
   renderSheet();
 }
@@ -6113,6 +6113,8 @@ function phName(k,p){ return phOv(p,k).n||(PH[k]?PH[k].n:k); }
 function phGate(k,p){ return phOv(p,k).gate||(PH[k]?PH[k].gate:''); }
 const phNo=k=>k==='3r'?'3R':(PH[k]?PH[k].no:k);
 function stepsFor(p,type,k){ const o=phOv(p,k); return stepsOf(type,k).map(([s,t])=>[s,o[s]||t]); }
+/* a project on a service plan starts with only that plan's phases ticked */
+function spPhaseSel(type,plan){ const all=typeDefSel(type), P=typeof SP_PLANS!=='undefined'&&SP_PLANS[plan]; if(!P||!P.ph) return all; const f=all.filter(k=>P.ph.includes(k==='3r'?'3':k)); return f.length?f:all; }
 function typeDefSel(type){ const tp=T()[type]; return tp&&tp.std?tp.phases.filter(k=>!(tp.off||[]).includes(k)):[]; }
 /* the type's own order first; a phase from outside the type slots in by its standard number */
 function phaseOrder(type,keys){ const ks=[...new Set(keys||[])].filter(k=>PH[k]), tp=T()[type], out=(tp&&tp.std?tp.phases:[]).filter(k=>ks.includes(k));
@@ -7859,6 +7861,7 @@ function pbDefaults(p,kind){
     sched:PB_SCHED[k].map(([label,pct])=>({label,pct:String(pct)})),
     vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',validDays:'30',revFree:'2',revRate:'10000',
     terms:PB_TERMS.join('\n'),signName:'Syed Mohammed Imran',signTitle:'Principal Architect'}; }
+function pbDefaultsPlan(p){ const d=pbDefaults(p,'dev'); d.area=''; d.plan='comp'; d.tier=p.type==='private'?'p':'s'; d.adj=spAdjDef(p); d.cmp=true; spApply(d,p); return d; }
 /* project timeline in the proposal: SLATE's standard phases for the project type, in working days (SLATE days + client review days) */
 /* what the client receives at the end of each stage */
 const PB_TL_DEL={'0':'Design brief and FAR / area feasibility report (site analysis if agreed)',
@@ -7877,6 +7880,113 @@ const PB_DAYS={std:{name:DAYS_NAME.std},dev:{name:DAYS_NAME.dev}};
 const pbDaysTable=type=>type==='dev'?'dev':'std';
 const pbBand=(tb,k)=>bandOf({katha:k},tb);
 const pbBandLabel=(tb,i)=>DAYS_LBL[tb][i]+' katha';
+/* ---------- Service plans and fee tiers (SLATE rate card and payment terms, 1 Nov 2026) ----------
+   New proposals choose a plan (what the client buys) and a tier (Competitive / Standard / Premium). The fee is one average
+   rate per plot band × the built area (gross floor area), never below the band minimum or the largest project of the band
+   below (step-up). Other plans are a share of Complete. Adjustments (developer, Jolshiri/Cantonment, Chittagong) are shown
+   to the Principal and the COO while preparing; the client sees only the final fee. Existing projects keep Legacy terms. */
+const SP_BANDS=[{k:7,a:31000,r:{c:63,s:70,p:80}},{k:10,a:45000,r:{c:59.5,s:66,p:75}},{k:20,a:94000,r:{c:52,s:58,p:66}},{k:30,a:144000,r:{c:47,s:52,p:59}},{k:90,a:450000,r:{c:40,s:44,p:50}},{k:1e9,a:1e12,r:{c:33,s:37,p:42}}];
+const SP_MIN={c:900000,s:1000000,p:1400000};
+const SP_TIERS={c:'Competitive',s:'Standard',p:'Premium'};
+const SP_MS9=[['Mobilisation, on signing',25],['Schematic design approval',10],['Design finalisation',10],['Authority set handover',10,250000],['Marketing materials handover',10,150000],['WD-1 substructure',10],['WD-2 superstructure',12],['WD-3 finishing',8],['Construction stage and as-built',5]];
+const SP_PLANS={
+  feas:{n:'Feasibility',short:'FAR, massing, unit mix and parking check',fixed:25000,ph:['0'],visits:0,build:false,time:'1 week',
+    svc:['Feasibility study'],sched:[['On signing (full fee)',100]]},
+  ess:{n:'Essentials',req:1,short:'Design and the authority approval set (not for construction)',share:.45,ph:['0','1','2','3','4'],visits:0,build:false,time:'6–8 weeks',
+    svc:['Approval design package'],sched:[['On signing',25],['Design sign-off',35],['Authority set handover',40]]},
+  essb:{n:'Essentials + Build',short:'Essentials plus a lean construction set (about 16 sheets)',share:.65,ph:['0','1','2','3','4','6','7'],visits:2,build:true,time:'10–12 weeks',
+    svc:['Approval design package','Lean construction set'],sched:[['On signing',25],['Design sign-off',25],['Authority set handover',25],['Construction set handover',25]]},
+  launch:{n:'Launch',req:1,short:'Full design development, 4 3D views and brochure-ready unit plans (land share phase 1)',share:.55,ph:['0','1','2','5'],visits:0,build:false,time:'5–7 weeks',
+    svc:['Launch design package'],sched:[['On signing',25],['Design sign-off',35],['Launch handover',40]]},
+  comp:{n:'Complete',rec:1,short:'Full design, authority set, working drawings WD-1 to WD-3, structural and MEP coordination, as-built set',share:1,ph:null,visits:6,build:true,time:'10–14 months',
+    svc:['Architectural design','Design coordination','Site supervision'],sched:'ms9'},
+  sig:{n:'Signature',short:'Complete, Principal-led, with two design schemes, 6 3D views, facade, landscape and lobby concept',share:1,tier:'p',ph:null,visits:10,build:true,time:'12–18 months',
+    svc:['Architectural design','Signature design direction','Design coordination','Site supervision'],sched:'ms9'}};
+const SP_MAIN=['feas','essb','comp','sig'], SP_ORDER=['feas','ess','essb','launch','comp','sig'];
+Object.assign(PB_SVC_INFO,{
+  'Feasibility study':['A quick check of what the site can take, before any design commitment. The fee counts toward any plan taken afterwards.',
+    ['FAR and MGC calculation under the building rules','Massing study','Unit mix options','Parking check','Short feasibility report']],
+  'Approval design package':['Design up to the authority approval set, on SLATE’s standard details. For authority approval only, not for construction.',
+    ['Site study and FAR analysis','Schematic design','Basic design development','Authority (RAJUK) submission set, signed','Up to the agreed revision rounds at each stage']],
+  'Lean construction set':['A compact set of construction drawings, about 16 sheets, on SLATE’s standard details, so the building can be built from the approved design.',
+    ['Setting-out and foundation plan','Floor plans, sections and elevations for construction','Door and window schedule','Key details (stair, toilet, wall sections)','2 site visits at key construction stages']],
+  'Launch design package':['Everything needed to launch the project for sale: the full design developed, with images and plans for the brochure.',
+    ['Site study and FAR analysis','Concept and full design development','4 3D views','Brochure-ready unit plans','Apartment area statement']],
+  'Signature design direction':['The Principal leads the design, with more design options and more visual work.',
+    ['Principal-led design direction','Two design schemes','6 3D views','Facade design','Landscape concept','Lobby concept']]});
+const spBand=k=>{ const x=+k||0; let i=SP_BANDS.findIndex(b=>x<=b.k); return i<0?SP_BANDS.length-1:i; };
+const spTier=d=>(SP_PLANS[d.plan]&&SP_PLANS[d.plan].tier)||d.tier||'s';
+/* fee for Complete at a tier: band rate × built area, never below the band minimum or the step-up from the band below */
+function spComplete(katha,area,tier){ const i=spBand(katha), b=SP_BANDS[i], base=b.r[tier]*(+area||0), step=i?SP_BANDS[i-1].r[tier]*SP_BANDS[i-1].a:0;
+  const fee=Math.max(base,step,SP_MIN[tier]); return {rate:b.r[tier],base,step,min:SP_MIN[tier],fee,why:fee===base?'rate':fee===step?'step':'min',band:i}; }
+const spAdjDef=p=>{ const loc=((p&&p.location)||'')+' '+((p&&p.doc&&p.doc.site)||''); return {dev:(p&&p.type)==='dev',jol:/jolshiri|cantonment/i.test(loc),ctg:/chatt|chitt|ctg|chattogram/i.test(loc)}; };
+/* the plan's fee, with every step shown for the builder */
+function spFee(d,planKey){ const k=planKey||d.plan, P=SP_PLANS[k]; if(!P) return null; const tier=P.tier||d.tier||'s', a=d.adj||{}, lines=[];
+  if(P.fixed){ lines.push(['Fixed fee',P.fixed]); return {fee:P.fixed,lines,tier,P}; }
+  if(!(+d.area>0)) return {fee:0,lines:[['Enter the built area to work out the fee',0]],tier,P,noArea:true};
+  const C=spComplete(d.katha,d.area,tier); let fee=C.fee*P.share;
+  lines.push([`Complete, ${SP_TIERS[tier]}: ${(+d.area).toLocaleString('en-IN')} sft × Tk ${C.rate}`+(C.why==='step'?' (raised to the band below’s largest project)':C.why==='min'?' (raised to the minimum fee)':''),C.fee]);
+  if(P.share!==1) lines.push([`${P.n}: ${Math.round(P.share*100)}% of Complete`,fee]);
+  if(a.dev){ fee*=1.10; lines.push(['Developer-owned land, fast track: +10%',fee]); }
+  if(a.jol){ const st=(Array.isArray(P.sched)?P.sched:SP_MS9).find(x=>/authority/i.test(x[0])); const add=st?fee*st[1]/100*0.10:0; fee+=add; lines.push(['Jolshiri or Cantonment: authority stage +10%',fee]); }
+  if(a.ctg){ fee*=0.85; lines.push(['Chittagong: 85% (site travel at cost)',fee]); }
+  let mins=0; if(P.sched==='ms9') SP_MS9.forEach(m=>{ if(m[2]&&!(/marketing/i.test(m[0])&&d.noMkt)){ const s=fee*m[1]/100; if(s<m[2]) mins+=m[2]-s; } });
+  if(mins){ fee+=mins; lines.push(['Stage minimums (authority set Tk 2.5 lakh, marketing Tk 1.5 lakh)',fee]); }
+  fee=Math.round(fee/1000)*1000; return {fee,lines,tier,P,C}; }
+/* payment stages for a plan: the 9 milestones (30% mobilisation for Competitive, land share or 30+ katha), stage minimums held */
+function spSched(d,p,fee){ const P=SP_PLANS[d.plan]; if(!P) return null;
+  if(P.sched!=='ms9') return P.sched.map(([label,pct])=>({label,pct:String(pct)}));
+  let ms=SP_MS9.map(m=>[...m]); if(spTier(d)==='c'||(p&&p.type)==='share'||(+d.katha||0)>=30){ ms[0][1]=30; ms[1][1]=5; }
+  if(d.noMkt){ const mk=ms.findIndex(m=>/marketing/i.test(m[0])); ms[2][1]+=ms[mk][1]; ms.splice(mk,1); }
+  if(!(fee>0)) return ms.map(([label,pct])=>({label,pct:String(pct)}));
+  const amt=ms.map(m=>m[1]/100*fee), fixed=ms.map((m,i)=>m[2]&&amt[i]<m[2]?m[2]:null), fxSum=fixed.reduce((a,x)=>a+(x||0),0), rest=ms.reduce((a,m,i)=>a+(fixed[i]?0:m[1]),0);
+  const out=ms.map((m,i)=>({label:m[0]+(m[2]?` (minimum Tk ${(m[2]/100000).toLocaleString('en-IN')} lakh)`:''),pct:fixed[i]?fixed[i]/fee*100:m[1]/rest*(100-fxSum/fee*100)}));
+  out.forEach(x=>x.pct=String(Math.round(x.pct*100)/100)); const diff=Math.round((100-out.reduce((a,x)=>a+(+x.pct),0))*100)/100; if(diff) out[0].pct=String(Math.round((+out[0].pct+diff)*100)/100);
+  return out; }
+const SP_TERMS=['Fees are quoted net. VAT and AIT are added to each invoice at the rates in force, or the invoice is grossed up if the client deducts at source.',
+  'Invoices are due within 15 days. The next stage starts only when no invoice is overdue.',
+  'If an invoice is 30 days overdue, work pauses and the programme is extended accordingly. At 60 days overdue, SLATE may suspend the services and hold signed sets and CAD files until payment is cleared.',
+  'If the design stage runs beyond 3 months from mobilisation because of the client, the schematic design approval payment falls due.',
+  'Signed drawing sets and editable CAD files are released against cleared payment for the stage concerned. Drawings remain SLATE’s intellectual property and are licensed to the client for the paid stages only.',
+  'If the client cancels, the invoiced stages and the stage in progress are payable, the stage in progress in proportion to the work done and at least half of it. The mobilisation payment is not refundable.',
+  'If the project is on hold for more than 90 days, restarting needs a re-mobilisation payment of 5% of the remaining fee. After 12 months on hold, the remaining fee moves to the rate card in force at restart.',
+  'Changes after a stage is signed off, or required by a change in authority rules, are additional services.',
+  'Intercity and overseas travel is borne by the client. Cash payments are acknowledged with a numbered money receipt.'];
+function spTerms(d){ const k=d.plan, t=[...SP_TERMS];
+  if(k==='ess') t.push('Essentials drawings are for authority approval only and are not for construction. Before construction, the client adds the Build set or moves to Complete; SLATE records it in writing if the client builds without either.');
+  if(k==='essb') t.push('The lean construction set is based on SLATE’s standard details. Full working drawings are available by moving to Complete.');
+  if(k==='feas') t.push('The feasibility fee counts toward any plan taken afterwards.');
+  if(k==='ess'||k==='essb') t.push('The fee for this plan counts toward Complete if the client upgrades within 6 months.');
+  if(k==='launch') t.push('The Launch fee counts toward Complete if the project continues within 12 months; phase 2 then needs a re-mobilisation payment of 10% of its fee.');
+  if((d.adj||{}).ctg) t.push('Site visits outside Dhaka: travel and accommodation at cost.');
+  return t; }
+/* the timeline stages a plan covers (the lean construction set replaces the full working drawings in Essentials + Build) */
+function spTlRows(d,p){ const P=SP_PLANS[d.plan], rows=pbTlRows(p.type,d.katha||p.katha,(d.tl&&d.tl.table)||pbDaysTable(p.type));
+  if(!P||!P.ph) return rows; const keep=rows.filter(x=>{ const k=Object.keys(PH).find(k=>PH[k].n===x.label); return k&&P.ph.includes(k)&&!(d.plan==='essb'&&['6','7'].includes(k)); });
+  if(d.plan==='essb') keep.push({label:'Lean construction set',w:'15',r:'5',del:'About 16 construction sheets on SLATE’s standard details'});
+  if(d.plan==='launch') keep.forEach(x=>{ if(x.par) delete x.par; });
+  return keep; }
+/* fill the proposal from the plan: services, fee, payment stages, visits, revisions, terms and timeline (all editable) */
+function spApply(d,p){ const P=SP_PLANS[d.plan]; if(!P) return;
+  d.parts=P.svc.map(label=>{ const x={label,rate:''}; pbSvcFill(x); return x; });
+  if(d.plan==='sig'||d.plan==='comp'){ const v=d.parts.find(x=>x.label==='Site supervision'); if(v) v.check=v.check.map(c=>/site visits at key stages/i.test(c.t)?{...c,t:`${P.visits} site visits at construction stages (setting-out, foundation, first slab, typical floor, facade and finishing, final)`}:c); }
+  d.noMkt=(p&&p.type)==='private'; d.feeMode='lump'; const F=spFee(d); d.lump=F&&F.fee?String(F.fee):''; d.disc='';
+  d.sched=spSched(d,p,F&&F.fee)||d.sched;
+  d.vFree=String(P.visits); d.vLead='15000'; d.vSenior='8000'; d.extra3d=d.extra3d||'12000'; d.asBuilt=(d.plan==='comp'||d.plan==='sig')?'0':'';
+  d.revMode='stage'; d.revRate=d.revRate||'10000'; d.revCap='300000';
+  d.terms=['The fee is adjusted to the final approved built area.',...spTerms(d)].join('\n');
+  d.scopeAuto=true; if(!d.tl) d.tl={on:true,start:'',setup:'3'}; d.tl.on=true; d.tl.rows=spTlRows(d,p); }
+/* one page comparing the chosen plan with the one below and the one above */
+function spCompare(d){ const i=SP_MAIN.indexOf(d.plan), keys=i<0?[d.plan,'comp'].filter((x,j,a)=>a.indexOf(x)===j):SP_MAIN.slice(Math.max(0,Math.min(i-1,SP_MAIN.length-3)),Math.max(0,Math.min(i-1,SP_MAIN.length-3))+3);
+  const row=(l,f)=>`<tr><td class="pb-k">${l}</td>${keys.map(k=>`<td class="${k===d.plan?'on':''}">${f(k)}</td>`).join('')}</tr>`;
+  return `<h2>Compare the plans</h2><table class="sp-cmp"><thead><tr><th></th>${keys.map(k=>`<th class="${k===d.plan?'on':''}">${pbEsc(SP_PLANS[k].n)}${k===d.plan?'<br><span>proposed</span>':SP_PLANS[k].rec?'<br><span>recommended</span>':''}</th>`).join('')}</tr></thead><tbody>
+    ${row('What it covers',k=>pbEsc(SP_PLANS[k].short))}
+    ${row('Drawings for construction',k=>SP_PLANS[k].build?(k==='essb'?'Lean set (about 16 sheets)':'Full working drawings'):'No')}
+    ${row('Site visits included',k=>String(SP_PLANS[k].visits))}
+    ${row('Typical time',k=>SP_PLANS[k].time)}
+    ${row('Fee',k=>{ const f=spFee({...d,plan:k}); return f&&f.fee?'<b>'+pbTk(f.fee)+'</b>':'—'; })}
+  </tbody></table><p class="pb-small">Fees exclude VAT and AIT. Fees for Feasibility and Essentials count toward a bigger plan taken later, as set out in the terms.</p>`; }
+
 function pbTlRows(type,katha,table){ const t=STD_DEF[type]&&type!=='proposal'?type:'dev', off=STD_DEF[t].off||[], tb=table||pbDaysTable(t), bi=pbBand(tb,katha), D=DAYS_T[tb];
   return STD_DEF[t].phases.filter(k=>!off.includes(k)&&PH[k]&&PH[k].d).map(k=>{ const dd=D[k]; return {label:PH[k].n,w:String(dd?dd[1][bi]:PH[k].d[0]),r:String(dd?dd[0]:PH[k].d[1]),del:PB_TL_DEL[k]||'',...(k==='5'?{par:true}:{})}; }); }
 /* timeline: the work order date, then setup days, then the stages (working days, five a week) */
@@ -7885,13 +7995,13 @@ function pbTl(d){ const tl=d.tl||{}, setup=tl.setup==null||tl.setup===''?3:Math.
   const start=tl.start||'', dt=n=>start?addWorkDays(start,n):'';
   const end=Math.max(at,...out.map(x=>x.to)); at=end;
   return {rows:out,setup,total:at,weeks:Math.ceil(at/5),start,end:start&&at?dt(at):'',dt}; }
-const pbRevFee=d=>Math.round((+d.katha||0)*(+d.revRate||0));
+const pbRevFee=d=>{ const v=Math.round((+d.katha||0)*(+d.revRate||0)); return +d.revCap>0?Math.min(v,+d.revCap):v; };
 function pbFee(d){ const area=+d.area||0;
   if(d.feeMode==='lump'){ const t=+d.lump||0; return {sub:t,disc:0,total:t,rate:area?t/area:0,area}; }
   const rate=d.parts.reduce((a,x)=>a+(+x.rate||0),0), sub=rate*area, disc=d.discMode==='sft'?(+d.disc||0)*area:(+d.disc||0), total=Math.max(0,sub-disc);
   return {sub,disc,total,rate:area?total/area:0,rawRate:rate,area}; }
 function openPropDoc(id,kind,fresh){ const p=(S.props||{})[id]||fresh; if(!p) return; if(fresh&&!(S.props||{})[id]) (S.props=S.props||{})[id]=fresh;
-  const d=p.doc&&!kind?JSON.parse(JSON.stringify(p.doc)):pbDefaults(p,kind);
+  const d=p.doc&&!kind?JSON.parse(JSON.stringify(p.doc)):kind?pbDefaults(p,kind):pbDefaultsPlan(p);
   if(d.tl&&Array.isArray(d.tl.rows)) d.tl.rows.forEach(x=>{ if(x.del==null||PB_TL_OLD.includes(x.del)) x.del=pbTlDel({label:x.label}); });
   if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revRate==null) d.revRate='10000'; delete d.revFee;
   if(p.doc&&kind){ d.ref=p.doc.ref||d.ref; d.date=p.doc.date||d.date; }
@@ -7937,6 +8047,26 @@ function sheetPropDoc(){
     h('p',{class:'lead',style:'margin:0',text:'Write the proposal the client receives, on the SLATE letterhead. Start from either layout and change anything; the total becomes this proposal’s fee.'}),
     h('div',{class:'form'},
       h('div',{class:'chips'},[['dev','Start from Developer layout'],['det','Start from Detailed layout']].map(([k,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>{ if(!confirm('Replace this draft with the '+(k==='dev'?'Developer':'Detailed')+' layout?')) return; openPropDoc(id,k); },text:l}))),
+      sec('Plan and fee'),
+      (()=>{ const P=SP_PLANS[d.plan], F=P?spFee(d):null, rc=F&&F.fee, a=d.adj||(d.adj=spAdjDef(p));
+        const ps=h('select',{'aria-label':'Service plan',onchange:e=>{ const v=e.target.value; d.plan=v; if(v&&SP_PLANS[v].tier) d.tier=SP_PLANS[v].tier; renderSheet(); }},
+          h('option',{value:'',text:'No plan (legacy layout)'}),...SP_MAIN.map(k=>h('option',{value:k,text:SP_PLANS[k].n+(SP_PLANS[k].rec?' (recommended)':'')})),
+          h('optgroup',{label:'On request'},...SP_ORDER.filter(k=>SP_PLANS[k].req).map(k=>h('option',{value:k,text:SP_PLANS[k].n})))); ps.value=d.plan||'';
+        const chk=(k,l)=>h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',style:'width:18px;height:18px',checked:!!a[k],onchange:e=>{ a[k]=e.target.checked; renderSheet(); }}),h('span',{text:l}));
+        return h('div',{style:'display:grid;gap:8px'},
+          h('div',{class:'form-row'},field('Service plan',ps),P&&!P.tier&&!P.fixed?field('Fee tier',seg('Tier',Object.entries(SP_TIERS).map(([k,l])=>[k,l]),d.tier||'s',v=>{ d.tier=v; renderSheet(); })):P?field('Fee tier',h('span',{class:'f-hint',style:'padding-top:10px',text:P.fixed?'Fixed fee':'Premium (always, for Signature)'})):null),
+          P?h('div',{class:'f-hint',style:'margin:0',text:P.short+' · '+P.time+(P.visits?' · '+P.visits+' site visits':'')}):h('div',{class:'f-hint',style:'margin:0',text:'Choose a plan to fill the fee, services, payment stages, site visits, revisions, terms and timeline from the rate card. Existing proposals can stay as they are.'}),
+          P&&!P.fixed?field('Built area, sft (gross: basement, parking and roof structures included)',h('input',{type:'number',min:0,step:1,inputmode:'numeric',value:d.area||'',onchange:e=>{ d.area=e.target.value; renderSheet(); }})):null,
+          P&&!P.fixed?h('div',{class:'f-hint',style:'margin:-4px 0 0'},'From the ',h('a',{href:'/far-tool/',target:'_blank',rel:'noopener',text:'FAR calculator'}),'. If the case is unusual, ask the POD leader first, then the Principal.'):null,
+          P&&!P.fixed?h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',text:'Adjustments · seen only while preparing, not by the client'}),
+            chk('dev','Developer-owned land (fast track): +10%'),chk('jol','Jolshiri or Cantonment: authority stage +10%'),chk('ctg','Chittagong: 85% of the Dhaka fee, travel at cost'),
+            p.type==='private'&&(d.tier||'s')!=='p'?h('div',{class:'f-hint',style:'margin:0;color:var(--overdue)',text:'Private client: the rate card says Premium.'}):null):null,
+          P?h('div',{class:'card',style:'gap:4px'},...(F?F.lines:[]).map(([l,v])=>h('div',{style:'display:flex;justify-content:space-between;gap:10px;font-size:13.5px'},h('span',{text:l}),h('span',{class:'mono',style:'white-space:nowrap',text:v?pbTk(v):''}))),
+            h('div',{style:'display:flex;justify-content:space-between;gap:10px;font-weight:700;border-top:1px solid var(--line);padding-top:4px'},h('span',{text:'Rate-card fee'}),h('span',{text:rc?pbTk(rc):'—'})),
+            rc&&d.feeMode==='lump'&&+d.lump!==rc?h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},h('span',{class:'f-hint',style:'margin:0;color:var(--overdue)',text:'The proposal’s fee is '+(d.lump?pbTk(d.lump):'empty')+'.'}),h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.lump=String(rc); d.sched=spSched(d,p,rc)||d.sched; renderSheet(); },text:'Use the rate-card fee'})):null):null,
+          P?h('div',{style:'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},
+            h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ if(d.parts&&d.parts.length&&!confirm('Fill this proposal from the '+P.n+' plan? Services, fee, payment stages, site visits, revisions, terms and timeline are replaced.')) return; spApply(d,p); renderSheet(); toast(P.n+' plan filled in'); },text:'Fill the proposal from this plan'}),
+            h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',style:'width:18px;height:18px',checked:!!d.cmp,onchange:e=>{ d.cmp=e.target.checked; }}),h('span',{text:'Compare plans in the proposal'}))):null); })(),
       sec('Letter'),
       h('div',{class:'form-row'},field('Date',inp('date',{type:'date'})),field('Reference',inp('ref',{maxlength:40}))),
       h('div',{class:'form-row'},field('To (person)',inp('toName',{maxlength:80,placeholder:'e.g. Mr. Shahin'})),field('Title',inp('toTitle',{maxlength:80,placeholder:'e.g. Managing Director'}))),
@@ -8004,10 +8134,10 @@ function sheetPropDoc(){
       rowsEd(d.sched,[{k:'pct',w:'72px',ph:'%'}],()=>({label:'',pct:''}),'+ Add a stage'),
       h('div',{id:'pb-sum',class:'f-hint',style:Math.round(schSum)!==100?'color:var(--overdue)':'',text:`${Math.round(schSum*100)/100}% of the fee`+(Math.round(schSum)!==100?' · should total 100%':'')}),
       sec('Site visits and extras'),
-      h('div',{class:'form-row'},field('Free site visits',inp('vFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra visit, lead (Tk)',inp('vLead',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
-      h('div',{class:'form-row'},field('Extra visit, senior (Tk)',inp('vSenior',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('As-built drawings (Tk)',inp('asBuilt',{type:'number',min:0,step:'any',inputmode:'decimal'},),'Leave empty if included')),
+      h('div',{class:'form-row'},field('Free site visits',inp('vFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field(d.plan?'Extra visit, Principal (Tk)':'Extra visit, lead (Tk)',inp('vLead',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
+      h('div',{class:'form-row'},field(d.plan?'Extra visit, POD architect (Tk)':'Extra visit, senior (Tk)',inp('vSenior',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('As-built drawings (Tk)',inp('asBuilt',{type:'number',min:0,step:'any',inputmode:'decimal'},),'Leave empty if included')),
       field('Extra 3D view (Tk per image)',inp('extra3d',{type:'number',min:0,step:'any',inputmode:'decimal'})),
-      h('div',{class:'form-row'},field('Free revisions (whole project)',inp('revFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra revision (Tk per katha)',inp('revRate',{type:'number',min:0,step:'any',inputmode:'decimal'}),+d.katha&&+d.revRate?'= '+pbTk(pbRevFee(d))+' per revision on '+d.katha+' katha':'Enter the land size above')),
+      h('div',{class:'form-row'},d.revMode==='stage'?field('Revisions included',h('span',{class:'f-hint',style:'padding-top:10px',text:'3 rounds at schematic, 2 at each later stage'})):field('Free revisions (whole project)',inp('revFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra revision (Tk per katha)',inp('revRate',{type:'number',min:0,step:'any',inputmode:'decimal'}),+d.katha&&+d.revRate?'= '+pbTk(pbRevFee(d))+' per revision on '+d.katha+' katha':'Enter the land size above')),
       field('Offer valid for (days)',inp('validDays',{type:'number',min:1,step:'1',inputmode:'numeric'}),d.date&&+d.validDays>0?'Valid until '+fmtD(addDays(d.date,+d.validDays))+'. Shown on the proposal.':null),
       field('VAT and AIT',sel('tax',[['excl','Not included: added to each invoice (client pays)'],['incl','Included in the fee']])),
       sec('Terms'),field('One per line',ta('terms',{rows:6})),
@@ -8053,6 +8183,7 @@ tr.tot td{border-bottom:0;border-top:1pt solid #000;font-weight:600}tr.sub td{co
 .amtbox{display:flex;justify-content:space-between;align-items:baseline;border:1pt solid #000;padding:4mm 5mm;margin:6mm 0 2mm}.amtbox b{font-size:16pt;font-weight:600}
 .docref{position:absolute;left:12.6mm;right:14mm;bottom:7mm;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9A9A9A;text-align:right}
 .iab-t tr.on td{background:#C41E29;color:#fff;font-weight:600}.iab-t td{padding:1.4mm 1.5mm}.iab-t th{padding-left:1.5mm}
+.sp-cmp th,.sp-cmp td{vertical-align:top;padding:1.8mm 2mm}.sp-cmp th{text-transform:none;letter-spacing:0;font-size:9.5pt;color:#000}.sp-cmp th span{font-size:7.5pt;color:#545454;font-weight:400}.sp-cmp th.on{background:#C41E29;color:#fff}.sp-cmp th.on span{color:#fff}.sp-cmp td.on{background:#fdf2f2}.sp-cmp td{font-size:9pt}
 .pb-tl td{vertical-align:middle}.pb-tl td b{font-weight:600}.pb-del{display:block;font-size:8.5pt;color:#545454;line-height:1.35;margin-top:.6mm}.pb-tl td.n,.pb-tl th.n{padding-right:4mm;white-space:nowrap}.pb-tl td:last-child,.pb-tl th:last-child{padding-left:2mm}.pb-bar{position:relative;height:3.2mm;background:#f2f2f2}.pb-bar span{position:absolute;top:0;bottom:0;background:#f3c7ca;display:block}.pb-bar i{display:block;height:100%;background:#C41E29}
 .pb-ul{margin:0;padding:0 0 0 5mm}.pb-svc{margin:0 0 2.5mm}.pb-svc>b{display:block;font-size:10pt}.pb-chk{list-style:none;padding:0;columns:2;column-gap:6mm}.pb-chk li{padding-left:4.5mm;text-indent:-4.5mm;break-inside:avoid}.pb-chk li:before{content:'✓';color:#C41E29;display:inline-block;width:4.5mm;text-indent:0}
 /* SLATE red marks the hierarchy: the subject, section headings, totals and the amount to pay */
@@ -8092,8 +8223,9 @@ function pbBlocks(p,d){
       ${d.parts.filter(x=>x.label||+x.rate).map((x,i)=>`<tr><td>${d.scopeAuto?(i+1)+'. ':''}${pbEsc(x.label)}</td>${+x.rate?`<td class="n">${(+x.rate).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate)*(+d.area||0)).toLocaleString('en-IN')}</td>`:'<td class="n">—</td><td class="n">Included</td>'}</tr>`).join('')}
       ${f.disc?`<tr class="sub"><td>Subtotal (${(+d.area||0).toLocaleString('en-IN')} sft × Tk ${(f.rawRate||0).toLocaleString('en-IN')})</td><td></td><td class="n">${Math.round(f.sub).toLocaleString('en-IN')}</td></tr><tr class="sub"><td>Less special discount${d.discMode==='sft'?` (Tk ${(+d.disc||0).toLocaleString('en-IN')}/sft)`:''}</td><td></td><td class="n">−${Math.round(f.disc).toLocaleString('en-IN')}</td></tr>`:''}
       <tr class="tot"><td>Total fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`;
-  } else fee=`<div class="amtbox"><span>Total fee (package)${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${d.scopeAuto&&d.parts.some(x=>x.label)?`<p class="pb-small">The package covers services 1 to ${d.parts.filter(x=>x.label).length} in the scope of work.</p>`:''}`;
+  } else fee=`<div class="amtbox"><span>Total fee (${d.plan&&SP_PLANS[d.plan]?SP_PLANS[d.plan].n+' plan':'package'})${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${d.scopeAuto&&d.parts.some(x=>x.label)?`<p class="pb-small">The package covers services 1 to ${d.parts.filter(x=>x.label).length} in the scope of work.</p>`:''}`;
   add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${d.tax==='incl'?'The fee includes VAT and AIT.':'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
+  if(d.plan&&SP_PLANS[d.plan]&&d.cmp) add(spCompare(d));
   if(d.iab&&f.area){ const I=pbIab(d,f);
     if(I.bi>=0) add(`<h2>IAB recommended minimum fees (Schedule D, 2018)</h2>
       <p class="pb-small" style="margin:0 0 2mm">${pbEsc(IAB_JUR[I.j])}. Basic architectural design, Tk per sft of total floor area; architecture and allied design services are 1.5 times the basic rate.</p>
@@ -8114,12 +8246,13 @@ function pbBlocks(p,d){
         <p class="pb-small">Days are working days, five a week: SLATE’s days + the client’s review days. In each bar the darker part is SLATE’s work and the lighter part the client’s review${T.rows.some(x=>x.par)?'; marketing materials are prepared alongside the other stages':''}. The programme starts ${T.start?'with the work order on '+fmtLong(T.start):'from the work order (signed agreement and advance)'}, with ${T.setup} setup day${T.setup===1?'':'s'} before stage 1. Time taken by RAJUK and other authorities, and delays in the client’s decisions or payments, are extra.</p>`); } }
   const sc=d.sched.filter(x=>x.label||+x.pct);
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
-  const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?['Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?['Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
+  const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?[d.plan?'Extra site visit with the Principal':'Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?[d.plan?'Extra site visit by a POD architect (within Dhaka)':'Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
     d.asBuilt!==''&&d.asBuilt!=null?['As-built drawings',+d.asBuilt?pbTk(d.asBuilt)+' (fixed)':'Included']:null,+d.extra3d?['Additional 3D view',pbTk(d.extra3d)+' per image']:null,
-    pbRevFee(d)?['Design revision beyond the '+(+d.revFree||0)+' included',pbTk(pbRevFee(d))+' per revision ('+pbTk(d.revRate)+' per katha)']:null].filter(Boolean);
+    pbRevFee(d)?[d.revMode==='stage'?'Design revision round beyond those included':'Design revision beyond the '+(+d.revFree||0)+' included',pbTk(pbRevFee(d))+' per '+(d.revMode==='stage'?'round':'revision')+' ('+pbTk(d.revRate)+' per katha'+(+d.revCap>0?', up to '+pbTk(d.revCap):'')+')']:null].filter(Boolean);
   if(ex.length) add(`<h2>Site visits and additional services</h2><table>${ex.map(([k,v])=>`<tr><td>${pbEsc(k)}</td><td class="n">${pbEsc(v)}</td></tr>`).join('')}</table>`);
   const gen=[];
-  if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(pbRevFee(d)?`Each further revision is charged at ${pbTk(d.revRate)} per katha of land, ${pbTk(pbRevFee(d))} for this project.`:'Further revisions are charged separately.'));
+  if(d.revMode==='stage') gen.push('The fee includes 3 rounds of design revision at schematic stage and 2 at each later stage. '+(pbRevFee(d)?`Each further round is charged at ${pbTk(d.revRate)} per katha of land`+(+d.revCap>0?`, up to ${pbTk(d.revCap)} a round`:'')+`: ${pbTk(pbRevFee(d))} for this project.`:'Further rounds are charged separately.')+(d.plan==='ess'||d.plan==='essb'?'':' Site visits are booked 3 working days ahead, last up to 2 hours and come with a written report.'));
+  else if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(pbRevFee(d)?`Each further revision is charged at ${pbTk(d.revRate)} per katha of land, ${pbTk(pbRevFee(d))} for this project.`:'Further revisions are charged separately.'));
   if(+d.validDays>0) gen.push(`This offer is valid for ${+d.validDays} days, until ${fmtLong(addDays(d.date||today(),+d.validDays))}. After that the fee and terms may be revised.`);
   list('Terms and conditions',[...pbLines(d.terms),...gen]);
   add(`<p class="pb-p" style="margin-top:6mm">We look forward to working with you.</p><div class="pb-acc"><div><b>${pbEsc(d.signName)}</b>${pbEsc(d.signTitle)}<br>SLATE</div><div><b>Accepted by</b>Name, signature and date<br>${pbEsc(d.toCompany||p.client||'')}</div></div>`);
@@ -8413,6 +8546,7 @@ function sheetPropView(){
   const outcome=(st)=>{ const note=prompt(st==='lost'?'Why was it lost? (optional)':'Why is it dropped? (optional)',''); if(note===null) return;
     save({status:st,closedAt:new Date().toISOString(),closedBy:S.uid,outcomeNote:note.trim(),next:''},st==='lost'?'Marked lost':'Marked dropped'); };
   const confirmIt=()=>{ openProject(); const d=S.sheet.d; d.name=p.name||''; d.client=p.client||''; d.contact=p.contact||''; d.phone=p.phone||''; d.location=p.location||''; d.katha=p.katha||''; d.type=p.type||''; d.scope=[...(p.scope||[])]; d.note=p.note||'';
+    if(p.doc&&p.doc.plan) d.plan=p.doc.plan;
     if(p.agr){ d.agStatus='signed'; d.agDate=p.agr.date||''; } if(p.doc&&p.doc.ref) d.agRef=(p.doc.ref||'').toUpperCase();
     if(p.doc&&p.doc.tl&&p.doc.tl.on){ const T=pbTl(p.doc); if(T.total) d.dueDate=addWorkDays(T.start&&T.start>=today()?T.start:today(),T.total); }
     S.sheet.fromProp=id; renderSheet(); toast('Fill in the rest. Once the project is added, the proposal is marked confirmed, and its fee and payment stages are ready in Business › Fees.'); };
@@ -9651,7 +9785,7 @@ function sheetProjView(){
     h('div',{class:'sh-status'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),tp&&h('span',{class:'tag',text:tp.name}),techTag(p),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.entry==='completed'&&h('span',{class:'tag',text:'Completed before SLATE OS'+(p.completedOn?' · '+MON[+p.completedOn.slice(5,7)-1]+' '+p.completedOn.slice(0,4):'')}),p.entry==='running'&&h('span',{class:'tag',text:'Running before SLATE OS'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:st.tot?`${st.pct}% complete`:'No tasks yet'}),h('span',{class:'muted',text:st.tot?`${st.ts.filter(t=>t.doneAt).length} of ${st.ts.length} done`:''})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${st.pct}%`})),
       h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%'],['Overdue',String(st.over)],['Open',String(st.open)],['No date',String(st.noDate)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
-    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',siteAddr(p)),fact('Land',p.katha?p.katha+' katha':''),
+    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),!isInternalP(p)&&p.pod!=='Studio'?fact('Service plan',p.plan&&SP_PLANS[p.plan]?SP_PLANS[p.plan].n:'Legacy terms'):null,fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',siteAddr(p)),fact('Land',p.katha?p.katha+' katha':''),
       fact('Planned finish',st.end?fmtD(st.end):'',p.dueDate?`Contract: ${fmtD(p.dueDate)}`+(st.end&&st.end>p.dueDate?` · ${diff(p.dueDate,st.end)}d over`:''):null),fact('Current phase',st.phase),(()=>{ const n=st.ts.filter(x=>x.parentId).length; return n?fact('Client revisions',`${n} round${n>1?'s':''}`,`across ${new Set(st.ts.filter(x=>x.parentId).map(x=>x.parentId)).size} item(s)`):null; })())];
   { const cs=closureSection(p); if(cs) out.push(cs); }
   if(p.pod!=='Studio'&&p.farApplies){ const d={...p,upf:p.upf||'',floors:p.floors||''}; const x=p.farApplies==='yes'?(farCalc(d)||p.farCalc):null; const fs=farFacts(d,x,fact);
