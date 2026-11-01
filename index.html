@@ -12,6 +12,8 @@
 .pod-p:first-child{border-radius:10px 10px 0 0;border-top:0}.pod-p:last-child{border-radius:0 0 10px 10px}.pod-p:only-child{border-radius:10px}
 .pod-pn{flex:1;min-width:0;display:grid}.pod-pn>span{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pod-pn small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pod-ph{font-size:12px;color:var(--muted);flex:none}
+.cstep{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1.5px solid var(--line);border-left:3px solid var(--late);border-radius:10px;padding:8px 10px}
+.cstep-l{font-size:13.5px;font-weight:600;flex:1 1 140px}.cstep input[type=date]{background:#fff;padding:5px 8px;font-size:13px;width:auto}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -2403,7 +2405,7 @@ const SEC_INFO={
   'By POD':'Each POD’s active projects, worst first: off track, at risk, on track, not started. Tap a project to open it; tap a POD to fold it.',
   'Building and FAR':'The plot and building this project is designed for. The plot size in katha sets the standard days for each phase.',
   'Landowner and developer units':'How the units are shared between the landowner and the developer in this joint venture.',
-  'Submissions log':'A record of sets sent to the client or authority: what, when and which revision. Use it for sets sent before SLATE OS or extra sets. New phase submissions are recorded by their gate deliverables. Record only, never scored.',
+  'Submissions log':'Everything sent to the client or authority: what, when and which revision. Marking a phase submitted (or a set issued) adds it here by itself; add sets sent before SLATE OS or extra sets by hand. Record only, never scored.',
   'Phases and gates':'The project’s phases in order. Each phase ends at its gate, the deliverable the client signs off. Open a phase for its checklist, days and client feedback.',
   'Project log':'Site visits and meetings held for this project, newest first.',
   'Project finish':'When the whole project was completed. Recorded once, at the end.',
@@ -5619,6 +5621,33 @@ function phaseReqCards(){
           h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>decidePhase(r,true),text:'Approve'}),
           h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>decidePhase(r,false),text:'Return'}))); })));
 }
+/* one tap for the client steps of a phase: submitted → feedback received → approved (or issued).
+   It ticks the same gate deliverables as Tasks do, so nothing is recorded twice; a submission also goes into the Submissions log. */
+function clientStep(p,k,s,fb,fbGot){
+  const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, sub=s.sub, fin=s.fin, wd=isWD(k);
+  const pend=t=>t&&!t.doneAt&&t.verify;
+  const st=S.sheet.cs||(S.sheet.cs={}), d=st[k]||today();
+  const finLbl=wd?'Mark issued':two?'Client approved':'Mark done', finTxt=((steps.find(x=>x[0]==='final')||[])[1]||'');
+  let next=null, alt=null, info='';
+  if(two&&sub&&!sub.doneAt){ if(pend(sub)) info=`Submitted ${fmtD(sub.verify.at)} · waiting for verification`; else next=['sub','Mark submitted']; }
+  else if(fin&&!fin.doneAt){ if(pend(fin)) info=`${finLbl.replace('Mark ','')} ${fmtD(fin.verify.at)} · waiting for verification`;
+    else if(two&&!fbGot){ next=['fb','Feedback received']; alt=['final',finLbl]; } else next=['final',finLbl]; }
+  if(!next&&!info) return null;
+  const go=what=>run(async()=>{ const day=st[k]||today(); if(day>today()) throw new Error('The date can’t be in the future.');
+    if(what==='fb'){ await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:day}}}); return; }
+    const t=what==='sub'?sub:fin; const [, txt]=steps.find(x=>x[0]===(what==='sub'?'sub':'final'))||[];
+    await finishTask(t,day,'From the phase card');
+    if(what==='sub'||wd){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[];
+      if(!list.some(x=>x&&x.gate&&x.gate.k===k&&x.gate.step===(what==='sub'?'sub':'final')))
+        await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'}}]}); }
+  },what==='fb'?'Client feedback received':what==='sub'?'Marked submitted. The client’s review clock has started':'Phase gate done').then(ok=>{ if(ok){ delete st[k]; renderSheet(); } });
+  return h('div',{class:'cstep'},
+    info?h('span',{class:'f-hint',style:'margin:0',text:info}):[
+      h('span',{class:'cstep-l',text:next[0]==='sub'?'Sent to the client?':next[0]==='fb'?'Client comments in?':wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
+      h('input',{type:'date',id:`cs-${k}`,value:d,max:today(),'aria-label':'Date',onchange:e=>{ st[k]=e.target.value||today(); }}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:next[1]}),
+      alt?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>go(alt[0]),text:alt[1]}):null]);
+}
 /* opening or closing a phase keeps that phase where it was on screen (other phases folding above it no longer move the page);
    closing from the pinned bar far down brings the phase's own heading back to the top */
 function phKeep(k,change){ const sc=document.querySelector('#sheet .panel'), c=sc&&sc.querySelector(`[data-ph="${k}"]`), r0=c?c.getBoundingClientRect().top:null;
@@ -5734,6 +5763,7 @@ function stdSection(p){
           clientDaysOf(p,k)!==stdClientDays(p,k)?h('span',{class:'muted',text:`(standard ${stdClientDays(p,k)})`}):null):null,
         kwOf(k)&&s.created&&!s.done?kwRow(p,k,fbEdit):null,
         s.created?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
+        s.created&&!s.done&&fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>phToggle(k,isOpen?null:k),text:isOpen?'Hide checklist':'Show checklist'}):null),
         h('div',{class:'pc-bar'},h('span',{style:`width:${c.tot-c.na?Math.round(c.done/(c.tot-c.na)*100):100}%`})),
@@ -7248,6 +7278,7 @@ const HOWDO=[
  ['projects','boss','Add a new project',['Projects › New project.','Fill in the name, Stage (Upcoming, Running or Completed), type, pod, land size, FAR, client, site and agreement.','Tap Add project.'],'The code is made automatically from area, plot and size (e.g. GUL2-24A-10K-2603). The phase setup opens next.','Over 30 katha needs a second pod. Agreement details are seen only by the Principal and COO.'],
  ['projects','lead','Ask for a new project for my pod',['Projects › Request a project.','Fill in the same form as a new project.','Tap Send for approval.'],'The COO approves it, edits it first or declines it with a note. You see it under Your project requests.','You can withdraw it while it is waiting.'],
  ['projects',['lead','boss'],'Enter a project that started before SLATE OS',['Add or request the project and choose the Stage: Running, or Completed.','Running: when setting up phases, tick Finished before SLATE OS on the phases already done and add their dates if known.','Completed: add the month it finished. It is kept as a record only.'],'Work before go-live is history: the COO approves it and it is never scored.','On a phase already set up, use Finished before SLATE OS? inside the phase.'],
+ ['projects',['lead','boss'],'Mark a set submitted, feedback received or approved',['Open the project › Phases and gates.','On the phase in progress, check the date (today unless you change it).','Tap Mark submitted the day the set goes to the client. Later tap Feedback received when comments come in, then Client approved (Mark issued for working drawings).'],'It ticks the phase’s gate deliverable, starts or stops the client’s review clock, and adds the submission to the Submissions log.','Do it on the day: a late tick starts the client clock late.'],
  ['projects',['lead','boss'],'Log the submissions made before SLATE OS',['Open the project › Submissions log › + Log a submission.','Pick the set (Concept presentation, RAJUK set, Working drawings…) and the date.','Tap Save.'],'Pod leads’ entries wait for the COO. It is a record only, never scored.',null],
  ['projects',['lead','boss'],'Add people to a project team',['Open the project › Project team › + Add people.','Choose the person; for someone from another pod add Until (the end date).','Say what they will help with and tap Send for approval (or Add).'],'Once approved they see the project, and the pod lead can give them tasks directly.','Temporary members lose access after their Until date.'],
  ['projects','lead','Ask for someone to join my pod',['Tasks › your pod’s team card › Add a team member….','Choose the person and tap Request.'],'The COO approves or declines.',null],
