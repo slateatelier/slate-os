@@ -2268,7 +2268,7 @@ async function boot(){
   db.doc('meetcfg/rota').onSnapshot(sn=>{ S.meetRota=sn.exists?sn.data():null; schedule(); },()=>{});
   db.doc('meetcfg/rules').onSnapshot(sn=>{ S.meetRules=sn.exists?sn.data():null; schedule(); },()=>{});
   db.collection('tasklib').onSnapshot(q=>{ S.lib={}; q.docs.forEach(d=>{S.lib[d.id]=d.data()}); schedule(); },()=>{});
-  db.collection('projects').onSnapshot(q=>{ S.projects={}; q.docs.forEach(d=>{S.projects[d.id]=d.data()}); schedule(); },onSubErr);
+  db.collection('projects').onSnapshot(q=>{ S.projects={}; q.docs.forEach(d=>{S.projects[d.id]=d.data()}); cxSync(); schedule(); },onSubErr);
   db.doc(`data/users/${S.uid}/notif`).onSnapshot(snap=>{ S.nst=snap.exists?snap.data():{}; schedule(); },()=>{ S.nst={}; });
   db.collection('proposals').onSnapshot(q=>{ S.props={}; q.docs.forEach(d=>{S.props[d.id]=d.data()}); schedule(); },()=>{ S.props={}; });
   db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
@@ -6138,8 +6138,22 @@ function stepsFor(p,type,k){ const o=phOv(p,k); return stepsOf(type,k).map(([s,t
 function spPhaseSel(type,plan){ const all=typeDefSel(type), P=typeof SP_PLANS!=='undefined'&&SP_PLANS[plan]; if(!P||!P.ph) return all; const f=all.filter(k=>P.ph.includes(k==='3r'?'3':k)); return f.length?f:all; }
 function typeDefSel(type){ const tp=T()[type]; return tp&&tp.std?tp.phases.filter(k=>!(tp.off||[]).includes(k)):[]; }
 /* the type's own order first; a phase from outside the type slots in by its standard number */
-function phaseOrder(type,keys){ const ks=[...new Set(keys||[])].filter(k=>PH[k]), tp=T()[type], out=(tp&&tp.std?tp.phases:[]).filter(k=>ks.includes(k));
+/* custom phases: a project's own phase (e.g. Master plan, Interior design), kept in p.std.cx and loaded into PH under its own key.
+   It has its own name, SLATE and client days, gate deliverable(s) and place in the order; no standard checklist. */
+const isCx=k=>!!(PH[k]&&PH[k].cx);
+function cxDef(c){ c=c||{}; const n=String(c.n||'').trim()||'Custom phase', sd=parseInt(c.sd,10), cd=parseInt(c.cd,10), sub=String(c.sub||'').trim(), fin=String(c.fin||'').trim()||n+' issued';
+  return {no:'+',n,d:sd>0?[sd,cd>=0?cd:0]:null,gate:fin,steps:sub?[['sub',sub],['final',fin]]:[['final',fin]],items:[],cx:true,after:c.after||''}; }
+function cxLoad(cx){ Object.entries(cx||{}).forEach(([k,c])=>{ if(c&&typeof c==='object') PH[k]=cxDef(c); }); }
+function cxSync(){ Object.values(S.projects||{}).forEach(p=>{ if(p&&p.std&&p.std.cx) cxLoad(p.std.cx); }); }
+const cxNew=()=>'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+function phaseOrder(type,keys,cxm){ const ks=[...new Set(keys||[])].filter(k=>PH[k]), cx=ks.filter(k=>PH[k].cx), tp=T()[type], out=(tp&&tp.std?tp.phases:[]).filter(k=>ks.includes(k)&&!PH[k].cx);
   STD_ORDER.filter(k=>ks.includes(k)&&!out.includes(k)).forEach(k=>{ const i=STD_ORDER.indexOf(k), at=out.findIndex(x=>STD_ORDER.indexOf(x)>i); out.splice(at<0?out.length:at,0,k); });
+  /* a custom phase sits right after the phase it follows ('^' = first); if that phase is off the project, where it would have been */
+  cx.forEach(k=>{ const a=(cxm&&cxm[k]?cxm[k].after:PH[k].after)||''; let at;
+    if(a==='^') at=0; else if(out.includes(a)) at=out.indexOf(a)+1;
+    else { const i=STD_ORDER.indexOf(a); at=i<0?out.length:out.findIndex(x=>!PH[x].cx&&STD_ORDER.indexOf(x)>i); if(at<0) at=out.length; }
+    while(at<out.length&&PH[out[at]].cx) at++;
+    out.splice(at,0,k); });
   return out; }
 /* every field written (blank = the standard), so clearing a name really clears it */
 function edFull(prev,cur,type){ const out={};
@@ -6152,19 +6166,21 @@ const isRenamed=(ed,k)=>!!ed&&!!ed[k]&&PH_F.some(f=>ed[k][f]);
 function phaseEditor(m,o){
   const type=o.type, p=o.p||null, tp=T()[type]; if(!tp||!tp.std) return null;
   const has=p&&p.std?stdPhases(p):[], made=has.filter(k=>stdState(p,k).created), shut=has.filter(k=>stdState(p,k).done);
-  const shown=phaseOrder(type,[...tp.phases,...m.sel,...has]), rest=STD_ORDER.filter(k=>!shown.includes(k)), idp=o.idp||'pe', cardBg=o.onGroup?'background:#fff;':'', fieldBg=o.onGroup?'var(--group)':'#fff';
-  const row=k=>{ const on=m.sel.includes(k)||shut.includes(k), lock=shut.includes(k), set=made.includes(k), inT=tp.phases.includes(k), open=m.open===k, x=m.ed[k]||{};
-    const nm=(x.n||'').trim()||PH[k].n, steps=stepsOf(type,k).map(([s,t])=>[s,(x[s]||'').trim()||t]);
-    const tags=[lock?'Gate closed · kept':set?'Set up':'',!inT?'Added to this project':(tp.off||[]).includes(k)&&!on?(tp.offNote||'Off by default'):'',isRenamed(m.ed,k)?'Renamed for this project':'',`${clItems(k).length} checklist items`].filter(Boolean);
+  const cxm=m.cx||null, shown=phaseOrder(type,[...tp.phases,...m.sel,...has],cxm), rest=STD_ORDER.filter(k=>!shown.includes(k)), cxRest=Object.keys(cxm||{}).filter(k=>PH[k]&&!shown.includes(k)), idp=o.idp||'pe', cardBg=o.onGroup?'background:#fff;':'', fieldBg=o.onGroup?'var(--group)':'#fff';
+  const row=k=>{ const on=m.sel.includes(k)||shut.includes(k), lock=shut.includes(k), set=made.includes(k), inT=tp.phases.includes(k), open=m.open===k, x=m.ed[k]||{}, cx=!!(cxm&&cxm[k]&&PH[k].cx), cd=cx?cxDef(cxm[k]):null;
+    const nm=cx?cd.n:(x.n||'').trim()||PH[k].n, steps=cx?cd.steps:stepsOf(type,k).map(([s,t])=>[s,(x[s]||'').trim()||t]);
+    const tags=cx?[lock?'Gate closed · kept':set?'Set up':'','Custom phase, this project only',cd.d?`SLATE ${cd.d[0]} · client ${cd.d[1]} working days`:'Not on the timeline (runs alongside)'].filter(Boolean)
+      :[lock?'Gate closed · kept':set?'Set up':'',!inT?'Added to this project':(tp.off||[]).includes(k)&&!on?(tp.offNote||'Off by default'):'',isRenamed(m.ed,k)?'Renamed for this project':'',`${clItems(k).length} checklist items`].filter(Boolean);
     const inp=(f,lbl,def,max)=>h('label',{class:'field'},h('span',{class:'lbl',text:lbl}),h('input',{id:`${idp}-${k}-${f}`,value:x[f]||'',placeholder:def,maxlength:max,style:'background:'+fieldBg,oninput:e=>{ (m.ed[k]=m.ed[k]||{})[f]=e.target.value; }}));
     return h('div',{class:'card',style:cardBg+'gap:8px'+(on?'':';opacity:.6')},
       h('div',{style:'display:flex;gap:10px;align-items:flex-start'},
-        h('input',{type:'checkbox',id:`${idp}-${k}`,checked:on,disabled:lock,'aria-label':'Phase '+phNo(k)+' '+nm,title:lock?'A closed gate stays on the project':'',style:'margin-top:3px',onchange:e=>{ m.sel=e.target.checked?phaseOrder(type,[...m.sel,k]):m.sel.filter(y=>y!==k); if(!e.target.checked&&m.open===k) m.open=null; renderSheet(); }}),
-        h('div',{style:'min-width:0;flex:1'},h('div',{style:'font-weight:600',text:'Phase '+phNo(k)+' '+nm}),
+        h('input',{type:'checkbox',id:`${idp}-${k}`,checked:on,disabled:lock,'aria-label':'Phase '+phNo(k)+' '+nm,title:lock?'A closed gate stays on the project':'',style:'margin-top:3px',onchange:e=>{ m.sel=e.target.checked?phaseOrder(type,[...m.sel,k],cxm):m.sel.filter(y=>y!==k); if(!e.target.checked&&cx&&!set&&!(o.p&&o.p.std&&(o.p.std.cx||{})[k])) delete cxm[k]; if(!e.target.checked&&m.open===k) m.open=null; renderSheet(); }}),
+        h('div',{style:'min-width:0;flex:1'},h('div',{style:'font-weight:600',text:cx?'+ '+nm:'Phase '+phNo(k)+' '+nm}),
           h('div',{class:'f-hint',text:'Gate: '+steps.map(s=>s[1]).join(' → ')}),
           h('div',{class:'f-hint',text:tags.join(' · ')})),
         on&&!lock?h('button',{class:'btn btn-sm',type:'button',style:'background:'+fieldBg+';flex:none',onclick:()=>{ m.open=open?null:k; renderSheet(); if(!open) setTimeout(()=>{ const el=document.getElementById(`${idp}-${k}-n`); el&&el.focus(); },30); },text:open?'Done':'Edit'}):null),
       set&&!on&&!lock?h('div',{class:'callout',style:'font-size:13.5px',text:'Removing this phase archives its open gate deliverables and takes its checklist off Home. Ticks are kept: tick the phase again to bring it back.'}):null,
+      open&&on&&cx?cxPanel(m,k,{type,shown,idp,fieldBg}):
       open&&on?h('div',{style:'display:grid;gap:8px;padding-left:28px'},
         inp('n','Phase name',PH[k].n,60),inp('gate','Gate (what closes the phase)',PH[k].gate,120),
         stepsOf(type,k).map(([s,t])=>inp(s,s==='sub'?'Gate deliverable · submission':'Gate deliverable · final',t,100)),
@@ -6174,33 +6190,53 @@ function phaseEditor(m,o){
   return h('div',{style:'display:grid;gap:8px'},
     shown.map(row),
     rest.length?h('div',{style:'display:grid;gap:6px'},h('span',{class:'lbl',text:'Add another standard phase'}),
-      h('div',{class:'chips'},rest.map(k=>h('button',{type:'button',class:'chip',id:`${idp}-add-${k}`,style:cardBg+'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ m.sel=phaseOrder(type,[...m.sel,k]); renderSheet(); },text:'+ '+phNo(k)+' '+PH[k].n})))):null,
-    h('p',{class:'f-hint',style:'margin:0',text:'Untick a phase this project doesn’t need; add any other standard phase it does. Names, gates and checklists come from the SLATE standard process unless you edit them here for this project.'}));
+      h('div',{class:'chips'},rest.map(k=>h('button',{type:'button',class:'chip',id:`${idp}-add-${k}`,style:cardBg+'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ m.sel=phaseOrder(type,[...m.sel,k],cxm); renderSheet(); },text:'+ '+phNo(k)+' '+PH[k].n})))):null,
+    cxm&&cxRest.length?h('div',{style:'display:grid;gap:6px'},h('span',{class:'lbl',text:'Custom phases taken off this project'}),
+      h('div',{class:'chips'},cxRest.map(k=>h('button',{type:'button',class:'chip',id:`${idp}-addcx-${k}`,style:cardBg+'border:0;cursor:pointer;padding-right:12px',onclick:()=>{ m.sel=phaseOrder(type,[...m.sel,k],cxm); renderSheet(); },text:'+ '+cxDef(cxm[k]).n})))):null,
+    cxm?h('button',{class:'btn',type:'button',id:`${idp}-cxnew`,style:'justify-self:start;background:'+fieldBg,onclick:()=>{ const k=cxNew(), std=shown.filter(x=>!isCx(x)); cxm[k]={n:'',sd:'',cd:'',sub:'',fin:'',after:std.length?std[std.length-1]:'^'}; PH[k]=cxDef(cxm[k]); m.sel=phaseOrder(type,[...m.sel,k],cxm); m.open=k; renderSheet(); setTimeout(()=>{ const el=document.getElementById(`${idp}-${k}-n`); el&&el.focus(); },30); },text:'+ Add a custom phase'}):null,
+    h('p',{class:'f-hint',style:'margin:0',text:'Untick a phase this project doesn’t need; add any other standard phase it does. Names, gates and checklists come from the SLATE standard process unless you edit them here for this project.'+(cxm?' A custom phase (for example Master plan or Interior design) is for this project only: give it a name, days, what the client gets and where it sits.':'')}));
+}
+/* the edit box of a custom phase: name, days, what the client gets, and the phase it comes after */
+function cxPanel(m,k,o){ const c=m.cx[k], fb=o.fieldBg, idp=o.idp;
+  const inp=(f,lbl,ph,max,num)=>h('label',{class:'field'},h('span',{class:'lbl',text:lbl}),h('input',{id:`${idp}-${k}-${f}`,value:c[f]==null?'':String(c[f]),placeholder:ph,maxlength:max,...(num?{type:'number',min:'0',max:'250',inputmode:'numeric'}:{}),style:'background:'+fb,oninput:e=>{ c[f]=e.target.value; }}));
+  const opts=[['^','At the start'],...o.shown.filter(x=>x!==k).map(x=>[x,'After '+(isCx(x)&&m.cx[x]?'+ '+cxDef(m.cx[x]).n:phLabel(x))])];
+  return h('div',{style:'display:grid;gap:8px;padding-left:28px'},
+    inp('n','Phase name','e.g. Master plan, Interior design',60),
+    h('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:8px'},inp('sd','SLATE working days','e.g. 15',4,true),inp('cd','Client review days','e.g. 5',4,true)),
+    inp('sub','What the client gets first (optional submission)','e.g. Master plan options submitted',100),
+    inp('fin','What closes the phase (final deliverable)','e.g. Master plan approved by the client',100),
+    h('label',{class:'field'},h('span',{class:'lbl',text:'Where it sits'}),h('select',{id:`${idp}-${k}-after`,style:'background:'+fb,onchange:e=>{ c.after=e.target.value; m.sel=phaseOrder(o.type,m.sel,m.cx); renderSheet(); }},
+      opts.map(([v,t])=>h('option',{value:v,selected:(c.after||'')===v,text:t})))),
+    h('span',{class:'f-hint',style:'margin:0',text:'Leave the days blank if it runs alongside and is not on the timeline. The deliverables become gate tasks for the POD leader; a custom phase has no standard checklist.'}));
 }
 /* what saving would change on a project whose phases are already set up */
-function phaseDiff(p,m){ const type=p.std.type||p.type, cur=stdPhases(p), shut=cur.filter(k=>stdState(p,k).done), keep=phaseOrder(type,[...m.sel,...shut]);
-  return {type,keep,add:keep.filter(k=>!cur.includes(k)),rem:cur.filter(k=>!keep.includes(k)),ren:!edSame(p.std.ed||{},m.ed,type),moved:keep.join()!==cur.join()}; }
+function phaseDiff(p,m){ const type=p.std.type||p.type, cur=stdPhases(p), shut=cur.filter(k=>stdState(p,k).done), keep=phaseOrder(type,[...m.sel,...shut],m.cx);
+  const cxCh=!!m.cx&&Object.keys(p.std.cx||{}).some(k=>JSON.stringify(p.std.cx[k])!==JSON.stringify(m.cx[k]));
+  return {type,keep,add:keep.filter(k=>!cur.includes(k)),rem:cur.filter(k=>!keep.includes(k)),ren:!edSame(p.std.ed||{},m.ed,type)||cxCh,cxCh,moved:keep.join()!==cur.join()}; }
 async function applyPhaseChanges(pid,m){
   const p=S.projects[pid]; if(!p||!p.std) return;
-  const {type,keep,add,rem}=phaseDiff({...p,id:pid},m), ed=edFull(p.std.ed||{},m.ed,type), op={...p,id:pid}, np={...p,id:pid,std:{...p.std,ed}};
+  const {type,keep,add,rem}=phaseDiff({...p,id:pid},m), ed=edFull(p.std.ed||{},m.ed,type), op={...p,id:pid}, np={...p,id:pid,std:{...p.std,ed,...(m.cx?{cx:m.cx}:{})}};
+  /* the wording before this save, then the custom phases as edited */
+  const was={}; for(const k of keep) if(PH[k]) was[k]=stepsFor(op,type,k);
+  if(m.cx) cxLoad(m.cx);
   for(const k of rem) for(const t of gateTasks(pid).filter(t=>t.gate.k===k&&!t.doneAt))
     await taskUpdate(t.id,{archived:true},[{type:'archived',note:`Phase ${phLabel(k,op)} removed from the project`}]);
   /* open gate deliverables follow a rename, unless someone already gave the task its own title */
   for(const k of keep.filter(k=>!add.includes(k))) for(const t of gateTasks(pid).filter(t=>t.gate.k===k&&!t.doneAt)){
-    const was=(stepsFor(op,type,k).find(s=>s[0]===t.gate.step)||[])[1], now=(stepsFor(np,type,k).find(s=>s[0]===t.gate.step)||[])[1], ph=phLabel(k,np), patch={}, ev=[];
-    if(now&&t.title===was&&now!==was){ patch.title=now; ev.push({type:'renamed',from:t.title,to:now}); }
+    const wasT=((was[k]||[]).find(s=>s[0]===t.gate.step)||[])[1], now=(stepsFor(np,type,k).find(s=>s[0]===t.gate.step)||[])[1], ph=phLabel(k,np), patch={}, ev=[];
+    if(now&&t.title===wasT&&now!==wasT){ patch.title=now; ev.push({type:'renamed',from:t.title,to:now}); }
     if((t.phase||'')!==ph){ patch.phase=ph; ev.push({type:'category',from:t.phase||'',to:ph}); }
     if(ev.length) await taskUpdate(t.id,patch,ev); }
   const lead=p.std.lead||personFor('lead',p.pod)||S.uid, cl=add.length?await createGates(np,type,add,{lead,pod:p.pod,pace:paceOf(p)}):{};
-  await S.db.doc('projects/'+pid).update({std:{phases:keep,ed},...(Object.keys(cl).length?{cl}:{})});
+  await S.db.doc('projects/'+pid).update({std:{phases:keep,ed,...(m.cx?{cx:m.cx}:{})},...(Object.keys(cl).length?{cl}:{})});
 }
 function openPhEdit(pid){ const p=S.projects[pid]; if(!p||!p.std) return;
-  S.sheet={type:'phEdit',projectId:pid,err:'',m:{sel:[...stdPhases(p)],ed:JSON.parse(JSON.stringify(p.std.ed||{})),open:null}}; renderSheet(); }
+  S.sheet={type:'phEdit',projectId:pid,err:'',m:{sel:[...stdPhases(p)],ed:JSON.parse(JSON.stringify(p.std.ed||{})),cx:JSON.parse(JSON.stringify(p.std.cx||{})),open:null}}; renderSheet(); }
 function sheetPhEdit(){
   const sh=S.sheet, p=S.projects[sh.projectId]; if(!p||!p.std) return [head('Phases','Not found')];
-  const df=phaseDiff({...p,id:sh.projectId},sh.m), what=[df.add.length?`add ${df.add.length}`:'',df.rem.length?`remove ${df.rem.length}`:'',df.ren?'rename':''].filter(Boolean), dirty=what.length>0||df.moved;
+  const df=phaseDiff({...p,id:sh.projectId},sh.m), what=[df.add.length?`add ${df.add.length}`:'',df.rem.length?`remove ${df.rem.length}`:'',df.ren?(df.cxCh?'edit':'rename'):''].filter(Boolean), dirty=what.length>0||df.moved;
   return [head(projLabel(p),'Edit phases'),
-    h('p',{class:'lead',style:'margin:0',text:'Add, remove or rename the standard phases on this project. Added phases get their gate deliverables (assigned to the pod lead) and checklist straight away. The SLATE standard process itself doesn’t change.'}),
+    h('p',{class:'lead',style:'margin:0',text:'Add, remove or rename the phases on this project, or add a custom phase of its own. Added phases get their gate deliverables (assigned to the pod lead) and checklist straight away. The SLATE standard process itself doesn’t change.'}),
     phaseEditor(sh.m,{type:df.type,p:{...p,id:sh.projectId},idp:'pe'}),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
@@ -6209,7 +6245,8 @@ function sheetPhEdit(){
 }
 function savePhEdit(){
   const sh=S.sheet, pid=sh.projectId, p=S.projects[pid]; if(!p||!p.std) return;
-  if(!phaseDiff({...p,id:pid},sh.m).keep.length) return fail('Keep at least one phase.');
+  const df=phaseDiff({...p,id:pid},sh.m); if(!df.keep.length) return fail('Keep at least one phase.');
+  const noName=df.keep.find(k=>sh.m.cx&&sh.m.cx[k]&&!String(sh.m.cx[k].n||'').trim()); if(noName){ sh.m.open=noName; renderSheet(); return fail('Give the custom phase a name.'); }
   run(()=>applyPhaseChanges(pid,sh.m),'Phases updated').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } });
 }
 /* the date a phase's checklist is needed by: its first open gate deliverable (submission before sign-off) */
