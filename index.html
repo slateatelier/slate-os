@@ -5953,7 +5953,7 @@ function stdSection(p){
       return h('div',{class:'card','data-ph':k,style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
         h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),s.done?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:tg,text:'Fold ‹'}):stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
-        PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysFor(p,k)} working days`}),h('span',{text:'·'}),
+        PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` + ${graceDays(p,k)} grace`:'')}),h('span',{text:'·'}),
           fbEdit&&!s.done?h('label',{class:'ph-cd'},'client',h('input',{id:'cd-'+k,type:'number',min:'0',max:'60',value:String(clientDaysOf(p,k)),'aria-label':'Client review days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); run(()=>S.db.doc('projects/'+p.id).update({std:{cd:{[k]:v===stdClientDays(p,k)?'':v}}}),'Client review days saved'); }}),'working days'):h('span',{text:`client ${clientDaysOf(p,k)} working days`}),
           clientDaysOf(p,k)!==stdClientDays(p,k)?h('span',{class:'muted',text:`(standard ${stdClientDays(p,k)})`}):null):null,
         kwOf(k)&&s.created&&!s.done?kwRow(p,k,fbEdit):null,
@@ -6020,6 +6020,22 @@ function tlDep(p,k){ const ks=tlPhases(p), has=x=>ks.includes(x), frz=has('3')?'
   if(k==='8') return has('7')?{k:'7',at:'sub'}:{prev:true};
   return {prev:true}; }
 /* live = use what has actually happened; otherwise the pure plan from the start date */
+/* POD-load grace (Principal, 1 Nov 2026): a heavy phase that runs while the POD already has 2 other heavy phases on at least half of
+   its working days gets +20% SLATE days. Decided when the timeline is planned (stored in std.grace), never on fast-track projects.
+   Load = the POD's heavy phases running on a day: SLATE's own working window (start to submission), live projects only. */
+/* GRACE_AT: heavy phases at once (this one included) that trigger grace. Off (null) until the Principal sets the POD capacity. */
+const HEAVY=['2','4','6','7','8','i2','i3'], GRACE=0.2, GRACE_AT=null;
+const graceDays=(p,k)=>{ const g=p&&p.std&&p.std.grace&&p.std.grace[k]; return g&&paceOf(p)!=='fast'?Math.ceil(slateDaysFor(p,k)*g):0; };
+function podLoadWins(p){ const ps=podsOfProject(p), out=[];
+  for(const q of projects()){ if(!q||q.id===p.id||!q.std||!tlOf(q)||q.closed||isOnHold(q)||!podsOfProject(q).some(x=>ps.includes(x))) continue;
+    let pl; try{ pl=tlCompute(q,tlOf(q).start,true); }catch(e){ continue; }
+    HEAVY.forEach(k=>{ const f=pl[k]; if(!f||f.none||stdState(q,k).done||(f.subA&&f.subA<today())) return; out.push({pid:q.id,k,s:f.s,e:f.sub}); }); }
+  return out; }
+function graceFor(p,plan,wins){ const out={}; if(!GRACE_AT||paceOf(p)==='fast') return out; wins=wins||podLoadWins(p);
+  HEAVY.forEach(k=>{ const f=plan[k]; if(!f||f.none||!f.s||!f.sub) return; let n=0, hit=0, x=f.s;
+    while(x<=f.sub){ if(isWorkDay(x)){ n++; const c=1+new Set(wins.filter(w=>w.s<=x&&w.e>=x).map(w=>w.pid)).size; if(c>=GRACE_AT) hit++; } x=addDays(x,1); }
+    if(n&&hit*2>=n) out[k]={g:GRACE,days:n,hit}; });
+  return out; }
 function tlCompute(p,start,live){
   const ks=tlPhases(p), td=today(), out={}, std=p.std||{}, take=+(((std.tl||{}).take)??TAKE_IN);
   ks.forEach((k,i)=>{
@@ -6030,7 +6046,7 @@ function tlCompute(p,start,live){
     if(!s){ out[k]={k,none:true}; return; }
     // re-planned on the SLATE standard (tl.from): a phase not started by then starts no earlier than that day
     if(std.tl&&std.tl.from){ const s0=stdState(p,k); if(!(s0.sub&&s0.sub.doneAt)&&!(s0.fin&&s0.fin.doneAt)){ const f0=firstWD(std.tl.from); if(s<f0) s=f0; } }
-    const st=live?stdState(p,k):{}, sd=slateDaysFor(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
+    const st=live?stdState(p,k):{}, sd=slateDaysFor(p,k)+graceDays(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
     const subA=live&&st.sub&&st.sub.doneAt?st.sub.doneAt.slice(0,10):'', finA=live&&st.fin&&st.fin.doneAt?st.fin.doneAt.slice(0,10):'';
     const deem=live&&std.deemed&&std.deemed[k]?std.deemed[k].on:'';
     // consultant window: SLATE works `pre` days, the plans go to the STR/MEP consultants, their drawings come back after `kd`
@@ -6231,6 +6247,17 @@ function tlSection(p){
     ap?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ if(!confirm(`Confirm deemed approval of phase ${PH[k].no} ${phName(k,p)} today?`)) return; run(()=>S.db.doc('projects/'+p.id).update({std:{deemed:{[k]:{on:today(),by:S.uid,at:new Date().toISOString()}}}}),'Deemed approval confirmed'); },text:'Confirm deemed approval'}):h('span',{class:'muted',text:'The COO confirms it.'}))));
   risk.forEach(x=>flags.push(h('div',{class:'tl-flag'},h('b',{text:`At risk: phase ${PH[x.k].no} started before phase ${PH[x.d].no} was approved`}),h('span',{text:'Starting the next phase before approval needs the COO’s approval (R5).'}),
     ap?h('button',{class:'btn btn-sm',type:'button',onclick:()=>run(()=>S.db.doc('projects/'+p.id).update({std:{risk:{[x.k]:{by:S.uid,at:new Date().toISOString()}}}}),'At-risk start approved'),text:'Approve at-risk start'}):h('span',{class:'muted',text:'Waiting for the COO.'}))));
+  if(ap&&paceOf(p)!=='fast'){ const g0=(p.std&&p.std.grace)||{}, gr=graceFor(p,tlCompute({...p,std:{...p.std,grace:{}}},t.start,true)), add=Object.keys(gr).filter(k=>!g0[k]&&!stdState(p,k).done&&!(live[k]&&live[k].subA));
+    if(add.length) flags.push(h('div',{class:'tl-flag'},h('b',{text:`POD load: grace +20% due on ${add.map(k=>'phase '+phNo(k)).join(', ')}`}),
+      h('span',{text:add.map(k=>`${phLabel(k,p)}: ${gr[k].hit} of its ${gr[k].days} working days with 3 or more heavy phases in the POD`).join(' · ')+'. The team’s dates move; the client’s dates don’t.'}),
+      h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{ const g={...g0}; add.forEach(k=>{ g[k]=GRACE; }); await S.db.doc('projects/'+p.id).update({std:{grace:g}});
+          const np={...p,std:{...p.std,grace:g}}, pl=tlCompute(np,t.start,true);
+          for(const k of tlPhases(np)){ const f=pl[k], st=stdState(np,k); if(!f||f.none) continue;
+            for(const [g2,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(g2&&!g2.doneAt&&g2.target&&date&&date>g2.target) await taskUpdate(g2.id,{target:date},[{type:'scheduled',from:g2.target,to:date,note:'POD-load grace +20%'}]); } },'Grace given: the team’s dates moved'),text:'Give the grace'})));
+    const gl=Object.keys(g0).filter(k=>g0[k]&&ks.includes(k)); if(gl.length) flags.push(h('div',{class:'tl-flag',style:'border-color:var(--line)'},h('b',{text:`Grace +20% · POD load: ${gl.map(k=>'phase '+phNo(k)).join(', ')}`}),h('span',{text:'Given because the POD was carrying 3 or more heavy phases at once. Only the team’s dates moved.'}),
+      h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!confirm('Remove the grace? The forecast goes back to the standard days; dates already moved stay until you change them.')) return; run(()=>S.db.doc('projects/'+p.id).update({std:{grace:Object.fromEntries(gl.map(k=>[k,0]))}}),'Grace removed'); },text:'Remove'}))); }
+  if(ap&&p.dueDate&&lastB&&lastF&&p.dueDate>lastB){ const buf=wdBetween(lastB,p.dueDate), used=wdBetween(lastB,lastF);
+    if(used>0&&used*3>=buf*2) flags.push(h('div',{class:'tl-flag'},h('b',{text:used>=buf?'Past the client’s date':'Client buffer two-thirds used'}),h('span',{text:`The client was promised ${fmtD(p.dueDate)}; the forecast is ${fmtD(lastF)}. ${used} of the ${buf} working days of buffer are used. Only you and the COO see this.`}))); }
   if(shift.length) flags.push(h('div',{class:'tl-flag'},h('b',{text:`${shift.length} gate date${shift.length===1?'':'s'} behind a client or consultant delay`}),h('span',{text:'The client’s or the consultants’ delay moves these dates (D8, R8). Moving them keeps the delay off the team’s score.'}),
     h('button',{class:'btn btn-sm',type:'button',onclick:()=>run(async()=>{ for(const x of shift) await taskUpdate(x.t.id,{target:x.date,clientShift:(x.t.clientShift||0)+wdBetween(x.t.target,x.date)},[{type:'target',from:x.t.target,to:x.date,note:'Moved for a client or consultant delay (D8, R8)'}]); },'Dates moved for the delay'),text:'Move these dates'})));
   const open=S.sheet&&S.sheet.tlLog;
@@ -6292,31 +6319,35 @@ function openTl(pid){ const p=S.projects[pid]; if(!p) return; const t=tlOf({...p
 /* re-plan on the SLATE standard from today: finished phases keep their dates, the rest start no earlier than today on the
    plot-size days; the old plan is kept in tl.prev (R4) and open gate deliverables without a date get the new one */
 function replanOf(p,td){ const t=tlOf(p)||{}, ks0=tlPhases(p), done0=ks0.flatMap(k=>{ const x=stdState(p,k); return [x.sub&&x.sub.doneAt,x.fin&&x.fin.doneAt]; }).filter(Boolean).map(d=>d.slice(0,10));
-  const start=t.start||(done0.length?firstWD(minD(...done0)):td), pv={...p,std:{...p.std,dv:13,tl:{...t,start,from:td}}};
+  const start=t.start||(done0.length?firstWD(minD(...done0)):td), pv0={...p,std:{...p.std,dv:13,grace:{},tl:{...t,start,from:td}}}, gr=graceFor(pv0,tlCompute(pv0,start,true)), grace={...((p.std&&p.std.grace)||{})};
+  Object.keys(gr).forEach(k=>{ if(!stdState(p,k).done) grace[k]=GRACE; }); const pv={...pv0,std:{...pv0.std,grace}};
   const plan=tlCompute(pv,start,true), base=tlPlanSnap(pv,start,true), dates=[];
   // an open phase behind a phase already finished was only never closed: it gets no date, the POD leader closes it
   const ord=tlPhases(pv).filter(k=>k!=='5'), stale=k=>k!=='5'&&ord.slice(ord.indexOf(k)+1).some(x=>stdState(p,x).done);
   tlPhases(pv).forEach(k=>{ const f=plan[k], s=stdState(p,k); if(!f||f.none||stale(k)) return;
     [[s.sub,f.sub],[s.fin,f.fin]].forEach(([g,date])=>{ if(g&&!g.doneAt&&!g.target&&!g.request&&date) dates.push({id:g.id,date}); }); });
-  return {start,base,dates,stale:tlPhases(pv).filter(k=>!stdState(p,k).done&&stale(k)),prev:t.base?[...(t.prev||[]),{base:t.base,at:t.at||'',by:t.by||''}]:(t.prev||[])}; }
+  return {start,base,dates,grace,stale:tlPhases(pv).filter(k=>!stdState(p,k).done&&stale(k)),prev:t.base?[...(t.prev||[]),{base:t.base,at:t.at||'',by:t.by||''}]:(t.prev||[])}; }
 function replanTl(pid){ const p={...S.projects[pid],id:pid}, td=today(), r=replanOf(p,td);
   if(!confirm(`Re-plan ${projLabel(p)} from today on the SLATE standard? Finished phases keep their dates; ${r.dates.length} open gate deliverable${r.dates.length===1?'':'s'} get a date.`)) return;
-  run(async()=>{ await S.db.doc('projects/'+pid).update({std:{dv:13,tl:{start:r.start,from:td,at:new Date().toISOString(),by:S.uid,take:+((tlOf(p)||{}).take??TAKE_IN),base:r.base,prev:r.prev}}});
+  run(async()=>{ await S.db.doc('projects/'+pid).update({std:{dv:13,grace:r.grace,tl:{start:r.start,from:td,at:new Date().toISOString(),by:S.uid,take:+((tlOf(p)||{}).take??TAKE_IN),base:r.base,prev:r.prev}}});
     for(const x of r.dates) await taskUpdate(x.id,{target:x.date,originalTarget:x.date,revisions:0,request:null},[{type:'scheduled',to:x.date,note:'Re-planned on the SLATE standard'}]); },'Re-planned from today').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } }); }
 function sheetTl(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
   const d=D(), ap=amApprover()||leadFree(p.id), had=!!tlOf(p), ks=tlPhases(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
   d.kd=d.kd||{};
   const pv={...p,std:{...p.std,sd:Object.fromEntries(ks.map(k=>[k,+d.sd[k]||0])),cd:Object.fromEntries(ks.map(k=>[k,+d.cd[k]||0])),kd:Object.fromEntries(ks.filter(kwOf).map(k=>[k,d.kd[k]===''||d.kd[k]==null?consultDaysOf(p,k):+d.kd[k]||0])),resume:d.resume,tl:{take:+d.take||0}}};
+  if(!had&&d.start){ const gr=graceFor(pv,tlCompute({...pv,std:{...pv.std,grace:{}}},d.start,false)); pv.std.grace=Object.fromEntries(Object.keys(gr).map(k=>[k,GRACE])); S.sheet.grace=gr; }
   const plan=d.start?tlCompute(pv,d.start,false):{};
   const num=(f,k,dis)=>h('input',{type:'number',min:'0',max:'120',value:d[f][k],disabled:dis,style:'width:58px;padding:4px 6px;text-align:center',oninput:e=>{ d[f][k]=e.target.value; },onchange:()=>renderSheet()});
+  const grN=!had&&S.sheet.grace?Object.keys(S.sheet.grace):[];
   return [head(projLabel(p),had?'Timeline days':'Set the timeline'),
+    grN.length?h('div',{class:'callout',style:'font-size:13.5px',text:`POD load: ${grN.map(k=>phLabel(k,p)).join(', ')} ${grN.length===1?'runs':'run'} while the POD has 3 or more heavy phases on, so ${grN.length===1?'it gets':'they get'} +20% SLATE days (grace). Included in the dates below.`}):null,
     h('p',{class:'lead',style:'margin:0',text:had?'Days changed here move the forecast. The original plan stays as it was first set (R4).':'The plan is saved as the project’s original timeline and never edited (R4). Client review days are the ones agreed in the fee proposal (R1).'}),
     useBand(p)?h('div',{class:'f-hint',style:'margin:0',text:`Standard days for ${p.katha?p.katha+' katha, ':''}band ${bandLbl(p)} (SLATE standard, Version 1).${p.katha?'':' Add the land size to get the right band.'}`}):h('div',{class:'f-hint',style:'margin:0',text:'This timeline was set before the days by plot size and keeps the days it was planned on.'}),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); if(!d.start) return fail('Give the start date.');
         run(async()=>{ const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=ap&&a!==stdSlateDays(p,k)?a:(p.std.sd&&p.std.sd[k])||''; cd[k]=b!==stdClientDays(p,k)?b:''; if(kwOf(k)){ const c=d.kd[k]===''?kwOf(k)[1]:+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
           const upd={std:{...(ap?{sd}:{}),cd,kd,resume:d.resume||'',...(!had?{dv:13}:{})}};
-          if(!had) upd.std.tl={start:d.start,at:new Date().toISOString(),by:S.uid,take:+d.take||0,base:tlPlanSnap(pv,d.start)};
+          if(!had){ const gr=graceFor(pv,tlCompute(pv,d.start,false)), g={}; Object.keys(gr).forEach(k=>{ g[k]=GRACE; }); pv.std.grace=g; upd.std.grace=g; upd.std.tl={start:d.start,at:new Date().toISOString(),by:S.uid,take:+d.take||0,base:tlPlanSnap(pv,d.start)}; }
           else upd.std.tl={take:+d.take||0};
           await S.db.doc('projects/'+p.id).update(upd);
           if(!had&&d.gates){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
@@ -8375,8 +8406,10 @@ function spCompare(d){ const i=SP_MAIN.indexOf(d.plan), keys=i<0?[d.plan,'comp']
     ${row('Fee',k=>{ const f=spFee({...d,plan:k}); return f&&f.fee?'<b>'+pbTk(f.fee)+'</b>':'—'; })}
   </tbody></table><p class="pb-small">Fees exclude VAT and AIT. Fees for Feasibility and Essentials count toward a bigger plan taken later, as set out in the terms.</p>`; }
 
+/* the client is promised SLATE's standard days + 30% (Principal, 1 Nov 2026); the team works to the standard. Client review days stay as they are. */
+const PROP_BUF=0.3, propDays=n=>n?Math.ceil(n*(1+PROP_BUF)):n;
 function pbTlRows(type,katha,table){ const t=STD_DEF[type]&&type!=='proposal'?type:'dev', off=STD_DEF[t].off||[], tb=table||pbDaysTable(t), bi=pbBand(tb,katha), D=DAYS_T[tb];
-  return STD_DEF[t].phases.filter(k=>!off.includes(k)&&PH[k]&&PH[k].d).map(k=>{ const dd=D[k]; return {label:PH[k].n,w:String(dd?dd[1][bi]:PH[k].d[0]),r:String(dd?dd[0]:PH[k].d[1]),del:PB_TL_DEL[k]||'',...(k==='5'?{par:true}:{})}; }); }
+  return STD_DEF[t].phases.filter(k=>!off.includes(k)&&PH[k]&&PH[k].d).map(k=>{ const dd=D[k]; return {label:PH[k].n,w:String(propDays(dd?dd[1][bi]:PH[k].d[0])),r:String(dd?dd[0]:PH[k].d[1]),del:PB_TL_DEL[k]||'',...(k==='5'?{par:true}:{})}; }); }
 /* timeline: the work order date, then setup days, then the stages (working days, five a week) */
 function pbTl(d){ const tl=d.tl||{}, setup=tl.setup==null||tl.setup===''?3:Math.max(0,+tl.setup||0), rows=(tl.rows||[]).filter(x=>x.label||+x.w||+x.r); let at=setup;
   let prev=at; const out=rows.map(x=>{ const n=(+x.w||0)+(+x.r||0); if(x.par){ const a=prev; return {...x,del:pbTlDel(x),n,from:a,to:a+n}; } const a=at; prev=a; at+=n; return {...x,del:pbTlDel(x),n,from:a,to:at}; });
@@ -8513,7 +8546,7 @@ function sheetPropDoc(){
             h('div',{class:'form-row'},field('Days table',h('select',{onchange:e=>{ d.tl.table=e.target.value; d.tl.rows=pbTlRows(p.type,d.katha||p.katha,d.tl.table); renderSheet(); }},Object.entries(PB_DAYS).map(([k,x])=>{ const o=h('option',{value:k,text:x.name}); if(k===tb) o.selected=true; return o; }))),
               field('Plot size band',h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},h('b',{text:pbBandLabel(tb,bi)+(+(d.katha||p.katha)?` (${d.katha||p.katha} katha)`:' (enter the land size)')}),
                 h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.tl.rows=pbTlRows(p.type,d.katha||p.katha,tb); renderSheet(); toast('Days set for '+pbBandLabel(tb,bi)); },text:'Use these days'})))),
-            h('div',{class:'f-hint',style:'margin:0',text:'Working days per stage (Sunday to Thursday): SLATE’s days + the client’s review days, the same plot-size days SLATE OS uses for project phase plans. Marketing runs alongside and doesn’t add to the total. Change any number.'}),
+            h('div',{class:'f-hint',style:'margin:0',text:'Working days per stage (Sunday to Thursday): SLATE’s days + the client’s review days. SLATE’s days here are the plot-size standard + 30% (the client’s buffer); the team’s own targets stay on the standard. Marketing runs alongside and doesn’t add to the total. Change any number.'}),
             h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 62px 62px 30px;gap:6px;font-size:12px;color:var(--muted)'},h('span',{text:'Stage'}),h('span',{text:'SLATE'}),h('span',{text:'Client'}),h('span')),
             ...d.tl.rows.map((x,i)=>h('div',{style:'display:grid;gap:4px;padding:8px;border:1px solid var(--border);border-radius:12px'},
               h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) 62px 62px 30px;gap:6px;align-items:center'},
