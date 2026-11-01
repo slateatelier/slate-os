@@ -58,6 +58,17 @@
 .hol-c{font-size:12px;font-weight:600;margin-top:auto}
 .hol-row{display:flex;align-items:center;gap:10px;padding-block:9px;flex-direction:row}.hol-d{min-width:84px;font-size:13px;flex:none}.hol-tag{font-size:11.5px;color:var(--late);flex:none;text-align:right}
 @media (max-width:520px){.hol-chart{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.desk-top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin:4px 0 12px}.desk-hi{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}.desk-hi>b{font-size:22px;letter-spacing:-.01em}.desk-hi p{margin:0}
+.desk{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr) minmax(0,.95fr);gap:14px;min-height:420px}
+.desk-col{display:flex;flex-direction:column;min-height:0;background:var(--group);border-radius:16px;overflow:hidden}
+.desk-h{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px}.desk-h h2{margin:0;font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.desk-b{flex:1;min-height:0;overflow-y:auto;padding:0 10px 12px;display:grid;gap:12px;align-content:start;scrollbar-width:thin}
+.desk-sub{display:grid;gap:6px}.desk-st{display:flex;align-items:center;gap:8px;padding:0 4px;font-size:12.5px;font-weight:600;color:#3a3a3c}.desk-st b{font-size:11.5px;color:var(--muted);font-weight:600}.desk-st .linkish{margin-left:auto;font-size:12.5px}
+.desk-b .h-list{background:#fff;border-radius:12px}.desk-b .sec{margin:0}
+.desk-nx{font-size:12px;color:var(--muted);flex:0 1 auto;min-width:0;max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.desk-b .pod-p{box-sizing:border-box}.mid-cl .desk-b>.sec>.sec-h h2,.mid-cl .desk-b>.sec>.sec-h .cnt{display:none}.mid-cl .desk-b>.sec>.sec-h{justify-content:flex-end;padding-top:0}.desk-nx b{font-weight:600;color:#3a3a3c}
+.desk-foot{display:flex;justify-content:flex-end;padding:8px 2px 0;font-size:13px}
+main.wrap.wrap-desk{max-width:1480px}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -2480,7 +2491,7 @@ const SEC_INFO={
 function secInfo(root){ if(!root) return; root.querySelectorAll('.sec-h > h2').forEach(h2=>{ const hd=h2.parentElement, t=SEC_INFO[h2.textContent.trim()];
   if(!t||hd.dataset.info===t) return; const nx=hd.nextElementSibling; if(nx&&nx.classList.contains('sec-desc')) nx.remove();
   const d=document.createElement('div'); d.className='f-hint sec-desc'; d.textContent=t; hd.after(d); hd.dataset.info=t; }); }
-let secInfoQ=0; const secInfoSoon=()=>{ if(secInfoQ) return; secInfoQ=requestAnimationFrame(()=>{ secInfoQ=0; secInfo(document.getElementById('view')); secInfo(document.getElementById('sheet')); }); };
+let secInfoQ=0; const secInfoSoon=()=>{ if(secInfoQ) return; secInfoQ=requestAnimationFrame(()=>{ secInfoQ=0; secInfo(document.getElementById('view')); secInfo(document.getElementById('sheet')); try{ fitDesk(); }catch(e){} }); };
 (()=>{ const go=()=>{ try{ const mo=new MutationObserver(secInfoSoon); ['view','sheet'].forEach(id=>{ const el=document.getElementById(id); el&&mo.observe(el,{childList:true,subtree:true}); }); secInfoSoon(); }catch(e){} }; if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',go); else go(); })();
 function render(force){
   applyStd();
@@ -2490,6 +2501,7 @@ function render(force){
   renderHeader();
   view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView())); secInfo(view);
+  view.classList.toggle('wrap-desk',S.view==='mine'&&!!view.querySelector('.desk'));
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
   try{ daySplash(); }catch(e){}
   restoreFocus(k);
@@ -3289,7 +3301,75 @@ function sheetSubsView(){ const k=S.sheet.k||'week', X=subsIn(k), td=today();
     Object.keys(byP).length?h('div',{class:'f-hint',style:'margin:0 4px',text:Object.entries(byP).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`${n} ${c}`).join(' · ')}):null,
     grp('Late',X.over.sort(byTarget)),grp('To go',X.due.sort(byTarget)),grp('Done',X.done.sort((a,b)=>b.doneAt.localeCompare(a.doneAt))),
     X.xs.length?null:h('p',{class:'muted',text:'No submissions in this period.'})]; }
+/* ---------- the desk: Home on a PC in one screen, three columns that scroll on their own ----------
+   Left · Do now: what moves a date today (approvals, team work to check, overdue, due this week, today's meetings).
+   Middle · Projects (POD leader, COO, Principal), My checklist (juniors and drafting), or the Drafting queue (drafting lead).
+   Right · Plan: week and month at a glance, my to-do, checklists to finish, coming meetings and an unread notice. */
+const deskOn=()=>window.innerWidth>=1100&&!(pref&&pref.fullHome);
+function deskTask(t,o={}){ const st=status(t), td=today(), p=S.projects[t.projectId];
+  const due=t.target?(t.target<td?`${diff(t.target,td)}d late`:t.target===td?'today':fmtD(t.target)):'no date';
+  return hRow({dot:st==='overdue'?'var(--overdue)':st==='soon'?'var(--late)':t.verify?'var(--early)':'var(--faint)',strong:t.title,
+    meta:[p?(p.name||p.code):'',t.phase||'',o.person?nameOf(t.assignee):'',due].filter(Boolean).join(' · '),onclick:()=>openTask(t.id),
+    right:o.done&&canQuickDone(t)&&!t.verify?h('button',{class:'btn btn-sm h-btn',type:'button',disabled:S.busy,title:'Mark done today',onclick:()=>quickDone(t),text:'✓'}):null}); }
+function deskCol(title,extra,blocks,cls){ const kids=blocks.filter(Boolean);
+  return h('section',{class:'desk-col'+(cls?' '+cls:'')},h('div',{class:'desk-h'},h('h2',{text:title}),extra||null),h('div',{class:'desk-b'},kids.length?kids:[h('p',{class:'f-hint',style:'margin:8px 4px',text:'Nothing here right now.'})])); }
+function deskSub(title,rows,n,go){ rows=rows.filter(Boolean); if(!rows.length) return null;
+  return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:title}),h('b',{text:String(n==null?rows.length:n)}),go?h('button',{class:'linkish',type:'button',onclick:go,text:'All'}):null),h('div',{class:'h-list'},rows)); }
+function viewDesk(){
+  const td=today(), ap=amApprover()||S.isOwner, lead=amPodLead()&&!ap, head=!!myHeadTeam(), mine=activeTasks().filter(t=>t.assignee===S.uid&&!t.archived);
+  const hr=new Date().getHours(), first=(nameOf(S.uid)||'').split(' ')[0], wk=addDays(td,7);
+  const top=h('div',{class:'desk-top'},
+    h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
+      h('div',{class:'desk-hi'},h('b',{text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),daySummary(mine,td,ap))),
+    h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap'},
+      canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openLead(),text:'+ Lead'}):null,
+      canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openProp(),text:'+ Proposal'}):null,
+      S.canWrite?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
+  /* LEFT · do now */
+  const waits=[];
+  if(ap) queueGroups().forEach(g=>waits.push(hRow({dot:'var(--overdue)',strong:`${g.n} ${g.label.toLowerCase()}`,meta:g.oldest?'oldest '+ageTxt(ageOf(g.oldest)):'',onclick:()=>{ S.qf=g.key; goView('queue'); }})));
+  if(lead||ap){ const mp=myPod(); activeTasks().filter(t=>t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.archived&&((t.stage==='review'&&(t.checker===S.uid||(!ap&&teamOf(t.assignee)===mp)))||(!ap&&t.verify&&podVerifies(t)))).sort(byTarget).slice(0,12)
+    .forEach(t=>waits.push(hRow({dot:'var(--early)',strong:t.title,meta:`${nameOf(t.assignee)} sent it to check · ${(S.projects[t.projectId]||{}).name||''}`,onclick:()=>openTask(t.id)}))); }
+  const extra=[]; kFollow(td,ap).forEach(r=>extra.push(r));
+  if(S.isOwner) Object.entries(S.projects).filter(([k,p])=>p&&p.delReq&&p.delReq.by!==S.uid).forEach(([k,p])=>extra.push(hRow({dot:'var(--overdue)',strong:'Delete project?',title:projLabel(p),onclick:()=>openProjectView(k)})));
+  const meetAll=homeMeetRows(td,ap), meetToday=meetAll.filter(r=>/Today|Yesterday|minutes/i.test(r.textContent||''));
+  const open=mine.filter(t=>!t.doneAt&&!t.verify), over=open.filter(t=>t.target&&t.target<td).sort(byTarget), week=open.filter(t=>t.target&&t.target>=td&&t.target<=wk).sort(byTarget);
+  const podGates=lead?activeTasks().filter(t=>t.gate&&!t.doneAt&&!t.archived&&t.assignee!==S.uid&&t.target&&t.target<=wk&&inMyPodProject(S.projects[t.projectId])).sort(byTarget):[];
+  const left=deskCol('Do now',null,[
+    deskSub('Waiting on you',waits,null,ap?()=>goView('queue'):null),
+    deskSub('Today',[...meetToday,...extra]),
+    deskSub('Overdue',over.slice(0,15).map(t=>deskTask(t,{done:true})),over.length,()=>{ S.fInit=1; S.f.person=S.uid; S.f.project=''; S.f.status='overdue'; S.f.q=''; goView('all'); }),
+    deskSub('Due this week',week.slice(0,15).map(t=>deskTask(t,{done:true})),week.length,()=>{ S.fInit=1; S.f.person=S.uid; S.f.project=''; S.f.status='week'; S.f.q=''; goView('all'); }),
+    deskSub('POD gates this week',podGates.slice(0,12).map(t=>deskTask(t,{person:true})),podGates.length)]);
+  /* MIDDLE · projects, checklist or drafting queue */
+  let mid;
+  if(ap||lead){ const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)&&(ap||inMyPodProject(p)));
+    const ord={off:0,risk:1,ok:2,none:3,done:4}, line=p=>{ const st=projStats(p), hl=HEALTH[st.health]||HEALTH.none, cp=curPhase(p), nx=gateTasks(p.id).filter(t=>!t.doneAt&&t.target).sort(byTarget)[0];
+      return h('button',{type:'button',class:'pod-p',title:[p.code,hl[0]].join(' · '),onclick:()=>openProjectView(p.id)},h('i',{style:`background:var(--${hl[1]})`}),
+        h('span',{class:'pod-pn'},p.name,isIntP(p)?h('b',{class:'pod-modo',text:'MODO'}):null),
+        h('span',{class:'desk-nx'},nx?[h('b',{style:nx.target<td?'color:var(--overdue)':'',text:nx.target<td?diff(nx.target,td)+'d late':fmtD(nx.target)}),' '+nx.title]:''),
+        h('span',{class:'pod-ph',text:cp?(/^\d/.test(phNo(cp))?'P'+phNo(cp):phNo(cp)):'—'})); };
+    const grp=ap?[...pods(),''].map(pd=>({pd,xs:ps.filter(p=>pd?p.pod===pd:!pods().includes(p.pod))})).filter(g=>g.xs.length):[{pd:myPod(),xs:ps}];
+    mid=deskCol(ap?'Projects · next gate':'My POD · next gate',h('span',{class:'cnt',text:`${ps.length} live`}),grp.map(g=>{ const xs=g.xs.sort((a,b)=>(ord[projStats(a).health]??9)-(ord[projStats(b).health]??9)||String(a.name).localeCompare(String(b.name)));
+      return h('div',{class:'desk-sub'},ap?h('div',{class:'desk-st'},h('span',{text:g.pd?podLabel(g.pd):'No POD'}),h('b',{text:String(xs.length)})):null,h('div',{class:'pod-list',style:'padding:0'},xs.map(line))); })); }
+  else if(head){ const dq=draftQueueSec(); mid=deskCol('Drafting queue',null,[dq],'mid-cl'); }
+  else { const cl=myChecklist(); mid=deskCol('My checklist',h('span',{class:'cnt',text:String(cl.length)}),[cl.length?myChecklistSec(cl,{grouped:true}):null],'mid-cl'); }
+  /* RIGHT · plan */
+  const W=subsIn('week'), M=subsIn('month');
+  const tiles=(W.xs.length||M.xs.length)?h('div',{class:'gl-grid'},[['week',W],['month',M]].map(([k,X])=>h('button',{type:'button',class:'gl-tile',onclick:()=>{ S.sheet={type:'subsView',k}; renderSheet(); }},
+    h('span',{class:'gl-l',text:X.P.lbl}),h('b',{class:'gl-n',text:String(X.xs.length)}),h('span',{class:'gl-m'},h('i',{style:'background:var(--ontime)'}),`${X.done.length} done`,X.over.length?[h('i',{style:'background:var(--overdue);margin-left:8px'}),`${X.over.length} late`]:null)))):null;
+  let clsum=null; if(ap||lead){ const by={}; projects().filter(p=>p.std&&!p.closed&&(ap?false:inMyPodProject(p))).forEach(p=>activePhases(p).forEach(k=>{ const c=clCount(p,k), n=c.tot-c.na-c.done; if(n>0) (by[p.id+'|'+k]={p,k,n}); }));
+    const xs=Object.values(by).sort((a,b)=>b.n-a.n); if(xs.length) clsum=deskSub('Checklists to finish',xs.slice(0,10).map(x=>hRow({dot:'var(--faint)',strong:x.p.name,title:`Phase ${phNo(x.k)} · ${x.n} open`,onclick:()=>{ S.sheet={type:'projView',id:x.p.id,openPh:x.k}; renderSheet(); }})),xs.length); }
+  const later=meetAll.filter(r=>!meetToday.includes(r)).slice(0,3);
+  const nt=nAll().filter(n=>nLive(n)&&!nSeen(n)).sort((a,b)=>(b.important-a.important)||b.created_at.localeCompare(a.created_at))[0];
+  const right=deskCol('Plan',null,[nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
+  return [top,h('div',{class:'desk'},left,mid,right),
+    h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
+}
+function fitDesk(){ const d=document.querySelector('.desk'); if(!d) return; const top=d.getBoundingClientRect().top; d.style.height=Math.max(420,window.innerHeight-top-34)+'px'; }
+window.addEventListener('resize',()=>{ const was=!!document.querySelector('.desk'); if(S.view==='mine'&&was!==deskOn()) render(true); else fitDesk(); });
 function viewMineBody(){
+  if(deskOn()) return viewDesk();
   const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const first=(nameOf(S.uid)||'').split(' ')[0];
@@ -3373,6 +3453,7 @@ function viewMineBody(){
      your own plan, meetings, then the week and month at a glance, your checklist and the POD overview */
   [SL.glance,SL.noticeNew?SL.notice:null,SL.meetNow?SL.meet:null,...(SL.work||[]),SL.review,SL.draft,SL.todo,SL.meetNow?null:SL.meet,SL.cl,SL.pod,SL.noticeNew?null:SL.notice].forEach(x=>{ if(x) out.push(x); });
   if(!mine.length&&!mcl.length&&!tg&&!homeMeetRows(td,ap).length) out.push(onboarding());
+  if(window.innerWidth>=1100&&pref&&pref.fullHome) out.splice(1,0,h('div',{class:'desk-foot',style:'justify-content:flex-start'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',0); render(true); window.scrollTo(0,0); },text:'← Back to the one-screen Home'})));
   return out;
 }
 
