@@ -1175,6 +1175,16 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .now-sum{display:flex;gap:14px;flex-wrap:wrap;margin:-4px 2px 0}
 .now-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 2px}
 .now-legend .now-chip{min-width:20px;height:20px;font-size:11px;animation:none}
+.pg-trk{height:40px}
+.pg-bar{position:absolute;top:9px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;font-weight:600;overflow:hidden;box-sizing:border-box}
+.pg-bar.pre{background:#C7C7CC;color:#fff}
+.pg-bar.done{background:#E6F4EA;color:var(--ontime)}
+.pg-bar.now{background:#fff;color:var(--c);box-shadow:inset 0 0 0 1.5px var(--c)}
+.pg-bar.later{background:transparent;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line)}
+.pg-pre{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,rgba(0,0,0,.035) 0 6px,transparent 6px 12px);pointer-events:none}
+.pg-none{position:absolute;left:12px;top:12px;font-size:12px;color:var(--faint)}
+.pg-key{display:inline-block;width:22px;height:12px;border-radius:4px;box-sizing:border-box}
+.pg-key.pre{background:repeating-linear-gradient(135deg,rgba(0,0,0,.15) 0 3px,transparent 3px 6px);box-shadow:inset 0 0 0 1px var(--line)}.pg-key.done{background:#E6F4EA;box-shadow:inset 0 0 0 1px var(--ontime)}.pg-key.now{background:#fff;box-shadow:inset 0 0 0 1.5px var(--c,var(--ink))}.pg-key.later{box-shadow:inset 0 0 0 1px var(--line)}
 .ps{display:grid;gap:6px;padding:2px 0}
 .ps-row{display:grid;grid-template-columns:14px 1fr;gap:8px;align-items:start;font-size:13.5px;line-height:1.4}
 .ps-row i{width:10px;height:10px;border-radius:50%;margin-top:4px;box-sizing:border-box;border:2px solid var(--faint)}
@@ -4186,14 +4196,57 @@ function viewPhaseMap(){
   rows.sort((a,b)=>rank.indexOf(a.n.st)-rank.indexOf(b.n.st)||(a.p.code||a.p.name||'').localeCompare(b.p.code||b.p.name||''));
   const cnt=k=>rows.filter(r=>r.n.st===k).length;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:g.pmPod?podLabel(g.pmPod):'All PODs'}),h('h1',{class:'h1',text:'Timeline'})),
-      h('div',{class:'bar'},seg('View',[['map','Projects'],['bars','Task bars']],'map',v=>{ g.mode=v; render(true); })))];
+      h('div',{class:'bar'},seg('View',[['map','Projects'],['gantt','Gantt'],['bars','Tasks']],'map',v=>{ g.mode=v; render(true); })))];
   out.push(h('div',{class:'bar'},podSel));
   out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site'],['pause','Paused']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
   out.push(h('div',{class:'now-legend'},h('span',{class:'now-chip pre',text:'2'}),'done before SLATE OS',h('span',{class:'now-chip done',style:'margin-left:8px',text:'✓'}),'done in SLATE OS',h('span',{class:'now-chip now',style:'--c:var(--ink);margin-left:8px;animation:none',text:'2'}),'now',h('span',{class:'now-chip later',style:'margin-left:8px',text:'3'}),'later · tap a project to open it'));
   out.push(rows.length?h('div',{class:'now-list'},rows.map(({p})=>h('button',{type:'button',class:'now-card',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }},nowStrip(p,{title:projLabel(p)}),h('div',{class:'now-meta',text:podText(p)})))):h('div',{class:'empty'},h('h3',{text:'No live projects here'})));
   return out;
 }
+/* Gantt by phase (Principal, 1 Nov 2026): one row per project, one bar per phase, the same marks as the project cards:
+   grey = done before SLATE OS, green = done in SLATE OS, outlined = now (amber due soon, red late), faint = later. */
+function viewPhaseGantt(){
+  const g=S.gantt, z=GZ[g.zoom], td=today(); if(g.pmPod===undefined) g.pmPod=fullView()?'':(myPod()||'');
+  const s0=addDays(td,-Math.round(z.days*0.2)+g.offset*Math.round(z.days/2)), e0=addDays(s0,z.days-1), W=Math.round(z.days*z.px), x=d=>Math.round(diff(s0,d)*z.px);
+  const podSel=h('select',{id:'pg-pod','aria-label':'POD',onchange:e=>{g.pmPod=e.target.value;render(true)}},h('option',{value:'',text:'All PODs'}),pods().map(v=>h('option',{value:v,text:podLabel(v)}))); podSel.value=g.pmPod||'';
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${fmtD(s0)} – ${fmtD(e0)}`}),h('h1',{class:'h1',text:'Timeline'})),
+    h('div',{class:'bar'},seg('View',[['map','Projects'],['gantt','Gantt'],['bars','Tasks']],'gantt',v=>{ g.mode=v; render(true); }),seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
+      h('button',{class:'btn btn-sm',type:'button','aria-label':'Earlier',onclick:()=>{g.offset--;render(true)},text:'‹'}),
+      g.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{g.offset=0;render(true)},text:'Today'}),
+      h('button',{class:'btn btn-sm',type:'button','aria-label':'Later',onclick:()=>{g.offset++;render(true)},text:'›'})))];
+  out.push(h('div',{class:'bar'},podSel));
+  out.push(h('div',{class:'now-legend'},h('span',{class:'pg-key pre'}),'before SLATE OS (counted beside each project)',h('span',{class:'pg-key done',style:'margin-left:8px'}),'done in SLATE OS',h('span',{class:'pg-key now',style:'margin-left:8px'}),'now',h('span',{class:'pg-key now',style:'margin-left:8px;--c:var(--late)'}),'due soon',h('span',{class:'pg-key now',style:'margin-left:8px;--c:var(--overdue)'}),'late',h('span',{class:'pg-key later',style:'margin-left:8px'}),'later'));
+  const hd=[]; let d=s0;
+  while(d<=e0){ const [y,m]=d.split('-').map(Number); const nx=ymd(new Date(y,m,1)); hd.push(h('div',{class:'g-mon',style:`left:${x(d)}px`,text:MONL[m-1]+(y!==new Date().getFullYear()?' '+y:'')})); d=nx; }
+  for(let i=z.step===1?0:z.step;i<z.days;i+=z.step){ const dd=addDays(s0,i); hd.push(h('div',{class:'g-tick',style:`left:${x(dd)}px`,text:z.step===1?String(+dd.slice(8)):`${+dd.slice(8)} ${MON[+dd.slice(5,7)-1]}`})); }
+  const grid=`background-image:repeating-linear-gradient(to right,transparent 0 ${z.px*z.step-1}px,var(--line) ${z.px*z.step-1}px ${z.px*z.step}px)`;
+  const rows=[h('div',{class:'g-row g-head'},h('div',{class:'g-lab',text:'Project'}),h('div',{class:'g-trk',style:`width:${W}px`},hd))];
+  const ps=projects().filter(p=>p.std&&!p.closed&&p.pod!=='Studio'&&!isInternalP(p)&&stdPhases(p).length&&(!g.pmPod||podsOfProject(p).includes(g.pmPod)));
+  const rank=['late','clate','soon','client','idle','ok','wait','pause','done'];
+  const items=ps.map(p=>({p,n:projNow(p)})).sort((a,b)=>rank.indexOf(a.n.st)-rank.indexOf(b.n.st)||(a.p.code||a.p.name||'').localeCompare(b.p.code||b.p.name||''));
+  for(const {p,n} of items){
+    let live=null; try{ if(tlOf(p)) live=tlCompute(p,tlOf(p).start,true); }catch(_){}
+    const bars=[], chip=Object.fromEntries(n.chips.map(c=>[c.k,c.state])), hot=['late','soon','clate'].includes(n.st)?NOW_ST[n.st][1]:'var(--ink)';
+    if(live) n.chips.forEach(c=>{ const k=c.k, f=live[k]; if(c.state==='pre'||!f||f.none||!f.s) return; const st=stdState(p,k);
+      const e=st.fin&&st.fin.doneAt&&!st.fin.legacyNoDate?String(st.fin.doneAt).slice(0,10):f.fin; if(!e||e<s0||f.s>e0) return;
+      const l=Math.max(0,x(f.s<s0?s0:f.s)), r=Math.min(W,x((e>e0?e0:e))+z.px), w=Math.max(18,r-l), state=chip[k];
+      const tip=`Phase ${phNo(k)} ${phName(k,p)}\n${fmtD(f.s)} → ${fmtD(e)}`+(state==='pre'?'\nDone before SLATE OS':state==='done'?'\nDone':state==='now'?'\nNow':'\nLater');
+      bars.push({l,w,state,tip,k}); });
+    /* phases that run side by side (authority and marketing, WD sets) go on their own lane instead of overlapping */
+    bars.sort((a,b)=>a.l-b.l); const lanes=[]; bars.forEach(b=>{ let i=lanes.findIndex(end=>end<=b.l); if(i<0){ i=lanes.length; lanes.push(0); } lanes[i]=b.l+b.w+2; b.lane=i; });
+    const gl=goLive(), preEl=gl>s0?h('div',{class:'pg-pre',style:`left:0;width:${Math.min(W,x(gl))}px`}):null;
+    const els=bars.map(b=>h('div',{class:'pg-bar '+b.state,style:`left:${b.l}px;width:${b.w}px;top:${8+b.lane*26}px`+(b.state==='now'?`;--c:${hot}`:''),'data-tip':b.tip,onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }},h('span',{text:String(phNo(b.k))})));
+    const meta=[podText(p),[n.nPre?`${n.nPre} done before`:'',n.nDone?`${n.nDone} done`:'',n.nLeft?`${n.nLeft} to go`:''].filter(Boolean).join(' · ')].filter(Boolean).join(' · ');
+    rows.push(h('div',{class:'g-row'},h('div',{class:'g-lab'},h('button',{class:'linkish t',type:'button',style:'text-decoration:none',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); },text:projLabel(p)}),h('div',{class:'m'},h('span',{class:'now-pill',style:`--c:${NOW_ST[n.st][1]};font-size:11.5px`,text:NOW_ST[n.st][0]}),' ',meta)),
+      h('div',{class:'g-trk pg-trk',style:`width:${W}px;height:${Math.max(40,14+Math.max(1,lanes.length)*26)}px;${grid}`},preEl,els.length?els:h('span',{class:'pg-none',text:live?'No phase in this window':'No timeline set yet'}))));
+  }
+  if(!items.length) rows.push(h('div',{class:'g-row'},h('div',{class:'g-lab m',text:''}),h('div',{class:'g-trk w-empty',style:`width:${W}px;display:flex;align-items:center;padding-left:16px`,text:'No live projects here.'})));
+  const inner=h('div',{class:'g-in'},rows); if(td>=s0&&td<=e0) inner.append(h('div',{class:'g-today',style:`left:calc(var(--lab) + ${x(td)+Math.round(z.px/2)}px)`}));
+  out.push(h('div',{class:'gantt'},inner));
+  return out;
+}
 function viewGantt(){
+  if(S.gantt.mode==='gantt') return viewPhaseGantt();
   if(S.gantt.mode!=='bars') return viewPhaseMap();
   const g=S.gantt, z=GZ[g.zoom], td=today();
   const s0=addDays(td,-Math.round(z.days*0.2)+g.offset*Math.round(z.days/2)), e0=addDays(s0,z.days-1), W=Math.round(z.days*z.px);
@@ -4201,7 +4254,7 @@ function viewGantt(){
   const podSel=h('select',{id:'g-pod','aria-label':'Pod',style:'flex:0 1 160px',onchange:e=>{g.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),pods().map(p=>h('option',{value:p,text:podLabel(p)}))); podSel.value=g.pod;
   const [pSel,uSel]=scopeFilters(g,'g');
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${fmtD(s0)} – ${fmtD(e0)}`}),h('h1',{class:'h1',text:'Timeline'})),
-    h('div',{class:'bar'},seg('View',[['map','Projects'],['bars','Task bars']],'bars',v=>{ g.mode=v; render(true); }),seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
+    h('div',{class:'bar'},seg('View',[['map','Projects'],['gantt','Gantt'],['bars','Tasks']],'bars',v=>{ g.mode=v; render(true); }),seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Earlier',onclick:()=>{g.offset--;render(true)},text:'‹'}),
       g.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{g.offset=0;render(true)},text:'Today'}),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Later',onclick:()=>{g.offset++;render(true)},text:'›'})))];
@@ -4223,7 +4276,7 @@ function viewGantt(){
     rows.push(h('div',{class:'g-row proj'},h('div',{class:'g-lab'},h('div',{class:'t',text:projLabel(p)}),h('div',{class:'m',text:[p&&p.pod?podLabel(p.pod):'',`${list.length} task${list.length>1?'s':''}`].filter(Boolean).join(' · ')})),
       h('div',{class:'g-trk',style:`width:${W}px;${grid}`},h('div',{class:'g-span',style:`left:${sp.l}px;width:${sp.w}px`,'data-tip':`${projLabel(p)}\n${fmtD(ps)} – ${fmtD(pe)}`}))));
     for(const t of list){
-      const leg=!!(t.legacy&&t.doneAt), st=leg?'open':status(t), s=startOf(t), e=endOf(t)||s, tg=leg?t.doneAt.slice(0,10):(t.target||e), col=leg?'var(--faint,#aeaeb2)':`var(--${st==='soon'?'late':st==='open'?'muted':st})`;
+      const leg=!!(t.legacy&&t.doneAt), st=leg?'open':status(t), s=startOf(t), e=endOf(t)||s, tg=leg?t.doneAt.slice(0,10):(t.target||e), col=leg?'#C7C7CC':t.doneAt?'var(--ontime)':st==='overdue'?'var(--overdue)':st==='soon'?'var(--late)':'var(--ink)';
       const tip=leg?`${t.title}\n${nameOf(t.assignee)}\nFinished before SLATE OS`+(t.legacyNoDate?' (date not recorded)':` · ${fmtD(t.doneAt)}`):`${t.title}\n${nameOf(t.assignee)}\nStart ${fmtD(s)} · Target ${t.target?fmtD(t.target):'—'}`+(t.doneAt?`\nDone ${fmtD(t.doneAt)}`:'')+`\n${ST[st]}`;
       const parts=[]; const baseEnd=tg<e?tg:e;
       const bs=clip(s<s0?s0:s,baseEnd>e0?e0:baseEnd);
