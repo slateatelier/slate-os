@@ -4259,7 +4259,7 @@ function viewPhaseMap(){
    Same marks everywhere: red late, amber due within 3 days, dark open, green done. */
 const TV_SEG=g=>seg('View',[['map','Projects'],['gantt','Gantt'],['people','People'],['due','By date']],g.mode||'map',v=>{ g.mode=v; render(true); });
 function tvTasks(g){ const td=today(), lim=addDays(td,60);
-  return activeTasks().filter(t=>t.target&&t.assignee&&!isCOO(t.assignee)&&t.assignee!==ownerId()&&!t.legacy&&!isChalkTask(t)&&!t.repeat&&(!t.doneAt||String(t.doneAt).slice(0,10)>=addDays(td,-6))&&(t.doneAt||t.target<=lim)
+  return activeTasks().filter(t=>t.target&&t.assignee&&(!isCOO(t.assignee)||S.isOwner)&&t.assignee!==ownerId()&&!t.legacy&&!isChalkTask(t)&&!t.repeat&&(!t.doneAt||String(t.doneAt).slice(0,10)>=addDays(td,-6))&&(t.doneAt||t.target<=lim)
     &&(!g.pmPod||podsOf(t).includes(g.pmPod)||teamOf(t.assignee)===g.pmPod)); }
 const tvCls=t=>t.doneAt?'done':status(t)==='overdue'?'late':status(t)==='soon'?'soon':'open';
 function tvChip(t,o={}){ const p=S.projects[t.projectId];
@@ -10069,7 +10069,7 @@ const STUDIO_ONE='studioOpsArea0001';
 function viewStudioTasks(out){
   const ap=amApprover()||S.isOwner, td=today(), areas=projects().filter(p=>isInternalP(p)), f=S.stF||(S.stF={a:'',done:false});
   const inA=t=>{ const p=S.projects[t.projectId]; return !!p&&isInternalP(p); };
-  let xs=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&inA(t)&&!isCooT(t));
+  let xs=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&inA(t)&&(S.isOwner||!isCooT(t)));
   if(ap&&f.a) xs=xs.filter(t=>t.projectId===f.a);
   const open=xs.filter(t=>!t.doneAt).sort(byTarget), over=open.filter(t=>t.target&&t.target<td), done=xs.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,15);
   out.push(h('div',{class:'kpis'},kpi('Open',open.length),kpi('Overdue',over.length,'overdue'),kpi('Done this month',xs.filter(t=>t.doneAt&&t.doneAt.slice(0,7)===td.slice(0,7)).length,'early')));
