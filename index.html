@@ -5637,7 +5637,6 @@ function sheetProject(){
     if(v.plotNo) v.plotNo=v.plotNo.replace(/^(PLOT|HOUSE|HOLDING)\s*(NO\.?)?\s*[#:]?\s*/,'');
     if(v.roadNo) v.roadNo=v.roadNo.replace(/^ROAD\s*(NO\.?)?\s*[#:]?\s*/,'');
     if(!v.name) return fail('Give the project a name.');
-    if(!v.pod) return fail('Choose the pod that owns this project, or Studio / internal.');
     if(!isStudio){
       if(!v.client) return fail('Add the client.');
       if(!v.location) return fail('Add the area or locality, e.g. Bashundhara R/A.');
@@ -5657,7 +5656,7 @@ function sheetProject(){
       if(!isInt&&!isPropT&&siteReq(id,d)&&!v.roadNo) return fail('Add the road number.');
       if(!isInt&&!isPropT&&!k) return fail('Add the land size in katha.');
       if(!id&&!v.type) return fail('Choose the project type.');
-      if(!isInt&&!isPropT&&k>30&&!v.pod2) return fail('Projects above 30 katha need a second pod.');
+      if(!isInt&&!isPropT&&v.pod&&k>30&&!v.pod2) return fail('Projects above 30 katha need a second POD.');
       if(v.pod2&&v.pod2===v.pod) return fail('Choose a different pod as the second pod.');
       if(!isPropT&&!v.agStatus) return fail('Choose the agreement status.');
       if(v.agStatus==='signed'&&!v.agDate) return fail('Add the agreement date.');
@@ -5684,7 +5683,7 @@ function sheetProject(){
       if(pSet){ const df=phaseDiff({...pSet,id},d.ph); phNow=!!(df.add.length||df.rem.length||df.ren||df.moved); }
       else v.phasePlan={sel:phaseOrder(d.type,d.ph.sel),ed:edFull((id&&S.projects[id]&&S.projects[id].phasePlan&&S.projects[id].phasePlan.ed)||{},d.ph.ed,d.type)}; }
     const fn=id?async()=>{ await ref.update(v); if(phNow) await applyPhaseChanges(id,d.ph); }:()=>ref.set({...v,closed:v.entry==='completed',...(v.entry==='completed'?{legacy:true}:{}),createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
-    const plan=!id&&ap&&v.type&&!internal&&v.entry!=='completed'?{pid:ref.id,type:v.type,pod:v.pod}:null;
+    const plan=!id&&ap&&v.type&&!internal&&v.pod&&v.entry!=='completed'?{pid:ref.id,type:v.type,pod:v.pod}:null;
     const dft=!id&&S.sheet.draftId, fp=!id&&S.sheet.fromProp;
     run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(dft) delProjDraft(dft).catch(()=>{}); if(fp) propWon(fp,ref.id).catch(()=>{}); if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
   };
@@ -5697,7 +5696,7 @@ function sheetProject(){
         h('div',{class:'f-hint',text:(d.entry||'upcoming')==='upcoming'?'A new project: all phases are set up and scored from the start.':d.entry==='running'?`Already under way: when you set up its phases, tick the ones finished before SLATE OS and add their dates if you know them. Only work after ${fmtD(goLive())} is scored.`:'Finished before SLATE OS: kept as a record with its key dates. No tasks, no scoring.'}),
         d.entry==='completed'?h('label',{class:'field'},h('span',{class:'lbl',text:'Completed in (optional)'}),h('input',{id:'sh-completedOn',type:'month',max:today().slice(0,7),value:d.completedOn||'',oninput:e=>{d.completedOn=e.target.value}})):null)):null,
       field('Project type'+(isStudio?'':' *'),typeSel(d,'Select project type…')),
-      internal?teamPickers(d,id):field('Pod *',(()=>{ const lockPod=!amApprover()&&!!myPod(); const el=sel('pod',lockPod?[[d.pod||myPod(),podLabel(d.pod||myPod())]]:[['','Select pod…'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)'],...(!id&&canChalkEdit()?[['__chalk','Chalk Create (separate unit) →']]:[])]); if(lockPod) el.disabled=true; el.addEventListener('change',()=>{ if(el.value==='__chalk'){ D().pod=''; openChalkProject(); return; } renderSheet(); }); return el; })(),!amApprover()&&myPod()?'Your pod. You request projects for your own pod; the COO approves them.':'The lead pod: its lead architect is accountable for the project.'),
+      internal?teamPickers(d,id):field('POD (optional)',(()=>{ const lockPod=!amApprover()&&!!myPod(); const el=sel('pod',lockPod?[[d.pod||myPod(),podLabel(d.pod||myPod())]]:[['','Choose later (no POD yet)'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)'],...(!id&&canChalkEdit()?[['__chalk','Chalk Create (separate unit) →']]:[])]); if(lockPod) el.disabled=true; el.addEventListener('change',()=>{ if(el.value==='__chalk'){ D().pod=''; openChalkProject(); return; } renderSheet(); }); return el; })(),!amApprover()&&myPod()?'Your pod. You request projects for your own pod; the COO approves them.':d.pod?'The lead POD: its leader is accountable for the project.':'You can choose the POD later on the project. Phases are set up once it has one.'),
       !isStudio&&[
         ...(d.type==='interior'||(!d.type&&id&&(S.projects[id]||{}).type==='interior')?[intFormSection(d,sec,id)]:[
         d.type==='proposal'?h('div',{class:'callout',style:'font-size:13.5px',text:'Design proposal (R&D): only the name, POD, client and area are needed now. Land size, FAR, plot and road, agreement and scope can wait until the project is confirmed; fill them in then (Edit project), or when you create the real project.'}):null,
