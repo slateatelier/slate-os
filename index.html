@@ -4233,7 +4233,7 @@ function sheetMeeting(){
           pds.length?h('div',{},h('div',{class:'lbl',text:'Decisions'}),h('ol',{style:'margin:4px 0 0;padding-left:22px;font-size:14px'},pds.map(x=>h('li',{text:x.text})))):null,
           pas.length?h('div',{},h('div',{class:'lbl',text:'Actions'}),h('ol',{style:'margin:4px 0 0;padding-left:22px;font-size:14px'},pas.map(a=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]).filter(Boolean), done=ts.length&&ts.every(t=>t.doneAt);
             return h('li',{},a.text,h('span',{class:'f-hint',text:' · '+[actOwners(a).map(nameOf).join(', '),a.due?'by '+fmtD(a.due):'',ts.length?(done?'done':'open'):''].filter(Boolean).join(' · ')})); }))):null,
-          h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>openMeeting(pd),text:'Open the full minutes'})))); } }
+          h('div',{style:'display:flex;gap:6px;flex-wrap:wrap'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>openMeeting(pd),text:'Open the full minutes'}),h('button',{class:'btn btn-sm',type:'button',onclick:()=>printMinutes(pd),text:'Print the minutes'}))))); } }
   if(!canSeeMinutes(date)&&m.status!=='published'&&!sh.edit){ out.push(h('p',{class:'muted',style:'margin:0',text:'The minutes will appear here once the COO approves them.'})); return out; }
   const carried=carriedActions(date);
   if(!sh.edit&&m.agenda) out.push(agendaChecks(m.agenda,m.agendaDone,null,true));
@@ -4374,18 +4374,18 @@ function printMinutes(date){
   <div class="top">${logo?`<img src="${logo}" alt="SLATE">`:'<b>SLATE</b>'}</div><div class="bar">MEETING INFORMATION</div>
   <table><tr><td class="k">Subject</td><td>${esc(meetTitle(date))}</td><td class="k">Organiser / minutes</td><td>${esc(org?nameOf(org):'')}</td></tr>
   <tr><td class="k">Venue, date and time</td><td>${esc(m.venue||rota().venue)} · ${esc(wd(date)+' '+fmtD(date))}, ${esc(fmtHM(m.time||meetTime()))}</td><td class="k">Status</td><td>${esc(MSTAT[m.status]||'Draft')}${m.approvedBy?' · approved by '+esc(nameOf(m.approvedBy)):''}</td></tr></table>
-  ${m.agenda?`<table><thead><tr class="h"><th>AGENDA</th></tr></thead><tbody><tr><td>${esc(m.agenda).replace(/\n/g,'<br>')}</td></tr></tbody></table>`:''}
+  ${m.agenda?(()=>{ const L=agLines(m.agenda), dn=new Set(m.agendaDone||[]); return `<table><thead><tr class="h"><th colspan="2">AGENDA · ${L.filter(x=>dn.has(x)).length} OF ${L.length} DISCUSSED</th></tr></thead><tbody>${L.map(x=>`<tr><td style="width:8mm;text-align:center">${dn.has(x)?'✓':'○'}</td><td>${esc(x)}</td></tr>`).join('')}</tbody></table>`; })():''}
   ${tbl('1. ATTENDANCE',['Sl.','Name','Team','Status'],meetPeople(date,att).filter(id=>att[id]).map((id,i)=>row([i+1,esc(nameOf(id)),esc(id===ownerId()?'Principal':isCOO(id)?'COO':teamLabel(id)),esc((ATT.find(x=>x[0]===att[id])||['',''])[1])])),'Not recorded')}
   ${tbl('2. REVIEW OF LAST MEETING’S ACTIONS',['Sl.','Action','Responsible','Target date','Status','Note'],revT.map((t,i)=>row([i+1,esc(t.title),esc(nameOf(t.assignee)),esc(t.target?fmtD(t.target):'—'),esc((REVIEW.find(x=>x[0]===rv[t.id].st)||['','—'])[1]),esc(rv[t.id].note||'')])),'No earlier actions')}
-  ${tbl('3. PROJECT STATUS',['Sl.','Project','Status','Progress and plan','Help needed'],ups.map(([pid,u],i)=>row([i+1,esc(S.projects[pid]?projLabel(S.projects[pid]):''),esc((RAG.find(x=>x[0]===u.rag)||['',''])[1]),esc(u.text||'').replace(/\n/g,'<br>'),esc(u.help||'')])),'No project updates')}
-  ${m.notes?`<table><thead><tr class="h"><th>4. DISCUSSION</th></tr></thead><tbody><tr><td>${esc(m.notes).replace(/\n/g,'<br>')}</td></tr></tbody></table>`:''}
-  ${tbl('4. DECISIONS',['Sl.','Decision','Area'],ds.map((x,i)=>row([i+1,esc(x.text)+(x.rule?' <i>(studio rule)</i>':''),esc(areaName(x.area))])),'No decisions')}
-  ${tbl('5. ACTION ITEMS',['Sl.','Action','Responsible','Area','Target date','Status'],acts.map((a,i)=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]).filter(Boolean), st=ts.length?(ts.every(t=>t.doneAt)?'Done':ts.some(t=>t.target&&t.target<today()&&!t.doneAt)?'Overdue':'Open'):'Proposed';
+  ${!ups.length?'':tbl('PROJECT STATUS',['Sl.','Project','Status','Progress and plan','Help needed'],ups.map(([pid,u],i)=>row([i+1,esc(S.projects[pid]?projLabel(S.projects[pid]):''),esc((RAG.find(x=>x[0]===u.rag)||['',''])[1]),esc(u.text||'').replace(/\n/g,'<br>'),esc(u.help||'')])),'No project updates')}
+  ${m.notes?`<table><thead><tr class="h"><th>3. DISCUSSION</th></tr></thead><tbody><tr><td>${esc(m.notes).replace(/\n/g,'<br>')}</td></tr></tbody></table>`:''}
+  ${tbl('3. DECISIONS',['Sl.','Decision','Area'],ds.map((x,i)=>row([i+1,esc(x.text)+(x.rule?' <i>(studio rule)</i>':''),esc(areaName(x.area))])),'No decisions')}
+  ${tbl('4. ACTION ITEMS',['Sl.','Action','Responsible','Area','Target date','Status'],acts.map((a,i)=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]).filter(Boolean), st=ts.length?(ts.every(t=>t.doneAt)?'Done':ts.some(t=>t.target&&t.target<today()&&!t.doneAt)?'Overdue':'Open'):'Proposed';
       return row([i+1,(a.kind&&a.kind!=='action'?'<b>'+esc(AKIND[a.kind])+':</b> ':'')+esc(a.text),esc(actOwners(a).map(nameOf).join(', ')),esc(areaName(a.area)||(S.projects[a.project]?projLabel(S.projects[a.project]):'')),esc(a.ongoing?'Ongoing':a.due?fmtD(a.due):'—'),st]); }),'No actions')}
-  ${m.sharing&&m.sharing.topic?`<table><thead><tr class="h"><th colspan="2">6. SHARING SESSION</th></tr></thead><tbody><tr><td class="k">Topic</td><td>${esc(m.sharing.topic)}${m.sharing.by?' · led by '+esc(nameOf(m.sharing.by)):''}${m.sharing.notes?'<br>'+esc(m.sharing.notes):''}</td></tr></tbody></table>`:''}
+  ${m.sharing&&m.sharing.topic?`<table><thead><tr class="h"><th colspan="2">5. SHARING SESSION</th></tr></thead><tbody><tr><td class="k">Topic</td><td>${esc(m.sharing.topic)}${m.sharing.by?' · led by '+esc(nameOf(m.sharing.by)):''}${m.sharing.notes?'<br>'+esc(m.sharing.notes):''}</td></tr></tbody></table>`:''}
   <table><tr><td class="next">Next meeting: ${esc(wd(nx)+' '+fmtD(nx))} @ ${esc(fmtHM(meetTime()))}</td><td class="k">Minutes</td><td class="next">${esc(organiserFor(nx)?nameOf(organiserFor(nx)):'')}</td></tr></table>
-  <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`;
-  const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to print the minutes.'); w.document.open(); w.document.write(html); w.document.close();
+</body></html>`;
+  pbShowPreview(html,false,null,'Minutes of '+wd(date)+' '+fmtD(date),null,true);
 }
 /* weekly-meeting action items can go to anyone, the Principal and the COO included; they become tasks when the COO approves the minutes */
 const meetOwnerOpts=keep=>[['','Select person…'],...people().filter(id=>(S.members[id]||id===ownerId())&&(!isPriv(id)||seePriv()||id===keep)&&!isChalkP(id)).sort((a,b)=>((b===ownerId())-(a===ownerId()))||(isCOO(b)-isCOO(a))||nameOf(a).localeCompare(nameOf(b))).map(id=>[id,nameOf(id)])];
@@ -8352,18 +8352,18 @@ const pbIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platfor
 async function pbShareFile(f){
   try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
   const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); }
-function pbShowPreview(html,plain,makePdf,label,swap){
+function pbShowPreview(html,plain,makePdf,label,swap,printAlways){
   document.getElementById('pb-prev')?.remove();
   html=html.replace(/<div class="bar">[\s\S]*?<\/div>/,'');
   const fr=h('iframe',{title:'Proposal preview',style:'flex:1;width:100%;border:0;background:#e6e6e6'}); fr.srcdoc=html;
   const close=()=>{ ov.remove(); document.removeEventListener('keydown',esc); }, esc=e=>{ if(e.key==='Escape') close(); };
   const ov=h('div',{id:'pb-prev',role:'dialog','aria-modal':'true','aria-label':'Proposal preview',style:'position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;background:#e6e6e6'},
     h('div',{style:'display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:#231f20'},
-      (()=>{ let file=null; const b=h('button',{type:'button',class:'btn',style:'background:#C41E29;color:#fff;border:0',text:'Make the PDF'});
+      makePdf?(()=>{ let file=null; const b=h('button',{type:'button',class:'btn',style:'background:#C41E29;color:#fff;border:0',text:'Make the PDF'});
         b.onclick=async()=>{ if(file) return pbShareFile(file); b.disabled=true; b.textContent='Making the PDF…';
           try{ file=await makePdf(); b.textContent='Share or save the PDF'; }catch(e){ b.textContent='Make the PDF'; toast(e.message||'Couldn’t make the PDF.'); } b.disabled=false; };
-        return b; })(),
-      pbIOS()?null:h('button',{type:'button',class:'btn',onclick:()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} },text:'Print'}),
+        return b; })():null,
+      pbIOS()&&!printAlways?null:h('button',{type:'button',class:'btn',style:makePdf?'':'background:#C41E29;color:#fff;border:0',onclick:()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} },text:makePdf?'Print':'Print or save as PDF'}),
       swap?h('button',{type:'button',class:'btn',onclick:swap,text:plain?'Show the share copy':'Show the print copy'}):null,
       h('button',{type:'button',class:'btn',onclick:close,text:'Close'}),
       h('span',{style:'color:#bbb;font-size:13px;flex-basis:100%;text-align:center',text:label||(plain?'Print copy: for the printed letterhead pad':'Share copy: with the letterhead design')})),
