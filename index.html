@@ -7863,14 +7863,14 @@ function pbDefaults(p,kind){
 /* what the client receives at the end of each stage */
 const PB_TL_DEL={'0':'Design brief and FAR / area feasibility report (site analysis if agreed)',
   '1':'Two to three concept options: plans, massing and 3D views',
-  '2':'Developed floor plans, sections and facade 3D, with structural and MEP concepts (elevation drawings if agreed)',
-  '3':'Design freeze set for signature: final plans, 3D elevation and outline specification (elevation drawings if agreed)',
+  '2':'Developed floor plans, sections and facade 3D, with structural and MEP concepts',
+  '3':'Design freeze set for signature: final plans, 3D elevation and outline specification',
   '4':'Signed RAJUK submission set: planning permit and building approval drawings',
   '5':'The agreed number of 3D views and animations, and the brochure, as set out in the scope',
   '6':'WD-1: setting-out, foundation and basement drawings, with structural and below-ground MEP',
   '7':'WD-2: floor plans, sections, elevations, stair and lift details, structural and MEP drawings',
   '8':'WD-3: door and window schedules, toilet and kitchen details, flooring, facade details and finishing schedule'};
-const PB_TL_OLD=['Design brief, site analysis and FAR / area feasibility report', 'Developed floor plans, sections, elevations and facade 3D, with structural and MEP concepts', 'Design freeze set for signature: final plans, elevations and outline specification', 'Exterior and interior 3D renders, walk-through animation and brochure floor plans'];
+const PB_TL_OLD=['Developed floor plans, sections and facade 3D, with structural and MEP concepts (elevation drawings if agreed)', 'Design freeze set for signature: final plans, 3D elevation and outline specification (elevation drawings if agreed)', 'Design brief, site analysis and FAR / area feasibility report', 'Developed floor plans, sections, elevations and facade 3D, with structural and MEP concepts', 'Design freeze set for signature: final plans, elevations and outline specification', 'Exterior and interior 3D renders, walk-through animation and brochure floor plans'];
 const pbTlDel=x=>x.del!=null?x.del:(PB_TL_DEL[Object.keys(PB_TL_DEL).find(k=>PH[k]&&PH[k].n===x.label)]||'');
 /* the proposal timeline uses the same days as project phase plans: SLATE Phase Days v1.3 by plot size (DAYS_T) */
 const PB_DAYS={std:{name:DAYS_NAME.std},dev:{name:DAYS_NAME.dev}};
