@@ -6236,6 +6236,7 @@ function preBox(p,k){
 function openStdPlan(pid,type,pod){
   const p=S.projects[pid]||{}, tp=T()[type]; if(!tp||!tp.std) return;
   if(p.std) return openPhEdit(pid);
+  if(!p.pod&&!isInternalP(p)) return toast('Choose the POD first: its POD leader gets the gate deliverables.');
   const plan=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null;
   const m={sel:plan?phaseOrder(type,plan.sel):spPhaseSel(type,p.plan,p.intExec),ed:JSON.parse(JSON.stringify((plan&&plan.ed)||{})),open:null};
   S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pre:{},running:p.entry==='running',pace:paceOf(p),lead:personFor('lead',pod||p.pod)||'',m};
@@ -7929,7 +7930,7 @@ function projStats(p){
 const canSeeProjectDetail=p=>fullView()||inMyPodProject(p)||(!!myPod()&&p.pod===myPod())||isMemberOk(p,S.uid);
 /* reading a project's details: also the drafting lead, on every active non-Chalk project (they check sets for every pod). Changing them still needs canSeeProjectDetail. */
 const canViewProjectDetail=p=>!!p&&(canSeeProjectDetail(p)||(!!myHeadTeam()&&!isChalkProj(p)&&!p.closed&&isLive(p)));
-const podText=p=>{ const ps=podsOfProject(p); return ps.length?ps.map(podLabel).join(' + '):isInternalP(p)?'Studio work':'Studio / internal'; };
+const podText=p=>{ const ps=podsOfProject(p); return ps.length?ps.map(podLabel).join(' + '):isInternalP(p)?'Studio work':p&&p.pod==='Studio'?'Studio / internal':'No POD yet'; };
 /* ---------- Proposed projects ----------
    Projects SLATE has proposed but not yet won. Only the Principal and the COO see them (proposals/<id>, closed to everyone
    else in the database too). Each one keeps a log of client responses and a next follow-up date; SLATE OS reminds both of them
@@ -10081,6 +10082,13 @@ function sheetProjView(){
     h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone].filter(Boolean).join(' · ')),!isInternalP(p)&&p.pod!=='Studio'?fact('Service plan',p.plan&&SP_PLANS[p.plan]?SP_PLANS[p.plan].n:'Legacy terms'):null,fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',siteAddr(p)),isIntP(p)?null:fact('Land',p.katha?p.katha+' katha':''),
       fact('Planned finish',st.end?fmtD(st.end):'',p.dueDate?`Contract: ${fmtD(p.dueDate)}`+(st.end&&st.end>p.dueDate?` · ${diff(p.dueDate,st.end)}d over`:''):null),fact('Current phase',st.phase),(()=>{ const n=st.ts.filter(x=>x.parentId).length; return n?fact('Client revisions',`${n} round${n>1?'s':''}`,`across ${new Set(st.ts.filter(x=>x.parentId).map(x=>x.parentId)).size} item(s)`):null; })())];
   { const cs=closureSection(p); if(cs) out.push(cs); }
+  /* a client project with no POD yet: the Principal or the COO picks it here (interior projects run in PODs like buildings) */
+  if(!p.pod&&!isInternalP(p)&&!p.closed){ const can=ap&&S.canWrite, ps=S.sheet.podPick||(S.sheet.podPick={pod:'',pod2:''});
+    out.splice(2,0,h('div',{class:'callout',style:'display:grid;gap:8px'},h('b',{text:'Which POD runs this project?'}),
+      can?[h('div',{class:'form-row'},h('select',{id:'pv-pod','aria-label':'POD',onchange:e=>{ ps.pod=e.target.value; renderSheet(); }},h('option',{value:'',text:'Select POD…'}),pods().map(x=>h('option',{value:x,selected:ps.pod===x,text:podLabel(x)}))),
+          h('select',{id:'pv-pod2','aria-label':'Second POD',onchange:e=>{ ps.pod2=e.target.value; }},h('option',{value:'',text:'No second POD'}),pods().filter(x=>x!==ps.pod).map(x=>h('option',{value:x,selected:ps.pod2===x,text:podLabel(x)})))),
+        h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy||!ps.pod,onclick:()=>run(()=>S.db.doc('projects/'+p.id).update({pod:ps.pod,pod2:ps.pod2&&ps.pod2!==ps.pod?ps.pod2:''}),`${podLabel(ps.pod)} runs this project now`).then(ok=>{ if(ok) S.sheet.podPick=null; }),text:'Save POD'}))]
+      :h('span',{class:'f-hint',style:'margin:0',text:'The COO chooses the POD. Until then it has no POD leader and no team.'}))); }
   if(isIntP(p)){ const fs=[fact('Building',p.intBuilding),fact('Apartment or unit',[p.intUnit,p.intFloor?p.intFloor+' floor':''].filter(Boolean).join(' · ')),fact('Interior area',p.intArea?Number(p.intArea).toLocaleString('en-IN')+' sft':''),
       fact('Type of space',(INT_SPACES.find(x=>x[0]===p.intSpace)||[])[1]||''),fact('Rooms in scope',intRoomsTxt(p)),fact('Execution',p.intExec==='build'?'Design + build':p.intExec==='design'?'Design only':'',p.intHandover?'Handover target '+fmtD(p.intHandover):null)].filter(Boolean);
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Interior space'})),fs.length?h('div',{class:'facts'},fs):h('p',{class:'f-hint',style:'margin:0 4px',text:'Not filled in yet. Edit the project to add the space, rooms and execution.'}))); }
