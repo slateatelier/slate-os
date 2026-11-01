@@ -4217,6 +4217,16 @@ function sheetMeeting(){
     h('div',{class:'who',style:'font-size:14px'},org?avaEl(org,false,'sm'):null,org?`Organiser and minutes: ${nameOf(org)}`:'No organiser',m.status?h('span',{class:'tag'+(m.status==='returned'?' tag-req':''),style:'margin-left:6px',text:MSTAT[m.status]}):null),
     guestFor(date)?h('div',{class:'who',style:'font-size:13.5px'},avaEl(guestFor(date),false,'sm'),`Invited junior architect: ${nameOf(guestFor(date))}`):null,
     m.status==='returned'&&m.returnNote&&(org===S.uid||amApprover())?h('div',{class:'callout'},h('div',{class:'lbl',text:`Returned by ${nameOf(m.returnedBy)}`}),h('p',{class:'quote',text:m.returnNote})):null];
+  /* the previous meeting's minutes, to review before and during this one */
+  { const pd=Object.keys(S.meetings||{}).filter(k=>k<date&&S.meetings[k]&&(S.meetings[k].status==='published'||canSeeMinutes(k))&&(S.meetings[k].notes||decisionsOf(S.meetings[k]).length||(S.meetings[k].actions||[]).length)).sort().pop();
+    if(pd){ const pm=S.meetings[pd], pds=decisionsOf(pm), pas=(pm.actions||[]).filter(a=>a.text);
+      out.push(h('details',{class:'pb-grp'},h('summary',{},h('b',{text:`Previous meeting: ${wd(pd)} ${fmtD(pd)}`}),h('span',{text:`${pds.length} decision${pds.length===1?'':'s'} · ${pas.length} action${pas.length===1?'':'s'} · read the minutes`})),
+        h('div',{style:'display:grid;gap:8px;padding-top:8px'},
+          pm.notes?h('div',{style:'white-space:pre-line;font-size:14px',text:pm.notes}):null,
+          pds.length?h('div',{},h('div',{class:'lbl',text:'Decisions'}),h('ol',{style:'margin:4px 0 0;padding-left:22px;font-size:14px'},pds.map(x=>h('li',{text:x.text})))):null,
+          pas.length?h('div',{},h('div',{class:'lbl',text:'Actions'}),h('ol',{style:'margin:4px 0 0;padding-left:22px;font-size:14px'},pas.map(a=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]).filter(Boolean), done=ts.length&&ts.every(t=>t.doneAt);
+            return h('li',{},a.text,h('span',{class:'f-hint',text:' · '+[actOwners(a).map(nameOf).join(', '),a.due?'by '+fmtD(a.due):'',ts.length?(done?'done':'open'):''].filter(Boolean).join(' · ')})); }))):null,
+          h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>openMeeting(pd),text:'Open the full minutes'})))); } }
   if(!canSeeMinutes(date)&&m.status!=='published'&&!sh.edit){ out.push(h('p',{class:'muted',style:'margin:0',text:'The minutes will appear here once the COO approves them.'})); return out; }
   const carried=carriedActions(date);
   if(!sh.edit){
