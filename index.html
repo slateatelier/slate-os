@@ -1515,11 +1515,11 @@ async function createTask(d){
   if(d.assignee&&!(d.chalk?canChalkAssign():canAssignTo(d.assignee))&&!S.spawning) throw new Error('Only the Principal and the COO can assign tasks to the Principal’s Office.');
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
-  const ask=d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
+  const ask=d.support?(!!d.assignee&&!amApprover()):d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
   const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
   const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
   fxMark('task:'+ref.id,'in');
-  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now}:null,
+  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:null,support:d.support?{...d.support,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
     repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),...(d.clRef?{clRef:d.clRef}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
@@ -1564,15 +1564,17 @@ function assignCard(t,inSheet){
   const selEl=h('select',{id:'asp-'+t.id,'aria-label':'Assign to',style:'background:#fff',onchange:e=>{S.assignPick[t.id]=e.target.value;inSheet?renderSheet():render(true)}},ppl.map(id=>{const c=loadOf(id,t.id);return h('option',{value:id,text:`${nameOf(id)} — ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`})})); selEl.value=pick;
   return h('div',{class:inSheet?'callout':'card',style:inSheet?'':'border-radius:0;border-bottom:1px solid var(--line)'},
     h('div',{class:inSheet?'lbl':'row-title'},inSheet?(isCrossPod(r.to,t.projectId)?`Support requested from ${teamLabel(r.to)}`:'Support assignment requested'):h('button',{class:'linkish',type:'button',onclick:()=>openTask(t.id),text:t.title})),
-    h('div',{class:'row-meta'},h('span',{text:projLabel(p)}),h('span',{text:'·'}),h('span',{text:podLabel(podOf(t))}),h('span',{text:'·'}),h('span',{text:`${nameOf(r.by)} asks for ${nameOf(r.to)}`+(isCrossPod(r.to,t.projectId)?` (${teamLabel(r.to)})`:'')}),t.target||t.request?h('span',{text:'· '+fmtD(t.target||(t.request&&t.request.date))}):null),
+    h('div',{class:'row-meta'},h('span',{text:projLabel(p)}),h('span',{text:'·'}),h('span',{text:podLabel(podOf(t))}),h('span',{text:'·'}),h('span',{text:r.any?`${nameOf(r.by)} asks ${r.team||teamLabel(r.to)} for support`+(t.phase?` · ${t.phase}`:''):`${nameOf(r.by)} asks for ${nameOf(r.to)}`+(isCrossPod(r.to,t.projectId)?` (${teamLabel(r.to)})`:'')}),r.days?h('span',{text:`· about ${r.days} working day${+r.days===1?'':'s'}`}):null,t.target||t.request?h('span',{text:'· '+fmtD(t.target||(t.request&&t.request.date))}):null),
     amApprover()&&S.canWrite?[loadPanel(pick,t.id),h('div',{class:'bar'},ppl.length>1?selEl:null,
-      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>approveAssign(t,pick),text:pick===r.to?'Approve':'Assign to '+nameOf(pick)}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>approveAssign(t,pick),text:pick===r.to&&!r.any?'Approve':'Assign to '+nameOf(pick)}),
       h('input',{id:'adn-'+t.id,placeholder:'Note (optional)',value:S.declineNote[key]||'',style:'background:#fff',oninput:e=>{S.declineNote[key]=e.target.value}}),
       h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>declineAssign(t),text:'Decline'}))]
     :h('div',{class:'f-hint',text:'Waiting for the COO to approve this assignment.'}));
 }
 function approveAssign(t,to){ const key='as:'+t.id, note=(S.declineNote[key]||'').trim();
-  return run(()=>taskUpdate(t.id,{assignee:to,assignReq:null},[{type:'assignApproved',from:t.assignReq.to,to,note}]),'Assignment approved').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
+  /* a support request carries its needed-by date: approving the person approves the date too */
+  const dt=t.support&&t.request&&t.request.initial&&!t.target?t.request.date:'';
+  return run(()=>taskUpdate(t.id,{assignee:to,assignReq:null,...(dt?{target:dt,originalTarget:dt,request:null}:{})},[{type:'assignApproved',from:t.assignReq.to,to,note},...(dt?[{type:'dateApproved',to:dt,note:'With the support request'}]:[])]),'Assignment approved').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
 function declineAssign(t){ const key='as:'+t.id, note=(S.declineNote[key]||'').trim();
   return run(()=>taskUpdate(t.id,{assignReq:null},[{type:'assignDeclined',to:t.assignReq.to,note}]),'Assignment declined').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
 const REPEATS={'':'Does not repeat',weekly:'Repeats weekly',monthly:'Repeats monthly'};
@@ -2419,6 +2421,7 @@ function capPods(root){
   if(document.body) go(); else document.addEventListener('DOMContentLoaded',go); })();
 /* one-line descriptions under section headings, so it is clear what each area is for. Added after every render, in one place. */
 const SEC_INFO={
+  'Support from other teams':'Ask another POD or team (drafting pool, visualizers…) for one piece of work in a phase. The COO confirms the person and the date; it then becomes their task here.',
   'Interior space':'The MODO interior: where it is, its size, the rooms SLATE designs, and whether SLATE builds it too.',
   'By POD':'Each POD’s active projects, worst first. The dot is health (red off track, orange at risk, green on track, grey not started); the box is the phase now running. Tap a project to open it; tap a POD to fold it.',
   'Building and FAR':'The plot and building this project is designed for. The plot size in katha sets the standard days for each phase.',
@@ -5655,6 +5658,43 @@ function teamSection(p){
     h('div',{class:'list'},rows.length?rows:[h('div',{class:'card',style:'border-radius:0'},h('span',{class:'f-hint',text:'No pods or people yet.'}))]),form,
     h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Members see the project and its tasks, and its POD leaders can give them tasks directly. People from another pod join for a set time; drafting-pool and other support people join for good. The COO approves everyone added.'}));
 }
+/* support from another POD or team for one piece of work in a phase: the request is a task waiting for the COO, who picks or confirms the person */
+const SUP_SKIP=["Principal's Office",'Office Support'];
+function supportSection(p){
+  const ap=amApprover()&&S.canWrite, lead=S.canWrite&&isProjLead(p), can=(ap||lead)&&!p.closed, sh=S.sheet, f=sh.supAdd||null, td=today(), own=podsOfProject(p);
+  const xs=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.projectId===p.id&&!t.archived&&t.support&&!(t.doneAt&&t.doneAt<addDays(td,-30))).sort((a,b)=>(b.support.at||'').localeCompare(a.support.at||''));
+  if(!xs.length&&!can) return null;
+  const st=t=>t.assignReq?['Waiting for the COO','s-late']:t.doneAt?['Done '+fmtD(t.doneAt),'s-ontime']:[nameOf(t.assignee)+(t.target?' · due '+fmtD(t.target):''),'s-open'];
+  const rows=xs.map(t=>{ const [lbl,cl]=st(t), r=t.assignReq||t.support;
+    return h('div',{class:'card',role:'button',tabindex:'0',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px;cursor:pointer',onclick:()=>openTask(t.id)},
+      h('div',{class:'pc-row'},h('b',{style:'font-size:14px',text:t.title}),h('span',{class:'pill '+cl,text:lbl})),
+      h('div',{class:'f-hint',text:[t.phase,r.any?'Anyone from '+(r.team||''):(t.assignReq?nameOf(t.assignReq.to)+' · '+teamLabel(t.assignReq.to):teamLabel(t.assignee)),r.days?`about ${r.days} days`:'',`asked by ${nameOf(t.support.by)}`].filter(Boolean).join(' · ')})); });
+  let form=null;
+  if(can&&!f) form=h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ sh.supAdd={team:'',who:'',phase:'',title:'',due:'',days:'',note:''}; renderSheet(); },text:'+ Request support'});
+  else if(can){
+    const tms=teams().filter(t=>!SUP_SKIP.includes(t)&&!own.includes(t)), ppl=f.team?people().filter(id=>teamOf(id)===f.team&&!isLeft(id)):[];
+    const phs=p.std?stdPhases(p).filter(k=>!stdState(p,k).done).map(k=>phLabel(k,p)):[];
+    const sel=(id,lbl,opts,v,on)=>{ const e=h('select',{id,'aria-label':lbl,style:'background:#fff',onchange:ev=>on(ev.target.value)},opts.map(([a,b])=>h('option',{value:a,text:b}))); e.value=v; return e; };
+    form=h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Request support for this project'}),
+      h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'From *'}),sel('sp-team','Team',[['','Choose a POD or team…'],...tms.map(t=>[t,podLabel(t)])],f.team,v=>{ f.team=v; f.who=''; renderSheet(); })),
+        h('label',{class:'field'},h('span',{class:'lbl',text:'Person'}),sel('sp-who','Person',[['',ap?'Choose a person…':'Anyone (the COO chooses)'],...ppl.map(id=>{ const c=loadOf(id); return [id,`${nameOf(id)} — ${c.open} open`]; })],f.who,v=>{ f.who=v; }))),
+      h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'Phase'}),sel('sp-ph','Phase',[['','General (no phase)'],...phs.map(x=>[x,x])],f.phase,v=>{ f.phase=v; })),
+        h('label',{class:'field'},h('span',{class:'lbl',text:'Needed by *'}),h('input',{id:'sp-due',type:'date',min:td,value:f.due,style:'background:#fff',oninput:e=>{ f.due=e.target.value; }}))),
+      h('label',{class:'field'},h('span',{class:'lbl',text:'What do you need? *'}),h('input',{id:'sp-title',maxlength:120,placeholder:'e.g. 3D views of the lobby and two typical units',value:f.title,style:'background:#fff',oninput:e=>{ f.title=e.target.value; }})),
+      h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'Working days (about)'}),h('input',{id:'sp-days',type:'number',min:1,max:60,inputmode:'numeric',value:f.days,style:'background:#fff',oninput:e=>{ f.days=e.target.value; }})),
+        h('label',{class:'field'},h('span',{class:'lbl',text:'Note'}),h('input',{id:'sp-note',maxlength:160,placeholder:'Optional',value:f.note,style:'background:#fff',oninput:e=>{ f.note=e.target.value; }}))),
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{
+          if(!f.team) return toast('Choose the POD or team.'); if(!(f.title||'').trim()) return toast('Write what you need.'); if(!f.due) return toast('Choose when it is needed by.'); if(f.due<td) return toast('The date can’t be in the past.');
+          if(ap&&!f.who) return toast('Choose the person.'); if(!ppl.length) return toast('No one is in that team yet.');
+          const to=f.who||ppl.slice().sort((a,b)=>loadOf(a).open-loadOf(b).open)[0], days=parseInt(f.days,10)||0;
+          run(()=>createTask({projectId:p.id,title:f.title.trim(),kind:'Task',assignee:to,phase:f.phase||'Support',target:ap?f.due:'',proposed:ap?'':f.due,note:[days?`About ${days} working days.`:'',(f.note||'').trim()].filter(Boolean).join(' '),
+            support:{team:f.team,any:!f.who,...(days?{days}:{})}}),ap?`Given to ${nameOf(to)}`:'Sent to the COO').then(ok=>{ if(ok){ sh.supAdd=null; renderSheet(); } }); },text:ap?'Assign':'Send request'}),
+        h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.supAdd=null; renderSheet(); },text:'Cancel'})),
+      h('div',{class:'f-hint',text:ap?'It becomes their task on this project right away.':'The COO confirms the person (or picks one if you chose Anyone) and the date. Then it becomes their task on this project.'}));
+  }
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Support from other teams'}),h('span',{class:'cnt',text:String(xs.length)})),
+    rows.length?h('div',{class:'list'},rows):null,form);
+}
 function memberReqs(){ const out=[]; for(const [pid,p] of Object.entries(S.projects)){ if(!isLive(p)) continue; for(const [uid,m] of projMembers(p)) if(m.status==='pending') out.push({pid,p:{...p,id:pid},uid,m}); } return out.sort((a,b)=>(a.m.at||'').localeCompare(b.m.at||'')); }
 function memberReqCards(){
   const xs=memberReqs(); if(!xs.length) return null;
@@ -7359,6 +7399,7 @@ const HOWDO=[
  ['projects','boss','Add a new project',['Projects › New project.','Fill in the name, Stage (Upcoming, Running or Completed), type, pod, land size, FAR, client, site and agreement.','Tap Add project.'],'The code is made automatically from area, plot and size (e.g. GUL2-24A-10K-2603). The phase setup opens next.','Over 30 katha needs a second pod. Agreement details are seen only by the Principal and COO.'],
  ['projects','lead','Ask for a new project for my pod',['Projects › Request a project.','Fill in the same form as a new project.','Tap Send for approval.'],'The COO approves it, edits it first or declines it with a note. You see it under Your project requests.','You can withdraw it while it is waiting.'],
  ['projects',['lead','boss'],'Enter a project that started before SLATE OS',['Add or request the project and choose the Stage: Running, or Completed.','Running: when setting up phases, tick Finished before SLATE OS on the phases already done and add their dates if known.','Completed: add the month it finished. It is kept as a record only.'],'Work before go-live is history: the COO approves it and it is never scored.','On a phase already set up, use Finished before SLATE OS? inside the phase.'],
+ ['projects',['lead','boss'],'Request support from another POD or team',['Open the project › Support from other teams › + Request support.','Choose the POD or team (drafting pool, visualization…), and a person or Anyone.','Choose the phase, what you need, the needed-by date and about how many working days.','Tap Send request.'],'The COO confirms the person (or picks one) and the date in Approvals › Support assignments. It then becomes that person’s task on your project, with the date.',null],
  ['projects',['lead','boss'],'Add a MODO interior project',['Projects › New project (or Request a project).','Project type: Interior design. The form asks for the interior space instead of land and FAR.','Fill in the building, apartment or unit, interior area in sft, type of space, the rooms in scope with how many of each, and the execution: design only, or design + build.','Save, then set up its phases: I0 Brief and survey to I4 Procurement, plus I5 Execution and handover for design + build.'],'The project carries the MODO tag in lists, on the By POD board and on the project, and runs on the interior phases with their own gates and checklists.',null],
  ['projects',['lead','boss'],'Mark a set submitted, feedback received or approved',['Open the project › Phases and gates.','On the phase in progress, check the date (today unless you change it).','Tap Mark submitted the day the set goes to the client. Later tap Feedback received when comments come in, then Client approved (Mark issued for working drawings).'],'It ticks the phase’s gate deliverable, starts or stops the client’s review clock, and adds the submission to the Submissions log.','Do it on the day: a late tick starts the client clock late.'],
  ['projects',['lead','boss'],'Log the submissions made before SLATE OS',['Open the project › Submissions log › + Log a submission.','Pick the set (Concept presentation, RAJUK set, Working drawings…) and the date.','Tap Save.'],'Pod leads’ entries wait for the COO. It is a record only, never scored.',null],
@@ -10096,6 +10137,7 @@ function sheetProjView(){
     if(fs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Building and FAR'})),h('div',{class:'facts'},fs))); }
   if(p.type==='jv'&&unitsOf(p)&&(det||amApprover())) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Landowner and developer units'})),h('div',{class:'card'},loChart({...p,loUnits:p.loUnits||[]},false))));
   { const tm=teamSection(p); if(tm) out.push(tm); }
+  { const sp=supportSection(p); if(sp) out.push(sp); }
   { const sb=subsSection(p); if(sb) out.push(sb); }
   { const ss=stdSection(p); if(ss) out.push(ss); }
   { const ms=projLog(p); if(ms) out.push(ms); }
