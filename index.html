@@ -6020,20 +6020,20 @@ function tlDep(p,k){ const ks=tlPhases(p), has=x=>ks.includes(x), frz=has('3')?'
   if(k==='8') return has('7')?{k:'7',at:'sub'}:{prev:true};
   return {prev:true}; }
 /* live = use what has actually happened; otherwise the pure plan from the start date */
-/* POD-load grace (Principal, 1 Nov 2026): a heavy phase that runs while the POD already has 2 other heavy phases on at least half of
+/* POD-load grace (Principal, 1 Nov 2026): a heavy phase that runs while the POD already has 5 other heavy phases on at least half of
    its working days gets +20% SLATE days. Decided when the timeline is planned (stored in std.grace), never on fast-track projects.
    Load = the POD's heavy phases running on a day: SLATE's own working window (start to submission), live projects only. */
-/* GRACE_AT: heavy phases at once (this one included) that trigger grace. Off (null) until the Principal sets the POD capacity. */
-const HEAVY=['2','4','6','7','8','i2','i3'], GRACE=0.2, GRACE_AT=null;
+/* GRACE_AT: heavy phases at once in the POD (this one included) that trigger grace: 6 (Principal, 1 Nov 2026). null switches it off. */
+const HEAVY=['2','4','6','7','8','i2','i3'], GRACE=0.2, GRACE_AT=6;
 const graceDays=(p,k)=>{ const g=p&&p.std&&p.std.grace&&p.std.grace[k]; return g&&paceOf(p)!=='fast'?Math.ceil(slateDaysFor(p,k)*g):0; };
 function podLoadWins(p){ const ps=podsOfProject(p), out=[];
   for(const q of projects()){ if(!q||q.id===p.id||!q.std||!tlOf(q)||q.closed||isOnHold(q)||!podsOfProject(q).some(x=>ps.includes(x))) continue;
     let pl; try{ pl=tlCompute(q,tlOf(q).start,true); }catch(e){ continue; }
-    HEAVY.forEach(k=>{ const f=pl[k]; if(!f||f.none||stdState(q,k).done||(f.subA&&f.subA<today())) return; out.push({pid:q.id,k,s:f.s,e:f.sub}); }); }
+    const qp=podsOfProject(q).filter(x=>ps.includes(x)); HEAVY.forEach(k=>{ const f=pl[k]; if(!f||f.none||stdState(q,k).done||(f.subA&&f.subA<today())) return; qp.forEach(pd=>out.push({pid:q.id,pd,k,s:f.s,e:f.sub})); }); }
   return out; }
 function graceFor(p,plan,wins){ const out={}; if(!GRACE_AT||paceOf(p)==='fast') return out; wins=wins||podLoadWins(p);
   HEAVY.forEach(k=>{ const f=plan[k]; if(!f||f.none||!f.s||!f.sub) return; let n=0, hit=0, x=f.s;
-    while(x<=f.sub){ if(isWorkDay(x)){ n++; const c=1+new Set(wins.filter(w=>w.s<=x&&w.e>=x).map(w=>w.pid)).size; if(c>=GRACE_AT) hit++; } x=addDays(x,1); }
+    while(x<=f.sub){ if(isWorkDay(x)){ n++; const on=wins.filter(w=>w.s<=x&&w.e>=x), c=Math.max(0,...podsOfProject(p).map(pd=>1+new Set(on.filter(w=>w.pd===pd).map(w=>w.pid)).size)); if(c>=GRACE_AT) hit++; } x=addDays(x,1); }
     if(n&&hit*2>=n) out[k]={g:GRACE,days:n,hit}; });
   return out; }
 function tlCompute(p,start,live){
@@ -6249,12 +6249,12 @@ function tlSection(p){
     ap?h('button',{class:'btn btn-sm',type:'button',onclick:()=>run(()=>S.db.doc('projects/'+p.id).update({std:{risk:{[x.k]:{by:S.uid,at:new Date().toISOString()}}}}),'At-risk start approved'),text:'Approve at-risk start'}):h('span',{class:'muted',text:'Waiting for the COO.'}))));
   if(ap&&paceOf(p)!=='fast'){ const g0=(p.std&&p.std.grace)||{}, gr=graceFor(p,tlCompute({...p,std:{...p.std,grace:{}}},t.start,true)), add=Object.keys(gr).filter(k=>!g0[k]&&!stdState(p,k).done&&!(live[k]&&live[k].subA));
     if(add.length) flags.push(h('div',{class:'tl-flag'},h('b',{text:`POD load: grace +20% due on ${add.map(k=>'phase '+phNo(k)).join(', ')}`}),
-      h('span',{text:add.map(k=>`${phLabel(k,p)}: ${gr[k].hit} of its ${gr[k].days} working days with 3 or more heavy phases in the POD`).join(' · ')+'. The team’s dates move; the client’s dates don’t.'}),
+      h('span',{text:add.map(k=>`${phLabel(k,p)}: ${gr[k].hit} of its ${gr[k].days} working days with 6 or more heavy phases in the POD`).join(' · ')+'. The team’s dates move; the client’s dates don’t.'}),
       h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{ const g={...g0}; add.forEach(k=>{ g[k]=GRACE; }); await S.db.doc('projects/'+p.id).update({std:{grace:g}});
           const np={...p,std:{...p.std,grace:g}}, pl=tlCompute(np,t.start,true);
           for(const k of tlPhases(np)){ const f=pl[k], st=stdState(np,k); if(!f||f.none) continue;
             for(const [g2,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(g2&&!g2.doneAt&&g2.target&&date&&date>g2.target) await taskUpdate(g2.id,{target:date},[{type:'scheduled',from:g2.target,to:date,note:'POD-load grace +20%'}]); } },'Grace given: the team’s dates moved'),text:'Give the grace'})));
-    const gl=Object.keys(g0).filter(k=>g0[k]&&ks.includes(k)); if(gl.length) flags.push(h('div',{class:'tl-flag',style:'border-color:var(--line)'},h('b',{text:`Grace +20% · POD load: ${gl.map(k=>'phase '+phNo(k)).join(', ')}`}),h('span',{text:'Given because the POD was carrying 3 or more heavy phases at once. Only the team’s dates moved.'}),
+    const gl=Object.keys(g0).filter(k=>g0[k]&&ks.includes(k)); if(gl.length) flags.push(h('div',{class:'tl-flag',style:'border-color:var(--line)'},h('b',{text:`Grace +20% · POD load: ${gl.map(k=>'phase '+phNo(k)).join(', ')}`}),h('span',{text:'Given because the POD was carrying 6 or more heavy phases at once. Only the team’s dates moved.'}),
       h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!confirm('Remove the grace? The forecast goes back to the standard days; dates already moved stay until you change them.')) return; run(()=>S.db.doc('projects/'+p.id).update({std:{grace:Object.fromEntries(gl.map(k=>[k,0]))}}),'Grace removed'); },text:'Remove'}))); }
   if(ap&&p.dueDate&&lastB&&lastF&&p.dueDate>lastB){ const buf=wdBetween(lastB,p.dueDate), used=wdBetween(lastB,lastF);
     if(used>0&&used*3>=buf*2) flags.push(h('div',{class:'tl-flag'},h('b',{text:used>=buf?'Past the client’s date':'Client buffer two-thirds used'}),h('span',{text:`The client was promised ${fmtD(p.dueDate)}; the forecast is ${fmtD(lastF)}. ${used} of the ${buf} working days of buffer are used. Only you and the COO see this.`}))); }
