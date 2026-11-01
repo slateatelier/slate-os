@@ -31,6 +31,7 @@
 .shg-n{display:flex;align-items:center;gap:3px;color:#9A5B13;font-size:12px}
 .shg-empty{font-size:12.5px;color:#8a6a35;padding:2px}
 .shg-champ{font-size:11.5px;color:#8a6a35;padding-top:2px}
+.shg-late{font-size:11.5px;color:#8a6a35}.shg-n b{min-width:18px;text-align:right}
 @keyframes shgBob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2px) rotate(-8deg)}}
 @keyframes shgIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 @keyframes shgWig{0%,100%{transform:rotate(0)}25%{transform:rotate(-12deg)}75%{transform:rotate(12deg)}}
@@ -4144,23 +4145,26 @@ function meetingCard(date,compact){
 const SHINGARA_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22 20.5H2Z" fill="#E0A23B" stroke="#9A5B13" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 2.5 15.2 20.5" fill="none" stroke="#9A5B13" stroke-width="1" opacity=".55"/><path d="M4.6 17.6l1.5 1.4M7 17.6l1.5 1.4M9.4 17.6l1.5 1.4M11.8 17.6l1.5 1.4M14.2 17.6l1.5 1.4M16.6 17.6l1.5 1.4" stroke="#9A5B13" stroke-width=".9" stroke-linecap="round"/><circle cx="10" cy="12" r=".8" fill="#9A5B13" opacity=".6"/><circle cx="13" cy="14.5" r=".7" fill="#9A5B13" opacity=".6"/></svg>';
 const shIcon=(cls)=>{ const x=h('span',{class:'shg'+(cls?' '+cls:'')}); x.innerHTML=SHINGARA_SVG; return x; };
 const qOf=d=>{ const y=+d.slice(0,4), q=Math.floor((+d.slice(5,7)-1)/3); return {y,q,from:`${y}-${String(q*3+1).padStart(2,'0')}-01`,to:q===3?`${y+1}-01-01`:`${y}-${String(q*3+4).padStart(2,'0')}-01`,lbl:`Q${q+1} ${y}`,months:['Jan–Mar','Apr–Jun','Jul–Sep','Oct–Dec'][q]}; };
+/* one late = one shingara for every SLATE member, except Ambia and Zisan (Principal, 1 Nov 2026) */
+const shgSupport=id=>teamOf(id)==='Office Support'||/^accounts$/i.test(nameOf(id).trim())||/\b(ambia|zisan)\b/i.test(nameOf(id));
+const shgHeads=()=>people().filter(id=>!shgSupport(id)).length;
 function shingaraTally(from,to){ const c={}, add=(id,d,what)=>{ if(!id) return; (c[id]=c[id]||[]).push({d,what}); };
   for(const [d,m] of Object.entries(S.meetings||{})) if(d>=from&&d<to&&m&&m.status!=='cancelled') for(const [id,v] of Object.entries(m.attendance||{})) if(v==='late') add(id,d,'Weekly meeting');
   for(const m of Object.values(S.pmeet||{})) if(m&&m.date>=from&&m.date<to&&m.status==='final'&&Array.isArray(m.late)) m.late.forEach(id=>add(id,m.date,m.title||'Meeting'));
-  return Object.entries(c).filter(([id])=>S.members[id]&&id!==ownerId()).map(([id,xs])=>({id,n:xs.length,xs:xs.sort((a,b)=>b.d.localeCompare(a.d))})).sort((a,b)=>b.n-a.n||nameOf(a.id).localeCompare(nameOf(b.id))); }
+  return Object.entries(c).filter(([id])=>S.members[id]&&id!==ownerId()&&!shgSupport(id)).map(([id,xs])=>({id,n:xs.length,xs:xs.sort((a,b)=>b.d.localeCompare(a.d))})).sort((a,b)=>b.n-a.n||nameOf(a.id).localeCompare(nameOf(b.id))); }
 function shingaraBoard(){
-  const Q=qOf(today()), rows=shingaraTally(Q.from,Q.to), tot=rows.reduce((a,r)=>a+r.n,0);
+  const Q=qOf(today()), rows=shingaraTally(Q.from,Q.to), per=shgHeads(), tot=rows.reduce((a,r)=>a+r.n,0)*per;
   const pq=qOf(addDays(Q.from,-1)), champ=shingaraTally(pq.from,pq.to)[0];
   const left=diff(today(),Q.to), MED=['🥇','🥈','🥉'], anim=!S.shgPlayed; S.shgPlayed=true;
   let rank=0, last=null;
   const row=(r,i)=>{ if(r.n!==last){ rank=i; last=r.n; }
     return h('div',{class:'shg-p'+(rank===0?' top':''),style:anim?`animation-delay:${80+i*60}ms`:'',title:r.xs.map(x=>`${fmtD(x.d)} · ${x.what}`).join('\n')},
       h('span',{class:'shg-rank',text:rank<3?MED[rank]:String(rank+1)}),h('span',{class:'shg-nm',text:nameOf(r.id)}),
-      h('span',{class:'shg-n'},shIcon(),h('b',{text:'×'+r.n}))); };
-  return h('section',{class:'sec shg-board'+(anim?' anim':''),title:'Late to a meeting = one shingara for the office. From the late marks in weekly and finalised meeting minutes. Resets every quarter.'},
-    h('div',{class:'shg-h'},shIcon('bob'),h('b',{text:'Shingara board'}),h('span',{class:'shg-q',text:`${Q.lbl} · resets in ${left}d`}),h('span',{class:'shg-tot',text:String(tot)})),
+      h('span',{class:'shg-late',text:`${r.n} late`}),h('span',{class:'shg-n'},shIcon(),h('b',{text:String(r.n*per)}))); };
+  return h('section',{class:'sec shg-board'+(anim?' anim':''),title:`Late to a meeting = one shingara for every SLATE member except Ambia and Zisan (${per} today). From the late marks in weekly and finalised meeting minutes. Resets every quarter.`},
+    h('div',{class:'shg-h'},shIcon('bob'),h('b',{text:'Shingara board'}),h('span',{class:'shg-q',text:`${Q.lbl} · 1 late = ${per} · resets in ${left}d`}),h('span',{class:'shg-tot',text:String(tot)})),
     rows.length?h('div',{class:'shg-list'},rows.slice(0,8).map(row)):h('div',{class:'shg-empty',text:'Nobody late this quarter.'}),
-    champ?h('div',{class:'shg-champ',text:`🏆 ${pq.lbl}: ${nameOf(champ.id)} · ${champ.n}`}):null);
+    champ?h('div',{class:'shg-champ',text:`🏆 ${pq.lbl}: ${nameOf(champ.id)} · ${champ.n} late`}):null);
 }
 function viewMeetings(){
   const up=upcomingSunday(), r=rota(), tab=S.mtab||'meet';
