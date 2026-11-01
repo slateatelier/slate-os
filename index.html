@@ -4654,7 +4654,7 @@ function sheetRota(){
   const sh=S.sheet, d=sh.d, ppl=people().filter(id=>(S.members[id]||id===ownerId())&&!d.ids.includes(id));
   const sel=h('select',{id:'rt-add',onchange:e=>{d.pick=e.target.value}},h('option',{value:'',text:'Add a person…'}),ppl.map(id=>h('option',{value:id,text:`${nameOf(id)}${roleOf(id)?' — '+roleOf(id):''}`}))); sel.value=d.pick;
   return [head('Weekly meeting','Rotation and time'),
-    h('div',{class:'form-row'},field('Meeting time',h('input',{id:'rt-time',type:'time',value:d.time,oninput:e=>{d.time=e.target.value}})),field('Venue',h('input',{id:'rt-venue',maxlength:60,value:d.venue,oninput:e=>{d.venue=e.target.value}}))),
+    h('div',{class:'form-row'},field('Meeting time',timeSel('rt-time',d.time,v=>{d.time=v},false)),field('Venue',h('input',{id:'rt-venue',maxlength:60,value:d.venue,oninput:e=>{d.venue=e.target.value}}))),
     field('Number of the meeting on the first Sunday',h('input',{id:'rt-no',type:'number',min:1,value:d.firstNo,oninput:e=>{d.firstNo=e.target.value}}),'Later meetings count up one a week, e.g. 03, 04, 05.'),
     h('p',{class:'lead',style:'margin:0',text:'Put the pod leads, the COO and the drafting leads in the order they take turns. Each Sunday moves to the next person, then the loop repeats.'}),
     h('div',{class:'list'},d.ids.length?d.ids.map((id,i)=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:24px auto minmax(0,1fr) auto auto;align-items:center'},
@@ -5232,6 +5232,11 @@ function renderSheet(fromData){
   secInfo(panel); el.hidden=false; document.body.classList.add('locked'); panel.scrollTop=top; restoreFocus(k);
 }
 const D=()=>S.sheet.d;
+/* times are picked in 15-minute steps (7:00 am to 10:45 pm); a time saved before that stays selectable */
+function timeSel(id,val,on,opt){ const xs=[]; for(let m=7*60;m<23*60;m+=15) xs.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));
+  if(val&&!xs.includes(val)) xs.push(val), xs.sort();
+  const lbl=t=>{ const [H,M]=t.split(':').map(Number); return `${H%12||12}:${String(M).padStart(2,'0')} ${H<12?'am':'pm'}`; };
+  const el=h('select',{id,onchange:e=>on(e.target.value)},[...(opt!==false?[h('option',{value:'',text:opt===true?'No time':'Choose a time…'})]:[]),...xs.map(t=>h('option',{value:t,text:lbl(t)}))]); el.value=val||''; return el; }
 function inp(key,attrs={}){ return h('input',{...attrs,id:'sh-'+key,value:D()[key]==null?'':D()[key],oninput:e=>{D()[key]=e.target.value}}); }
 function ta(key,attrs={}){ const el=h('textarea',{...attrs,id:'sh-'+key,oninput:e=>{D()[key]=e.target.value}}); el.value=D()[key]||''; return el; }
 function sel(key,opts){ const el=h('select',{id:'sh-'+key,onchange:e=>{D()[key]=e.target.value}},opts.map(([v,l])=>h('option',{value:v,text:l}))); el.value=D()[key]||''; return el; }
@@ -5365,7 +5370,7 @@ function sheetTask(){
     h('div',{class:'form-row'},field('Type',sel('kind',[['Task','Task'],['Deliverable','Deliverable']])),field('Project',(()=>{ const el=sel('projectId',ck?chalkProjOpts(t.projectId):projectOpts(t.projectId)); el.addEventListener('change',()=>renderSheet()); return el; })())),
     field('Assigned to',ck?(()=>{ const el=sel('assignee',chalkAssignOpts(t.assignee)); if(!canChalkAssign()) el.disabled=true; return el; })():sel('assignee',memberOpts(t.assignee))),
     h('div',{class:'form-row'},field('Start date (optional)',inp('start',{type:'date'}),'Used for the Timeline bar.'),field('Repeat',sel('repeat',Object.entries(REPEATS)))),
-    field('Time (optional)',inp('time',{type:'time'}))],'Save changes',()=>{
+    field('Time (optional)',timeSel('sh-time',D().time,v=>{D().time=v},true))],'Save changes',()=>{
       const title=(d.title||'').trim(); if(!title) return fail('The title can’t be empty.');
       if(!d.projectId) return fail('Choose a project.'); if(!d.assignee&&t.assignee) return fail('Choose who it’s assigned to.');
       const patch={},ev=[];
@@ -5498,7 +5503,7 @@ function sheetNewTask(){
         h('label',{class:'jt-opt'},h('input',{type:'radio',name:'jt',checked:d.split!==true,onchange:()=>{ d.split=false; renderSheet(); }}),h('span',{},h('b',{text:'One shared task'}),h('span',{class:'muted',text:'Everyone marks their part done; it goes for approval only when all have finished.'}))),
         h('label',{class:'jt-opt'},h('input',{type:'radio',name:'jt',checked:d.split===true,onchange:()=>{ d.split=true; renderSheet(); }}),h('span',{},h('b',{text:'Separate tasks'}),h('span',{class:'muted',text:'Each person finishes and is approved on their own.'}))))):null,
       field(amApprover()?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
-      field('Time (optional)',inp('time',{type:'time'}),'For meetings and visits: shows beside the date.'),
+      field('Time (optional)',timeSel('sh-time',D().time,v=>{D().time=v},true),'For meetings and visits: shows beside the date.'),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
       S.sheet.more?[
         (()=>{ const tf=titleField(d); return [tf[1],tf[2]]; })(),
@@ -7023,7 +7028,7 @@ function sheetPMeet(){
   if(sched) return [head(eye,m?'Reschedule or edit':'Schedule a meeting'),back,
     h('form',{class:'form',onsubmit:e=>{e.preventDefault();saveSchedule()}},pick,leadF,titleF,
       isProj?field('Type',typeSel):null,
-      h('div',{class:'form-row'},field('Date *',h('input',{id:'pm-date',type:'date',min:today(),value:d.date,oninput:e=>{d.date=e.target.value}})),field('Start time *',h('input',{id:'pm-time',type:'time',value:d.time||'',oninput:e=>{d.time=e.target.value}}))),
+      h('div',{class:'form-row'},field('Date *',h('input',{id:'pm-date',type:'date',min:today(),value:d.date,oninput:e=>{d.date=e.target.value}})),field('Start time *',timeSel('pm-time',d.time||'',v=>{d.time=v},'req'))),
       field('Venue or link',h('input',{id:'pm-venue',maxlength:200,value:d.venue||'',placeholder:'e.g. SLATE studio, site, client office, Google Meet link',oninput:e=>{d.venue=e.target.value}})),
       invite,
       field('Others attending',h('input',{id:'pm-ext',value:d.external,maxlength:200,placeholder:'e.g. Mr. Salam (client), Engr. Rahman (structural)',oninput:e=>{d.external=e.target.value}})),
@@ -9210,7 +9215,7 @@ function sheetPropTask(){ const sh=S.sheet, d=sh.d, id=sh.id, p=(S.props||{})[id
     h('form',{class:'form',onsubmit:submit},
       field('What needs doing',inp('title',{maxlength:160})),
       h('div',{class:'form-row'},field('Who',sel('to',propPeople().map(x=>[x,nameOf(x)+(x===cooUid()?' (COO)':x===ownerId()?' (Principal)':'')]))),field('By',inp('date',{type:'date',min:today()}))),
-      h('div',{class:'form-row'},field('Time (optional)',inp('time',{type:'time'})),field('Note (optional)',inp('note',{maxlength:200}))),
+      h('div',{class:'form-row'},field('Time (optional)',timeSel('sh-time',D().time,v=>{D().time=v},true)),field('Note (optional)',inp('note',{maxlength:200}))),
       h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Give the task'}),h('button',{class:'btn',type:'button',onclick:()=>openPropView(id),text:'Cancel'})))]; }
 function propWon(id,pid){ const p=(S.props||{})[id]; if(!p) return Promise.resolve();
   return propWrite(id,{...p,status:'won',wonAt:new Date().toISOString(),closedAt:new Date().toISOString(),closedBy:S.uid,projectId:pid,next:'',outcomeNote:p.outcomeNote||'Client confirmed. It is now a client project.'}); }
@@ -10013,7 +10018,7 @@ function sheetSiteVisit(){ const d=S.sheet.d, ap=amApprover(), now=d.mode==='now
       now?checkinField(d,p&&{...(pinFrom(d.map)||{})}):[
         h('div',{class:'form-row'},field('Who goes',who),field('Date *',h('input',{type:'date',min:today(),value:d.date,oninput:e=>{d.date=e.target.value}}))),
         alsoPeople(d),
-        field('Time',h('input',{type:'time',value:d.time,oninput:e=>{d.time=e.target.value}})),
+        field('Time',timeSel('ex-time',d.time,v=>{d.time=v},true)),
         field('Site address *',h('input',{maxlength:200,value:d.address,placeholder:'e.g. Plot 24A, Road 7, Gulshan 2',oninput:e=>{d.address=e.target.value}}),'Filled from the project; correct it if needed.'),
         field('Google Maps link (optional)',h('input',{type:'url',value:d.map,placeholder:'Paste the site’s map link or pin',oninput:e=>{d.map=e.target.value}}),'With a pin, the check-in shows how far the visitor was from the site.'),
         (d.also||[]).filter(x=>x&&x!==d.assignee).length?h('p',{class:'f-hint',style:'margin:0',text:'Everyone checks in at the site; it goes for approval when all have done it.'}):null],
@@ -10750,7 +10755,7 @@ function sheetSup(){
     hand:'The developer or owner has handed the building over. Construction support ends and the project becomes a record.'}[m];
   const f=[];
   if(m==='start') f.push(field('Under construction since *',inp('from',{type:'date',max:td})),field('Note',ta('note',{rows:2,placeholder:'e.g. Contractor on site, piling done'})));
-  if(m==='visit') f.push(h('div',{class:'form-row'},field('Visit date *',inp('on',{type:'date',min:td})),field('Time',inp('time',{type:'time'}))),field('Who goes *',who()),field('Purpose *',inp('purpose',{placeholder:'e.g. Check slab reinforcement before casting, level 3'})));
+  if(m==='visit') f.push(h('div',{class:'form-row'},field('Visit date *',inp('on',{type:'date',min:td})),field('Time',timeSel('sh-time',D().time,v=>{D().time=v},true))),field('Who goes *',who()),field('Purpose *',inp('purpose',{placeholder:'e.g. Check slab reinforcement before casting, level 3'})));
   if(m==='oncall') f.push(field('Visit date *',inp('on',{type:'date',max:td})),field('Who went *',who()),field('Why the site called *',inp('purpose',{placeholder:'e.g. Column clash with a sewer line'})),field('What was decided',ta('note',{rows:2})));
   if(m==='correction') f.push(field('Drawing or sheet *',inp('drawing',{placeholder:'e.g. A-201 Level 4 plan'})),field('What changes and why *',inp('purpose',{placeholder:'e.g. Shift kitchen window; site request'})),h('div',{class:'form-row'},field('Due *',inp('on',{type:'date',min:td})),field('Who corrects it *',who())));
   if(m==='hand'){ f.push(field('Handed over on *',inp('handedOn',{type:'date',max:td})),field('Note',ta('note',{rows:2,placeholder:'e.g. Handed over to the owners’ association'})));
