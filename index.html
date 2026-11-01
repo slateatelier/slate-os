@@ -1549,7 +1549,7 @@ async function createTask(d){
   if(d.assignee&&!(d.chalk?canChalkAssign():canAssignTo(d.assignee))&&!S.spawning) throw new Error('Only the Principal and the COO can assign tasks to the Principal’s Office.');
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
-  const ask=d.support?(!!d.assignee&&!amApprover()):d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
+  const ask=d.support?(!!d.assignee&&!amApprover()&&!coverOk(d.assignee,d.projectId)):d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
   const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,target:String(d.doneAt||'').slice(0,10)||null,originalTarget:String(d.doneAt||'').slice(0,10)||null,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
   const dReq=d.kind==='Deliverable'&&!d.gate&&!d.legacy&&!canSetDeliv();
   const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(dReq) hist.push({at:now,by:S.uid,type:'delivRequested'}); if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
@@ -1575,7 +1575,12 @@ const unscored=id=>['intern','other','boss'].includes(roleGroup(id));
 const myHeadTeam=()=>S.uid&&roleGroup(S.uid)==='dhead'?teamOf(S.uid):'';
 const isSupport=id=>!!id&&supportTeams().includes(teamOf(id));
 const isCrossPod=(id,pid)=>{ const tm=teamOf(id); if(!/^pod\b/i.test(tm)) return false; const ps=podsOfProject(S.projects[pid]); return ps.length>0&&!ps.includes(tm); };
-const needsAssignApproval=(id,pid)=>!!id&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(r4on()&&!S.dqAsk&&myHeadTeam()&&teamOf(id)===myHeadTeam());
+/* cover (Principal, 1 Nov 2026): while a POD is short of a member, its POD leader assigns members of other PODs to its projects
+   directly, without the COO. settings.cover = {'Pod 1':{since,note,by}}; the Principal or the COO ends it. Helpers earn the
+   usual capped POD-support bonus. */
+const coverOf=p=>{ const c=(S.settings&&S.settings.cover)||{}; return p?podsOfProject(p).find(pd=>c[pd]&&!c[pd].ended)||null:null; };
+const coverOk=(id,pid)=>{ const p=S.projects[pid]; return !!p&&!!coverOf(p)&&isProjLead(p)&&/^pod\b/i.test(teamOf(id)||'')&&!isLeft(id); };
+const needsAssignApproval=(id,pid)=>!!id&&!coverOk(id,pid)&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(r4on()&&!S.dqAsk&&myHeadTeam()&&teamOf(id)===myHeadTeam());
 function loadOf(id,excl){
   const td=today(), wk=addDays(td,7);
   const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id))&&(!isChalkTask(t)||isChalkP(id)));
@@ -5879,10 +5884,11 @@ function supportSection(p){
     const phs=p.std?stdPhases(p).filter(k=>!stdState(p,k).done):[];
     const items=f.k?clItems(f.k).filter(it=>{ const x=clOf(p,f.k,it.id); return !x.done&&!x.na; }):[];
     const it=items.find(x=>x.id===f.item), wd=f.start&&f.end&&f.end>=f.start?wdBetween(addDays(f.start,-1),f.end):0;
+    const dir=ap||(lead&&!!coverOf(p)&&/^pod\b/i.test(f.team||''));
     const sel=(id,lbl,opts,v,on)=>{ const e=h('select',{id,'aria-label':lbl,style:'background:#fff',onchange:ev=>on(ev.target.value)},opts.map(([a,b])=>h('option',{value:a,text:b}))); e.value=v; return e; };
     form=h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Request support for this project'}),
       h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'From *'}),sel('sp-team','Team',[['','Choose a POD or team…'],...tms.map(t=>[t,podLabel(t)])],f.team,v=>{ f.team=v; f.who=''; renderSheet(); })),
-        h('label',{class:'field'},h('span',{class:'lbl',text:'Person'}),sel('sp-who','Person',[['',ap?'Choose a person…':'Anyone (the COO chooses)'],...ppl.map(id=>{ const c=loadOf(id); return [id,`${nameOf(id)} — ${c.open} open`]; })],f.who,v=>{ f.who=v; }))),
+        h('label',{class:'field'},h('span',{class:'lbl',text:'Person'}),sel('sp-who','Person',[['',dir?'Choose a person…':'Anyone (the COO chooses)'],...ppl.map(id=>{ const c=loadOf(id); return [id,`${nameOf(id)} — ${c.open} open`]; })],f.who,v=>{ f.who=v; }))),
       h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'Phase'}),sel('sp-ph','Phase',[['','General (no phase)'],...phs.map(k=>[k,phLabel(k,p)])],f.k||'',v=>{ f.k=v; f.item=''; renderSheet(); })),
         h('label',{class:'field'},h('span',{class:'lbl',text:'Task *'}),sel('sp-item','Task',[['',f.k?(items.length?'Choose from the phase checklist…':'No open checklist items'):'Choose a phase, or type below'],...items.map(x=>[x.id,x.t.length>70?x.t.slice(0,68)+'…':x.t]),...(f.k?[['__other','Something else (type it)']]:[])],f.item||'',v=>{ f.item=v; if(v&&v!=='__other') f.title=''; renderSheet(); }))),
       !f.k||f.item==='__other'||!items.length?h('label',{class:'field'},h('span',{class:'lbl',text:'What do you need? *'}),h('input',{id:'sp-title',maxlength:120,placeholder:'e.g. 3D views of the lobby and two typical units',value:f.title,style:'background:#fff',oninput:e=>{ f.title=e.target.value; }})):null,
@@ -5894,15 +5900,18 @@ function supportSection(p){
           const title=it?it.t:(f.title||'').trim();
           if(!f.team) return toast('Choose the POD or team.'); if(!title) return toast(f.k?'Choose the task, or type what you need.':'Write what you need.');
           if(!f.start||!f.end) return toast('Choose the start and finish dates.'); if(f.start<td) return toast('The start can’t be in the past.'); if(f.end<f.start) return toast('The finish can’t be before the start.');
-          if(ap&&!f.who) return toast('Choose the person.'); if(!ppl.length) return toast('No one is in that team yet.');
+          if(dir&&!f.who) return toast('Choose the person.'); if(!ppl.length) return toast('No one is in that team yet.');
           const to=f.who||ppl.slice().sort((a,b)=>loadOf(a).open-loadOf(b).open)[0];
-          run(()=>createTask({projectId:p.id,title,kind:'Task',assignee:to,phase:f.k?phLabel(f.k,p):'Support',start:f.start,target:ap?f.end:'',proposed:ap?'':f.end,...(it?{clRef:{k:f.k,id:it.id}}:{}),
+          run(()=>createTask({projectId:p.id,title,kind:'Task',assignee:to,phase:f.k?phLabel(f.k,p):'Support',start:f.start,target:dir?f.end:'',proposed:dir?'':f.end,...(it?{clRef:{k:f.k,id:it.id}}:{}),
             note:[`Support ${fmtD(f.start)} to ${fmtD(f.end)}, ${wd} working day${wd===1?'':'s'}.`,(f.note||'').trim()].filter(Boolean).join(' '),
-            support:{team:f.team,any:!f.who,start:f.start,end:f.end,days:wd}}),ap?`Given to ${nameOf(to)}`:'Sent to the COO').then(ok=>{ if(ok){ sh.supAdd=null; renderSheet(); } }); },text:ap?'Assign':'Send request'}),
+            support:{team:f.team,any:!f.who,start:f.start,end:f.end,days:wd}}),dir?`Given to ${nameOf(to)}`:'Sent to the COO').then(ok=>{ if(ok){ sh.supAdd=null; renderSheet(); } }); },text:dir?'Assign':'Send request'}),
         h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.supAdd=null; renderSheet(); },text:'Cancel'})),
-      h('div',{class:'f-hint',text:ap?'It becomes their task on this project right away.':'The COO confirms the person (or picks one if you chose Anyone) and the date. Then it becomes their task on this project.'}));
+      h('div',{class:'f-hint',text:dir?'It becomes their task on this project right away.':'The COO confirms the person (or picks one if you chose Anyone) and the date. Then it becomes their task on this project.'}));
   }
-  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Support from other teams'}),h('span',{class:'cnt',text:String(xs.length)})),
+  const cv=coverOf(p), cvD=cv&&S.settings.cover[cv], boss=S.isOwner||isCOO(S.uid);
+  const cvBox=cv?h('div',{class:'callout',style:'display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap'},h('span',{style:'font-size:13.5px',text:`Cover on for ${podLabel(cv)}${cvD.note?': '+cvD.note:''}. Its POD leader assigns people from other PODs directly; they earn the POD-support bonus.`}),
+    boss&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>run(()=>settingsRef().update({cover:{[cv]:{...cvD,ended:today(),endedBy:S.uid}}}),'Cover ended'),text:'End cover'}):null):null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Support from other teams'}),h('span',{class:'cnt',text:String(xs.length)})),cvBox,
     rows.length?h('div',{class:'list'},rows):null,form);
 }
 function memberReqs(){ const out=[]; for(const [pid,p] of Object.entries(S.projects)){ if(!isLive(p)) continue; for(const [uid,m] of projMembers(p)) if(m.status==='pending') out.push({pid,p:{...p,id:pid},uid,m}); } return out.sort((a,b)=>(a.m.at||'').localeCompare(b.m.at||'')); }
