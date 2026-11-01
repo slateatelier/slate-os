@@ -536,7 +536,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .n-day{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 4px 0}
 .panel{grid-auto-rows:max-content}
 /* Save bars in long forms stay at the very bottom of the screen (the sheet's bottom padding no longer lifts them into the middle) */
-.sticky-acts{position:sticky;bottom:calc(-36px - env(safe-area-inset-bottom,0px));z-index:2;background:var(--group);padding-top:10px;padding-bottom:calc(46px + env(safe-area-inset-bottom,0px));margin-bottom:calc(-36px - env(safe-area-inset-bottom,0px));box-shadow:0 -1px 0 var(--line)}
+.sticky-acts{position:sticky;bottom:0;z-index:2;background:var(--group);padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));margin-bottom:0;box-shadow:0 -1px 0 var(--line)}
 .n-list{display:grid;background:var(--group);border-radius:var(--r);overflow:hidden}
 .n-item{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:4px 10px;padding:12px 14px;border-bottom:1px solid var(--line);align-items:start}
 .n-item:last-child{border-bottom:0}
