@@ -4398,11 +4398,11 @@ function viewPhaseGantt(){
   const s0=addDays(td,-Math.round(z.days*0.2)+g.offset*Math.round(z.days/2)), e0=addDays(s0,z.days-1), W=Math.round(z.days*z.px), x=d=>Math.round(diff(s0,d)*z.px);
   const podSel=h('select',{id:'pg-pod','aria-label':'POD',onchange:e=>{g.pmPod=e.target.value;render(true)}},h('option',{value:'',text:'All PODs'}),pods().map(v=>h('option',{value:v,text:podLabel(v)}))); podSel.value=g.pmPod||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:`${fmtD(s0)} – ${fmtD(e0)}`}),h('h1',{class:'h1',text:'Timeline'})),
-    h('div',{class:'bar'},TV_SEG(g),seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
+    h('div',{class:'bar'},TV_SEG(g)))];
+  out.push(h('div',{class:'bar'},podSel,seg('Zoom',[['month','6 weeks'],['quarter','3 months'],['half','6 months']],g.zoom,v=>{g.zoom=v;g.offset=0;render(true)}),
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Earlier',onclick:()=>{g.offset--;render(true)},text:'‹'}),
       g.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{g.offset=0;render(true)},text:'Today'}),
-      h('button',{class:'btn btn-sm',type:'button','aria-label':'Later',onclick:()=>{g.offset++;render(true)},text:'›'})))];
-  out.push(h('div',{class:'bar'},podSel));
+      h('button',{class:'btn btn-sm',type:'button','aria-label':'Later',onclick:()=>{g.offset++;render(true)},text:'›'})));
   const lk=(bg,l,m)=>[h('span',{class:'pg-key',style:`background:${bg};${m?'margin-left:10px':''}`}),l];
   out.push(h('div',{class:'now-legend'},...lk('#4A5868','now'),...lk('var(--late)','due soon',1),...lk('var(--overdue)','late',1),...lk('#DDF1E3','done',1),...lk('#EEF0F3','later',1),h('span',{class:'pg-key pre',style:'margin-left:10px'}),'before SLATE OS',h('span',{style:'display:inline-block;width:2px;height:14px;background:var(--overdue);margin-left:10px'}),'today'));
   const hd=[]; let d=s0;
