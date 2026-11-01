@@ -2422,7 +2422,7 @@ function render(force){
   const k=keepFocus(view);
   renderHeader();
   view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','projects','team','cal'].includes(S.view)?' wide':'');
-  view.replaceChildren(...[].concat(buildView()));
+  view.replaceChildren(...[].concat(buildView())); secInfo(view);
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
   try{ daySplash(); }catch(e){}
   restoreFocus(k);
@@ -5001,7 +5001,7 @@ function renderSheet(fromData){
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
-  el.hidden=false; document.body.classList.add('locked'); panel.scrollTop=top; restoreFocus(k);
+  secInfo(panel); el.hidden=false; document.body.classList.add('locked'); panel.scrollTop=top; restoreFocus(k);
 }
 const D=()=>S.sheet.d;
 function inp(key,attrs={}){ return h('input',{...attrs,id:'sh-'+key,value:D()[key]==null?'':D()[key],oninput:e=>{D()[key]=e.target.value}}); }
