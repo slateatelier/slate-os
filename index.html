@@ -7739,11 +7739,12 @@ function openProp(id,convert){ const p=id?(S.props||{})[id]:null;
 /* clients SLATE already knows: from client projects and proposals, newest details first. Picking one fills the contact
    details, so a repeat client (often a developer with many projects) is never typed again. */
 function clientDir(){ const M={}, norm=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
-  const add=(name,o,at)=>{ const k=norm(name); if(!k) return; const c=M[k]||(M[k]={name:String(name).trim(),projects:0,props:0,at:''});
+  const add=(name,o,at)=>{ const k=norm(name); if(!k) return; const c=M[k]||(M[k]={name:String(name).trim(),projects:0,live:0,props:0,at:'',last:''}); if((at||'')>c.last) c.last=at||'';
     if((at||'')>=c.at){ for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]) c[f]=o[f]; c.at=at||c.at; c.name=String(name).trim(); } else for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]&&!c[f]) c[f]=o[f]; };
-  Object.values(S.projects||{}).forEach(x=>{ if(!x||!x.client||isInternalP(x)||x.pod==='Studio') return; add(x.client,{contact:x.contact,phone:x.phone,type:x.type},x.createdAt||''); M[norm(x.client)].projects++; });
+  Object.values(S.projects||{}).forEach(x=>{ if(!x||!x.client||isInternalP(x)||x.pod==='Studio') return; add(x.client,{contact:x.contact,phone:x.phone,type:x.type},x.createdAt||''); M[norm(x.client)].projects++; if(!x.closed) M[norm(x.client)].live++; });
   Object.values(S.props||{}).forEach(x=>{ if(!x||!x.client) return; const dd=x.doc||{}; add(x.client,{contact:x.contact||dd.toName,phone:x.phone,email:x.email,title:dd.toTitle,address:dd.toAddress,type:x.type,src:x.src},x.createdAt||''); M[norm(x.client)].props++; });
-  return Object.values(M).sort((a,b)=>(b.projects+b.props)-(a.projects+a.props)||a.name.localeCompare(b.name)); }
+  /* running work first, then most recent: a client with only closed or one-off placeholder projects drops down */
+  return Object.values(M).sort((a,b)=>(b.live+b.props)-(a.live+a.props)||(b.last||'').localeCompare(a.last||'')||a.name.localeCompare(b.name)); }
 /* the client box: type to search known clients, tap one to fill the details */
 function clientPick(d,opt){ const box=h('div',{style:'display:grid;gap:6px'}), list=h('div',{style:'display:grid;gap:4px'});
   const show=()=>{ list.textContent=''; const q=String(d.client||'').trim().toLowerCase(); if(d._picked&&d._picked===d.client) return;
@@ -7751,7 +7752,7 @@ function clientPick(d,opt){ const box=h('div',{style:'display:grid;gap:6px'}), l
     xs.forEach(c=>list.append(h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:8px 12px;text-align:left;justify-content:flex-start;border-radius:10px',onclick:()=>{
       d.client=c.name; d._picked=c.name; ['contact','phone','email'].forEach(f=>{ if(c[f]) d[f]=c[f]; }); if(c.title) d._title=c.title; if(c.address) d._addr=c.address;
       if(c.type&&!d.type) d.type=c.type; if(!d.src) d.src=c.projects?'client':(c.src||''); renderSheet(); }},
-      h('span',{},h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?c.projects+' project'+(c.projects>1?'s':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact].filter(Boolean).join(' · ')})))));
+      h('span',{},h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?(c.live?c.live+' running':'')+(c.live&&c.projects>c.live?', ':'')+(c.projects>c.live?(c.projects-c.live)+' closed':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact].filter(Boolean).join(' · ')})))));
     list.prepend(h('div',{class:'f-hint',style:'margin:0',text:q?'Existing clients · tap to fill their details':'Your main clients · tap one, or type a new name'})); };
   const inpEl=h('input',{id:'sh-client',maxlength:120,placeholder:opt&&opt.ph||'Company or person',value:d.client||'',autocomplete:'off',oninput:e=>{ d.client=e.target.value; d._picked=''; show(); }});
   box.append(inpEl,list); show();
