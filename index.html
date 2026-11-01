@@ -1180,6 +1180,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .now-sum{display:flex;gap:14px;flex-wrap:wrap;margin:-4px 2px 0}
 .now-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 2px}
 .now-legend .now-chip{min-width:20px;height:20px;font-size:11px;animation:none}
+.pv-lead>summary{list-style:none}.pv-lead>summary::-webkit-details-marker{display:none}
+.pv-lead[open]>summary .cnt{opacity:.6}
+.pv-lead-h{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:12px 2px 8px}
 .ci-list{display:grid;gap:10px}
 .ci-row{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fff}
 .ci-t{font-size:14.5px;font-weight:600;line-height:1.35}.ci-m{font-size:12.5px;color:var(--muted);margin-top:2px}.ci-m.late{color:var(--overdue)}
@@ -10305,7 +10308,11 @@ function pvCalc(per,R){
   /* the COO is measured as leadership, against the whole firm, not ranked by task points */
   const lead=rows.find(x=>x.coo)||null;
   const dueAll=T.filter(t=>t.target&&t.target>=s&&t.target<=e&&!t.legacy&&creditOf(t)!=null), okAll=dueAll.filter(t=>['early','ontime'].includes(status(t))).length;
-  return {months,s,e,rows:rows.filter(x=>!x.coo),lead,projRows,totB,totC,unlinked,unatt,studioCost,idleCost,coo,supTot,payTot,onTime:dueAll.length?okAll/dueAll.length:null}; }
+  /* the Principal: own pay (if kept in HR) and the firm as a whole */
+  const runTot=months.reduce((a,ym)=>a+runOf(ym),0), oSt=own&&!inTeam(own)?stOf(own):null;
+  const ownCost=oSt?months.reduce((a,ym)=>{ if(oSt.active===false||(oSt.joinDate&&oSt.joinDate.slice(0,7)>ym)) return a; const r=salRate(oSt,ym); return a+salGross(r)+(+((r||{}).basic)||0)*2/12; },0):0;
+  const firmCost=payTot+runTot+ownCost;
+  return {months,s,e,rows:rows.filter(x=>!x.coo),lead,projRows,totB,totC,unlinked,unatt,studioCost,idleCost,coo,supTot,payTot,runTot,ownCost,ownNoSal:!oSt,firmCost,onTime:dueAll.length?okAll/dueAll.length:null}; }
 function viewValue(){
   if(S.uid!==ownerId()){ S.biz.tab='over'; return viewBizOver(); }
   const B=S.biz, R=pvRules(), out=[...bizHead('Only you see this. What each person costs SLATE against the fees their work earns: cost to company, fee earned, value multiple and project labour margins.',null)];
@@ -10344,11 +10351,20 @@ function viewValue(){
     hl('Best value multiple',tm,x=>x2(x.mult),x=>`${tk(x.fee)} earned on ${tk(x.ctc)} cost`),
     hl('Top performer',tf,x=>(Math.round(x.pts*10)/10).toFixed(1)+' points',x=>pc(x.rel)+' on time'+(x.nDue?` · ${x.nDue} task${x.nDue>1?'s':''} due`:''))));
   /* leadership: the COO, measured against the firm */
-  if(D.lead){ const L=D.lead, waiting=(()=>{ try{ return queueGroups().reduce((a,g)=>a+g.n,0); }catch(e){ return null; } })();
-    out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'Leadership'}),h('span',{class:'cnt',text:'the COO, measured against the whole firm'})),
+  { const L=D.lead, waiting=(()=>{ try{ return queueGroups().reduce((a,g)=>a+g.n,0); }catch(e){ return null; } })(), mar=D.totB-D.firmCost, fm=D.firmCost>0?D.totB/D.firmCost:null;
+    const per=D.months.length>1?` · ${D.months.length} months`:' · this month';
+    /* always folded: opens on a tap, folds again on the next visit */
+    out.push(h('details',{class:'pv-lead'},h('summary',{class:'sec-h biz-sec',style:'cursor:pointer'},h('h2',{text:'Leadership'}),h('span',{class:'cnt',text:'the Principal and the COO, measured against the whole firm ›'})),
+      h('div',{class:'pv-lead-h',text:'Principal'}),
+      h('div',{class:'kpis kpis5'},kpi('Principal cost',D.ownNoSal?'not in HR':tk(Math.round(D.ownCost)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:D.ownNoSal?'add your pay in HR & salaries to include it':'salary and Eid bonus'+per})),
+        kpi('Fees billed',tk(Math.round(D.totB)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'the whole firm'+per})),
+        kpi('Firm cost',tk(Math.round(D.firmCost)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:`team ${bdt(Math.round(D.payTot))} + running ${bdt(Math.round(D.runTot))}`+(D.ownCost?` + Principal ${bdt(Math.round(D.ownCost))}`:'')})),
+        kpi('Firm margin',(mar<0?'−':'')+tk(Math.round(Math.abs(mar))),mar>=0?'ontime':'overdue',h('div',{class:'f-hint',style:'margin:2px 0 0',text:'fees billed less firm cost'})),
+        kpi('Firm multiple',fm==null?'—':x2(fm),fm==null?'':fm>=R.bench?'ontime':fm>=1.5?'late':'overdue',h('div',{class:'f-hint',style:'margin:2px 0 0',text:`healthy at ${R.bench}× or more`}))),
+      ...(L?[h('div',{class:'pv-lead-h',text:'COO'}),
       h('div',{class:'kpis kpis5'},kpi('COO cost',L.noSal?'no salary':tk(Math.round(L.ctc)),null,L.noSal?null:h('div',{class:'f-hint',style:'margin:2px 0 0',text:`salary ${bdt(Math.round(L.sal))} + Eid bonus ${bdt(Math.round(L.bonus))}`+(L.oh>1?` + overhead share ${bdt(Math.round(L.oh))}`:'')+(D.months.length>1?` · ${D.months.length} months`:' · this month')})),kpi('Management share earned',tk(Math.round(L.feeM+L.feeW)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:R.coo+'% of every fee billed'})),
         kpi('Multiple',L.fee>0?x2(L.mult):'—',!(L.fee>0)||L.mult==null?'':L.mult>=R.bench?'ontime':L.mult>=1.5?'late':'overdue',!(L.fee>0)?h('div',{class:'f-hint',style:'margin:2px 0 0',text:'nothing billed yet'}):null),kpi('Studio on time',pc(D.onTime),D.onTime==null?'':D.onTime>=target()/100?'ontime':'late'),kpi('Approvals waiting now',waiting==null?'—':String(waiting),waiting>5?'late':'')),
-      h('p',{class:'f-hint',style:'margin:0 2px 6px',text:'Most of the COO’s work (coordination, approvals, clients, running the office) never becomes a task, so the COO is not ranked by points. Judge this block on fees billed against leadership cost, the studio’s on-time rate and how fast approvals clear.'})); }
+      h('p',{class:'f-hint',style:'margin:0 2px 6px',text:'Most of the COO’s work (coordination, approvals, clients, running the office) never becomes a task, so the COO is not ranked by points. Judge this block on fees billed against leadership cost, the studio’s on-time rate and how fast approvals clear.'})]:[]))); }
   if(D.supTot>1) out.push(h('p',{class:'f-hint',style:'margin:4px 2px 10px',text:`Support staff cost ${bdt(Math.round(D.supTot))} in this period (${D.payTot?Math.round(D.supTot/D.payTot*100):0}% of team cost). They are not ranked: their cost is shared into everyone’s cost to company, like rent.`}));
   /* matrix */
   out.push(...pvBoard(rows,R.bench,D.totB));
