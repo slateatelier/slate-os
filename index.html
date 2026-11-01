@@ -4142,12 +4142,19 @@ function restoreMeetDraft(){ const sh=S.sheet; if(!sh||!sh.edit) return; let x=n
   const m=S.meetings[sh.date]||{}; if(!x||x.uid!==S.uid||!x.d||(m.updatedAt&&m.updatedAt>x.at)) return; sh.d={...sh.d,...x.d}; sh.restored=x.at; }
 function openMeeting(date){ const m=S.meetings[date]||{};
   S.sheet={type:'meeting',date,edit:canEditMeeting(date)&&!['published','submitted'].includes(m.status),err:'',d:{
-    attendance:attOf(m),guest:m.guest||'',organiser:m.organiser||'',agenda:m.agenda||MEET_AGENDA,notes:m.notes||'',
+    attendance:attOf(m),guest:m.guest||'',organiser:m.organiser||'',agenda:m.agenda||MEET_AGENDA,agendaDone:[...(m.agendaDone||[])],notes:m.notes||'',
     review:JSON.parse(JSON.stringify(m.review||{})),updates:JSON.parse(JSON.stringify(m.updates||{})),
     decisionList:decisionsOf(m).map(x=>({text:x.text,area:x.area||'',rule:!!x.rule})),
     actions:(m.actions||[]).map(a=>({...a,owners:actOwners(a),taskIds:actTaskIds(a),kind:a.kind||'action'})),
     sharing:{topic:'',by:'',notes:'',...(m.sharing||{})}}};
   restoreMeetDraft(); renderSheet(); }
+/* an agenda as a checklist: each line ticked once it has been discussed */
+const agLines=t=>String(t||'').split('\n').map(x=>x.replace(/^\s*([-•*]|\d+[.)])\s*/,'').trim()).filter(Boolean);
+function agendaChecks(text,done,onChange,ro){ const L=agLines(text); if(!L.length) return null; const set=new Set(done||[]), n=L.filter(x=>set.has(x)).length;
+  return h('div',{class:'card',style:'gap:6px;background:#fff'},
+    h('div',{style:'display:flex;justify-content:space-between;gap:8px'},h('b',{style:'font-size:14px',text:'Agenda'}),h('span',{class:'f-hint',style:'margin:0;color:'+(n===L.length?'var(--ontime)':'var(--muted)'),text:`${n} of ${L.length} discussed`})),
+    ...L.map(x=>ro?h('div',{style:'display:flex;gap:8px;align-items:baseline;font-size:14px'},h('span',{style:'width:16px;color:'+(set.has(x)?'var(--ontime)':'var(--muted)'),text:set.has(x)?'✓':'○'}),h('span',{text:x,style:set.has(x)?'':'color:var(--muted)'}))
+      :h('label',{style:'display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer'},h('input',{type:'checkbox',style:'width:20px;height:20px;flex:0 0 20px',checked:set.has(x),onchange:e=>{ e.target.checked?set.add(x):set.delete(x); onChange([...set].filter(y=>L.includes(y))); }}),h('span',{text:x})))); }
 function saveMeeting(mode){
   const publish=mode==='publish'||mode===true, submit=mode==='submit';
   const sh=S.sheet, d=sh.d, date=sh.date, now=new Date().toISOString(), m=S.meetings[date]||{};
@@ -4177,7 +4184,7 @@ function saveMeeting(mode){
       const rules=decs.filter(x=>x.rule&&!x.ruleAdded); if(rules.length){ const cur=meetRules(); await S.db.doc('meetcfg/rules').set({items:[...cur,...rules.map(x=>({id:Math.random().toString(36).slice(2,10),text:x.text.trim(),cat:areaName(x.area)||'Weekly meeting',since:date,by:S.uid,at:now,from:date}))],by:S.uid,at:now}); rules.forEach(x=>{x.ruleAdded=true}); }
     }
     await S.db.doc('meetings/'+date).set({date,no:meetNo(date)||null,time:meetTime(),venue:rota().venue,organiser:d.organiser||(amApprover()?'':S.uid),guest:d.guest||'',
-      attendance:att,attendees:present,agenda:d.agenda||'',notes:d.notes||'',review:d.review||{},updates:d.updates||{},
+      attendance:att,attendees:present,agenda:d.agenda||'',agendaDone:(d.agendaDone||[]).filter(x=>agLines(d.agenda).includes(x)),notes:d.notes||'',review:d.review||{},updates:d.updates||{},
       decisionList:decs.map(x=>({text:x.text.trim(),area:x.area||'',rule:!!x.rule,...(x.ruleAdded?{ruleAdded:true}:{})})),decisions:decs.map(x=>x.text.trim()).join('\n'),
       actions:acts.map(a=>({text:a.text.trim(),kind:a.kind||'action',owner:a.owners[0]||'',owners:a.owners,due:a.ongoing?'':(a.due||''),...(a.ongoing?{ongoing:true}:{}),area:a.area||'',project:a.project||'',taskId:(actTaskIds(a)[0])||'',taskIds:actTaskIds(a)})),
       sharing:{topic:(d.sharing.topic||'').trim(),by:d.sharing.by||'',notes:(d.sharing.notes||'').trim()},
@@ -4229,6 +4236,7 @@ function sheetMeeting(){
           h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>openMeeting(pd),text:'Open the full minutes'})))); } }
   if(!canSeeMinutes(date)&&m.status!=='published'&&!sh.edit){ out.push(h('p',{class:'muted',style:'margin:0',text:'The minutes will appear here once the COO approves them.'})); return out; }
   const carried=carriedActions(date);
+  if(!sh.edit&&m.agenda) out.push(agendaChecks(m.agenda,m.agendaDone,null,true));
   if(!sh.edit){
     const att=attOf(m), canAtt=S.canWrite&&(amApprover()||org===S.uid);
     if(sh.att) out.push(mtSec(1,'Attendance','Tap each person’s status.',attEditor(date,sh.att),
@@ -4319,7 +4327,8 @@ function sheetMeeting(){
     (()=>{ const s=h('select',{id:'sh-by','aria-label':'Led by',style:'background:var(--group)',onchange:e=>{shr.by=e.target.value}},h('option',{value:'',text:'Led by…'}),ppl.map(id=>h('option',{value:id,text:nameOf(id)}))); s.value=shr.by||''; return s; })(),
     h('textarea',{id:'sh-notes2',rows:2,maxlength:600,placeholder:'Key points (optional)',style:'background:var(--group)',oninput:e=>{shr.notes=e.target.value}},shr.notes||''));
   out.push(h('form',{class:'form',oninput:()=>saveMeetDraft(),onchange:()=>saveMeetDraft(),onsubmit:e=>{e.preventDefault();saveMeeting(false)}},
-    field('Agenda',ta('agenda',{rows:3}),'Write it before the meeting; complete the sections below after it.'),
+    field('Agenda',ta('agenda',{rows:3,onchange:()=>renderSheet()}),'Write it before the meeting, one point per line. In the meeting, tick each point once it has been discussed.'),
+    agendaChecks(d.agenda,d.agendaDone,v=>{ d.agendaDone=v; saveMeetDraft(); renderSheet(); }),
     mtSec(1,'Attendance','Mark everyone: present, late, absent or excused. Late arrivals count toward the snacks rule.',attEditor(date,d.attendance)),
     mtSec(2,'Review of last meeting’s actions',carried.length?'Give each open action an update. Done ones are confirmed; dropped ones are archived when the COO approves.':null,carried.length?revRows:h('p',{class:'muted',style:'margin:0 4px',text:'No earlier actions to review.'})),
     /* project status: no longer part of the weekly meeting (Principal, 1 Nov 2026) */
@@ -4337,7 +4346,7 @@ function sheetMeeting(){
       m.status==='published'||m.updatedAt?h('button',{class:'btn',type:'button',onclick:()=>{sh.edit=false;renderSheet()},text:'Close editor'}):null,
       h('button',{class:'btn'+(sh.clearArm?' btn-accent':''),type:'button',style:sh.clearArm?'':'background:#fff;color:var(--overdue)',disabled:S.busy,onclick:()=>{
         if(!sh.clearArm){ sh.clearArm=true; renderSheet(); setTimeout(()=>{ if(S.sheet===sh&&sh.clearArm){ sh.clearArm=false; renderSheet(); } },4000); return; }
-        sh.clearArm=false; sh.d={...sh.d,attendance:{},review:{},updates:{},agenda:MEET_AGENDA,notes:'',decisionList:[],actions:sh.d.actions.filter(a=>actTaskIds(a).some(Boolean)),sharing:{topic:'',by:'',notes:''}}; sh.err=''; clearMeetDraft(date); renderSheet(); toast('Cleared. Tap Save draft to keep it cleared.'); },text:sh.clearArm?'Tap again to clear all':'Clear all'})),
+        sh.clearArm=false; sh.d={...sh.d,attendance:{},review:{},updates:{},agenda:MEET_AGENDA,agendaDone:[],notes:'',decisionList:[],actions:sh.d.actions.filter(a=>actTaskIds(a).some(Boolean)),sharing:{topic:'',by:'',notes:''}}; sh.err=''; clearMeetDraft(date); renderSheet(); toast('Cleared. Tap Save draft to keep it cleared.'); },text:sh.clearArm?'Tap again to clear all':'Clear all'})),
     h('div',{class:'f-hint',text:'Save draft keeps your work (it is also kept on this device as you type). Write the agenda before the meeting and complete the rest after it.'})));
   return out;
 }
@@ -6452,7 +6461,7 @@ function openPMeet(id,pid){
   if(!m) return openNewMeeting({projectId:pid||'',mode:'log',back});
   const p=mProj(m), cur=p&&p.std?curPhase(p):'', c=mCat(m);
   S.sheet={type:'pmeet',id,projectId:m.projectId||'',back,edit:false,mode:null,err:'',
-    d:{cat:c,leadId:m.leadId||'',projectId:c==='project'?m.projectId:'',title:m.title||'',type:m.type||'client',date:m.date,time:m.time||'',venue:m.venue||'',phase:m.phase||(m.status==='scheduled'?cur||'':''),attendees:[...(m.attendees||[])],cc:[...(m.cc||[])],external:m.external||'',agenda:m.agenda||'',decisions:m.decisions||'',changes:m.changes||'',extraAsk:!!m.extra,issues:m.issues||'',fbGot:m.status==='scheduled'?true:!!m.fbGot,actions:(m.actions||[]).map(a=>({...a})),cancelNote:''}};
+    d:{cat:c,leadId:m.leadId||'',projectId:c==='project'?m.projectId:'',title:m.title||'',type:m.type||'client',date:m.date,time:m.time||'',venue:m.venue||'',phase:m.phase||(m.status==='scheduled'?cur||'':''),attendees:[...(m.attendees||[])],cc:[...(m.cc||[])],agendaItems:m.agendaItems||(m.status==='scheduled'?m.agenda||'':''),agendaDone:[...(m.agendaDone||[])],external:m.external||'',agenda:m.agenda||'',decisions:m.decisions||'',changes:m.changes||'',extraAsk:!!m.extra,issues:m.issues||'',fbGot:m.status==='scheduled'?true:!!m.fbGot,actions:(m.actions||[]).map(a=>({...a})),cancelNote:''}};
   renderSheet();
 }
 function backToProject(){ const b=S.sheet&&S.sheet.back; if(b) openProjectView(b); else closeSheet(); }
@@ -6471,7 +6480,7 @@ function savePMeet(final){
     let extra=m&&m.extra||null; if(isProj&&d.extraAsk&&(d.changes||'').trim()&&!extra) extra={status:ap?'approved':'pending',by:S.uid,at:now,...(ap?{decidedBy:S.uid,decidedAt:now}:{})}; if(!d.extraAsk) extra=null;
     const title=(d.title||'').trim()||(isProj?`${PMT[d.type]||'Project'} meeting`:`${mCatName(d.cat)} meeting`), from=`From the ${isProj?(PMT[d.type]||'').toLowerCase()+' meeting':'“'+title+'”'} on ${fmtD(d.date)}`;
     if(final) for(const a of acts) if(!a.taskId){ a.taskId=await createTask({projectId:pid,title:a.text.trim(),kind:'Task',assignee:a.owner,phase:isProj&&d.phase?phLabel(d.phase):'Meeting actions',target:ap?(a.due||''):'',proposed:ap?'':(a.due||''),note:from}); }
-    await ref.set({projectId:pid,cat:d.cat,leadId:canProps()?(d.leadId||''):((m&&m.leadId)||''),title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,cc:(d.cc||[]).filter(x=>!d.attendees.includes(x)),external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot),
+    await ref.set({projectId:pid,cat:d.cat,leadId:canProps()?(d.leadId||''):((m&&m.leadId)||''),title,type:isProj?d.type:'studio',date:d.date,time:d.time||'',venue:(d.venue||'').trim(),phase:isProj?(d.phase||''):'',attendees:d.attendees,cc:(d.cc||[]).filter(x=>!d.attendees.includes(x)),agendaItems:d.agendaItems||(m&&m.agendaItems)||'',agendaDone:(d.agendaDone||[]).filter(x=>agLines(d.agendaItems||'').includes(x)),external:(d.external||'').trim(),agenda:d.agenda||'',decisions:d.decisions||'',changes:isProj?(d.changes||''):'',extra,issues:d.issues||'',fbGot:!!(fbOk&&isClientMT(d.type)&&d.phase&&d.fbGot),
       actions:acts.map(a=>({text:a.text.trim(),owner:a.owner||'',due:a.due||'',taskId:a.taskId||''})),status:final?'final':(m&&m.status==='final'?'final':'draft'),sentAt:m&&m.sentAt||'',
       createdAt:m&&m.createdAt||now,createdBy:m&&m.createdBy||S.uid,updatedAt:now,updatedBy:S.uid,finalAt:final?(m&&m.finalAt||now):(m&&m.finalAt||''),
       ...(m&&m.schedAt?{schedAt:m.schedAt}:{}),history:[...((m&&m.history)||[]),{at:now,by:S.uid,type:final?'final':'draft'}].slice(-20)});
@@ -6494,6 +6503,7 @@ function sheetPMeet(){
       h('div',{class:'sh-status'},pmStateTag(m),m.phase?h('span',{class:'tag',text:'Phase '+phLabel(m.phase)}):null,m.fbGot?h('span',{class:'tag',style:'color:var(--ontime)',text:'Client feedback received'}):null),
       sec('Attended',h('div',{class:'chips'},(m.attendees||[]).map(id=>h('span',{class:'chip who',style:'padding-right:12px'},avaEl(id,false,'sm'),nameOf(id))),m.external?h('span',{class:'chip',style:'padding-right:12px',text:m.external}):null)),
       (m.cc||[]).length?sec('Minutes shared with (did not attend)',h('div',{class:'chips'},m.cc.map(id=>h('span',{class:'chip who',style:'padding-right:12px;opacity:.85'},avaEl(id,false,'sm'),nameOf(id))))):null,
+      m.agendaItems?agendaChecks(m.agendaItems,m.agendaDone,null,true):null,
       sec('Discussion',m.agenda?h('div',{class:'card',style:'white-space:pre-line',text:m.agenda}):null),
       sec('Decisions',lines(m.decisions).length?h('ol',{class:'card',style:'margin:0;padding-left:34px'},lines(m.decisions).map(x=>h('li',{text:x}))):null),
       sec('Changes requested by the client',lines(m.changes).length?h('div',{class:'card'},h('ul',{style:'margin:0;padding-left:20px'},lines(m.changes).map(x=>h('li',{text:x}))),
@@ -6551,6 +6561,7 @@ function sheetPMeet(){
         return field('Share the minutes with (did not attend)',h('div',{class:'chips'},all.filter(id=>!set.has(id)).map(id=>h('button',{type:'button',class:'chip who'+(cs.has(id)?' on':''),style:'border:0;cursor:pointer;padding-right:12px',
           onclick:()=>{ cs.has(id)?cs.delete(id):cs.add(id); d.cc=[...cs]; renderSheet(); }},avaEl(id,false,'sm'),nameOf(id)))),'They get the minutes when they are finalised, without being recorded as attending.'); })(),
       field('Other attendees',h('input',{id:'pm-ext',value:d.external,maxlength:200,placeholder:'e.g. Mr. Salam (client), Engr. Rahman (structural)',oninput:e=>{d.external=e.target.value}})),
+      d.agendaItems?agendaChecks(d.agendaItems,d.agendaDone,v=>{ d.agendaDone=v; renderSheet(); }):null,
       field('Discussion',ta('agenda',{placeholder:'Key points discussed',rows:3})),
       field('Decisions',ta('decisions',{placeholder:'One decision per line, e.g.\nUnit B kitchen moved to the east side\nGround floor lobby double height',rows:3})),
       isProj&&isClientMT(d.type)?[field('Changes requested by the client',ta('changes',{placeholder:'One change per line',rows:3})),
