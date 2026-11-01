@@ -611,6 +611,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .mn-sub{padding:0 0 10px 17px;font-size:13px;display:grid;gap:4px}.mn-sub>div{display:flex;justify-content:space-between;gap:12px;color:var(--muted)}
 .mn-li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}.mn-li:first-child{border-top:0}.mn-li .mono{white-space:pre;text-align:right}
 .mn-key{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.mn-key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.pb-grp{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--card,#fff)}.pb-grp>summary{cursor:pointer;list-style:none;display:grid;gap:2px}.pb-grp>summary::-webkit-details-marker{display:none}.pb-grp>summary b{font-size:15px}.pb-grp>summary b:after{content:' ›';color:var(--muted)}.pb-grp[open]>summary b:after{content:' ⌄'}.pb-grp>summary span{font-size:13px;color:var(--muted)}
 .pc-next{font-size:13px;font-weight:600;color:var(--ink)}.pc-next.u{color:var(--overdue)}
 .flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 12px}
 .flow-s{display:flex;gap:8px;align-items:flex-start;text-align:left;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--card,#fff);cursor:pointer;font:inherit;color:inherit;min-width:0}
@@ -7735,8 +7736,29 @@ function openProp(id,convert){ const p=id?(S.props||{})[id]:null;
   if(!Array.isArray(d.scope)) d.scope=[];
   if(convert){ d.stage='prep'; d.next=addWorkDays(today(),3); }
   S.sheet={type:'prop',id:id||null,d,err:'',convert:!!convert}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-name'); el&&el.focus(); },30); }
+/* clients SLATE already knows: from client projects and proposals, newest details first. Picking one fills the contact
+   details, so a repeat client (often a developer with many projects) is never typed again. */
+function clientDir(){ const M={}, norm=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
+  const add=(name,o,at)=>{ const k=norm(name); if(!k) return; const c=M[k]||(M[k]={name:String(name).trim(),projects:0,props:0,at:''});
+    if((at||'')>=c.at){ for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]) c[f]=o[f]; c.at=at||c.at; c.name=String(name).trim(); } else for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]&&!c[f]) c[f]=o[f]; };
+  Object.values(S.projects||{}).forEach(x=>{ if(!x||!x.client||isInternalP(x)||x.pod==='Studio') return; add(x.client,{contact:x.contact,phone:x.phone,type:x.type},x.createdAt||''); M[norm(x.client)].projects++; });
+  Object.values(S.props||{}).forEach(x=>{ if(!x||!x.client) return; const dd=x.doc||{}; add(x.client,{contact:x.contact||dd.toName,phone:x.phone,email:x.email,title:dd.toTitle,address:dd.toAddress,type:x.type,src:x.src},x.createdAt||''); M[norm(x.client)].props++; });
+  return Object.values(M).sort((a,b)=>(b.projects+b.props)-(a.projects+a.props)||a.name.localeCompare(b.name)); }
+/* the client box: type to search known clients, tap one to fill the details */
+function clientPick(d,opt){ const box=h('div',{style:'display:grid;gap:6px'}), list=h('div',{style:'display:grid;gap:4px'});
+  const show=()=>{ list.textContent=''; const q=String(d.client||'').trim().toLowerCase(); if(d._picked&&d._picked===d.client) return;
+    const xs=clientDir().filter(c=>!q||c.name.toLowerCase().includes(q)).slice(0,q?6:4); if(!xs.length) return;
+    xs.forEach(c=>list.append(h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:8px 12px;text-align:left;justify-content:flex-start;border-radius:10px',onclick:()=>{
+      d.client=c.name; d._picked=c.name; ['contact','phone','email'].forEach(f=>{ if(c[f]) d[f]=c[f]; }); if(c.title) d._title=c.title; if(c.address) d._addr=c.address;
+      if(c.type&&!d.type) d.type=c.type; if(!d.src) d.src=c.projects?'client':(c.src||''); renderSheet(); }},
+      h('span',{},h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?c.projects+' project'+(c.projects>1?'s':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact].filter(Boolean).join(' · ')})))));
+    list.prepend(h('div',{class:'f-hint',style:'margin:0',text:q?'Existing clients · tap to fill their details':'Your main clients · tap one, or type a new name'})); };
+  const inpEl=h('input',{id:'sh-client',maxlength:120,placeholder:opt&&opt.ph||'Company or person',value:d.client||'',autocomplete:'off',oninput:e=>{ d.client=e.target.value; d._picked=''; show(); }});
+  box.append(inpEl,list); show();
+  if(d._picked&&d._picked===d.client) box.append(h('div',{class:'f-hint',style:'margin:0;color:var(--ontime)',text:'Existing client: contact details filled in. Change them below if needed.'}));
+  return box; }
 function sheetProp(){
-  const d=S.sheet.d, id=S.sheet.id;
+  const d=S.sheet.d, id=S.sheet.id, quick=!id&&!S.sheet.convert;
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
   const submit=e=>{ e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds proposed projects.');
     const name=(d.name||'').trim().toUpperCase(), client=(d.client||'').trim();
@@ -7744,31 +7766,36 @@ function sheetProp(){
     if(d.katha!==''&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     if(d.fee!==''&&!(+d.fee>0)) return fail('Fee should be a number, or leave it empty.');
     const now=new Date().toISOString(), pid=id||S.db.collection('proposals').doc().id, old=id?(S.props||{})[id]||{}:{};
-    const v={...old,name,client,contact:(d.contact||'').trim(),phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
+    const v={...old,name,client,...(d._title||d._addr?{_title:'',_addr:''}:{}),contact:(d.contact||'').trim(),phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
       scope:[...d.scope],feeBasis:d.feeBasis||'lump',fee:d.fee===''?'':String(+d.fee),feeNote:(d.feeNote||'').trim(),sentOn:d.sentOn||'',stage:d.stage||'prep',next:d.next||'',note:(d.note||'').trim(),
       src:d.src||'',status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid,proposedAt:now}),...(S.sheet.convert?{lead:false,proposedAt:now}:{})};
-    run(()=>propWrite(pid,v),S.sheet.convert?'Moved to Proposed':id?'Proposal updated':'Proposal added: now write the proposal document').then(ok=>{ if(!ok) return; if(!id||S.sheet.convert) openPropDoc(pid,null,v); else openPropView(pid); }); };
+    if(!id&&!S.sheet.convert&&!v.next) v.next=addWorkDays(today(),3); delete v._title; delete v._addr; delete v._picked;
+    if(!id&&!S.sheet.convert&&(d._title||d._addr)) v._hint={title:d._title||'',address:d._addr||''};
+    run(()=>propWrite(pid,v),S.sheet.convert?'Moved to Proposed':id?'Proposal updated':'Proposal added: now choose the plan').then(ok=>{ if(!ok) return; if(!id||S.sheet.convert) openPropDoc(pid,null,v); else openPropView(pid); }); };
   const chip=(x)=>{ const on=d.scope.includes(x); return h('button',{type:'button',class:'chip','aria-pressed':String(on),style:'border:0;cursor:pointer;padding:6px 12px;'+(on?'background:var(--ink);color:#fff':''),onclick:()=>{ d.scope=on?d.scope.filter(y=>y!==x):[...d.scope,x]; renderSheet(); },text:x}); };
-  return [head(S.sheet.convert?'Make a proposal':id?'Edit proposal':'New proposed project',id?(d.name||d.client||'Proposal'):'Only you and the COO see this'),
+  return [head(S.sheet.convert?'Make a proposal':id?'Edit proposal':'New proposal',id?(d.name||d.client||'Proposal'):'Only you and the COO see this'),
     h('p',{class:'lead',style:'margin:0',text:'Just what you need while proposing. When the client confirms, it becomes a client project and the team sees it.'}),
     h('form',{class:'form',onsubmit:submit},
+      sec('Client'),
+      field('Client *',clientPick(d)),
+      h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Phone',inp('phone',{type:'tel',maxlength:40}))),
       sec('Project'),
       field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'})),
-      h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:120,placeholder:'Company or person'})),field('Contact person',inp('contact',{maxlength:80}))),
-      h('div',{class:'form-row'},field('Phone',inp('phone',{type:'tel',maxlength:40})),field('Email',inp('email',{type:'email',maxlength:120}))),
       field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'})),
-      field('Source',sel('src',[['','Not recorded'],...LEAD_SRC])),
       h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Project type',sel('type',[['','Not decided'],...Object.entries(STD_DEF).filter(([k])=>k!=='proposal').map(([k,t])=>[k,t.name])]))),
-      field('Scope proposed',h('div',{class:'chips'},SCOPES.map(chip))),
-      sec('Fee proposed'),
+      quick?null:field('Email',inp('email',{type:'email',maxlength:120})),
+      quick?null:field('Source',sel('src',[['','Not recorded'],...LEAD_SRC])),
+      quick?null:field('Scope proposed',h('div',{class:'chips'},SCOPES.map(chip))),
+      quick?h('div',{class:'f-hint',text:'Next you choose the plan and the fee is worked out. Follow-up is set for 3 working days from today; change it on the proposal later.'}):null,
+      ...(quick?[]:[sec('Fee proposed'),
       h('div',{class:'form-row'},field('Basis',seg('Fee basis',[['lump','Lump sum'],['sft','Per sft']],d.feeBasis||'lump',v=>{ d.feeBasis=v; renderSheet(); })),
         field(d.feeBasis==='sft'?'Rate (Tk per sft)':'Amount (Tk)',inp('fee',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
       field('Fee note',inp('feeNote',{maxlength:160,placeholder:'e.g. plus VAT; 3D extra'})),
       sec('Follow-up'),
       h('div',{class:'form-row'},field('Stage',sel('stage',Object.entries(PROP_STAGE))),field('Proposal sent on',inp('sentOn',{type:'date',max:today()}))),
       field('Next follow-up',inp('next',{type:'date'}),'You and the COO are reminded on this date, then every 3 days until a response is logged with a new date.'),
-      field('Note',ta('note',{rows:3,placeholder:'Anything worth remembering about this client or proposal'})),
-      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:S.sheet.convert?'Move to Proposed':id?'Save proposal':'Add proposed project'}),
+      field('Note',ta('note',{rows:3,placeholder:'Anything worth remembering about this client or proposal'}))]),
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:S.sheet.convert?'Move to Proposed':id?'Save proposal':'Next: choose the plan →'}),
         h('button',{class:'btn',type:'button',onclick:()=>id?openPropView(id):closeSheet(),text:'Cancel'})))]; }
 /* ---------- proposal builder: the client-facing proposal on the SLATE letterhead ----------
    Built inside a proposal (Business › Proposals › open one › Build the proposal). The draft lives in the proposal's
@@ -7851,7 +7878,8 @@ function pbNewRef(){ const y=today().slice(0,4), used=Object.values(S.props||{})
   return 'SLATE/PROP/'+y+'/'+String((used.length?Math.max(...used):0)+1).padStart(3,'0'); }
 function pbDefaults(p,kind){
   const k=kind||'dev', katha=+p.katha||0, area=katha?Math.round(katha*(k==='det'?6600:5000)/100)*100:'';
-  return {kind:k,date:today(),ref:pbNewRef(),toName:p.contact||'',toTitle:'',toCompany:p.client||'',toAddress:'',
+  const hn=p._hint||{};
+  return {kind:k,date:today(),ref:pbNewRef(),toName:p.contact||'',toTitle:hn.title||'',toCompany:p.client||'',toAddress:hn.address||'',
     subject:'Expression of interest and financial proposal: '+(p.name||'').trim(),
     intro:`Thank you for considering SLATE for ${p.name?p.name.trim():'your project'}. We are pleased to submit our proposal for the design consultancy below, with the scope, the fee and how it is paid.`,
     site:p.location||'',katha:p.katha||'',area:area===''?'':String(area),storeys:'',use:'Residential',
@@ -8022,9 +8050,16 @@ function pbSvcEditor(x,i){
       h('div',{style:'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px'},add,h('button',{type:'button',class:'btn btn-sm',onclick:addIt,text:'Add'})),
       pbSvcInfo(x.label)?h('button',{type:'button',class:'btn btn-sm',style:'justify-self:start',onclick:()=>{ pbSvcFill(x); PB_OPEN.add(i); renderSheet(); },text:'Reset to SLATE’s default'}):null));
   return det; }
+/* the builder's sections fold away under a one-line summary; only the plan and fee stay open */
+const PB_GRP_OPEN=new Set();
+function pbGroups(items){ const out=[]; let cur=null;
+  const close=()=>{ if(cur){ const g=cur; out.push(h('details',{class:'pb-grp',open:PB_GRP_OPEN.has(g.t),ontoggle:e=>{ e.target.open?PB_GRP_OPEN.add(g.t):PB_GRP_OPEN.delete(g.t); }},
+    h('summary',{},h('b',{text:g.t}),h('span',{style:g.warn?'color:var(--overdue)':'',text:g.sum||''})),h('div',{style:'display:grid;gap:12px;padding-top:10px'},...g.kids))); cur=null; } };
+  for(const x of items){ if(x&&x.grp){ close(); cur={t:x.grp,sum:x.sum,warn:x.warn,kids:[]}; } else if(x&&x.end){ close(); } else if(cur) cur.kids.push(x); else out.push(x); }
+  close(); return out; }
 function sheetPropDoc(){
   const sh=S.sheet, d=sh.d, id=sh.id, p=(S.props||{})[id]; if(!p) return [head('Proposal','Not found')];
-  const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:10px',text:t});
+  const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:10px',text:t}), gsec=(t,sum,warn)=>({grp:t,sum,warn});
   const F=pbFee(d), schSum=d.sched.reduce((a,x)=>a+(+x.pct||0),0);
   const upd=()=>{ const t=document.getElementById('pb-tot'); if(t){ const f=pbFee(d); t.textContent=f.total?pbTk(f.total)+(f.area?` · ${pbTk(f.rate)}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''):'—'; } const s=document.getElementById('pb-sum'); if(s){ const v=d.sched.reduce((a,x)=>a+(+x.pct||0),0); s.textContent=`${Math.round(v*100)/100}% of the fee`+(Math.round(v)!==100?' · should total 100%':''); s.style.color=Math.round(v)!==100?'var(--overdue)':''; } };
   const num=(o,k,ph,w)=>h('input',{type:'number',min:0,step:'any',inputmode:'decimal',placeholder:ph||'',value:o[k]==null?'':o[k],style:w?'width:'+w:'',oninput:e=>{ o[k]=e.target.value; upd(); }});
@@ -8044,9 +8079,9 @@ function sheetPropDoc(){
     try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:f.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },800); };
   return [head('Build the proposal · only you and the COO',p.name||p.client||'Proposal'),
-    h('p',{class:'lead',style:'margin:0',text:'Write the proposal the client receives, on the SLATE letterhead. Start from either layout and change anything; the total becomes this proposal’s fee.'}),
-    h('div',{class:'form'},
-      h('div',{class:'chips'},[['dev','Start from Developer layout'],['det','Start from Detailed layout']].map(([k,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>{ if(!confirm('Replace this draft with the '+(k==='dev'?'Developer':'Detailed')+' layout?')) return; openPropDoc(id,k); },text:l}))),
+    h('p',{class:'lead',style:'margin:0',text:'Quick way: choose the plan and tier, enter the built area, then Make the PDFs. Everything else is filled in from the plan; open a section below only to change it.'}),
+    h('div',{class:'form'},...pbGroups([
+      d.plan?null:h('div',{class:'chips'},[['dev','Start from Developer layout'],['det','Start from Detailed layout']].map(([k,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>{ if(!confirm('Replace this draft with the '+(k==='dev'?'Developer':'Detailed')+' layout?')) return; openPropDoc(id,k); },text:l}))),
       sec('Plan and fee'),
       (()=>{ const P=SP_PLANS[d.plan], F=P?spFee(d):null, rc=F&&F.fee, a=d.adj||(d.adj=spAdjDef(p));
         const ps=h('select',{'aria-label':'Service plan',onchange:e=>{ const v=e.target.value; d.plan=v; if(v&&SP_PLANS[v].tier) d.tier=SP_PLANS[v].tier; renderSheet(); }},
@@ -8067,17 +8102,17 @@ function sheetPropDoc(){
           P?h('div',{style:'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},
             h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ if(d.parts&&d.parts.length&&!confirm('Fill this proposal from the '+P.n+' plan? Services, fee, payment stages, site visits, revisions, terms and timeline are replaced.')) return; spApply(d,p); renderSheet(); toast(P.n+' plan filled in'); },text:'Fill the proposal from this plan'}),
             h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',style:'width:18px;height:18px',checked:!!d.cmp,onchange:e=>{ d.cmp=e.target.checked; }}),h('span',{text:'Compare plans in the proposal'}))):null); })(),
-      sec('Letter'),
+      gsec('Letter',`${d.toCompany||d.toName||'Client not set'} · ${d.ref||''} · ${fmtD(d.date)}`),
       h('div',{class:'form-row'},field('Date',inp('date',{type:'date'})),field('Reference',inp('ref',{maxlength:40}))),
       h('div',{class:'form-row'},field('To (person)',inp('toName',{maxlength:80,placeholder:'e.g. Mr. Shahin'})),field('Title',inp('toTitle',{maxlength:80,placeholder:'e.g. Managing Director'}))),
       h('div',{class:'form-row'},field('Company',inp('toCompany',{maxlength:120})),field('Address',inp('toAddress',{maxlength:160}))),
       field('Subject',inp('subject',{maxlength:160})),
       field('Opening paragraph',ta('intro',{rows:3})),
-      sec('Project'),
+      gsec('Project',[d.site,d.katha?d.katha+' katha':'',+d.area?(+d.area).toLocaleString('en-IN')+' sft':''].filter(Boolean).join(' · ')||'Not set'),
       field('Site',inp('site',{maxlength:160,placeholder:'Plot, road, sector, area'})),
       h('div',{class:'form-row'},field('Land (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Construction area (sft)',h('input',{id:'sh-area',type:'number',min:0,step:'any',inputmode:'decimal',value:d.area||'',oninput:e=>{ d.area=e.target.value; upd(); }}))),
       h('div',{class:'form-row'},field('Storeys',inp('storeys',{maxlength:40,placeholder:'e.g. G+M+8'})),field('Use',inp('use',{maxlength:60}))),
-      sec('Scope of work'),
+      gsec('Scope of work',d.scopeAuto?`From the services in the fee`:'Own list'),
       field('Scope is written from',seg('Scope',[['auto','The services in the fee'],['own','My own list']],d.scopeAuto?'auto':'own',v=>{ d.scopeAuto=v==='auto'; renderSheet(); })),
       d.scopeAuto?h('div',{style:'display:grid;gap:8px'},
         h('div',{class:'f-hint',style:'margin:0',text:'The scope lists every service in the fee below, in the same order and numbering, with its description and ticked items, so the scope and the fee always match. Site visits and as-built drawings are added from Site visits and extras.'}),
@@ -8085,7 +8120,7 @@ function sheetPropDoc(){
         field('Anything else in the scope · one per line',ta('scopeExtra',{rows:2})))
       :field('One item per line · check it matches the services in the fee',ta('scope',{rows:7})),
       field('Deliverables · one per line',ta('deliv',{rows:3})),
-      sec('Fee'),
+      gsec('Services and fee',`${(d.parts||[]).filter(x=>x.label).length} services · ${F.total?pbTk(F.total):'fee not set'}`),
       field('How the fee is worked out',seg('Fee basis',[['parts','Per sft by component'],['lump','Lump-sum package']],d.feeMode,v=>{ d.feeMode=v; renderSheet(); })),
       h('div',{style:'display:grid;gap:8px'},
         h('div',{class:'f-hint',text:d.feeMode==='parts'?'Choose each service and its rate per sft (times the construction area). Open “What’s included” to edit its description and tick the items it covers.':'Choose the services in the package. Open “What’s included” to edit each description and tick the items it covers.'}),
@@ -8109,7 +8144,7 @@ function sheetPropDoc(){
           h('div',{class:'mn-scroll'},h('table',{class:'iab-t'},h('thead',{},h('tr',{},h('th',{text:'Floor area'}),h('th',{class:'n',text:'Basic Tk/sft'}),h('th',{class:'n',text:'With allied ×1.5'}))),
             h('tbody',{},IAB_BANDS.map((b,i)=>h('tr',{class:i===I.bi?'on':''},h('td',{text:iabBandLabel(b)}),h('td',{class:'n',text:String(b[2][I.j])}),h('td',{class:'n',text:String(b[2][I.j]*1.5)})))))),
           h('div',{class:'f-hint',style:'margin:0'},I.bi>=0?`This project: ${(+d.area).toLocaleString('en-IN')} sft → Tk ${I.allied}/sft for architecture and allied design = ${pbTk(I.arch)}`+(I.site?`, plus landscape Tk ${I.landRate}/sft on ${I.site.toLocaleString('en-IN')} sft of site (${d.katha} katha) = ${pbTk(I.land)}`:'')+`. IAB minimum ${pbTk(I.total)}; SLATE’s fee is ${I.pct}% of it.`:I.lump?'Up to 10,750 sft the IAB scale is a lump sum, so no per-sft comparison.':'Enter the construction area to find the IAB band.')); })():null,
-      sec('Project timeline'),
+      gsec('Project timeline',d.tl&&d.tl.on?(()=>{ const T=pbTl(d); return `${T.rows.length} stages · ${T.total} working days, about ${T.weeks} weeks`; })():'Not in the proposal'),
       (()=>{ if(!d.tl) d.tl={on:false,start:'',setup:'3',table:pbDaysTable(p.type),rows:pbTlRows(p.type,d.katha||p.katha)}; const T=pbTl(d), tb=d.tl.table||pbDaysTable(p.type), bi=pbBand(tb,d.katha||p.katha);
         return h('div',{style:'display:grid;gap:8px'},
           h('div',{style:'display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center'},h('input',{type:'checkbox',id:'pb-tl',style:'width:20px;height:20px',checked:!!d.tl.on,onchange:e=>{ d.tl.on=e.target.checked; renderSheet(); }}),h('label',{for:'pb-tl',style:'font-size:15px',text:'Show the project timeline in the proposal'})),
@@ -8130,18 +8165,19 @@ function sheetPropDoc(){
             h('div',{style:'display:flex;gap:6px;flex-wrap:wrap'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.tl.rows.push({label:'',w:'',r:''}); renderSheet(); },text:'+ Add a stage'}),
               h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ d.tl.rows=pbTlRows(p.type,d.katha||p.katha,tb); renderSheet(); },text:'Reset to SLATE’s standard'})),
             h('b',{text:`Total ${T.total} working days (${T.setup} setup + stages), about ${T.weeks} weeks`+(T.end?` · work order ${fmtD(T.start)}, last stage ends ${fmtD(T.end)}`:'')+'. Authority approval time is extra.'})):null); })(),
-      sec('Payment schedule'),
+      gsec('Payment schedule',`${d.sched.filter(x=>x.label||+x.pct).length} stages · ${Math.round(schSum*100)/100}%`,Math.round(schSum)!==100),
       rowsEd(d.sched,[{k:'pct',w:'72px',ph:'%'}],()=>({label:'',pct:''}),'+ Add a stage'),
       h('div',{id:'pb-sum',class:'f-hint',style:Math.round(schSum)!==100?'color:var(--overdue)':'',text:`${Math.round(schSum*100)/100}% of the fee`+(Math.round(schSum)!==100?' · should total 100%':'')}),
-      sec('Site visits and extras'),
+      gsec('Site visits, revisions and validity',`${+d.vFree||0} visits · valid ${+d.validDays||0} days · ${d.tax==='incl'?'VAT/AIT included':'plus VAT and AIT'}`),
       h('div',{class:'form-row'},field('Free site visits',inp('vFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field(d.plan?'Extra visit, Principal (Tk)':'Extra visit, lead (Tk)',inp('vLead',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
       h('div',{class:'form-row'},field(d.plan?'Extra visit, POD architect (Tk)':'Extra visit, senior (Tk)',inp('vSenior',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('As-built drawings (Tk)',inp('asBuilt',{type:'number',min:0,step:'any',inputmode:'decimal'},),'Leave empty if included')),
       field('Extra 3D view (Tk per image)',inp('extra3d',{type:'number',min:0,step:'any',inputmode:'decimal'})),
       h('div',{class:'form-row'},d.revMode==='stage'?field('Revisions included',h('span',{class:'f-hint',style:'padding-top:10px',text:'3 rounds at schematic, 2 at each later stage'})):field('Free revisions (whole project)',inp('revFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra revision (Tk per katha)',inp('revRate',{type:'number',min:0,step:'any',inputmode:'decimal'}),+d.katha&&+d.revRate?'= '+pbTk(pbRevFee(d))+' per revision on '+d.katha+' katha':'Enter the land size above')),
       field('Offer valid for (days)',inp('validDays',{type:'number',min:1,step:'1',inputmode:'numeric'}),d.date&&+d.validDays>0?'Valid until '+fmtD(addDays(d.date,+d.validDays))+'. Shown on the proposal.':null),
       field('VAT and AIT',sel('tax',[['excl','Not included: added to each invoice (client pays)'],['incl','Included in the fee']])),
-      sec('Terms'),field('One per line',ta('terms',{rows:6})),
+      gsec('Terms and signature',`${pbLines(d.terms).length} terms · signed by ${d.signName||'—'}`),field('One per line',ta('terms',{rows:6})),
       h('div',{class:'form-row'},field('Signed by',inp('signName',{maxlength:80})),field('Title',inp('signTitle',{maxlength:80}))),
+      {end:true}]),
       sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
       sh.pdf&&sh.pdf.state==='ok'?h('div',{class:'card',style:'gap:8px'},h('b',{text:'Two PDFs are ready'}),
         h('div',{class:'f-hint',style:'margin:0',text:'Share copy: with the SLATE letterhead design, to send by email or WhatsApp. Print copy: the same pages without the letterhead, to print on the printed SLATE letterhead pad. Print it at actual size (100%, not “fit to page”).'}),
@@ -8674,7 +8710,8 @@ function sheetLead(){
   return [head(id?'Edit lead':'New lead',id?pTitle(d):'Only you and the COO see this'),
     h('p',{class:'lead',style:'margin:0',text:'Name, phone and where it came from are enough. Add the rest when you know it.'}),
     h('form',{class:'form',onsubmit:submit},
-      h('div',{class:'form-row'},field('Name or company *',inp('client',{maxlength:120,placeholder:'e.g. Rupayan Housing'})),field('Phone *',inp('phone',{type:'tel',maxlength:40}))),
+      field('Name or company *',clientPick(d,{ph:'e.g. Rupayan Housing'})),
+      field('Phone *',inp('phone',{type:'tel',maxlength:40})),
       field('Source *',sel('src',[['','Where did it come from?'],...LEAD_SRC])),
       field('Interest',seg('Interest',Object.entries(LEAD_HEAT).map(([k,[l]])=>[k,l]),d.heat||'warm',v=>{ d.heat=v; renderSheet(); })),
       h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Email',inp('email',{type:'email',maxlength:120}))),
