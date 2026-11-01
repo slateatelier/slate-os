@@ -4025,9 +4025,9 @@ function sheetProfile(){
 /* ---------- weekly meeting: Sundays, organiser rotates, structured minutes for everyone ----------
    The minutes follow one fixed order so they are quick to write and easy to follow up:
    1 Attendance (present / late / absent / excused)   2 Last meeting's actions, reviewed one by one
-   3 Project status by pod (on track / at risk / delayed)   4 Discussion and decisions (a decision can become a studio rule)
-   5 New actions (each with people, area and a target date; they become tasks when the COO approves)
-   6 Sharing session   7 Next meeting (worked out from the rotation).
+   3 Discussion and decisions (a decision can become a studio rule); project status is not part of it (Principal, 1 Nov 2026)
+   4 New actions (each with people, area and a target date; they become tasks when the COO approves)
+   5 Sharing session   6 Next meeting (worked out from the rotation).
    Standing rules (office hours, lateness, rotation…) live once in the Studio rules list, not in every set of minutes. */
 const rota=()=>{ const r=S.meetRota||{}; return {ids:r.ids||[],start:r.start||'',juniors:r.juniors||[],jstart:r.jstart||r.start||'',time:r.time||'11:00',venue:r.venue||'SLATE studio',firstNo:+r.firstNo||1}; };
 const meetTime=()=>rota().time;
@@ -4043,7 +4043,7 @@ function organiserFor(date){ const m=S.meetings[date]; if(m&&m.organiser) return
 const canEditMeeting=date=>S.canWrite&&(amApprover()||(organiserFor(date)===S.uid&&!['submitted','published'].includes(mStatus(date))));
 const meetNo=date=>{ const m=S.meetings[date]; if(m&&m.no) return +m.no; const r=rota(); if(!r.start) return null; return r.firstNo+Math.round(diff(r.start,date)/7); };
 const meetTitle=date=>{ const n=meetNo(date); return 'SLATE Weekly Meeting'+(n?' '+pad(n):''); };
-const MEET_AGENDA='Review of last meeting’s actions\nProject status and plan for the coming week\nChallenges and proposed solutions\nDevelopment initiatives (studio and individual)\nSharing session';
+const MEET_AGENDA='Review of last meeting’s actions\nChallenges and proposed solutions\nDevelopment initiatives (studio and individual)\nSharing session';
 const ATT=[['present','Present'],['late','Late'],['absent','Absent'],['excused','Excused']];
 const RAG=[['ok','On track','ontime'],['risk','At risk','late'],['off','Delayed','overdue']];
 const REVIEW=[['done','Done'],['ontrack','On track'],['delayed','Delayed'],['blocked','Blocked'],['dropped','Dropped']];
@@ -4234,19 +4234,19 @@ function sheetMeeting(){
         h('div',{class:'pc-row'},h('span',{style:'font-weight:500',text:t.title}),h('span',{class:'pill s-'+({done:'ontime',ontrack:'early',delayed:'late',blocked:'overdue',dropped:'open'}[rv[t.id].st]||'open'),text:(REVIEW.find(x=>x[0]===rv[t.id].st)||['','—'])[1]})),
         h('div',{class:'f-hint',text:[nameOf(t.assignee),t.target?'due '+fmtD(t.target):'',rv[t.id].note].filter(Boolean).join(' · ')})))):h('p',{class:'muted',style:'margin:0 4px',text:'No earlier actions to review.'})));
     const up=Object.entries(m.updates||{}).filter(([pid,u])=>u&&(u.rag||u.text));
-    out.push(mtSec(3,'Project status',null,up.length?h('div',{class:'list'},up.map(([pid,u])=>{ const p=S.projects[pid]; return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},
+    if(up.length) out.push(mtSec('·','Project status',null,up.length?h('div',{class:'list'},up.map(([pid,u])=>{ const p=S.projects[pid]; return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},
         h('div',{class:'pc-row'},h('b',{text:p?projLabel(p):'Project'}),u.rag?h('span',{class:'pill s-'+(RAG.find(x=>x[0]===u.rag)||[,,'open'])[2],text:(RAG.find(x=>x[0]===u.rag)||['',''])[1]}):null),
         u.text?h('div',{style:'white-space:pre-line',text:u.text}):null,u.help?h('div',{class:'f-hint',style:'color:var(--overdue)',text:'Needs: '+u.help}):null); })):h('p',{class:'muted',style:'margin:0 4px',text:'No project updates recorded.'})));
     const ds=decisionsOf(m);
-    out.push(mtSec(4,'Discussion and decisions',null,m.notes?h('div',{class:'card',style:'white-space:pre-line',text:m.notes}):null,
+    out.push(mtSec(3,'Discussion and decisions',null,m.notes?h('div',{class:'card',style:'white-space:pre-line',text:m.notes}):null,
       ds.length?h('ol',{class:'card',style:'margin:0;padding-left:34px'},ds.map(x=>h('li',{},x.text,x.area?h('span',{class:'f-hint',text:' · '+areaName(x.area)}):null,x.rule?h('span',{class:'tag',style:'margin-left:6px',text:'Studio rule'}):null))):h('p',{class:'muted',style:'margin:0 4px',text:'No decisions recorded.'})));
     const acts=(m.actions||[]).filter(a=>a.text);
-    out.push(mtSec(5,'New actions',null,acts.length?h('div',{class:'list'},acts.flatMap(a=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]?{...S.tasks[id],id}:null).filter(t=>t&&canSee(t));
+    out.push(mtSec(4,'New actions',null,acts.length?h('div',{class:'list'},acts.flatMap(a=>{ const ts=actTaskIds(a).map(id=>S.tasks[id]?{...S.tasks[id],id}:null).filter(t=>t&&canSee(t));
       if(ts.length) return ts.map(t=>row(t,{}));
       const os=actOwners(a); return [h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},h('div',{style:'font-weight:500'},a.kind&&a.kind!=='action'?h('span',{class:'tag tag-req',style:'margin-right:6px',text:AKIND[a.kind]}):null,a.text),h('div',{class:'f-hint who'},...os.slice(0,4).map(o=>avaEl(o,false,'sm')),[os.map(nameOf).join(', '),areaName(a.area)||(S.projects[a.project]?projLabel(S.projects[a.project]):''),a.due?'due '+fmtD(a.due):''].filter(Boolean).join(' · ')))]; })):h('p',{class:'muted',style:'margin:0 4px',text:'No new actions.'})));
     const shr=m.sharing||{};
-    out.push(mtSec(6,'Sharing session',null,shr.topic?h('div',{class:'card',style:'gap:4px'},h('b',{text:shr.topic}),shr.by?h('div',{class:'f-hint',text:'Led by '+nameOf(shr.by)}):null,shr.notes?h('div',{style:'white-space:pre-line',text:shr.notes}):null):h('p',{class:'muted',style:'margin:0 4px',text:'No sharing session recorded.'})));
-    out.push(mtSec(7,'Next meeting',null,h('div',{class:'card',style:'gap:4px'},h('b',{text:`${wd(nx)} ${fmtD(nx)} · ${fmtHM(meetTime())}`}),h('div',{class:'f-hint',text:[organiserFor(nx)?'Minutes: '+nameOf(organiserFor(nx)):'',guestFor(nx)?'Invited: '+nameOf(guestFor(nx)):''].filter(Boolean).join(' · ')}))));
+    out.push(mtSec(5,'Sharing session',null,shr.topic?h('div',{class:'card',style:'gap:4px'},h('b',{text:shr.topic}),shr.by?h('div',{class:'f-hint',text:'Led by '+nameOf(shr.by)}):null,shr.notes?h('div',{style:'white-space:pre-line',text:shr.notes}):null):h('p',{class:'muted',style:'margin:0 4px',text:'No sharing session recorded.'})));
+    out.push(mtSec(6,'Next meeting',null,h('div',{class:'card',style:'gap:4px'},h('b',{text:`${wd(nx)} ${fmtD(nx)} · ${fmtHM(meetTime())}`}),h('div',{class:'f-hint',text:[organiserFor(nx)?'Minutes: '+nameOf(organiserFor(nx)):'',guestFor(nx)?'Invited: '+nameOf(guestFor(nx)):''].filter(Boolean).join(' · ')}))));
     if(!m.updatedAt) out.push(h('p',{class:'muted',style:'margin:0',text:can?'Nothing written yet.':'The organiser hasn’t started the minutes yet.'}));
     if(amApprover()&&S.canWrite&&m.status==='submitted') out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--ink)'},h('div',{class:'lbl',text:`Submitted by ${nameOf(m.submittedBy)} · ${fmtTs(m.submittedAt)}`}),
       h('div',{class:'bar'},h('input',{id:'mt-rn',placeholder:'Note for the organiser (needed to return)',value:S.declineNote['mt:'+date]||'',style:'background:#fff',oninput:e=>{S.declineNote['mt:'+date]=e.target.value}}),
@@ -4312,14 +4312,14 @@ function sheetMeeting(){
     field('Agenda',ta('agenda',{rows:3}),'Write it before the meeting; complete the sections below after it.'),
     mtSec(1,'Attendance','Mark everyone: present, late, absent or excused. Late arrivals count toward the snacks rule.',attEditor(date,d.attendance)),
     mtSec(2,'Review of last meeting’s actions',carried.length?'Give each open action an update. Done ones are confirmed; dropped ones are archived when the COO approves.':null,carried.length?revRows:h('p',{class:'muted',style:'margin:0 4px',text:'No earlier actions to review.'})),
-    mtSec(3,'Project status','One line per running project: status, progress and plan, and any help needed. Leave a project blank if it wasn’t discussed.',prj.length?upRows:h('p',{class:'muted',style:'margin:0 4px',text:'No running projects.'})),
-    mtSec(4,'Discussion and decisions','Write the discussion briefly, then list each decision. Tick “Make it a studio rule” for standing guidelines (office hours, meeting rules…); they go to the Studio rules list instead of being repeated every week.',
+    /* project status: no longer part of the weekly meeting (Principal, 1 Nov 2026) */
+    mtSec(3,'Discussion and decisions','Write the discussion briefly, then list each decision. Tick “Make it a studio rule” for standing guidelines (office hours, meeting rules…); they go to the Studio rules list instead of being repeated every week.',
       field('Discussion',ta('notes',{placeholder:'Key points discussed',rows:4})),decRows,
       h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ d.decisionList.push({text:'',area:'',rule:false}); renderSheet(); setTimeout(()=>{ const e=document.getElementById('dc-'+(d.decisionList.length-1)); e&&e.focus(); },30); },text:'+ Add decision'})),
-    mtSec(5,'New actions','Each action needs who is responsible, the area and a target date. “Decision needed” and “Approval needed” go to the Principal unless you choose someone else. They become tasks when the COO approves the minutes.',actRows,
+    mtSec(4,'New actions','Each action needs who is responsible, the area and a target date. “Decision needed” and “Approval needed” go to the Principal unless you choose someone else. They become tasks when the COO approves the minutes.',actRows,
       h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ d.actions.push({text:'',kind:'action',owners:[],taskIds:[],due:'',area:'',project:''}); renderSheet(); setTimeout(()=>{const e=document.getElementById('ma-t-'+(d.actions.length-1));e&&e.focus()},30); },text:'+ Add action'})),
-    mtSec(6,'Sharing session','The 30-minute knowledge session after the meeting.',shareBox),
-    mtSec(7,'Next meeting',null,h('div',{class:'card',style:'background:#fff;gap:4px'},h('b',{text:`${wd(nx)} ${fmtD(nx)} · ${fmtHM(meetTime())}`}),h('div',{class:'f-hint',text:[organiserFor(nx)?'Minutes: '+nameOf(organiserFor(nx)):'',guestFor(nx)?'Invited: '+nameOf(guestFor(nx)):''].filter(Boolean).join(' · ')||'Set by the rotation'}))),
+    mtSec(5,'Sharing session','The 30-minute knowledge session after the meeting.',shareBox),
+    mtSec(6,'Next meeting',null,h('div',{class:'card',style:'background:#fff;gap:4px'},h('b',{text:`${wd(nx)} ${fmtD(nx)} · ${fmtHM(meetTime())}`}),h('div',{class:'f-hint',text:[organiserFor(nx)?'Minutes: '+nameOf(organiserFor(nx)):'',guestFor(nx)?'Invited: '+nameOf(guestFor(nx)):''].filter(Boolean).join(' · ')||'Set by the rotation'}))),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:var(--group);padding-block:10px;z-index:2'},
       h('button',{class:'btn',type:'submit',style:'background:#fff',disabled:S.busy,text:'Save draft'}),
