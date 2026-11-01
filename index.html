@@ -10230,13 +10230,16 @@ function viewBizOver(){
        the rest by quality-adjusted work points (task weight × on-time credit) on that project in the period
        (if no work was logged on it in the period, by the work logged on it before).
    · The Principal and Chalk Create are left out. Studio work counts for points but earns no fee. */
-const PV_DEF={lead:15,coo:5,oh:true,bench:2.5,pick:{}};
+/* v2 (Principal, 2 Nov 2026, international practice): fee credited by effort only (no leader or COO cut); two multiples:
+   fee ÷ salary (net multiplier, healthy about 3.0×) and fee ÷ full cost incl. overhead (healthy about 1.25×, 1.0× = break-even) */
+const PV_DEF={v:2,lead:0,coo:0,oh:true,bench:1.25,benchS:3,pick:{}};
 /* who is in the People value matrix: everyone except the Principal and Chalk Create; support staff (accounts, office, admin) are left out unless ticked in Rules */
 const pvBase=id=>!!id&&id!==ownerId()&&!isChalkP(id)&&!!S.members[id]&&!isLeft(id);
 const pvDefIn=id=>roleGroup(id)!=='other'&&!/account|office|admin|peon|driver/i.test((roleOf(id)||'')+' '+nameOf(id));
 const pvIn=(id,R)=>pvBase(id)&&((R.pick||{})[id]!=null?!!R.pick[id]:pvDefIn(id));
 /* the rules are kept in SLATE OS (Business data, config/pv), so they are the same on every device; a copy stays on this device */
-function pvRules(){ let r={}; try{ r=JSON.parse(localStorage.getItem('slate-pv')||'{}')||{}; }catch(e){} if(S.pvRulesDb) r=S.pvRulesDb; return {...PV_DEF,...r}; }
+function pvRules(){ let r={}; try{ r=JSON.parse(localStorage.getItem('slate-pv')||'{}')||{}; }catch(e){} if(S.pvRulesDb) r=S.pvRulesDb;
+  if((r.v||1)<2){ const {lead,coo,bench,...keep}=r; r=keep; } return {...PV_DEF,...r}; }
 function pvLoadRules(){ if(S.pvRulesLoad) return; S.pvRulesLoad=true;
   window.slateSupabase.from('fin_docs').select('data').eq('path','config/pv').maybeSingle().then(({data})=>{ if(data&&data.data){ S.pvRulesDb=data.data; try{ localStorage.setItem('slate-pv',JSON.stringify(data.data)); }catch(e){} if(S.view==='biz') render(true); } },()=>{}); }
 function pvSave(r){ try{ localStorage.setItem('slate-pv',JSON.stringify(r)); }catch(e){} S.pvRulesDb=r; const sb=window.slateSupabase;
@@ -10316,7 +10319,7 @@ function pvCalc(per,R){
   const projRows=Object.keys({...billed,...cost}).map(pid=>({p:S.projects[pid],pid,B:billed[pid]||0,C:cost[pid]||0,info:proj.find(x=>x.pid===pid)})).filter(x=>x.p&&!isStudioWP(x.p));
   const studioCost=Object.entries(cost).filter(([pid])=>isStudioWP(S.projects[pid])).reduce((a,[,v])=>a+v,0);
   const idleCost=ids.reduce((a,id)=>a+(P[id].pts?0:P[id].ctc),0);
-  const rows=ids.map(id=>{ const x=P[id]; x.fee=x.feeW+x.feeL+x.feeM; x.mult=x.ctc?x.fee/x.ctc:null; x.contrib=x.fee-x.ctc; x.cpp=x.pts?x.ctc/(x.pts*10):null; return x; })
+  const rows=ids.map(id=>{ const x=P[id]; x.fee=x.feeW+x.feeL+x.feeM; x.mult=x.ctc?x.fee/x.ctc:null; x.salMult=(x.sal+x.bonus)?x.fee/(x.sal+x.bonus):null; x.contrib=x.fee-x.ctc; x.cpp=x.pts?x.ctc/(x.pts*10):null; return x; })
     .filter(x=>x.ctc||x.pts||x.fee||x.pred);
   const totB=Object.values(billed).reduce((a,v)=>a+v,0)+unlinked, totC=rows.reduce((a,x)=>a+x.ctc,0);
   /* the COO is measured as leadership, against the whole firm, not ranked by task points */
@@ -10341,18 +10344,19 @@ function viewValue(){
   out.push(h('div',{class:'bar biz-bar'},h('div',{class:'biz-seg'},seg('Period',[['q','This quarter'],['lq','Last quarter'],['6m','6 months'],['12m','12 months'],['fy','This FY']],per,v=>{ B.pv=v; render(true); }))),
     h('p',{class:'f-hint',style:'margin:-4px 2px 10px',text:`${ymLabel(D.months[0])} – ${ymLabel(D.months[D.months.length-1])} · counted from 1 Nov 2026, when SLATE OS went live`}),
     h('details',{class:'biz-more',open:!!B.pvRules,ontoggle:e=>{B.pvRules=e.target.open;}},h('summary',{text:'Rules'}),
-      h('div',{class:'pv-rules'},num('lead','POD leader share of each project’s fee',50),num('coo','COO management share of every fee',30),
+      h('div',{class:'pv-rules'},h('p',{class:'f-hint',style:'margin:0 0 4px',text:'International practice: fees are credited by the work each person finishes; leaders and the COO get no automatic cut. Leave both shares at 0 unless you decide otherwise.'}),num('lead','POD leader share of each project’s fee',50),num('coo','COO management share of every fee',30),
         h('label',{class:'pv-rule'},h('input',{type:'checkbox',checked:!!R.oh,onchange:e=>setR('oh',e.target.checked)}),h('span',{text:'Share the studio’s running costs into each person’s cost'})),
-        h('label',{class:'pv-rule'},h('span',{text:'Healthy value multiple'}),h('input',{type:'number',min:1,max:10,step:'0.1',value:R.bench,onchange:e=>setR('bench',Math.max(1,Math.min(10,+e.target.value||2.5)))}),h('span',{class:'muted',text:'×'})),
+        h('label',{class:'pv-rule'},h('span',{text:'Healthy multiple on full cost (1.0 = break-even)'}),h('input',{type:'number',min:1,max:5,step:'0.05',value:R.bench,onchange:e=>setR('bench',Math.max(1,Math.min(5,+e.target.value||1.25)))}),h('span',{class:'muted',text:'×'})),
+        h('label',{class:'pv-rule'},h('span',{text:'Healthy multiple on salary (net multiplier)'}),h('input',{type:'number',min:1,max:8,step:'0.1',value:R.benchS,onchange:e=>setR('benchS',Math.max(1,Math.min(8,+e.target.value||3)))}),h('span',{class:'muted',text:'×'})),
         h('div',{class:'pv-who'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px',text:'Who is in the matrix'}),
           people().filter(pvBase).sort((a,b)=>Number(pvDefIn(b))-Number(pvDefIn(a))||nameOf(a).localeCompare(nameOf(b))).map(id=>h('label',{class:'pv-rule'},h('input',{type:'checkbox',checked:pvIn(id,R),onchange:e=>{ setR('pick',{...(R.pick||{}),[id]:e.target.checked}); }}),
             h('span',{text:nameOf(id)}),h('span',{class:'muted',style:'font-size:12px',text:(isCOO(id)?'COO':roleOf(id)||'')+(pvDefIn(id)?'':' · support staff')}))),
           h('p',{class:'f-hint',style:'margin:2px 0 0',text:'Support staff are left out by default. When someone is left out, their salary is shared into everyone else’s cost, like rent. So are salaries in HR for people without a SLATE OS login.'})),
-        h('p',{class:'f-hint',style:'margin:4px 0 0',text:'Cost to company = gross + Eid bonuses spread over the year (2 × basic ÷ 12) + an equal share of running costs. Fee = fee invoiced in Books in the period, before VAT. Each project’s fee goes: POD leader share to its lead, COO share to the COO, the rest by work points (task weight × on-time credit) on that project. You and Chalk Create are left out. These rules are saved on this device.'}))));
+        h('p',{class:'f-hint',style:'margin:4px 0 0',text:'Cost to company = gross + Eid bonuses spread over the year (2 × basic ÷ 12) + an equal share of running costs. Fee = fee invoiced in Books in the period, before VAT. Each project’s fee is credited by the work each person finished on it (points × on-time credit); leader and COO shares apply only if set above. Multiple = fee ÷ cost to company (1.0× break-even, healthy about 1.25×); on salary = fee ÷ salary and bonus (healthy about 3.0×). The COO and you are firm overhead, judged under Leadership. Counted from 1 Nov 2026.'}))));
   const rows=D.rows;
   if(!rows.length){ out.push(h('p',{class:'muted',text:'No salaries or finished work in this period yet. Enter salaries in HR and bill projects in Finance, and this fills in.'})); return out; }
   const team=rows.reduce((a,x)=>a+x.fee,0)+(D.lead?D.lead.fee:0), mult=D.totC?team/D.totC:null, cli=D.projRows.reduce((a,x)=>a+x.C,0), marg=D.totB?(D.totB-D.totC)/D.totB:null;
-  out.push(h('div',{class:'kpis kpis5'},kpi('Fee earned',tk(D.totB),'early'),kpi('Cost to company',tk(D.totC)),kpi('Predictable earning',tk(D.predTot),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'fee still to bill on present work orders'})),kpi('Team value multiple',x2(mult),mult==null?'':mult>=R.bench?'ontime':mult>=1.5?'late':'overdue'),kpi('Fee not shared out',tk(D.unatt+D.unlinked),D.unatt+D.unlinked>1?'late':'')));
+  out.push(h('div',{class:'kpis kpis5'},kpi('Fee earned',tk(D.totB),'early'),kpi('Cost to company',tk(D.totC)),kpi('Predictable earning',tk(D.predTot),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'fee still to bill on present work orders'})),kpi('Team value multiple',x2(mult),mult==null?'':mult>=R.bench?'ontime':mult>=1?'late':'overdue'),kpi('Fee not shared out',tk(D.unatt+D.unlinked),D.unatt+D.unlinked>1?'late':'')));
   const notes=[]; if(D.unlinked>1) notes.push(`${bdt(D.unlinked)} was billed on Finance projects not linked to SLATE OS.`); if(D.unatt>1) notes.push(`${bdt(D.unatt)} was billed on projects with no finished work logged, so only the leader and COO shares were given out.`);
   const noSal=rows.filter(x=>x.noSal); if(noSal.length) notes.push('No salary in HR yet: '+noSal.map(x=>x.name).join(', ')+'. Their cost shows as nothing, so their multiple can’t be judged.');
   if(notes.length) out.push(h('p',{class:'f-hint',style:'margin:8px 2px 0',text:notes.join(' ')}));
@@ -10373,11 +10377,10 @@ function viewValue(){
       h('div',{class:'kpis kpis5'},kpi('Principal cost',D.ownNoSal?'not in HR':tk(Math.round(D.ownCost)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:D.ownNoSal?'add your pay in HR & salaries to include it':'salary and Eid bonus'+per})),
         kpi('Fees billed',tk(Math.round(D.totB)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'the whole firm'+per})),
         kpi('Firm cost',tk(Math.round(D.firmCost)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:`team ${bdt(Math.round(D.payTot))} + running ${bdt(Math.round(D.runTot))}`+(D.ownCost?` + Principal ${bdt(Math.round(D.ownCost))}`:'')})),
-        kpi('Firm margin',(mar<0?'−':'')+tk(Math.round(Math.abs(mar))),mar>=0?'ontime':'overdue',h('div',{class:'f-hint',style:'margin:2px 0 0',text:'fees billed less firm cost'})),
-        kpi('Firm multiple',fm==null?'—':x2(fm),fm==null?'':fm>=R.bench?'ontime':fm>=1.5?'late':'overdue',h('div',{class:'f-hint',style:'margin:2px 0 0',text:`healthy at ${R.bench}× or more`}))),
+        kpi('Firm margin',(mar<0?'−':'')+tk(Math.round(Math.abs(mar))),D.totB&&mar/D.totB>=0.15?'ontime':mar>=0?'late':'overdue',h('div',{class:'f-hint',style:'margin:2px 0 0',text:(D.totB?Math.round(mar/D.totB*100)+'% of fees':'fees billed less firm cost')+' · healthy 15–20%'})),
+        kpi('Firm multiple',fm==null?'—':x2(fm),fm==null?'':fm>=R.bench?'ontime':fm>=1?'late':'overdue',h('div',{class:'f-hint',style:'margin:2px 0 0',text:`healthy at ${R.bench}× or more`}))),
       ...(L?[h('div',{class:'pv-lead-h',text:'COO'}),
-      h('div',{class:'kpis kpis5'},kpi('COO cost',L.noSal?'no salary':tk(Math.round(L.ctc)),null,L.noSal?null:h('div',{class:'f-hint',style:'margin:2px 0 0',text:`salary ${bdt(Math.round(L.sal))} + Eid bonus ${bdt(Math.round(L.bonus))}`+(L.oh>1?` + overhead share ${bdt(Math.round(L.oh))}`:'')+(D.months.length>1?` · ${D.months.length} months`:' · this month')})),kpi('Management share earned',tk(Math.round(L.feeM+L.feeW)),null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:R.coo+'% of every fee billed'})),
-        kpi('Multiple',L.fee>0?x2(L.mult):'—',!(L.fee>0)||L.mult==null?'':L.mult>=R.bench?'ontime':L.mult>=1.5?'late':'overdue',!(L.fee>0)?h('div',{class:'f-hint',style:'margin:2px 0 0',text:'nothing billed yet'}):null),kpi('Studio on time',pc(D.onTime),D.onTime==null?'':D.onTime>=target()/100?'ontime':'late'),kpi('Approvals waiting now',waiting==null?'—':String(waiting),waiting>5?'late':''))]:[]))); }
+      h('div',{class:'kpis kpis5'},kpi('COO cost',L.noSal?'no salary':tk(Math.round(L.ctc)),null,L.noSal?null:h('div',{class:'f-hint',style:'margin:2px 0 0',text:`salary ${bdt(Math.round(L.sal))} + Eid bonus ${bdt(Math.round(L.bonus))}`+(L.oh>1?` + overhead share ${bdt(Math.round(L.oh))}`:'')+(D.months.length>1?` · ${D.months.length} months`:' · this month')})),kpi('Share of firm cost',D.firmCost?Math.round(L.ctc/D.firmCost*100)+'%':'—',null,h('div',{class:'f-hint',style:'margin:2px 0 0',text:'leadership is firm overhead'})),kpi('Studio on time',pc(D.onTime),D.onTime==null?'':D.onTime>=target()/100?'ontime':'late'),kpi('Approvals waiting now',waiting==null?'—':String(waiting),waiting>5?'late':''))]:[]))); }
   if(D.supTot>1) out.push(h('p',{class:'f-hint',style:'margin:4px 2px 10px',text:`Support staff cost ${bdt(Math.round(D.supTot))} in this period (${D.payTot?Math.round(D.supTot/D.payTot*100):0}% of team cost). They are not ranked: their cost is shared into everyone’s cost to company, like rent.`}));
   /* matrix */
   out.push(...pvBoard(rows,R.bench,D.totB));
@@ -10388,7 +10391,7 @@ function viewValue(){
     h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'pv-tbl'},h('thead',{},h('tr',{},h('th',{text:'Person'}),th('ctc','Cost to company'),th('pts','Points'),th('rel','On time'),th('fee','Fee earned'),th('mult','Multiple'),th('contrib','Contribution'),th('cpp','Cost per 0.1 pt'))),
       h('tbody',{},srt.map(x=>h('tr',{},h('td',{},h('b',{text:x.name}),h('div',{class:'muted',style:'font-size:12px',text:[x.coo?'COO':podLabel(x.team)||x.team,x.feeL?'lead share '+bdt(x.feeL):'',x.feeM?'management share '+bdt(x.feeM):''].filter(Boolean).join(' · ')})),
         h('td',{class:'mono r',text:x.noSal?'no salary':tk(Math.round(x.ctc))}),h('td',{class:'mono r',text:x.pts?(Math.round(x.pts*10)/10).toFixed(1):'—'}),h('td',{class:'mono r',text:pc(x.rel)}),
-        h('td',{class:'mono r',text:tk(Math.round(x.fee))}),h('td',{class:'mono r',style:x.mult==null?'':'color:var('+(x.mult>=R.bench?'--ontime':x.mult>=1.5?'--late':'--overdue')+')',text:x2(x.mult)}),
+        h('td',{class:'mono r',text:tk(Math.round(x.fee))}),h('td',{class:'mono r',style:x.mult==null?'':'color:var('+(x.mult>=R.bench?'--ontime':x.mult>=1?'--late':'--overdue')+')',text:x2(x.mult)}),
         h('td',{class:'mono r',text:x.ctc?(x.contrib>=0?'+':'−')+bdt(Math.abs(x.contrib)):'—'}),h('td',{class:'mono r',text:x.cpp?taka(Math.round(x.cpp)):'—'})))))));
   /* projects */
   const pr=D.projRows.slice().sort((a,b)=>((a.B?(a.B-a.C)/a.B:-9)-(b.B?(b.B-b.C)/b.B:-9)));
@@ -10405,7 +10408,7 @@ function viewValue(){
   const pl=[...pods.values()].sort((a,b)=>(b.fee-b.ctc)-(a.fee-a.ctc));
   out.push(h('div',{class:'sec-h biz-sec'},h('h2',{text:'By POD and team'})),h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'pv-tbl'},h('thead',{},h('tr',{},['Team','People','Cost','Fee earned','Multiple','Contribution'].map((l,i)=>h('th',{style:i?'text-align:right':'',text:l})))),
     h('tbody',{},pl.map(g=>{ const m=g.ctc?g.fee/g.ctc:null; return h('tr',{},h('td',{text:podLabel(g.k)||g.k}),h('td',{class:'mono r',text:String(g.n)}),h('td',{class:'mono r',text:tk(Math.round(g.ctc))}),h('td',{class:'mono r',text:tk(Math.round(g.fee))}),
-      h('td',{class:'mono r',style:m==null?'':'color:var('+(m>=R.bench?'--ontime':m>=1.5?'--late':'--overdue')+')',text:x2(m)}),h('td',{class:'mono r',text:g.ctc?(g.fee>=g.ctc?'+':'−')+bdt(Math.abs(g.fee-g.ctc)):'—'})); })))));
+      h('td',{class:'mono r',style:m==null?'':'color:var('+(m>=R.bench?'--ontime':m>=1?'--late':'--overdue')+')',text:x2(m)}),h('td',{class:'mono r',text:g.ctc?(g.fee>=g.ctc?'+':'−')+bdt(Math.abs(g.fee-g.ctc)):'—'})); })))));
   out.push(h('p',{class:'f-hint',style:'margin:14px 2px 0',text:'Read with care: the figures are only as good as task weights and logged work. POD leaders’ coordination shows through the leader share, not points. Junior salaries are low, so their multiples run high; read the multiple with points. Use a full quarter or more before judging anyone.'}));
   return out; }
 /* value board: one row per person — earned against cost, with the healthy target marked — and a plain verdict */
@@ -10431,7 +10434,7 @@ function pvBoard(rows,bench,billed){
       return h('div',{class:'pv-row'},
         h('div',{class:'pv-rh'},h('span',{class:'pv-rank',text:String(i+1)}),h('div',{class:'pv-nm'},h('b',{text:x.name}),h('span',{class:'muted',text:x.coo?'COO':podLabel(x.team)||x.team})),h('span',{class:'pill s-'+vc,text:vl})),
         h('div',{class:'pv-bar',title:`Earned ${tk(x.fee)} · cost ${tk(x.ctc)}`},h('div',{class:'pv-c',style:`width:${pc(x.ctc)}%`}),h('div',{class:'pv-p',style:`left:${pc(x.fee)}%;width:${pc(x.pred||0)}%`}),h('div',{class:'pv-e s-'+vc,style:`width:${pc(x.fee)}%`}),x.ctc?h('div',{class:'pv-t',style:`left:${pc(x.ctc*bench)}%`}):null),
-        h('div',{class:'pv-meta pv-three'},h('span',{},h('small',{text:'Fee earned'}),h('b',{text:tk(x.fee)})),h('span',{},h('small',{text:'Cost to company'}),h('b',{text:tk(x.ctc)})),h('span',{},h('small',{text:'Predictable earning'}),h('b',{text:tk(x.pred||0)})),h('span',{},h('small',{text:'Multiple'}),h('b',{text:x.fee?x2(x.mult):'—'})))); })));
+        h('div',{class:'pv-meta pv-three'},h('span',{},h('small',{text:'Fee earned'}),h('b',{text:tk(x.fee)})),h('span',{},h('small',{text:'Cost to company'}),h('b',{text:tk(x.ctc)})),h('span',{},h('small',{text:'Predictable earning'}),h('b',{text:tk(x.pred||0)})),h('span',{},h('small',{text:'Multiple · on salary'}),h('b',{text:x.fee?`${x2(x.mult)} · ${x2(x.salMult)}`:'—'})))); })));
   return out; }
 /* Home: the + button opens a quick-add menu (task, project, meeting, lead, proposal, notice, FAR) */
 function fabItems(){ const w=!!S.canWrite, cm=amChalkMember();
