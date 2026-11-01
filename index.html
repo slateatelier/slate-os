@@ -5536,7 +5536,7 @@ function sheetProject(){
     if(!isStudio){
       if(!v.client) return fail('Add the client.');
       if(!v.location) return fail('Add the area or locality, e.g. Bashundhara R/A.');
-      const isInt=v.type==='interior'||(!v.type&&id&&(S.projects[id]||{}).type==='interior');
+      const isInt=v.type==='interior'||(!v.type&&id&&(S.projects[id]||{}).type==='interior'), isPropT=v.type==='proposal'||(!v.type&&id&&(S.projects[id]||{}).type==='proposal');
       if(isInt){ ['intBuilding','intUnit','intFloor'].forEach(f=>{ if(v[f]) v[f]=v[f].toUpperCase().replace(/\s+/g,' ').trim(); });
         if(!v.intBuilding) return fail('Add the building or project the interior is in, e.g. Desdemona.');
         if(!v.intUnit) return fail('Add the apartment or unit number, e.g. C10.');
@@ -5548,17 +5548,17 @@ function sheetProject(){
         if(!Object.keys(v.intRooms).length) return fail('Tick at least one room in scope.');
         v.farApplies=''; }
       else { ['intBuilding','intUnit','intFloor','intArea','intSpace','intExec','intHandover'].forEach(f=>{ v[f]=''; }); v.intRooms={}; }
-      if(!isInt&&siteReq(id,d)&&!v.plotNo) return fail('Add the plot number.');
-      if(!isInt&&siteReq(id,d)&&!v.roadNo) return fail('Add the road number.');
-      if(!isInt&&!k) return fail('Add the land size in katha.');
+      if(!isInt&&!isPropT&&siteReq(id,d)&&!v.plotNo) return fail('Add the plot number.');
+      if(!isInt&&!isPropT&&siteReq(id,d)&&!v.roadNo) return fail('Add the road number.');
+      if(!isInt&&!isPropT&&!k) return fail('Add the land size in katha.');
       if(!id&&!v.type) return fail('Choose the project type.');
-      if(!isInt&&k>30&&!v.pod2) return fail('Projects above 30 katha need a second pod.');
+      if(!isInt&&!isPropT&&k>30&&!v.pod2) return fail('Projects above 30 katha need a second pod.');
       if(v.pod2&&v.pod2===v.pod) return fail('Choose a different pod as the second pod.');
-      if(!v.agStatus) return fail('Choose the agreement status.');
+      if(!isPropT&&!v.agStatus) return fail('Choose the agreement status.');
       if(v.agStatus==='signed'&&!v.agDate) return fail('Add the agreement date.');
-      if(!v.scope.length) return fail('Tick at least one service in the scope.');
+      if(!isPropT&&!v.scope.length) return fail('Tick at least one service in the scope.');
       for(const x of v.scope){ const q=SCOPE_QTY[x]; if(q&&!v.scopeQty[x]) return fail(`${x}: add the number of ${q.unit==='seconds'?'seconds':'still renders'}.`); }
-      if(!isInt&&!v.farApplies) return fail('Say whether FAR applies to this project.');
+      if(!isInt&&!isPropT&&!v.farApplies) return fail('Say whether FAR applies to this project.');
       if(v.farApplies==='yes'&&(!v.block||!v.road)) return fail(d.roadMode==='custom'&&v.block?'Type the custom road width in feet.':'Choose the density block and the front road.');
       if(v.farApplies==='yes'&&(plotFarOf(v.road)||{}).under) return fail(`A ${v.road} road is under ${ROAD_MIN} ft, outside the DAP plot FAR table. Set FAR to “not applicable” and enter the areas by hand, or check the road width.`);
       if(v.mezz==='yes'&&!v.mezzName) return fail('Choose what to call the mezzanine: Mezzanine or 1st floor.');
@@ -5595,24 +5595,25 @@ function sheetProject(){
       internal?teamPickers(d,id):field('Pod *',(()=>{ const lockPod=!amApprover()&&!!myPod(); const el=sel('pod',lockPod?[[d.pod||myPod(),podLabel(d.pod||myPod())]]:[['','Select pod…'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)'],...(!id&&canChalkEdit()?[['__chalk','Chalk Create (separate unit) →']]:[])]); if(lockPod) el.disabled=true; el.addEventListener('change',()=>{ if(el.value==='__chalk'){ D().pod=''; openChalkProject(); return; } renderSheet(); }); return el; })(),!amApprover()&&myPod()?'Your pod. You request projects for your own pod; the COO approves them.':'The lead pod: its lead architect is accountable for the project.'),
       !isStudio&&[
         ...(d.type==='interior'||(!d.type&&id&&(S.projects[id]||{}).type==='interior')?[intFormSection(d,sec,id)]:[
-        h('div',{class:'form-row'},field('Land size (katha) *',h('input',{id:'sh-katha',type:'number',min:0,step:'any',inputmode:'decimal',value:d.katha||'',oninput:e=>{const was=parseFloat(d.katha)>30;d.katha=e.target.value;if((parseFloat(d.katha)>30)!==was)renderSheet()}})),
+        d.type==='proposal'?h('div',{class:'callout',style:'font-size:13.5px',text:'Design proposal (R&D): only the name, POD, client and area are needed now. Land size, FAR, plot and road, agreement and scope can wait until the project is confirmed; fill them in then (Edit project), or when you create the real project.'}):null,
+        h('div',{class:'form-row'},field(d.type==='proposal'?'Land size (katha)':'Land size (katha) *',h('input',{id:'sh-katha',type:'number',min:0,step:'any',inputmode:'decimal',value:d.katha||'',oninput:e=>{const was=parseFloat(d.katha)>30;d.katha=e.target.value;if((parseFloat(d.katha)>30)!==was)renderSheet()}})),
           field(parseFloat(d.katha)>30?'Second pod *':'Second pod (optional)',sel('pod2',[['','None'],...pods().filter(x=>x!==d.pod).map(x=>[x,podLabel(x)])]))),
-        farFormSection(d,sec)]),
+        d.type==='proposal'?null:farFormSection(d,sec)]),
         sec('Client and site'),
         h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:80,placeholder:'Company or owner',style:'text-transform:uppercase',autocapitalize:'characters'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Area / locality *',inp('location',{maxlength:120,placeholder:'e.g. Bashundhara R/A, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row',style:'grid-template-columns:repeat(3,minmax(0,1fr))'},
-          field(siteReq(id,d)&&d.type!=='interior'?'Plot no. *':'Plot no.',inp('plotNo',{maxlength:20,placeholder:'e.g. 24A',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
-          field(siteReq(id,d)&&d.type!=='interior'?'Road no. *':'Road no.',inp('roadNo',{maxlength:20,placeholder:'e.g. 7',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
+          field(siteReq(id,d)&&!['interior','proposal'].includes(d.type)?'Plot no. *':'Plot no.',inp('plotNo',{maxlength:20,placeholder:'e.g. 24A',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
+          field(siteReq(id,d)&&!['interior','proposal'].includes(d.type)?'Road no. *':'Road no.',inp('roadNo',{maxlength:20,placeholder:'e.g. 7',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
           field('Block / Sector',inp('blockSector',{maxlength:30,placeholder:'e.g. C',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'}))),
         h('div',{class:'form-row'},field('Technical person at the client’s end',(()=>{ const el=sel('tech',[['','Not known yet'],['yes','Yes, available'],['no','No, not available']]); el.addEventListener('change',()=>renderSheet()); return el; })(),
             d.tech==='no'?'The project and its tasks show a caution mark, so the team expects to explain more and check more on site.':'An engineer or technical person who can read drawings and answer site questions.'),
           field(d.tech==='yes'?'Name and role (optional)':'Note (optional)',inp('techNote',{maxlength:80,placeholder:d.tech==='yes'?'e.g. Eng. Rahman, site engineer':d.tech==='no'?'e.g. Owner decides; no engineer on site':''}))),
-        sec('Agreement'),
+        ...(d.type==='proposal'?[]:[sec('Agreement'),
         h('div',{class:'form-row'},field('Agreement status *',(()=>{ const el=sel('agStatus',AGS); el.addEventListener('change',()=>renderSheet()); return el; })()),field(d.agStatus==='signed'?'Agreement date *':'Agreement date (optional)',inp('agDate',{type:'date'}))),
         h('div',{class:'form-row'},field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40,style:'text-transform:uppercase',autocapitalize:'characters'})),
           field('Fee',sel('proBono',[['','Paid project'],['yes','Pro bono (no fee)']]),d.proBono==='yes'?'No fee is expected; Finance and the Clients dashboard won’t look for one.':null)),
-        field('Scope of services *',scopeBox),
+        field('Scope of services *',scopeBox)]),
         h('div',{class:'form-row'},field('Contractual completion (optional)',inp('dueDate',{type:'date'}),'Used to flag a project whose plan runs past it.'),field('Agreement document link (optional)',inp('docUrl',{type:'url',placeholder:'https://…'})))],
       showPh?[sec('Phases'),h('div',{class:'f-hint',style:'margin-top:-4px',text:pSet?'Already set up. Changes here add or archive gate deliverables when you save.':'Set from the project type. The pod lead creates the gate deliverables and checklists when the phases are set up.'}),phaseEditor(d.ph,{type:phType,p:pSet?{...pSet,id}:null,idp:'pp',onGroup:true})]:null,
       field('Note (optional)',ta('note',{placeholder:!ap&&!id?'Anything the COO should know':''})),
