@@ -1,4 +1,5 @@
-<!doctype html><html><head><meta charset=utf8><meta name="robots" content="noindex"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#d7262b"><link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SLATE OS"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>@media (max-width:820px){input,select,textarea{font-size:16px!important}}</style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name="robots" content="noindex"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#d7262b"><link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SLATE OS"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>@media (max-width:820px){input,select,textarea{font-size:16px!important}}.sec-desc{margin:-4px 4px 8px;font-size:13px;line-height:1.4;color:var(--muted,#6e6e73)}
+</style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
@@ -2384,6 +2385,34 @@ function capPods(root){
   const mo=new MutationObserver(()=>{ if(!q){ q=true; requestAnimationFrame(run); } });
   const go=()=>{ capPods(document.body); mo.observe(document.body,{childList:true,subtree:true,characterData:true}); };
   if(document.body) go(); else document.addEventListener('DOMContentLoaded',go); })();
+/* one-line descriptions under section headings, so it is clear what each area is for. Added after every render, in one place. */
+const SEC_INFO={
+  'Building and FAR':'The plot and building this project is designed for. The plot size in katha sets the standard days for each phase.',
+  'Landowner and developer units':'How the units are shared between the landowner and the developer in this joint venture.',
+  'Submissions log':'A record of sets sent to the client or authority: what, when and which revision. Use it for sets sent before SLATE OS or extra sets. New phase submissions are recorded by their gate deliverables. Record only, never scored.',
+  'Phases and gates':'The project’s phases in order. Each phase ends at its gate, the deliverable the client signs off. Open a phase for its checklist, days and client feedback.',
+  'Project log':'Site visits and meetings held for this project, newest first.',
+  'Project finish':'When the whole project was completed. Recorded once, at the end.',
+  'Phases':'The project’s stages and when each was completed.',
+  'Task progress by category':'Share of tasks done in each category, for everyone on the project.',
+  'Milestones':'The project’s deliverables in date order: gate submissions and sign-offs. Ticked when done.',
+  'Agreement':'The signed agreement and fee for this project. Only the Principal and COO see this.',
+  'Client revisions':'Changes the client asked for after a sign-off. Revisions beyond the agreed number are charged extra.',
+  'History to approve':'Phases finished and sets submitted before SLATE OS, entered by POD leaders. The COO checks them before they count on the project.',
+  'Phase completion dates to approve':'Completion dates a POD leader recorded for a phase. Approve to make them part of the project record.',
+  'Project team requests':'People a POD leader wants added to a project. Approve to give them access.',
+  'Dates to approve':'New dates people asked for on their tasks. Approve to move the date, or return it with a note.',
+  'Completed work to verify':'Tasks marked done that need a check before they count as finished.',
+  'Support assignments to approve':'Requests to give someone from another POD or the drafting pool work on a project.',
+  'Meeting minutes to approve':'Minutes the organiser submitted. Approve to publish them to everyone who attended or was copied.',
+  'POD deadlines · next 2 weeks':'Gate deliverables due across your POD’s projects in the next two weeks.',
+  'Notice board':'Studio notices from the Principal and the COO.'
+};
+function secInfo(root){ if(!root) return; root.querySelectorAll('.sec-h > h2').forEach(h2=>{ const hd=h2.parentElement, t=SEC_INFO[h2.textContent.trim()];
+  if(!t||hd.dataset.info===t) return; const nx=hd.nextElementSibling; if(nx&&nx.classList.contains('sec-desc')) nx.remove();
+  const d=document.createElement('div'); d.className='f-hint sec-desc'; d.textContent=t; hd.after(d); hd.dataset.info=t; }); }
+let secInfoQ=0; const secInfoSoon=()=>{ if(secInfoQ) return; secInfoQ=requestAnimationFrame(()=>{ secInfoQ=0; secInfo(document.getElementById('view')); secInfo(document.getElementById('sheet')); }); };
+(()=>{ const go=()=>{ try{ const mo=new MutationObserver(secInfoSoon); ['view','sheet'].forEach(id=>{ const el=document.getElementById(id); el&&mo.observe(el,{childList:true,subtree:true}); }); secInfoSoon(); }catch(e){} }; if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',go); else go(); })();
 function render(force){
   applyStd();
   const view=$('#view');
