@@ -1173,6 +1173,13 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .now-sum{display:flex;gap:14px;flex-wrap:wrap;margin:-4px 2px 0}
 .now-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 2px}
 .now-legend .now-chip{min-width:20px;height:20px;font-size:11px;animation:none}
+.ps{display:grid;gap:6px;padding:2px 0}
+.ps-row{display:grid;grid-template-columns:14px 1fr;gap:8px;align-items:start;font-size:13.5px;line-height:1.4}
+.ps-row i{width:10px;height:10px;border-radius:50%;margin-top:4px;box-sizing:border-box;border:2px solid var(--faint)}
+.ps-row.done{color:var(--muted)}.ps-row.done i{background:var(--ontime);border-color:var(--ontime)}
+.ps-row.now i{border-color:var(--ink);background:var(--ink)}.ps-row.now{font-weight:600}
+.ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
+.ps-row.later{color:var(--muted)}
 </style>
 
 <div class="chrome">
@@ -4134,7 +4141,7 @@ function endOf(t){ const td=today(); if(t.doneAt) return t.target&&t.doneAt<t.ta
 /* ---------- plain-language project status (Principal, 1 Nov 2026: the timeline must read at a glance) ----------
    one strip of phase chips (done / now / later) and one sentence: what is happening now, the next date, and whose turn it is.
    Dates are the approved gate dates the team is scored on. */
-const NOW_ST={late:['Late','var(--overdue)'],soon:['Due soon','var(--late)'],client:['With the client','var(--early)'],clate:['Client is late','var(--early)'],ok:['On track','var(--ontime)'],idle:['No dates yet','var(--muted)'],wait:['Waiting for site','var(--muted)'],done:['All phases done','var(--ink)']};
+const NOW_ST={late:['Late','var(--overdue)'],soon:['Due soon','var(--late)'],client:['With the client','var(--early)'],clate:['Client is late','var(--early)'],ok:['On track','var(--ontime)'],idle:['No dates yet','var(--muted)'],wait:['Waiting for site','var(--muted)'],pause:['Paused','var(--muted)'],done:['All phases done','var(--ink)']};
 function projNow(p){
   const ks=stdPhases(p).filter(k=>PH[k]||String(k).startsWith('x')), td=today();
   let live=null; try{ if(tlOf(p)) live=tlCompute(p,tlOf(p).start,true); }catch(_){}
@@ -4147,6 +4154,7 @@ function projNow(p){
   const wdl=(a,b)=>Math.max(0,wdBetween(a,b)), pl=n=>`${n} working day${n===1?'':'s'}`;
   const one=k=>{ const s=st[k], sub=s.sub, fin=s.fin, nm=`${phNo(k)} ${phName(k,p)}`;
     const ours=sub&&!sub.doneAt?sub:(!sub&&fin&&!fin.doneAt?fin:null);
+    if(k==='3r'&&!(p.std&&p.std.resume)&&!(sub&&sub.doneAt)) return {st:'pause',txt:`Paused after the launch: ${nm} starts when the land share project resumes.`};
     if(ours){ const tg=ours.target; if(!tg) return k==='9'?{st:'wait',txt:`${nm}: starts when construction is finished.`}:{st:'idle',txt:`${nm}: our work, no date set yet.`};
       if(tg<td) return {st:'late',txt:`${nm}: our ${sub?'submission':'work'} was due ${fmtD(tg)}, ${pl(wdl(tg,td))} late.`};
       const n=wdl(td,tg); return {st:n<=3?'soon':'ok',txt:`${nm}: we ${sub?'submit':'finish'} by ${fmtD(tg)}${n?` (${pl(n)} left)`:' (today)'}`+(sub&&fin&&fin.target?`, then the client reviews; approval expected ${fmtD(fin.target)}.`:'.')}; }
@@ -4154,7 +4162,7 @@ function projNow(p){
       if(tg&&tg<td) return {st:'clate',txt:`${nm}: with the client${since?' since '+fmtD(since):''}. Their reply was expected ${fmtD(tg)}, ${pl(wdl(tg,td))} over.`};
       return {st:'client',txt:`${nm}: with the client${since?' since '+fmtD(since):''}${tg?`; approval expected ${fmtD(tg)}`:''}.`}; }
     return {st:'idle',txt:`${nm}: no gate set.`}; };
-  const xs=cur.map(one), rank=['late','clate','soon','idle','client','ok','wait'], top=xs.slice().sort((a,b)=>rank.indexOf(a.st)-rank.indexOf(b.st))[0];
+  const xs=cur.map(one), rank=['late','clate','soon','idle','client','ok','wait','pause'], top=xs.slice().sort((a,b)=>rank.indexOf(a.st)-rank.indexOf(b.st))[0];
   const nx=open.find(k=>!cur.includes(k));
   return {chips,cur,st:top.st,line:xs.map(x=>x.txt),next:nx?`Next: ${phNo(nx)} ${phName(nx,p)}`:''};
 }
@@ -4168,13 +4176,13 @@ function viewPhaseMap(){
   const g=S.gantt; if(g.pmPod===undefined) g.pmPod=fullView()?'':(myPod()||'');
   const podSel=h('select',{id:'pm-pod','aria-label':'POD',onchange:e=>{g.pmPod=e.target.value;render(true)}},h('option',{value:'',text:'All PODs'}),pods().map(x=>h('option',{value:x,text:podLabel(x)}))); podSel.value=g.pmPod||'';
   const ps=projects().filter(p=>p.std&&!p.closed&&p.pod!=='Studio'&&!isInternalP(p)&&stdPhases(p).length&&(!g.pmPod||podsOfProject(p).includes(g.pmPod)));
-  const rows=ps.map(p=>({p,n:projNow(p)})), rank=['late','clate','soon','client','idle','ok','wait','done'];
+  const rows=ps.map(p=>({p,n:projNow(p)})), rank=['late','clate','soon','client','idle','ok','wait','pause','done'];
   rows.sort((a,b)=>rank.indexOf(a.n.st)-rank.indexOf(b.n.st)||(a.p.code||a.p.name||'').localeCompare(b.p.code||b.p.name||''));
   const cnt=k=>rows.filter(r=>r.n.st===k).length;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:g.pmPod?podLabel(g.pmPod):'All PODs'}),h('h1',{class:'h1',text:'Timeline'})),
       h('div',{class:'bar'},seg('View',[['map','Projects'],['bars','Task bars']],'map',v=>{ g.mode=v; render(true); })))];
   out.push(h('div',{class:'bar'},podSel));
-  out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
+  out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site'],['pause','Paused']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
   out.push(h('div',{class:'now-legend'},h('span',{class:'now-chip done',text:'✓'}),'done',h('span',{class:'now-chip now',style:'--c:var(--ink);margin-left:8px',text:'2'}),'now',h('span',{class:'now-chip later',style:'margin-left:8px',text:'3'}),'later · tap a project to open it'));
   out.push(rows.length?h('div',{class:'now-list'},rows.map(({p})=>h('button',{type:'button',class:'now-card',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }},nowStrip(p,{title:projLabel(p)}),h('div',{class:'now-meta',text:podText(p)})))):h('div',{class:'empty'},h('h3',{text:'No live projects here'})));
   return out;
@@ -6165,12 +6173,11 @@ function stdSection(p){
       return h('div',{class:'card','data-ph':k,style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
         h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),s.done?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:tg,text:'Fold ‹'}):stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
-        PH[k].d?h('div',{class:'ph-days'},h('span',{text:`SLATE ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` + ${graceDays(p,k)} grace`:'')}),h('span',{text:'·'}),
-          fbEdit&&!s.done?h('label',{class:'ph-cd'},'client',h('input',{id:'cd-'+k,type:'number',min:'0',max:'60',value:String(clientDaysOf(p,k)),'aria-label':'Client review days',onchange:e=>{ const v=Math.max(0,Math.min(60,parseInt(e.target.value,10)||0)); run(()=>S.db.doc('projects/'+p.id).update({std:{cd:{[k]:v===stdClientDays(p,k)?'':v}}}),'Client review days saved'); }}),'working days'):h('span',{text:`client ${clientDaysOf(p,k)} working days`}),
-          clientDaysOf(p,k)!==stdClientDays(p,k)?h('span',{class:'muted',text:`(standard ${stdClientDays(p,k)})`}):null):null,
-        kwOf(k)&&s.created&&!s.done?kwRow(p,k,fbEdit):null,
-        s.created?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
+        s.created&&!s.done?phSteps(p,k,s,fb,fbGot):null,
+        PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`Our time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:'',`client ${clientDaysOf(p,k)}`].filter(Boolean).join(' · ')}):null,
+        s.created&&s.done?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
         s.created&&!s.done&&fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):null,
+        s.created&&!s.done&&fbEdit&&S.canWrite?phUpdate(p,k,s,fbEdit):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>phToggle(k,isOpen?null:k),text:isOpen?'Hide checklist':'Show checklist'}):null),
         h('div',{class:'pc-bar'},h('span',{style:`width:${c.tot-c.na?Math.round(c.done/(c.tot-c.na)*100):100}%`})),
@@ -6178,8 +6185,61 @@ function stdSection(p){
           h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',onclick:()=>phToggle(k,null),text:'Hide'})):null,
         isOpen&&det?h('div',{class:'cl'},main.map(it=>clRow(p,k,it,manage)),cost.length?[h('div',{class:'cl-h',text:'Cost checks'}),cost.map(it=>clRow(p,k,it,manage))]:null):null,
         s.created&&!s.done&&manage&&today()<addDays(goLive(),60)?preBox(p,k):null); })),
-    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Gate deliverables carry the dates and count on the dashboard. Checklist items are ticked, not dated. Client feedback dates are for planning and never count against the pod.'}),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Gate deliverables carry the dates and count on the dashboard. Checklist items are ticked, not dated. Client and consultant dates are for planning and never count against the POD. Record what happened with Log an update.'}),
     own&&amMgr()&&S.canWrite&&!p.closed?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>openPhEdit(p.id),text:'Edit phases'}):null);
+}
+/* phase card, read-only: the steps of a phase in plain words (our work → consultants → client → gate), Principal 1 Nov 2026.
+   Anything that happened is recorded with "Log an update", not with date boxes on the card. */
+function phSteps(p,k,s,fb,fbGot){
+  const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, sub=s.sub, fin=s.fin, wd=isWD(k), td=today();
+  const pl=n=>`${n} working day${n===1?'':'s'}`, dd=t=>t?String(t).slice(0,10):'';
+  const out=[], row=(st,txt)=>out.push(h('div',{class:'ps-row '+st},h('i',{'aria-hidden':'true'}),h('span',{text:txt})));
+  if(two&&sub){ if(sub.doneAt) row('done',`Our work: submitted ${fmtD(dd(sub.doneAt))}`);
+    else if(!sub.target) row('now','Our work: no submission date yet');
+    else if(sub.target<td) row('late',`Our work: submission was due ${fmtD(sub.target)}, ${pl(wdBetween(sub.target,td))} late`);
+    else row('now',`Our work: submit by ${fmtD(sub.target)} (${pl(Math.max(0,wdBetween(td,sub.target)))} left)`); }
+  if(kwOf(k)){ const kd=consultDaysOf(p,k);
+    KDISC.forEach(([d,l])=>{ const x=kxOf(p,k,d), due=x.on?addWorkDays(x.on,kd):'';
+      if(x.got) row('done',`${l} drawings received ${fmtD(x.got)}`);
+      else if(x.on&&due<td) row('late',`${l} drawings were due ${fmtD(due)}, ${pl(wdBetween(due,td))} over`+(x.fu.length?` · followed up ${x.fu.length}×`:' · not followed up yet'));
+      else if(x.on) row('now',`${l} drawings due ${fmtD(due)} (sent ${fmtD(x.on)})`);
+      else row('later',`${l}: starts when we share the plans (${pl(kd)})`); }); }
+  if(two){ const exp=fb||(sub&&sub.doneAt?addWorkDays(dd(sub.doneAt),clientDaysOf(p,k)):'');
+    if(fbGot) row('done',`Client comments in ${fmtD(fbGot)}`);
+    else if(sub&&sub.doneAt) row(exp&&exp<td?'late':'now',`With the client: comments ${exp<td?'were ':''}expected ${fmtD(exp)}`+(exp<td?`, ${pl(wdBetween(exp,td))} over`:''));
+    else row('later',`Client reviews for ${pl(clientDaysOf(p,k))}`); }
+  if(fin){ const what=wd?'Issued for construction':two?'Client approval':((steps.find(x=>x[0]==='final')||[])[1]||'Done');
+    if(fin.doneAt) row('done',`${what} ${fin.legacy?'before SLATE OS':fmtD(dd(fin.doneAt))}`);
+    else row(fin.target&&fin.target<td&&!two?'late':'later',fin.target?`${what} expected ${fmtD(fin.target)}`:`${what}: no date yet`); }
+  return h('div',{class:'ps'},out);
+}
+function phUpdate(p,k,s,can){
+  const box=(S.sheet.upd||(S.sheet.upd={})), u=box[k];
+  const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, td=today(), kw=!!kwOf(k);
+  if(!u) return h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:var(--group)',onclick:()=>phKeep(k,()=>{ box[k]={what:'',date:td,d:'both',note:'',num:''}; }),text:'Log an update'});
+  const opts=[['','What happened?'],...(kw?[['kOn','We sent the plans to the consultants'],['kGot','Consultant drawings came in'],['kFu','We followed up with a consultant']]:[]),
+    ...(two?[['fbGot','Client comments came in'],['fb','Client gave a date for their comments']]:[]),
+    ...(can?[['cd','Change the client’s review days'],...(kw?[['kd','Change the consultants’ days']]:[])]:[])];
+  const sel=h('select',{id:'upd-'+k,'aria-label':'What happened',onchange:e=>{ u.what=e.target.value; u.num=u.what==='cd'?String(clientDaysOf(p,k)):u.what==='kd'?String(consultDaysOf(p,k)):''; renderSheet(); }},opts.map(([v,l])=>h('option',{value:v,text:l}))); sel.value=u.what;
+  const isK=['kOn','kGot','kFu'].includes(u.what), isNum=['cd','kd'].includes(u.what), dateLbl=u.what==='fb'?'Comments expected on':'On';
+  const discSel=isK?h('select',{'aria-label':'Which consultant',onchange:e=>{ u.d=e.target.value; }},[['both','Structural and MEP'],['str','Structural'],['mep','MEP']].filter(([v])=>u.what!=='kFu'||v!=='both').map(([v,l])=>h('option',{value:v,text:l}))):null; if(discSel){ if(u.what==='kFu'&&u.d==='both') u.d='str'; discSel.value=u.d; }
+  const save=()=>{ const w=u.what; if(!w) return toast('Choose what happened.');
+    if(!isNum&&!u.date) return toast('Choose the date.'); if(!isNum&&w!=='fb'&&u.date>td) return toast('The date can’t be in the future.');
+    const ds=u.d==='both'?['str','mep']:[u.d];
+    return run(async()=>{ const ref=S.db.doc('projects/'+p.id);
+      if(w==='kOn'||w==='kGot') await ref.update({std:{kx:{[k]:Object.fromEntries(ds.map(d=>[d,{[w==='kOn'?'on':'got']:u.date}]))}}});
+      else if(w==='kFu'){ const x=kxOf(p,k,u.d); await ref.update({std:{kx:{[k]:{[u.d]:{fu:[...x.fu,{on:u.date,by:S.uid,...(u.note.trim()?{note:u.note.trim().slice(0,200)}:{})}]}}}}}); }
+      else if(w==='fbGot') await ref.update({std:{fbGot:{[k]:u.date}}});
+      else if(w==='fb') await ref.update({std:{fb:{[k]:u.date}}});
+      else if(w==='cd'){ const v=Math.max(0,Math.min(60,parseInt(u.num,10)||0)); await ref.update({std:{cd:{[k]:v===stdClientDays(p,k)?'':v}}}); }
+      else if(w==='kd'){ const v=Math.max(0,Math.min(60,parseInt(u.num,10)||0)); await ref.update({std:{kd:{[k]:v===kwOf(k)[1]?'':v}}}); }
+    },'Update saved').then(ok=>{ if(ok){ delete box[k]; renderSheet(); } }); };
+  return h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Log an update'}),sel,
+    discSel,
+    u.what&&!isNum?h('label',{class:'field'},h('span',{class:'lbl',text:dateLbl}),h('input',{type:'date',value:u.date,...(u.what==='fb'?{}:{max:td}),style:'background:#fff',oninput:e=>{ u.date=e.target.value; }})):null,
+    isNum?h('label',{class:'field'},h('span',{class:'lbl',text:'Working days'}),h('input',{type:'number',min:'0',max:'60',value:u.num,style:'background:#fff',oninput:e=>{ u.num=e.target.value; }}),h('span',{class:'f-hint',text:`Standard ${u.what==='cd'?stdClientDays(p,k):kwOf(k)[1]} working days.`})):null,
+    u.what==='kFu'?h('input',{maxlength:200,placeholder:'What did they say? (optional)',value:u.note,style:'background:#fff',oninput:e=>{ u.note=e.target.value; }}):null,
+    h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy||!u.what,onclick:save,text:'Save'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>phKeep(k,()=>{ delete box[k]; }),text:'Cancel'})));
 }
 /* the consultant clock on a phase (R8): when SLATE's plans went to the STR/MEP consultants, and when their drawings came back */
 function kwRow(p,k,can){ const kd=consultDaysOf(p,k), td=today(), par=useBand(p)&&KW_PAR[k]!=null;
@@ -6604,14 +6664,15 @@ function sheetTl(){
           if(!had){ const gr=graceFor(pv,tlCompute(pv,d.start,false)), g={}; Object.keys(gr).forEach(k=>{ g[k]=GRACE; }); pv.std.grace=g; upd.std.grace=g; upd.std.tl={start:d.start,at:new Date().toISOString(),by:S.uid,take:+d.take||0,base:tlPlanSnap(pv,d.start)}; }
           else upd.std.tl={take:+d.take||0};
           await S.db.doc('projects/'+p.id).update(upd);
-          if(!had&&d.gates){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
+          const resumed=had&&d.resume&&d.resume!==((p.std&&p.std.resume)||'');
+          if((!had&&d.gates)||resumed){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
             for(const [t,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!t||t.doneAt||t.target||t.request) continue;
-              if(ap) await taskUpdate(t.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:'From the project timeline'}]);
+              if(ap) await taskUpdate(t.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:resumed?'Land share resumed':'From the project timeline'}]);
               else await taskUpdate(t.id,{request:{date,reason:'From the project timeline',by:S.uid,at:new Date().toISOString(),initial:true}},[{type:'proposed',to:date,note:'From the project timeline'}]); } } }
         },had?'Timeline updated':'Timeline set').then(ok=>{ if(ok) back(); }); }},
       h('div',{class:'form-row'},field('Start *',h('input',{type:'date',value:d.start,disabled:had,oninput:e=>{ d.start=e.target.value; },onchange:()=>renderSheet()}),had?'Fixed once set; it starts the original plan.':'Usually the work order date.'),
         field(useBand(p)?'Of the WD days, days to take the NFC feedback in for GFC':'Days to take NFC feedback in before GFC',h('input',{type:'number',min:'0',max:'20',value:d.take,oninput:e=>{ d.take=e.target.value; },onchange:()=>renderSheet()}))),
-      ks.includes('3r')?field('Land share: work resumes on',h('input',{type:'date',value:d.resume,oninput:e=>{ d.resume=e.target.value; },onchange:()=>renderSheet()}),'3R and the phases after it are planned from this date.'):null,
+      ks.includes('3r')?field('Land share: work resumes on',h('input',{type:'date',value:d.resume,oninput:e=>{ d.resume=e.target.value; },onchange:()=>renderSheet()}),'Leave it empty while the project is paused after the launch: 3R and later phases wait, with no dates, and nothing goes late. Enter the date when work restarts; 3R and the phases after it get their dates from it.'):null,
       h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'SLATE days'}),h('th',{class:'n',text:'Consultant days'}),h('th',{class:'n',text:'Client days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
         h('tbody',{},ks.map(k=>{ const f=plan[k]||{}; return h('tr',{},h('td',{text:`${PH[k].no} ${phName(k,p)}`}),h('td',{class:'n'},num('sd',k,!ap)),h('td',{class:'n'},kwOf(k)?num('kd',k,false):h('span',{class:'muted',text:'—'})),h('td',{class:'n'},num('cd',k,false)),
           h('td',{class:'n',text:f.sub?fmtD(f.sub):'—'}),h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):(f.none?'after resume':'—')})); })))),
