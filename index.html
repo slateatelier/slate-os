@@ -9445,7 +9445,24 @@ function sheetRecPay(){
       field('Note',h('input',{value:d.note,placeholder:'e.g. meter reading, bill no.',oninput:e=>{d.note=e.target.value}})),
       h('p',{class:'f-hint',style:'margin:0',text:S.isOwner?'Saved in Finance as an approved expense.':'Saved in Finance as an expense waiting for the Principal’s approval.'}),
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Record payment'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
-function pjKindSeg(f){ return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work']],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })); }
+const cooId=()=>people().find(id=>isCOO(id)&&isPriv(id))||'';
+const seeCooWork=()=>!!cooId()&&(S.isOwner||S.uid===cooId());
+function pjKindSeg(f){ return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio work'],...(seeCooWork()?[['coo','COO work']]:[])],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })); }
+/* COO work: every task on the COO, kept in her private task list, so only the Principal and the COO ever see it */
+function viewCooWork(out){
+  const coo=cooId(), td=today(), xs=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.assignee===coo&&!t.archived&&String(S.paths[t.id]||'').startsWith('lead/'));
+  const open=xs.filter(t=>!t.doneAt), over=open.filter(t=>t.target&&t.target<td), mon=xs.filter(t=>t.doneAt&&t.doneAt.slice(0,7)===td.slice(0,7)), pub=Object.values(S.tasks).filter(t=>t.assignee===coo&&!t.archived&&!t.doneAt).length-open.length;
+  out.push(h('div',{class:'kpis'},kpi('Open',open.length),kpi('Overdue',over.length,'overdue'),kpi('Done this month',mon.length,'early')));
+  out.push(h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{style:'font-size:14px',text:`Only you and ${S.uid===coo?'the Principal':nameOf(coo)} can see this list. Anything you assign to the COO, on a studio area or a project, goes here and stays private.`}),
+    S.canWrite?h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ openNewTask(); if(S.sheet&&S.sheet.d){ S.sheet.d.assignee=coo; if(!S.sheet.d.projectId) S.sheet.d.projectId=['studioMgmtArea01','studioOpsArea0001'].find(k=>S.projects[k])||''; renderSheet(); } },text:'+ New COO task'})):null,
+    pub>0?h('div',{class:'f-hint',style:'margin:0',text:`${pub} open task${pub===1?' is':'s are'} on the COO in a shared project list (assigned before this rule), so that POD can see ${pub===1?'it':'them'}. Reassign them if they belong to the POD.`}):null));
+  const by={}; open.forEach(t=>{ const p=S.projects[t.projectId]; const k=p?(isStudioWP(p)||p.pod==='Studio'?'Studio · ':'')+p.name:'No project'; (by[k]=by[k]||[]).push(t); });
+  Object.keys(by).sort((a,b)=>(b.startsWith('Studio')-a.startsWith('Studio'))||a.localeCompare(b)).forEach(k=>{ const ts=by[k].sort(byTarget);
+    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:k}),h('span',{class:'cnt',text:String(ts.length)})),h('div',{class:'list'},ts.map(t=>row(t,{person:false,project:false}))))); });
+  if(!open.length) out.push(h('p',{class:'muted',style:'margin:0 4px',text:'Nothing open on the COO.'}));
+  const dn=xs.filter(t=>t.doneAt).sort((a,b)=>b.doneAt.localeCompare(a.doneAt)).slice(0,10);
+  if(dn.length) out.push(h('details',{class:'sec'},h('summary',{class:'sec-h',style:'cursor:pointer'},h('h2',{text:'Recently done'}),h('span',{class:'cnt',text:String(dn.length)})),h('div',{class:'list'},dn.map(t=>row(t,{person:false})))));
+  return out; }
 function viewProposals(f){
   const all=propList().filter(p=>!isLead(p)), q=(f.q||'').trim().toLowerCase(), ps=f.ps||'open', td=today();
   const openL=all.filter(propOpen), due=openL.filter(propDue), won=all.filter(p=>p.status==='won'), lost=all.filter(p=>['lost','dropped'].includes(p.status));
@@ -10128,6 +10145,7 @@ function viewProjects(){
     S.canWrite&&h('div',{class:'actions'},canChalkEdit()?h('button',{class:'btn',type:'button',onclick:()=>openChalkProject(),text:'New Chalk project'}):null,canProjReq()?h('button',{class:'btn btn-primary',type:'button',onclick:()=>openProject(),text:ap?'New project':'Request a project'}):null))];
   const hold=all.filter(p=>isOnHold(p));
   out.push(pjKindSeg(f));
+  if(f.kind==='coo'){ if(seeCooWork()) return viewCooWork(out); f.kind='client'; }
   if(sv) out.push(h('div',{class:'kpis'},kpi('Studio areas',act.length),kpi('Open tasks',act.reduce((a,p)=>a+Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!t.doneAt).length,0))));
   else out.push(h('div',{class:'kpis kpis5'},kpi('Total',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On hold',hold.length,'late'),kpi('Cancelled',clientAll.filter(p=>p.closed&&outcomeOf(p)==='cancelled').length,'overdue')),
     h('div',{class:'lbl',style:'margin:-4px 0 -6px;text-transform:uppercase;letter-spacing:.05em',text:'Active projects'}),
