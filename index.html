@@ -4163,7 +4163,7 @@ function saveMeeting(mode){
   const decs=(d.decisionList||[]).filter(x=>(x.text||'').trim());
   if(submit||publish){
     if(!present.length) return fail('Section 1: mark who was present.');
-    const open=carriedActions(date).filter(t=>!t.doneAt&&!(d.review[t.id]&&d.review[t.id].st)); if(open.length) return fail(`Section 2: give an update for every open action (${open.length} left).`);
+    const open=carriedActions(date).filter(t=>!t.doneAt&&!(d.review[t.id]&&d.review[t.id].st)); if(open.length&&!(publish&&amApprover())) return fail(`Section 2: give an update for every open action (${open.length} left).`);
     if(!decs.length&&!acts.length&&!(d.notes||'').trim()) return fail('Add the discussion, a decision or an action before submitting.');
     const bad=acts.find(a=>!a.owners.length||(!a.area&&!a.project)||(!a.due&&!a.ongoing)); if(bad) return fail(`Section 5: “${bad.text}” needs who, the area and a target date (or tick Ongoing).`);
   }
@@ -4266,6 +4266,7 @@ function sheetMeeting(){
     out.push(mtSec(5,'Sharing session',null,shr.topic?h('div',{class:'card',style:'gap:4px'},h('b',{text:shr.topic}),shr.by?h('div',{class:'f-hint',text:'Led by '+nameOf(shr.by)}):null,shr.notes?h('div',{style:'white-space:pre-line',text:shr.notes}):null):h('p',{class:'muted',style:'margin:0 4px',text:'No sharing session recorded.'})));
     out.push(mtSec(6,'Next meeting',null,h('div',{class:'card',style:'gap:4px'},h('b',{text:`${wd(nx)} ${fmtD(nx)} · ${fmtHM(meetTime())}`}),h('div',{class:'f-hint',text:[organiserFor(nx)?'Minutes: '+nameOf(organiserFor(nx)):'',guestFor(nx)?'Invited: '+nameOf(guestFor(nx)):''].filter(Boolean).join(' · ')}))));
     if(!m.updatedAt) out.push(h('p',{class:'muted',style:'margin:0',text:can?'Nothing written yet.':'The organiser hasn’t started the minutes yet.'}));
+    if(sh.err) out.push(h('div',{class:'err',role:'alert',text:sh.err}));
     if(amApprover()&&S.canWrite&&m.status==='submitted') out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--ink)'},h('div',{class:'lbl',text:`Submitted by ${nameOf(m.submittedBy)} · ${fmtTs(m.submittedAt)}`}),
       h('div',{class:'bar'},h('input',{id:'mt-rn',placeholder:'Note for the organiser (needed to return)',value:S.declineNote['mt:'+date]||'',style:'background:#fff',oninput:e=>{S.declineNote['mt:'+date]=e.target.value}}),
         h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ openMeeting(date); saveMeeting('publish'); },text:'Approve and publish'}),
