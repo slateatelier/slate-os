@@ -440,7 +440,7 @@ main.wide{max-width:1160px}
 .g-span{position:absolute;top:13px;height:6px;border-radius:3px;background:var(--faint)}
 .g-ms{position:absolute;top:11px;width:13px;height:13px;transform:translateX(-50%) rotate(45deg);background:var(--c);border:2px solid #fff;box-shadow:0 0 0 1px var(--c);cursor:pointer}
 .g-today{position:absolute;top:0;bottom:0;width:2px;background:var(--overdue);z-index:1;pointer-events:none}
-.g-today::after{content:"Today";position:absolute;top:2px;left:4px;font-size:10px;font-weight:600;color:var(--overdue)}
+.g-today::after{content:"Today";position:absolute;top:47px;left:4px;font-size:10px;font-weight:600;color:var(--overdue);background:#fff;padding:0 3px;border-radius:3px;line-height:14px}
 .g-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);padding:0 4px}
 .g-legend span{display:inline-flex;align-items:center;gap:6px}
 .g-legend i{width:16px;height:8px;border-radius:3px;background:var(--c)}
@@ -4228,7 +4228,7 @@ function viewPhaseGantt(){
     let live=null; try{ if(tlOf(p)) live=tlCompute(p,tlOf(p).start,true); }catch(_){}
     const bars=[], chip=Object.fromEntries(n.chips.map(c=>[c.k,c.state])), hot=['late','soon','clate'].includes(n.st)?NOW_ST[n.st][1]:'var(--ink)';
     if(live) n.chips.forEach(c=>{ const k=c.k, f=live[k]; if(c.state==='pre'||!f||f.none||!f.s) return; const st=stdState(p,k);
-      const e=st.fin&&st.fin.doneAt&&!st.fin.legacyNoDate?String(st.fin.doneAt).slice(0,10):f.fin; if(!e||e<s0||f.s>e0) return;
+      const e=st.fin&&st.fin.doneAt&&!st.fin.legacyNoDate?String(st.fin.doneAt).slice(0,10):maxD(f.fin,st.fin&&st.fin.target,st.sub&&!st.sub.doneAt&&st.sub.target); if(!e||e<s0||f.s>e0) return;
       const l=Math.max(0,x(f.s<s0?s0:f.s)), r=Math.min(W,x((e>e0?e0:e))+z.px), w=Math.max(18,r-l), state=chip[k];
       const tip=`Phase ${phNo(k)} ${phName(k,p)}\n${fmtD(f.s)} → ${fmtD(e)}`+(state==='pre'?'\nDone before SLATE OS':state==='done'?'\nDone':state==='now'?'\nNow':'\nLater');
       bars.push({l,w,state,tip,k}); });
