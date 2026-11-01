@@ -1551,9 +1551,10 @@ async function createTask(d){
   const tg=d.target||null, pr=d.proposed||null;
   const ask=d.support?(!!d.assignee&&!amApprover()):d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
   const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,target:String(d.doneAt||'').slice(0,10)||null,originalTarget:String(d.doneAt||'').slice(0,10)||null,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
-  const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
+  const dReq=d.kind==='Deliverable'&&!d.gate&&!d.legacy&&!canSetDeliv();
+  const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(dReq) hist.push({at:now,by:S.uid,type:'delivRequested'}); if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
   fxMark('task:'+ref.id,'in');
-  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:d.kind||'Task',assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:null,support:d.support?{...d.support,by:S.uid,at:now}:null,
+  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:dReq?'Task':(d.kind||'Task'),...(dReq?{delivReq:{by:S.uid,at:now}}:{}),assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:null,support:d.support?{...d.support,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
     repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),...(d.clRef?{clRef:d.clRef}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
@@ -1590,6 +1591,12 @@ function loadPanel(id,excl){
     h('div',{style:'display:flex;flex-wrap:wrap;gap:6px'},chip('Open',c.open),chip('Overdue',c.overdue,c.overdue?'tag-req':''),chip('Due in 7 days',c.week),chip('Later',c.later),chip('No date',c.nodate),c.pending?chip('Other pending requests',c.pending):null),
     c.list.length?h('div',{style:'display:grid;gap:4px'},c.list.slice(0,5).map(t=>{const p=S.projects[t.projectId];return h('div',{style:'display:flex;justify-content:space-between;gap:10px;font-size:13px'},h('span',{style:'min-width:0'},h('span',{style:'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${t.title} · ${p?(p.code||p.name):''}`}),p&&p.code?h('span',{class:'pn',style:'display:block',text:p.name}):null),h('span',{class:'mono',style:'white-space:nowrap;'+(t.target&&t.target<today()?'color:var(--overdue)':''),text:t.target?fmtD(t.target):'—'}))}),c.list.length>5?h('div',{class:'f-hint',text:`and ${c.list.length-5} more`}):null):h('div',{class:'f-hint',text:'No open tasks right now.'}));
 }
+function delivCard(t){ const p=S.projects[t.projectId], r=t.delivReq;
+  const act=(yes)=>run(()=>taskUpdate(t.id,yes?{kind:'Deliverable',delivReq:null}:{delivReq:null},[{type:yes?'delivApproved':'delivDeclined'}]),yes?'Confirmed as a deliverable':'Kept as a task');
+  return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},
+    h('div',{class:'row-title'},h('button',{class:'linkish',type:'button',onclick:()=>openTask(t.id),text:t.title})),
+    h('div',{class:'row-meta'},h('span',{text:projLabel(p)}),h('span',{text:'·'}),h('span',{text:`${nameOf(r.by)} asks for a deliverable`}),t.assignee?h('span',{text:'· '+nameOf(t.assignee)}):null,t.target?h('span',{text:'· due '+fmtD(t.target)}):null),
+    S.canWrite?h('div',{style:'display:flex;gap:8px;margin-top:8px'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>act(true),text:'Make it a deliverable'}),h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>act(false),text:'Keep as a task'})):null); }
 function assignCard(t,inSheet){
   const r=t.assignReq, p=S.projects[t.projectId], key='as:'+t.id;
   if(!S.assignPick[t.id]) S.assignPick[t.id]=r.to;
@@ -2864,6 +2871,7 @@ function row(t,o={}){
       h('div',{class:'row-title'},h('span',{text:t.title}),
         t.gate?h('span',{class:'tag',text:'Gate'}):t.kind==='Deliverable'&&h('span',{class:'tag',text:'Deliverable'}),
         t.assignReq&&h('span',{class:'tag tag-req',text:'Assignment pending'}),
+        t.delivReq&&h('span',{class:'tag tag-req',text:'Deliverable · awaiting COO'}),
         t.repeat&&h('span',{class:'tag',text:'↻ '+(t.repeat==='weekly'?'Weekly':'Monthly')}),
         t.request&&h('span',{class:'tag tag-req',text:'Date request'}),
         vfReturned(t)&&h('span',{class:'tag tag-req',title:'Returned by '+nameOf(t.lastReturn.by),text:'Returned'}),
@@ -2918,10 +2926,11 @@ function queueGroups(){
   const areq=ts.filter(t=>t.assignReq).sort((a,b)=>(a.assignReq.at||'').localeCompare(b.assignReq.at||''));
   const ma=minutesToApprove(), cr=S.isOwner?chalkReqs():[], rp=S.isOwner?roleProposals():[];
   const dels=S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid):[];
-  const hr=historyReqs(), vf=vfGroups();
+  const hr=historyReqs(), vf=vfGroups(), dq=canSetDeliv()?ts.filter(t=>t.delivReq&&!t.doneAt).sort((a,b)=>(a.delivReq.at||'').localeCompare(b.delivReq.at||'')):[];
   const G=[
     ['verify','Completed work',vf.length,mn(vf.map(t=>t.verify.ts)),()=>h('section',{class:'sec','data-q':'verify'},h('div',{class:'sec-h'},h('h2',{text:'Completed work to verify'}),h('span',{class:'cnt',text:String(vf.length)})),h('div',{class:'list'},vf.map(vfCard)))],
     ['dates','Dates',reqs.length,mn(reqs.map(t=>t.request.at)),()=>h('section',{class:'sec','data-q':'dates'},h('div',{class:'sec-h'},h('h2',{text:'Dates to approve'}),h('span',{class:'cnt',text:String(reqs.length)})),approvalBlocks(reqs))],
+    ['deliv','Deliverables',dq.length,mn(dq.map(t=>t.delivReq.at)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Deliverables to confirm'}),h('span',{class:'cnt',text:String(dq.length)})),h('div',{class:'list'},dq.map(delivCard)))],
     ['assign','Support assignments',areq.length,mn(areq.map(t=>t.assignReq.at)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Support assignments to approve'}),h('span',{class:'cnt',text:String(areq.length)})),h('div',{class:'list'},areq.map(t=>assignCard(t,false))))],
     ['minutes','Meeting minutes',ma.length,mn(ma.map(([d,m])=>m.submittedAt)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Meeting minutes to approve'}),h('span',{class:'cnt',text:String(ma.length)})),h('div',{class:'list'},ma.map(([d,m])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openMeeting(d)},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:`Meeting of ${wd(d)} ${fmtD(d)}`}),h('div',{class:'row-meta who'},avaEl(organiserFor(d),false,'sm'),`Submitted by ${nameOf(m.submittedBy||organiserFor(d))}`)),h('span',{class:'mi-a',text:'›'})))))],
     ['projects','New projects',projectReqs().filter(p=>p.status==='pending').length,mn(projectReqs().filter(p=>p.status==='pending').map(p=>p.requestedAt)),projReqCards],
@@ -4810,13 +4819,13 @@ function buildNotifs(){
   for(const t of ts){ for(const e of (t.history||[])){ if(!e.at||e.by===me||e.at.slice(0,10)<from) continue;
       const mineT=t.assignee===me, toMe=e.to===me||e.assignee===me, myReq=t.request&&t.request.by===me;
       let cat=null;
-      if(boss){ cat=(e.type==='request'||(e.type==='proposed'&&!isApprover(e.by))||e.type==='assignRequested'||(e.type==='submitted'&&canVerify(t)))?'action':'update'; }
+      if(boss){ cat=(e.type==='request'||(e.type==='proposed'&&!isApprover(e.by))||e.type==='assignRequested'||(e.type==='delivRequested'&&canSetDeliv())||(e.type==='submitted'&&canVerify(t)))?'action':'update'; }
       else if(toMe&&(e.type==='created'||e.type==='reassigned'||e.type==='assignApproved')) cat='action';
       else if(mineT||(e.type==='approved'||e.type==='declined')&&(e.by!==me)&&(mineT||myReq)) cat='update';
       else if(lead&&podsOf(t).includes(mp)) cat='update';
       if(!cat) continue;
       if(['stage'].includes(e.type)&&!boss&&!mineT) continue;
-      const still=cat==='action'&&boss?((e.type==='request'||e.type==='proposed')?!!t.request:e.type==='assignRequested'?!!t.assignReq:e.type==='submitted'?!!t.verify:false):true;
+      const still=cat==='action'&&boss?((e.type==='request'||e.type==='proposed')?!!t.request:e.type==='assignRequested'?!!t.assignReq:e.type==='delivRequested'?!!t.delivReq:e.type==='submitted'?!!t.verify:false):true;
       const ttl=!boss&&cat==='action'&&toMe?`${nameOf(e.by)} assigned you a ${t.kind==='Deliverable'?'deliverable':'task'}`+(t.target?` due ${fmtD(t.target)}`:''):histText(e);
       add({id:`h:${t.id}:${e.at}:${e.type}`,cat:boss&&cat==='action'&&!still?'update':cat,pending:boss&&cat==='action'&&still,at:e.at,title:ttl,body:`${t.title} · ${proj(t)}`+pn(t)+(e.note?`\n“${e.note}”`:''),taskId:t.id}); } }
   // 2. requests waiting for the Principal / COO: they stay in the inbox until decided, and open Approvals
@@ -4965,6 +4974,9 @@ function sheetNotifs(){
 const histText=e=>{
   const by=nameOf(e.by), pn=id=>S.projects[id]?S.projects[id].name:'another project';
   switch(e.type){
+    case 'delivRequested': return `${by} asked for this to count as a deliverable`;
+    case 'delivApproved': return `${by} confirmed it as a deliverable`;
+    case 'delivDeclined': return `${by} kept it as a task`;
     case 'assignRequested': return `${by} requested ${nameOf(e.to)}${e.cross?' from '+podLabel(e.cross):''} for this task`;
     case 'assignApproved': return e.to===e.from?`${by} approved assigning it to ${nameOf(e.to)}`:`${by} assigned it to ${nameOf(e.to)} instead of ${nameOf(e.from)}`;
     case 'assignDeclined': return `${by} declined assigning it to ${nameOf(e.to)}`;
@@ -5481,7 +5493,7 @@ function sheetMsgTask(){
       field('Task',inp('title',{maxlength:140,autocomplete:'off'})),
       h('div',{class:'form-row'},field('Project',sel('projectId',pj)),field('Assign to',sel('assignee',who.map(id=>[id,id===S.uid?nameOf(id)+' (me)':nameOf(id)])))),
       field(ap?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'})),ap?null:'The COO approves the date before it counts.'),
-      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-mdel',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
+      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-mdel',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),canSetDeliv()?'This is a deliverable':'This is a deliverable (the COO confirms)'),
       sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Create task'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})),
       h('div',{class:'f-hint',text:`${nameOf(sh.msg.sender)} gets the reply “Made it a task”, and the task is tracked like any other.`}))];
@@ -5523,7 +5535,7 @@ function sheetNewTask(){
         h('label',{class:'jt-opt'},h('input',{type:'radio',name:'jt',checked:d.split===true,onchange:()=>{ d.split=true; renderSheet(); }}),h('span',{},h('b',{text:'Separate tasks'}),h('span',{class:'muted',text:'Each person finishes and is approved on their own.'}))))):null,
       field(amApprover()?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
       field('Time (optional)',timeSel('sh-time',D().time,v=>{D().time=v},true),'For meetings and visits: shows beside the date.'),
-      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
+      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),canSetDeliv()?'This is a deliverable':'This is a deliverable (the COO confirms)'),
       S.sheet.more?[
         (()=>{ const tf=titleField(d); return [tf[1],tf[2]]; })(),
         field('Note (optional)',inp('note',{maxlength:160,placeholder:'e.g. Level 3 and roof only'})),
@@ -7540,6 +7552,9 @@ const HOWTO=[
   rules:['Only approved dates count on the dashboard.',`Work finished before ${fmtD(goLive())} is history: you approve it, and it is never scored. Scores count work due from ${fmtD(scoreFrom())}; until then it is a trial run.`,'Standing guidelines go in Weekly meeting › Studio rules once, not in every set of minutes.','The Principal deletes projects. The COO asks with a reason and the Principal approves or declines.','A temporary password is shown once; the person chooses their own when they sign in.','You can close a gate with open checklist items. Use it rarely and say why.']}];
 /* scoring is explained only to the Principal and the COO */
 const canSeeScoring=()=>S.isOwner||isCOO(S.uid);
+/* only the Principal and the COO decide what is a deliverable; anyone else's "This is a deliverable" is a request (Principal, 1 Nov 2026).
+   Until it is confirmed the item is a task. Phase gates from the SLATE standard are deliverables already. */
+const canSetDeliv=()=>S.isOwner||isCOO(S.uid);
 const myGuide=()=>amApprover()||S.isOwner?'boss':(amMgr()||amPodLead())?'lead':myHeadTeam()?'head':'member';
 
 function hxSec(eyebrow,title,lead,...body){ return h('section',{class:'hx-sec'},h('div',{class:'hx-sec-h'},h('div',{class:'eyebrow',text:eyebrow}),h('h2',{class:'hx-h2',text:title}),lead?h('p',{class:'hx-lead',text:lead}):null),...body); }
@@ -7641,7 +7656,7 @@ const HOWDO=[
  ['tasks',['lead','boss'],'Give a task to someone in my pod',['Tap New task.','Choose the Project, then the person under Assign to.','Pick a date: pod leads propose it, the COO and Principal set it directly.','Tick This is a deliverable if it is a submission.','Tap Add task. The sheet stays open for the next one.'],'The person is notified. A pod lead’s date waits for the COO.','Added just now lists what you created in this sheet.'],
  ['tasks',['lead','head','boss'],'Get help from the drafting pool or another pod',['Create the task (or open it › More options › Edit or reassign).','Choose a drafter, visualiser or someone from another pod.','Save.'],'It becomes an assignment request: the task shows “awaiting approval” until the COO approves, picks someone else, or declines.','Drafting leads: leave the date as a proposal. Adding a person to the project team (Project › + Add people) avoids asking for every task.'],
  ['tasks','lead','Ask for a new standard task',['Tap New task.','Below the form, tap Can’t find the task? Request a new standard task.','Write a title that works for any project, pick the category, tick Deliverable if it is one.','Tap Send for approval.'],'The COO adds it to the standard list or declines it with a note. Once added, it appears in everyone’s suggestions.','You can withdraw it while it is waiting.'],
- ['tasks','all','Know a task from a deliverable',['A deliverable is a submission (a set, a presentation, a gate). Tick This is a deliverable when you create it.','Everything else is a task.'],'Deliverables carry a tag and a diamond on the Timeline and the Calendar.',null],
+ ['tasks','all','Know a task from a deliverable',['A deliverable is a submission (a set, a presentation, a gate). Tick This is a deliverable when you create it; the COO or the Principal confirms it, and until then it counts as a task.','Phase gates are deliverables already. Everything else is a task.'],'Deliverables carry a tag and a diamond on the Timeline and the Calendar.',null],
  ['tasks','all','Mark a task done',['Tap the circle on the task row, or open it and tap ✓ Done today.','Finished on an earlier day? Open it › More options › Done on another date, pick the date, add a note if useful, tap Mark as done.'],'It is checked against the approved target: done in advance, on time or late. If verification is on for that kind of task, it goes to the Principal or the COO first and counts once verified, dated the day you finished. Undo is offered for a few seconds.','A phase’s final gate deliverable can’t be marked done while its checklist has open items. A site visit needs your location first: tap I’m at the site. On a shared task, your part is done and it waits for the others.'],
  ['tasks','all','Move my work across the Board',['Tasks › Board.','On a computer, drag the card to To do, In progress, In review or Done.','On a phone, use the ← Prev / Next → buttons on the card.'],'Dropping on Done asks for the completion date.','You can move only your own cards (managers can move their pod’s).'],
  ['tasks','all','Find a task',['Open Tasks.','Type in Search tasks: title, project, code or person.','Filter by Project, Person and Status (Open, Overdue, Due soon, Date requests, Completed, Archived…).'],null,'Switch between List, Board and Timeline at the top; the app remembers your choice.'],
@@ -10981,7 +10996,7 @@ function sheetChalkTask(){
       field('Task *',inp('title',{maxlength:140,placeholder:'e.g. Draft renders for review'})),
       h('div',{class:'form-row'},field('Project *',sel('projectId',chalkProjOpts())),field('Assign to *',sel('assignee',chalkAssignOpts()))),
       field('Due',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
-      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'ck-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),'This is a deliverable'),
+      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'ck-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),canSetDeliv()?'This is a deliverable':'This is a deliverable (the COO confirms)'),
       field('Note (optional)',inp('note',{maxlength:160})),
       sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
       h('div',{class:'f-hint',text:'No approval needed for the first date: it counts straight away. Any later change is a date request the Principal approves.'}),
