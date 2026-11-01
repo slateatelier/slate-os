@@ -4217,7 +4217,7 @@ function endOf(t){ const td=today(); if(t.doneAt) return t.target&&t.doneAt<t.ta
    one strip of phase chips (done / now / later) and one sentence: what is happening now, the next date, and whose turn it is.
    Dates are the approved gate dates the team is scored on. */
 /* three signals only: red = we are late, amber = needs attention soon, green = fine; everything else is calm grey */
-const NOW_ST={late:['Late','var(--overdue)'],soon:['Due soon','var(--late)'],client:['With the client','var(--muted)'],clate:['Client is late','var(--late)'],ok:['On track','var(--ontime)'],idle:['No dates yet','var(--muted)'],wait:['Waiting for site','var(--muted)'],pause:['Paused','var(--muted)'],done:['All phases done','var(--ink)']};
+const NOW_ST={late:['Late','var(--overdue)'],soon:['Due soon','var(--late)'],client:['With the client','var(--muted)'],clate:['Client is late','var(--late)'],ok:['On track','var(--ontime)'],idle:['No dates yet','var(--muted)'],wait:['Waiting for site','var(--muted)'],pause:['Paused','var(--muted)'],auth:['Waiting for authority','var(--muted)'],done:['All phases done','var(--ink)']};
 function projNow(p){
   const ks=stdPhases(p).filter(k=>PH[k]||String(k).startsWith('x')), td=today();
   let live=null; try{ if(tlOf(p)) live=tlCompute(p,tlOf(p).start,true); }catch(_){}
@@ -4232,6 +4232,7 @@ function projNow(p){
   const wdl=(a,b)=>Math.max(0,wdBetween(a,b)), pl=n=>`${n} working day${n===1?'':'s'}`;
   const one=k=>{ const s=st[k], sub=s.sub, fin=s.fin, nm=`${phNo(k)} ${phName(k,p)}`;
     const ours=sub&&!sub.doneAt?sub:(!sub&&fin&&!fin.doneAt?fin:null);
+    if(k==='6'&&wdWaiting(p)) return {st:'auth',txt:`${nm}: waiting for authority approval; starts when the client gives the go-ahead.`};
     if(k==='3r'&&!(p.std&&p.std.resume)&&!(sub&&sub.doneAt)) return {st:'pause',txt:`Paused after the launch: ${nm} starts when the land share project resumes.`};
     if(ours){ const tg=ours.target; if(!tg) return k==='9'?{st:'wait',txt:`${nm}: starts when construction is finished.`}:{st:'idle',txt:`${nm}: our work, no date set yet.`};
       if(tg<td) return {st:'late',txt:`${nm}: our ${sub?'submission':'work'} was due ${fmtD(tg)}, ${pl(wdl(tg,td))} late.`};
@@ -4240,7 +4241,7 @@ function projNow(p){
       if(tg&&tg<td) return {st:'clate',txt:`${nm}: with the client${since?' since '+fmtD(since):''}. Their reply was expected ${fmtD(tg)}, ${pl(wdl(tg,td))} over.`};
       return {st:'client',txt:`${nm}: with the client${since?' since '+fmtD(since):''}${tg?`; approval expected ${fmtD(tg)}`:''}.`}; }
     return {st:'idle',txt:`${nm}: no gate set.`}; };
-  const xs=cur.map(one), rank=['late','clate','soon','idle','client','ok','wait','pause'], top=xs.slice().sort((a,b)=>rank.indexOf(a.st)-rank.indexOf(b.st))[0];
+  const xs=cur.map(one), rank=['late','clate','soon','idle','client','ok','wait','auth','pause'], top=xs.slice().sort((a,b)=>rank.indexOf(a.st)-rank.indexOf(b.st))[0];
   const nx=open.find(k=>!cur.includes(k));
   return {chips,cur,st:top.st,nPre,nDone,nLeft,line:xs.map(x=>x.txt),next:nx?`Next: ${phNo(nx)} ${phName(nx,p)}`:''};
 }
@@ -4255,13 +4256,13 @@ function viewPhaseMap(){
   const g=S.gantt; if(g.pmPod===undefined) g.pmPod=fullView()?'':(myPod()||'');
   const podSel=h('select',{id:'pm-pod','aria-label':'POD',onchange:e=>{g.pmPod=e.target.value;render(true)}},h('option',{value:'',text:'All PODs'}),pods().map(x=>h('option',{value:x,text:podLabel(x)}))); podSel.value=g.pmPod||'';
   const ps=projects().filter(p=>p.std&&!p.closed&&p.pod!=='Studio'&&!isInternalP(p)&&stdPhases(p).length&&(!g.pmPod||podsOfProject(p).includes(g.pmPod)));
-  const rows=ps.map(p=>({p,n:projNow(p)})), rank=['late','clate','soon','client','idle','ok','wait','pause','done'];
+  const rows=ps.map(p=>({p,n:projNow(p)})), rank=['late','clate','soon','client','idle','ok','wait','auth','pause','done'];
   rows.sort((a,b)=>rank.indexOf(a.n.st)-rank.indexOf(b.n.st)||(a.p.code||a.p.name||'').localeCompare(b.p.code||b.p.name||''));
   const cnt=k=>rows.filter(r=>r.n.st===k).length;
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:g.pmPod?podLabel(g.pmPod):'All PODs'}),h('h1',{class:'h1',text:'Timeline'})),
       h('div',{class:'bar'},TV_SEG(g)))];
   out.push(h('div',{class:'bar'},podSel));
-  out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site'],['pause','Paused']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
+  out.push(h('div',{class:'now-sum'},[['late','Late'],['clate','Client is late'],['soon','Due soon'],['client','With the client'],['ok','On track'],['idle','No dates yet'],['wait','Waiting for site'],['auth','Waiting for authority'],['pause','Paused']].filter(([k])=>cnt(k)).map(([k,l])=>h('span',{class:'now-pill',style:`--c:${NOW_ST[k][1]}`,text:`${cnt(k)} ${l.toLowerCase()}`}))));
   out.push(h('div',{class:'now-legend'},h('span',{class:'now-chip pre',text:'2'}),'done before SLATE OS',h('span',{class:'now-chip done',style:'margin-left:8px',text:'✓'}),'done in SLATE OS',h('span',{class:'now-chip now',style:'--c:var(--ink);margin-left:8px;animation:none',text:'2'}),'now',h('span',{class:'now-chip later',style:'margin-left:8px',text:'3'}),'later · tap a project to open it'));
   out.push(rows.length?h('div',{class:'now-list'},rows.map(({p})=>h('button',{type:'button',class:'now-card',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }},nowStrip(p,{title:projLabel(p)}),h('div',{class:'now-meta',text:podText(p)})))):h('div',{class:'empty'},h('h3',{text:'No live projects here'})));
   return out;
@@ -4350,7 +4351,7 @@ async function giveGrace(p,add){ const g0=(p.std&&p.std.grace)||{}, g={...g0}; a
   const np={...p,std:{...p.std,grace:g}}, pl=tlCompute(np,tlOf(np).start,true);
   for(const k of tlPhases(np)){ const f=pl[k], st=stdState(np,k); if(!f||f.none) continue;
     for(const [g2,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(g2&&!g2.doneAt&&g2.target&&date&&date>g2.target) await taskUpdate(g2.id,{target:date},[{type:'scheduled',from:g2.target,to:date,note:'POD-load grace +20%'}]); } }
-function riskScan(){ const out={grace:[],risk:[],deem:[],shift:[],late:[],client:[],kons:[],buffer:[],used:[]}, td=today();
+function riskScan(){ const out={grace:[],risk:[],deem:[],shift:[],late:[],client:[],kons:[],buffer:[],used:[],auth:[]}, td=today();
   for(const p0 of projects()){ const p={...S.projects[p0.id],id:p0.id}; if(!p.std||p.closed||p.pod==='Studio'||isInternalP(p)||!tlOf(p)) continue;
     let live; try{ live=tlCompute(p,tlOf(p).start,true); }catch(_){ continue; }
     const ks=tlPhases(p).filter(k=>live[k]&&!live[k].none), g0=(p.std.grace)||{}, no=(p.std.graceNo)||{};
@@ -4360,7 +4361,7 @@ function riskScan(){ const out={grace:[],risk:[],deem:[],shift:[],late:[],client
     const sh=tlShiftable(p,live); if(sh.length) out.shift.push({p,xs:sh});
     ks.filter(k=>live[k].submitted&&!live[k].approved&&!isWD(k)&&td>live[k].due).forEach(k=>out.client.push({p,k,f:live[k]}));
     ks.filter(k=>live[k].kd&&live[k].kx&&!live[k].subA).forEach(k=>KDISC.forEach(([d,l])=>{ const x=live[k].kx[d]; if(!x.got&&x.late) out.kons.push({p,k,l,x}); }));
-    const n=projNow(p); if(n.st==='late') out.late.push({p,n});
+    const n=projNow(p); if(n.st==='late') out.late.push({p,n}); if(wdWaiting(p)&&stdState(p,'4').done) out.auth.push({p,since:String((stdState(p,'4').fin||{}).doneAt||'').slice(0,10)});
     const base=tlBase(p)||{}, lastB=maxD(...ks.map(k=>base[k]&&base[k].fin)), lastF=maxD(...ks.map(k=>live[k].fin));
     if(p.dueDate&&lastB&&lastF&&p.dueDate>lastB){ const buf=wdBetween(lastB,p.dueDate), used=wdBetween(lastB,lastF); if(used>0&&used*3>=buf*2) out.buffer.push({p,buf,used,lastF}); }
     Object.keys(g0).filter(k=>g0[k]&&tlPhases(p).includes(k)).forEach(k=>{ const ss=stdState(p,k), ga=(p.std.graceAt||{})[k]||{}, who=[...new Set((ga.who&&ga.who.length?ga.who:[ss.sub&&ss.sub.assignee,ss.fin&&ss.fin.assignee]).filter(Boolean))];
@@ -4399,6 +4400,9 @@ function viewRisk(){
     ...R.late.map(x=>card(x.p,'Late on our side',x.n.line.join(' '))),
     ...R.client.map(x=>card(x.p,`Client late on phase ${phLabel(x.k,x.p)}`,`Review was due ${fmtD(x.f.due)}; ${x.f.lateC} working day${x.f.lateC===1?'':'s'} over. Later dates move with it and count as client time.`)),
     ...R.kons.map(x=>card(x.p,`${x.l} consultant late on phase ${phLabel(x.k,x.p)}`,`Drawings were due ${fmtD(x.x.due)}; ${x.x.late} working day${x.x.late===1?'':'s'} over`+(x.x.fu.length?`, followed up ${x.x.fu.length}×.`:', not followed up yet.'))),
+    ...R.auth.map(x=>card(x.p,'Waiting for authority approval',`Authority set handed over${x.since&&x.since>=goLive()?' '+fmtD(x.since):''}. Working drawings start on the client’s go-ahead.`,
+      B('Go-ahead received today',()=>run(()=>wdGoSave(x.p,today(),false),'Go-ahead recorded').then(()=>render(true))),
+      B('Start now, before approval',()=>{ if(!confirm('Start working drawings now, before the authority approval? This is an at-risk start.')) return; run(()=>wdGoSave(x.p,today(),true),'Working drawings start today (at risk)').then(()=>render(true)); }))),
     ...R.buffer.map(x=>card(x.p,x.used>=x.buf?'Past the client’s date':'Client buffer two-thirds used',`Promised ${fmtD(x.p.dueDate)}; forecast ${fmtD(x.lastF)}. ${x.used} of ${x.buf} working days of buffer used.`))];
   /* grace used, by POD */
   const byPod=new Map(); R.used.forEach(u=>{ podsOfProject(u.p).forEach(pd=>{ if(!byPod.has(pd)) byPod.set(pd,{n:0,days:0,list:[]}); const b=byPod.get(pd); b.n++; b.days+=u.days; b.list.push(u); }); });
@@ -6594,6 +6598,22 @@ function graceFor(p,plan,wins){ const out={}; if(!GRACE_AT||paceOf(p)==='fast') 
     while(x<=f.sub){ if(isWorkDay(x)){ n++; const on=wins.filter(w=>w.s<=x&&w.e>=x), c=Math.max(0,...podsOfProject(p).map(pd=>1+new Set(on.filter(w=>w.pd===pd).map(w=>w.pid)).size)); if(c>=GRACE_AT) hit++; } x=addDays(x,1); }
     if(n&&hit*2>=n) out[k]={g:GRACE,days:n,hit}; });
   return out; }
+const wdStarted=p=>{ const st=stdState(p,'6'); return !!((st.sub&&st.sub.doneAt)||(st.fin&&st.fin.doneAt)||Object.values(((p.cl||{})['6'])||{}).some(x=>x&&x.done&&!x.legacy)); };
+const wdWaiting=p=>!!p&&!!p.std&&stdPhases(p).includes('4')&&stdPhases(p).includes('6')&&!(p.std.wdGo&&p.std.wdGo.on)&&!wdStarted(p)&&!stdState(p,'6').done;
+/* record the go-ahead and re-date the open working-drawing gates from it */
+async function wdGoSave(p,on,early){ const go={on,by:S.uid,at:new Date().toISOString(),...(early?{early:true}:{})};
+  await S.db.doc('projects/'+p.id).update({std:{wdGo:go}});
+  const np={...p,std:{...p.std,wdGo:go}}; if(!tlOf(np)) return; const pl=tlCompute(np,tlOf(np).start,true);
+  for(const k of ['6','7','8'].filter(k=>tlPhases(np).includes(k))){ const f=pl[k], st=stdState(np,k); if(!f||f.none) continue;
+    for(const [g,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(g&&!g.doneAt&&date&&g.target!==date) await taskUpdate(g.id,{target:date,...(g.target?{}:{originalTarget:date})},[{type:'scheduled',from:g.target||'',to:date,note:early?'Working drawings started before authority approval (COO)':'Working drawings started: client go-ahead after authority approval'}]); } }
+function wdGoBox(p){ if(!wdWaiting(p)||!S.canWrite) return null; const can=amApprover()||isProjLead(p), coo=S.isOwner||isCOO(S.uid); if(!can) return null;
+  const st=S.sheet.wdg||(S.sheet.wdg={on:today()});
+  return h('div',{class:'callout',style:'display:grid;gap:8px'},
+    h('b',{style:'font-size:14px',text:'Working drawings wait for authority approval'}),
+    h('div',{class:'f-hint',style:'margin:0',text:'WD-1 and the sets after it start when the client gives the go-ahead after the authority approves the drawings. Until then they have no dates and nothing goes late.'}),
+    h('div',{class:'bar',style:'margin:0;align-items:center'},h('input',{type:'date',value:st.on,max:today(),style:'max-width:170px',oninput:e=>{ st.on=e.target.value; }}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!st.on) return toast('Choose the date.'); run(()=>wdGoSave(p,st.on,false),'Go-ahead recorded: working drawings are dated').then(ok=>ok&&renderSheet()); },text:'Go-ahead received'}),
+      coo?h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!confirm('Start working drawings now, before the authority approval? This is an at-risk start.')) return; run(()=>wdGoSave(p,today(),true),'Working drawings start today (at risk)').then(ok=>ok&&renderSheet()); },text:'Start now, before approval'}):null)); }
 function tlCompute(p,start,live){
   const ks=tlPhases(p), td=today(), out={}, std=p.std||{}, take=+(((std.tl||{}).take)??TAKE_IN);
   ks.forEach((k,i)=>{
@@ -6602,6 +6622,11 @@ function tlCompute(p,start,live){
     else if(dep.resume) s=std.resume?firstWD(std.resume):'';
     else { const ref=dep.prev?out[ks[i-1]]:out[dep.k]; const at=dep.prev?'fin':dep.at; if(ref&&ref[at]) s=nextWD(ref[at]); }
     if(!s){ out[k]={k,none:true}; return; }
+    /* working drawings wait for the client's go-ahead after authority approval (Principal, 2 Nov 2026): std.wdGo = {on, by, early}.
+       Until it is recorded WD-1 and the sets after it have no dates and nothing goes late; a WD-1 already under way carries on. */
+    if(k==='6'&&ks.includes('4')){ const go=std.wdGo&&std.wdGo.on;
+      if(!go&&!wdStarted(p)){ out[k]={k,none:true,auth:true}; return; }
+      if(go){ const g=nextWD(go); if(s<g) s=g; } }
     // re-planned on the SLATE standard (tl.from): a phase not started by then starts no earlier than that day
     if(std.tl&&std.tl.from){ const s0=stdState(p,k); if(!(s0.sub&&s0.sub.doneAt)&&!(s0.fin&&s0.fin.doneAt)){ const f0=firstWD(std.tl.from); if(s<f0) s=f0; } }
     const st=live?stdState(p,k):{}, sd=slateDaysFor(p,k)+graceDays(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
@@ -6859,6 +6884,7 @@ function tlSection(p){
   const open=S.sheet&&S.sheet.tlLog;
   return h('div',{class:'card tl-card'},
     nowStrip(p),
+    wdGoBox(p),
     (ap||S.sheet&&S.sheet.tlFull)?null:h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ S.sheet.tlFull=true; renderSheet(); },text:'Show the full timeline'}),
     ...(!(ap||S.sheet&&S.sheet.tlFull)?[]:[
     h('div',{class:'pc-row'},h('b',{text:'Timeline'}),h('span',{class:'pill '+(cLate||kLate?'s-late':slip>0?'s-overdue':'s-ontime'),text:cLate||kLate?[cLate?`Client +${cLate}`:'',kLate?`Consultants +${kLate}`:''].filter(Boolean).join(' · ')+' days':slip>0?`${slip} days behind plan`:'On plan'})),
