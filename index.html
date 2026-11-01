@@ -1333,7 +1333,8 @@ const amApprover=()=>S.isOwner||isApprover(S.uid);
 /* the COO approves; only the Principal and the COO give the COO tasks (they stay private) */
 /* only the Principal and the COO can give work to the Principal's Office */
 const isPO=id=>!!id&&(id===ownerId()||/principal/i.test(teamOf(id)));
-const canAssignTo=id=>(!isPO(id)||amApprover())&&(!isChalkP(id)||S.isOwner);
+/* only the Principal gives work to the COO (Principal, 1 Nov 2026) */
+const canAssignTo=id=>(!isCOO(id)||S.isOwner)&&(!isPO(id)||amApprover())&&(!isChalkP(id)||S.isOwner);
 const isCOO=id=>!!id&&id!==ownerId()&&(isApprover(id)||/\bcoo\b|chief operat/i.test(roleOf(id)));
 /* Chalk Create: a separate SBU. Its lead and the Principal assign Chalk work; the COO views and edits; no SLATE process or scoring */
 const isChalkName=t=>/^\s*chalk\s*create\s*$/i.test(t||'');
@@ -10081,7 +10082,7 @@ function viewStudioTasks(out){
   return out; }
 const seeCooWork=()=>!!cooId()&&(S.isOwner||S.uid===cooId());
 /* a task in the COO's private list: it shows under COO work only, never in the shared studio areas */
-const isCooT=t=>!!t&&!!S.privW&&S.privW.has(t)&&t.assignee===cooId();
+const isCooT=t=>!!t&&!!cooId()&&t.assignee===cooId()&&((!!S.privW&&S.privW.has(t))||String(S.paths[t.id]||'').startsWith('lead/'));
 function pjKindSeg(f){ return h('div',{class:'bar pj-kind',style:'margin-top:-4px'},seg('Show',[['client','Client projects'],['studio','Studio tasks'],...(seeCooWork()?[['coo','COO work']]:[])],f.kind,v=>{ f.kind=v; f.pod=''; render(true); })); }
 /* COO work: every task on the COO, kept in her private task list, so only the Principal and the COO ever see it */
 function viewCooWork(out){
@@ -10091,7 +10092,10 @@ function viewCooWork(out){
   out.push(h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{style:'font-size:14px',text:`Only you and ${S.uid===coo?'the Principal':nameOf(coo)} can see this list. Anything you assign to the COO, on a studio area or a project, goes here and stays private.`}),
     S.canWrite?h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>{ openNewTask(); if(S.sheet&&S.sheet.d){ S.sheet.d.assignee=coo; if(!S.sheet.d.projectId) S.sheet.d.projectId=['studioMgmtArea01','studioOpsArea0001'].find(k=>S.projects[k])||''; renderSheet(); } },text:'+ New COO task'})):null,
     pub>0?h('div',{class:'f-hint',style:'margin:0',text:`${pub} open task${pub===1?' is':'s are'} on the COO in a shared project list (assigned before this rule), so that POD can see ${pub===1?'it':'them'}. Reassign them if they belong to the POD.`}):null));
-  const by={}; open.forEach(t=>{ const p=S.projects[t.projectId]; const k=p?(isStudioWP(p)||p.pod==='Studio'?'Studio · ':'')+p.name:'No project'; (by[k]=by[k]||[]).push(t); });
+  const catOf=t=>{ const p=S.projects[t.projectId]; return !p?'Other':isInternalP(p)||p.pod==='Studio'?(t.projectId===STUDIO_ONE?'Operations':areaName(p.type)):'Client projects'; };
+  const cats=[...new Set(open.map(catOf))].sort(), cf=S.cooF&&cats.includes(S.cooF)?S.cooF:'';
+  if(cats.length>1) out.push(h('div',{class:'chips',style:'margin:0'},[['','All'],...cats.map(c=>[c,c])].map(([v,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;'+(cf===v?'background:var(--ink);color:#fff':''),onclick:()=>{ S.cooF=v; render(true); },text:`${l} · ${v?open.filter(t=>catOf(t)===v).length:open.length}`}))));
+  const by={}; open.filter(t=>!cf||catOf(t)===cf).forEach(t=>{ const p=S.projects[t.projectId]; const k=p?(isStudioWP(p)||p.pod==='Studio'?'Studio · ':'')+p.name:'No project'; (by[k]=by[k]||[]).push(t); });
   Object.keys(by).sort((a,b)=>(b.startsWith('Studio')-a.startsWith('Studio'))||a.localeCompare(b)).forEach(k=>{ const ts=by[k].sort(byTarget);
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:k}),h('span',{class:'cnt',text:String(ts.length)})),h('div',{class:'list'},ts.map(t=>row(t,{person:false,project:false}))))); });
   if(!open.length) out.push(h('p',{class:'muted',style:'margin:0 4px',text:'Nothing open on the COO.'}));
