@@ -35,6 +35,14 @@
 .shg-board.anim .shg-p{animation:shgIn .3s ease-out both}
 .shg-p.top .shg-n .shg{animation:shgWig .9s ease-in-out 2 .5s}
 @media (prefers-reduced-motion:reduce){.shg.bob,.shg-board.anim .shg-p,.shg-p.top .shg{animation:none}}
+.td-box{background:var(--group);border-radius:14px;padding:8px;display:grid;gap:6px}
+.td-add{display:flex;gap:6px;align-items:center}.td-add input{flex:1;min-width:0;background:#fff}.td-add select{width:auto;background:#fff;flex:none;max-width:120px}
+.td-list{display:grid;background:#fff;border-radius:10px;overflow:hidden}
+.td-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-top:1px solid var(--line);font-size:14px}.td-row:first-child{border-top:0}
+.td-row input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:#111;margin:0}
+.td-t{flex:1;min-width:0;overflow-wrap:anywhere}.td-row.done .td-t{text-decoration:line-through;color:var(--muted)}
+.td-d{font-size:11.5px;color:var(--muted);flex:none}.td-d.late{color:var(--overdue)}
+.td-x{border:0;background:transparent;color:var(--faint,#aeaeb2);font-size:18px;line-height:1;cursor:pointer;padding:0 2px;opacity:.6}.td-x:hover{opacity:1}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -2306,6 +2314,7 @@ async function boot(){
   db.collection('projects').onSnapshot(q=>{ S.projects={}; q.docs.forEach(d=>{S.projects[d.id]=d.data()}); cxSync(); schedule(); },onSubErr);
   db.doc(`data/users/${S.uid}/notif`).onSnapshot(snap=>{ S.nst=snap.exists?snap.data():{}; schedule(); },()=>{ S.nst={}; });
   db.collection('proposals').onSnapshot(q=>{ S.props={}; q.docs.forEach(d=>{S.props[d.id]=d.data()}); schedule(); },()=>{ S.props={}; });
+  db.doc(`data/users/${S.uid}/todo`).onSnapshot(snap=>{ S.todo=(snap.exists&&snap.data().items)||[]; schedule(); },()=>{ S.todo=[]; });
   db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
   db.collection('tasks').onSnapshot(q=>{ S.shared={}; q.docs.forEach(d=>{S.shared[d.id]=d.data()}); mergeTasks(); },onSubErr);
 
@@ -2421,6 +2430,7 @@ function capPods(root){
   if(document.body) go(); else document.addEventListener('DOMContentLoaded',go); })();
 /* one-line descriptions under section headings, so it is clear what each area is for. Added after every render, in one place. */
 const SEC_INFO={
+  'My to-do':'Your own planning list. Only you see it; it isn’t scored. Ticked items clear away after a day.',
   'Support from other teams':'Ask another POD or team (drafting pool, visualizers…) for one piece of work in a phase. The COO confirms the person and the date; it then becomes their task here.',
   'Interior space':'The MODO interior: where it is, its size, the rooms SLATE designs, and whether SLATE builds it too.',
   'By POD':'Each POD’s active projects, worst first. The dot is health (red off track, orange at risk, green on track, grey not started); the box is the phase now running. Tap a project to open it; tap a POD to fold it.',
@@ -3210,6 +3220,30 @@ function homeTour(){ const g=roleGroup(S.uid);
   if(g==='dhead') return ['Your Home as drafting lead',['The drafting queue lists drafting work in every live phase, earliest deadline first.','Give each item to someone: it becomes a task on their Home with the phase’s date. The numbers on top are tasks due in the next 7 days per person.','The checklist item ticks itself when the task is done.']];
   if(g==='draft') return ['Your Home',['Drafting work from your Design Associate Lead lands here as tasks, each with its date.','Open a task and tap Start working, then ✓ Done today when it is issued.','Can’t make a date? Open the task › More options › Request new date, before the date passes.']];
   return ['Your Home',['Start with Needs attention, then This week.','My checklist shows the items you own, with the date each phase needs them. Press and hold the circle to tick one.','Can’t make a date? Open the task › More options › Request new date, before the date passes.']]; }
+/* ---------- my to-do: a private planning list on Home (data/users/<me>/todo, which only its owner can read) ---------- */
+const TODO_MAX=60;
+const todoItems=()=>Array.isArray(S.todo)?S.todo.filter(x=>x&&x.id&&x.t):[];
+function todoSave(items){ S.todo=items; render(true); return S.db.doc(`data/users/${S.uid}/todo`).set({items:items.slice(-TODO_MAX)}).catch(e=>toast(errMsg(e))); }
+function todoAdd(){ const el=document.getElementById('td-new'), t=(el&&el.value||'').trim(); if(!t) return; const day=(S.todoDay||'');
+  const items=todoItems(); if(items.filter(x=>!x.done).length>=40) return toast('That’s 40 open items: tick some off first.');
+  S.todoDraft=''; todoSave([...items,{id:'t'+Date.now().toString(36)+Math.random().toString(36).slice(2,4),t:t.slice(0,140),done:false,at:new Date().toISOString(),...(day?{day}:{})}]);
+  setTimeout(()=>{ const e=document.getElementById('td-new'); e&&e.focus(); },30); }
+function todoSec(){
+  const items=todoItems(), td=today(), open=items.filter(x=>!x.done).sort((a,b)=>(a.day||'9999').localeCompare(b.day||'9999')||(a.at||'').localeCompare(b.at||'')),
+    done=items.filter(x=>x.done&&(x.doneAt||'').slice(0,10)>=addDays(td,-1)).sort((a,b)=>(b.doneAt||'').localeCompare(a.doneAt||''));
+  const dayTxt=d=>!d?'':d===td?'Today':d===addDays(td,1)?'Tomorrow':d<td?fmtD(d)+' · overdue':fmtD(d);
+  const row=x=>h('div',{class:'td-row'+(x.done?' done':'')},
+    h('input',{type:'checkbox',checked:!!x.done,'aria-label':x.t,onchange:e=>todoSave(todoItems().map(y=>y.id===x.id?{...y,done:e.target.checked,doneAt:e.target.checked?new Date().toISOString():''}:y))}),
+    h('span',{class:'td-t',text:x.t}),
+    x.day&&!x.done?h('span',{class:'td-d'+(x.day<td?' late':''),text:dayTxt(x.day)}):null,
+    h('button',{class:'td-x',type:'button','aria-label':'Remove',title:'Remove',onclick:()=>todoSave(todoItems().filter(y=>y.id!==x.id)),text:'×'}));
+  const inp=h('input',{id:'td-new',maxlength:140,placeholder:'Add a to-do for yourself…',value:S.todoDraft||'',oninput:e=>{ S.todoDraft=e.target.value; },onkeydown:e=>{ if(e.key==='Enter'){ e.preventDefault(); todoAdd(); } }});
+  const dSel=h('select',{id:'td-day','aria-label':'When',onchange:e=>{ S.todoDay=e.target.value; }},[['','Any day'],[td,'Today'],[addDays(td,1),'Tomorrow'],[addWorkDays(td,2),'In 2 days'],[addDays(td,7),'Next week']].map(([v,l])=>h('option',{value:v,text:l}))); dSel.value=S.todoDay||'';
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My to-do'}),h('span',{class:'cnt',text:open.length?`${open.length} open`:''})),
+    h('div',{class:'td-box'},
+      h('div',{class:'td-add'},inp,dSel,h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:todoAdd,text:'Add'})),
+      open.length||done.length?h('div',{class:'td-list'},[...open.map(row),...done.map(row)]):h('div',{class:'f-hint',style:'margin:2px 4px',text:'Plan your day: add the things you mean to do, tick them off as you go.'})));
+}
 function viewMineBody(){
   const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
@@ -3282,6 +3316,8 @@ function viewMineBody(){
     { const x=list('done','Recently completed',done,3); if(x) out.push(x); }
     if(!attn.length&&!week.length&&!next.length&&!podGate.length&&!nodate.length) out.push(h('p',{class:'f-hint',style:'margin:-6px 4px 0',text:later.length?'Nothing due in the next two weeks.':'Nothing open. Enjoy the clear desk.'}));
   }
+  /* 5b · my own to-do list: private planning, only the person sees it */
+  out.push(todoSec());
   /* 6 · My checklist */
   const mcl=myChecklist(); if(mcl.length){ const all=!!(S.homeMore&&S.homeMore.cl), el=myChecklistSec(mcl,mcl.length>5?(all||S.clSel?{grouped:true}:{limit:5}):{});
     if(mcl.length>5){ el.querySelectorAll('.f-hint').forEach(x=>x.remove()); el.append(h('button',{class:'h-more',type:'button',style:'justify-self:start',onclick:()=>{ S.homeMore={...(S.homeMore||{}),cl:!(S.homeMore&&S.homeMore.cl)}; render(true); },text:S.homeMore&&S.homeMore.cl?'Show less':`Show all ${mcl.length}`})); }
