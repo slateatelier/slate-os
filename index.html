@@ -7861,15 +7861,16 @@ function pbDefaults(p,kind){
     terms:PB_TERMS.join('\n'),signName:'Syed Mohammed Imran',signTitle:'Principal Architect'}; }
 /* project timeline in the proposal: SLATE's standard phases for the project type, in working days (SLATE days + client review days) */
 /* what the client receives at the end of each stage */
-const PB_TL_DEL={'0':'Design brief, site analysis and FAR / area feasibility report',
+const PB_TL_DEL={'0':'Design brief and FAR / area feasibility report (site analysis if agreed)',
   '1':'Two to three concept options: plans, massing and 3D views',
-  '2':'Developed floor plans, sections, elevations and facade 3D, with structural and MEP concepts',
-  '3':'Design freeze set for signature: final plans, elevations and outline specification',
+  '2':'Developed floor plans, sections and facade 3D, with structural and MEP concepts (elevation drawings if agreed)',
+  '3':'Design freeze set for signature: final plans, 3D elevation and outline specification (elevation drawings if agreed)',
   '4':'Signed RAJUK submission set: planning permit and building approval drawings',
-  '5':'Exterior and interior 3D renders, walk-through animation and brochure floor plans',
+  '5':'The agreed number of 3D views and animations, and the brochure, as set out in the scope',
   '6':'WD-1: setting-out, foundation and basement drawings, with structural and below-ground MEP',
   '7':'WD-2: floor plans, sections, elevations, stair and lift details, structural and MEP drawings',
   '8':'WD-3: door and window schedules, toilet and kitchen details, flooring, facade details and finishing schedule'};
+const PB_TL_OLD=['Design brief, site analysis and FAR / area feasibility report', 'Developed floor plans, sections, elevations and facade 3D, with structural and MEP concepts', 'Design freeze set for signature: final plans, elevations and outline specification', 'Exterior and interior 3D renders, walk-through animation and brochure floor plans'];
 const pbTlDel=x=>x.del!=null?x.del:(PB_TL_DEL[Object.keys(PB_TL_DEL).find(k=>PH[k]&&PH[k].n===x.label)]||'');
 /* the proposal timeline uses the same days as project phase plans: SLATE Phase Days v1.3 by plot size (DAYS_T) */
 const PB_DAYS={std:{name:DAYS_NAME.std},dev:{name:DAYS_NAME.dev}};
@@ -7891,7 +7892,7 @@ function pbFee(d){ const area=+d.area||0;
   return {sub,disc,total,rate:area?total/area:0,rawRate:rate,area}; }
 function openPropDoc(id,kind,fresh){ const p=(S.props||{})[id]||fresh; if(!p) return; if(fresh&&!(S.props||{})[id]) (S.props=S.props||{})[id]=fresh;
   const d=p.doc&&!kind?JSON.parse(JSON.stringify(p.doc)):pbDefaults(p,kind);
-  if(d.tl&&Array.isArray(d.tl.rows)) d.tl.rows.forEach(x=>{ if(x.del==null) x.del=pbTlDel(x); });
+  if(d.tl&&Array.isArray(d.tl.rows)) d.tl.rows.forEach(x=>{ if(x.del==null||PB_TL_OLD.includes(x.del)) x.del=pbTlDel({label:x.label}); });
   if(d.validDays==null) d.validDays='30'; if(d.revFree==null) d.revFree='2'; if(d.revRate==null) d.revRate='10000'; delete d.revFee;
   if(p.doc&&kind){ d.ref=p.doc.ref||d.ref; d.date=p.doc.date||d.date; }
   S.sheet={type:'propDoc',id,d,err:'',pdf:null}; renderSheet(); }
