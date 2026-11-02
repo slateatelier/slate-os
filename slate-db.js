@@ -105,6 +105,7 @@
   const collSubs = new Map();       // collection path -> Set(callback)
   let me = null;                    // my profile row
   let authUser = null;
+  let review = null;   // a read-only review login: { kind: 'principal' | 'coo', until, live }
 
   const PEOPLE_KEYS = ['roster', 'managers', 'approvers', 'privateIds', 'chalkLeads', 'ownerId'];
 
@@ -215,6 +216,7 @@
     for (const r of ppl) { if (JSON.stringify(people.get(r.id)) !== JSON.stringify(r)) peopleChanged = true; people.set(r.id, r); }
     for (const id of [...people.keys()]) if (!ppl.some(r => r.id === id)) { people.delete(id); peopleChanged = true; }
     me = people.get(authUser.id) || null;
+    if (me && review) me = { ...me, active: true };   // a review login's profile stays inactive so the team never meets it
     if (peopleChanged) touchPeople();
   }
   window.slateReload = () => loadAll().catch(() => {});   // after the Business PIN is entered or locks again
@@ -228,7 +230,7 @@
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, ev => {
         if (ev.eventType === 'DELETE') { if (ev.old && ev.old.id) people.delete(ev.old.id); }
-        else if (ev.new && ev.new.id) { people.set(ev.new.id, ev.new); if (authUser && ev.new.id === authUser.id) me = ev.new; }
+        else if (ev.new && ev.new.id) { people.set(ev.new.id, ev.new); if (authUser && ev.new.id === authUser.id) me = review ? { ...ev.new, active: true } : ev.new; }
         touchPeople();
       })
       .subscribe();
@@ -317,7 +319,7 @@
       return me ? { id: me.id, name: displayName(me), email: me.email, isOwner: me.designation === 'principal' && me.active }
                 : { id: authUser ? authUser.id : null, name: authUser && authUser.email, isOwner: false };
     },
-    async can(what) { return what === 'data.write' ? !!(me && me.active) : true; },
+    async can(what) { return what === 'data.write' ? !!(me && me.active) && !review : true; },
     async profiles(ids) {
       const out = {};
       for (const id of ids || []) { const p = people.get(id); if (p) out[id] = { id, name: displayName(p) }; }
@@ -1234,6 +1236,68 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadReports(); });
   }
 
+  /* ---------------- review logins: read-only Principal / COO views for an outside reviewer ----------------
+     The database refuses every save from a review login; this only labels the screen, logs each open and gives
+     the Principal More › Review logins to end or reopen them. */
+  function setupReview() {
+    if (!review) return;
+    const mob = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    sb.rpc('review_seen', { p_device: mob ? 'mobile' : 'computer' }).then(() => {}, () => {});
+    whenBody(() => {
+      if (document.getElementById('slate-review-bar')) return;
+      const st = document.createElement('style');
+      st.textContent = '#slate-review-bar{position:fixed;top:0;left:0;right:0;z-index:2147483000;background:#141414;color:#fff;font:500 12px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;padding:5px 12px;letter-spacing:.01em;pointer-events:none}#slate-review-bar b{color:#ff6b5e;font-weight:600}body{padding-top:24px}';
+      document.head.append(st);
+      const ends = new Date(review.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const bar = document.createElement('div'); bar.id = 'slate-review-bar';
+      bar.innerHTML = '<b>Read-only review</b> · ' + (review.kind === 'coo' ? 'COO' : 'Principal') + ' view · nothing you change is saved · ends ' + ends;
+      document.body.append(bar);
+    });
+  }
+  const RV = { rows: null, busy: false, msg: '' };
+  async function loadReviews() {
+    const { data, error } = await sb.rpc('review_list');
+    RV.rows = error ? [] : (data || []); RV.msg = error ? '!' + friendly(error).message : RV.msg;
+    try { if (S.view === 'review') render(true); } catch (_) {}
+  }
+  async function reviewAct(kind, on, days) {
+    if (RV.busy) return;
+    if (!on && !confirm('End the ' + (kind === 'coo' ? 'COO' : 'Principal') + ' review login now? It is signed out everywhere at once.')) return;
+    RV.busy = true; RV.msg = ''; try { render(true); } catch (_) {}
+    const { error } = on ? await sb.rpc('review_open', { p_kind: kind, p_days: days }) : await sb.rpc('review_off', { p_kind: kind });
+    RV.busy = false; RV.msg = error ? '!' + friendly(error).message : (on ? 'Open for ' + days + ' days.' : 'Ended and signed out.');
+    try { toast(error ? 'Not changed' : on ? 'Review login open' : 'Review login ended'); } catch (_) {}
+    loadReviews();
+  }
+  function reviewView() {
+    if (RV.rows === null) { RV.rows = undefined; loadReviews(); }
+    const day = d => new Date(d).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const out = [el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Only you'), el('h1', { class: 'h1' }, 'Review logins'),
+      el('p', { class: 'lead' }, 'Two read-only logins for an outside reviewer, such as an AI. One sees what you see, one what the COO sees, with real figures. Nothing they do is saved, the team never sees them, and each ends on its own date.')))];
+    if (!Array.isArray(RV.rows)) { out.push(el('div', { class: 'card' }, 'Checking…')); return out; }
+    if (!RV.rows.length) out.push(el('div', { class: 'card' }, 'No review logins yet. They are created by the m_reviewers.sql set-up.'));
+    for (const r of RV.rows) {
+      const nm = r.kind === 'coo' ? 'COO view' : 'Principal view';
+      const state = r.live ? 'Open until ' + day(r.until) : r.off_at ? 'Ended ' + day(r.off_at) : 'Expired ' + day(r.until);
+      const btn = (label, fn, primary) => { const b = el('button', { class: 'btn btn-sm' + (primary ? ' btn-primary' : ''), type: 'button' }, label); if (RV.busy) b.disabled = true; b.addEventListener('click', fn); return b; };
+      const acts = r.live ? [btn('End now', () => reviewAct(r.kind, false)), btn('Extend 7 days', () => reviewAct(r.kind, true, 7))]
+                          : [btn('Open for 7 days', () => reviewAct(r.kind, true, 7), true), btn('Open for 1 day', () => reviewAct(r.kind, true, 1))];
+      const seen = (r.log || []).slice(0, 8).map(x => day(x.at) + ' · ' + x.device);
+      const ins = (r.signins || []).slice(0, 8).map(day);
+      out.push(el('div', { class: 'card', style: 'gap:8px' },
+        el('div', { style: 'display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline' }, el('b', {}, nm),
+          el('span', { style: 'color:' + (r.live ? 'var(--ok,#1a7f37)' : 'var(--muted,#777)') + ';font-weight:500' }, state)),
+        el('div', { class: 'f-hint', style: 'margin:0' }, 'Sign-in: ' + r.email + ' · opened ' + (r.opens || 0) + ' time' + (r.opens === 1 ? '' : 's')),
+        el('div', { class: 'actions', style: 'margin:0' }, ...acts),
+        ins.length ? el('div', { class: 'f-hint', style: 'margin:0' }, 'Sign-ins: ' + ins.join(' · ')) : el('span'),
+        seen.length ? el('div', { class: 'f-hint', style: 'margin:0' }, 'App opens: ' + seen.join(' · ')) : el('span')));
+    }
+    if (RV.msg) out.push(el('div', { class: RV.msg.startsWith('!') ? 'err' : 'f-hint' }, RV.msg.replace(/^!/, '')));
+    out.push(el('p', { class: 'f-hint', style: 'margin:0' }, 'They see figures at the level of your role and the COO’s: projects, fees, Business, Books, HR and salaries. Personal items stay personal: your own inbox, messages and My tasks are not theirs. Opening Business or Books needs a PIN they set with their password, and after office hours you are told when they open it. To change a password, run the set-up file again; it issues new ones.'));
+    return out;
+  }
+  window.slateReviewView = reviewView;
+
   /* ---------------- weekly backup: the Principal and the COO download all data (More → Backup) ---------------- */
   const BK = { last: null, loaded: false, busy: false, msg: '' };
   async function loadBackups() {
@@ -1725,6 +1789,9 @@
     if (started) return; started = true;
     authUser = session.user;
     try { const { data: tp } = await sb.rpc('temp_password_pending'); if (tp === true) await new Promise(r => whenBody(() => authScreen('temp', r))); } catch (_) {}
+    try { const { data: rv } = await sb.rpc('my_review'); review = rv || null; } catch (_) { review = null; }
+    if (review && !review.live) { alert('This review login has ended. Ask the Principal to open it again.'); try { await sb.auth.signOut(); } catch (_) {} return; }
+    window.slateReview = review;
     try { await loadAll(); } catch (e) { started = false; authScreen('signin'); return; }
     hideAuth(); goLive(); addCss(); window.slateAccount = accountPanel;
     setupNotifications();
@@ -1733,6 +1800,7 @@
     setupReports();
     setupBackup();
     setupDayLog();
+    setupReview();
     // Finance is a separate page; only ask whether to show its link. Anyone else gets null and sees nothing.
     sb.rpc('fin_role').then(({ data }) => {
       // The Accountant's login is Finance input only: send them straight there.

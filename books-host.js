@@ -149,7 +149,7 @@ const db = {
 };
 
 /* ---------- user ---------- */
-let ME = null, ROLE = null, PEOPLE = {}, MYICON = null;
+let ME = null, ROLE = null, PEOPLE = {}, MYICON = null, REVIEW = null;
 /* your SLATE OS profile icon, worked out as Studio does: the icon you chose, if no one chose it before you */
 async function loadMyIcon(uid) {
   const icons = window.SLATE_ICONS; if (!icons) return;
@@ -165,7 +165,7 @@ async function loadPeople() {
 }
 const user = {
   async me() { return ME; },
-  async can(what) { return what === 'data.write' ? ROLE !== 'Viewer' : true; },
+  async can(what) { return what === 'data.write' ? ROLE !== 'Viewer' && !REVIEW : true; },
   async profiles(ids) { const out = {}; ids.forEach(id => { const p = PEOPLE[id]; if (p) out[id] = { name: p.label || p.full_name }; }); return out; }
 };
 
@@ -251,8 +251,8 @@ const ready = (async () => {
     ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => SlatePin.activity(), { passive: true }));
   }
   const pAll = loadAll(); all = pAll; pAll.catch(() => { all = null; });
-  const [, r] = await Promise.all([loadPeople().then(() => loadMyIcon(session.user.id)).catch(() => {}), sb.rpc('books_role')]);
-  ROLE = (r && r.data) || null;
+  const [, r, rv] = await Promise.all([loadPeople().then(() => loadMyIcon(session.user.id)).catch(() => {}), sb.rpc('books_role'), sb.rpc('my_review').then(x => x, () => ({}))]);
+  ROLE = (r && r.data) || null; REVIEW = (rv && rv.data) || null;   // read-only review login: the database refuses its saves
   const p = PEOPLE[session.user.id] || {};
   ME = { id: session.user.id, name: p.label || p.full_name || session.user.email, isOwner: ROLE === 'Principal',
     canEdit: ['Principal', 'COO', 'Accountant', 'Viewer'].includes(ROLE) };
