@@ -1257,7 +1257,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .qs-t{display:block;padding-left:11.5px}
 .qs-v .qs-in{width:220px;max-width:100%;height:42px;padding:0 10px;font-size:15px;font-weight:500;text-align:left;box-sizing:border-box}
 .qs-tbl td,.qs-tbl th{padding-block:9px}
-.qs-tbl .n{width:110px}
+.qs-tbl .n{width:110px}.qs-days{width:64px!important;min-width:0;height:32px;box-sizing:border-box;border:1.5px solid var(--faint);border-radius:8px;padding:0 8px;text-align:right;font:inherit;font-size:14px;background:#fff}.qs-days.set{font-weight:700;border-color:var(--ink)}.qs-fit{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}.qs-fit input[type=date]{max-width:180px}
 .qs-last td{font-weight:700;border-top:1.5px solid var(--faint)}
 .tl-num{background:#fff!important;border:1.5px solid var(--faint)!important;border-radius:8px;font-weight:600;font-size:15px}
 .tl-num:focus{border-color:var(--early)!important;outline:none}
@@ -7312,10 +7312,17 @@ function openStdPlan(pid,type,pod){
    phases come from the type or service plan, the POD leader from the POD, and the gate dates from the SLATE standard.
    Phases and their tasks are changed later from Edit phases (a POD leader's change goes to the COO). */
 function qsPlan(sh,p){ const ks=phaseOrder(sh.tpl,sh.m.sel), ed=edFull((p.phasePlan&&p.phasePlan.ed)||{},sh.m.ed,sh.tpl);
-  const np={...p,id:sh.projectId,type:sh.tpl,std:{v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed,grace:{},tl:{take:TAKE_IN}}};
+  const sd={}; Object.entries(sh.sd||{}).forEach(([k,v])=>{ if(ks.includes(k)&&+v>0) sd[k]=Math.round(+v); });
+  const np={...p,id:sh.projectId,type:sh.tpl,std:{v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed,grace:{},tl:{take:TAKE_IN},...(Object.keys(sd).length?{sd}:{})}};
   if(!sh.start||!ks.length) return {ks,ed,np,plan:{},grace:{}};
-  let grace={}, plan={}; try{ const gr=graceFor(np,tlCompute(np,sh.start,false)); Object.keys(gr).forEach(k=>{ grace[k]=GRACE; }); np.std.grace=grace; plan=tlCompute(np,sh.start,false); }catch(e){ console.warn('qsPlan',e); }
-  return {ks,ed,np,plan,grace}; }
+  let grace={}, plan={}; try{ const gr=graceFor(np,tlCompute(np,sh.start,false)); Object.keys(gr).filter(k=>!sd[k]).forEach(k=>{ grace[k]=GRACE; }); np.std.grace=grace; plan=tlCompute(np,sh.start,false); }catch(e){ console.warn('qsPlan',e); }
+  return {ks,ed,np,plan,grace,sd}; }
+/* finish by a date (Principal, 2 Nov 2026): SLATE's days of every phase are scaled by one factor so the last dated gate lands on or
+   before the target. Client review days stay as they are. Returns the days, or null when even the shortest plan is too late. */
+function qsFit(sh,p,target){ const q0=qsPlan({...sh,sd:{}},p), base={}; q0.ks.forEach(k=>{ base[k]=stdSlateDays(q0.np,k); });
+  const at=f=>{ const sd={}; Object.keys(base).forEach(k=>{ sd[k]=Math.max(1,Math.round(base[k]*f)); }); const q=qsPlan({...sh,sd},p); return {sd,last:maxD(...q.ks.map(k=>(q.plan[k]||{}).fin).filter(Boolean))}; };
+  if(at(0.2).last>target) return null; let lo=0.2, hi=5, best=at(0.2).sd; for(let i=0;i<24;i++){ const m=(lo+hi)/2, r=at(m); if(r.last&&r.last<=target){ best=r.sd; lo=m; } else hi=m; }
+  return best; }
 function sheetStdPlan(){
   const sh=S.sheet, p=S.projects[sh.projectId], tp=T()[sh.tpl];
   if(!p||!tp) return [head('Phases','Not found')];
@@ -7335,9 +7342,13 @@ function sheetStdPlan(){
       kv('Type',h('span',{class:'qs-t',text:tp.name+(sh.pace&&sh.pace!=='std'?' · '+paceName({type:sh.tpl},sh.pace):'')})),
       kv('Phases',h('span',{class:'qs-t',text:`${n} phase${n===1?'':'s'}`}))),
     sh.start&&n&&!preAny?h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{class:'qs-tbl'},
-      h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
-      h('tbody',{},rows.map(({k,f})=>h('tr',{},h('td',{text:`${phNo(k)} ${phName(k,q.np)}`}),h('td',{class:'n',text:f.none?'—':f.sub?fmtD(f.sub):'—'}),f.none?h('td',{class:'n muted',style:'font-family:inherit;font-size:13px',text:f.auth?'after authority':'after WD-1'}):h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):'—'}))),
-        last?h('tr',{class:'qs-last'},h('td',{text:rows.some(r=>r.f.none)?'Last dated gate':'Last gate'}),h('td'),h('td',{class:'n',text:fmtD(last)})):null))):null,
+      h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'Our days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
+      h('tbody',{},rows.map(({k,f})=>h('tr',{},h('td',{text:`${phNo(k)} ${phName(k,q.np)}`}),h('td',{class:'n'},h('input',{type:'number',min:1,step:1,class:'qs-days'+(q.sd[k]?' set':''),'aria-label':'SLATE working days for '+phName(k,q.np),value:String(q.sd[k]||stdSlateDays(q.np,k)),onchange:e=>{ const v=Math.round(+e.target.value); sh.sd=sh.sd||{}; if(v>0&&v!==stdSlateDays(q.np,k)) sh.sd[k]=v; else delete sh.sd[k]; sh.fitTo=''; renderSheet(); }})),h('td',{class:'n',text:f.none?'—':f.sub?fmtD(f.sub):'—'}),f.none?h('td',{class:'n muted',style:'font-family:inherit;font-size:13px',text:f.auth?'after authority':'after WD-1'}):h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):'—'}))),
+        last?h('tr',{class:'qs-last'},h('td',{text:rows.some(r=>r.f.none)?'Last dated gate':'Last gate'}),h('td'),h('td'),h('td',{class:'n',text:fmtD(last)})):null))):null,
+    sh.start&&n&&!preAny?h('div',{class:'qs-fit'},h('span',{class:'qs-k',text:'Finish by'}),h('input',{type:'date',class:'tl-num qs-in',min:sh.start,value:sh.fitTo||'',oninput:e=>{ sh.fitTo=e.target.value; }}),
+      h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ if(!sh.fitTo) return toast('Choose the finish date.'); const sd=qsFit(sh,{...p,id:sh.projectId},sh.fitTo); if(!sd){ sh.err='That date is too early even at a fifth of the standard days. Choose a later date or fewer phases.'; renderSheet(); return; } sh.err=''; sh.sd=sd; renderSheet(); toast('Our days fitted to finish by '+fmtD(sh.fitTo)); },text:'Fit the days'}),
+      Object.keys(q.sd).length?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ sh.sd={}; sh.fitTo=''; renderSheet(); },text:'Back to the standard'}):null,
+      h('span',{class:'f-hint',style:'margin:0;flex-basis:100%',text:Object.keys(q.sd).length?'Changed days are in bold. Client review days stay the same. Working drawings waiting for the authority go-ahead are not dated yet, so the finish date counts the dated phases.':'Type SLATE’s working days per phase, or give a finish date and fit the days to it. Client review days stay the same.'})):null,
     preAny?h('div',{class:'callout',style:'font-size:13.5px',text:'Some phases were finished before SLATE OS. After set-up the timeline opens so the start date and days can be checked.'}):null,
     h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{ sh.more=!sh.more; renderSheet(); },text:sh.more?'Hide phases and pace ‹':'Change phases or pace ›'}),
     sh.more?h('div',{style:'display:grid;gap:12px'},
@@ -7360,7 +7371,7 @@ function createStdPlan(){
   const timed=!preAny&&!isInternalP(p)&&p.pod!=='Studio';
   run(async()=>{
     const cl=await createGates(q.np,sh.tpl,ks,{lead:sh.lead,pod:sh.pod,pace:sh.pace,pre:sh.pre,...(timed?{dates:q.plan,ap}:{})});
-    const std={v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed:q.ed};
+    const std={v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed:q.ed,...(Object.keys(q.sd||{}).length?{sd:q.sd}:{})};
     if(timed){ std.grace=q.grace; std.tl={start:sh.start,at:new Date().toISOString(),by:S.uid,take:TAKE_IN,base:tlPlanSnap(q.np,sh.start)}; }
     await S.db.doc('projects/'+pid).update({type:sh.tpl,std,cl});
   },timed?(ap?'Project started: phases and dates set':'Project started: dates sent to the COO'):`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(!ok) return; if(preAny) openTl(pid); else { S.sheet={type:'projView',id:pid}; renderSheet(); } });
