@@ -145,6 +145,7 @@ button.hb-can .nm::after{content:' ▾';color:var(--muted);font-size:11px}button
 .hb-sub{display:grid;gap:2px;margin:-4px 0 6px;padding:8px 10px;border-radius:10px;background:var(--fill, #f2f2f7)}
 .hb-sub-t{font-size:12px;font-weight:600;color:var(--muted);padding:2px 2px 6px}
 .hb-sub button{appearance:none;background:none;border:0;border-top:1px solid var(--line, rgba(60,60,67,.12));font:inherit;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 2px;font-size:13px}
+.hb-fut-l{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 2px;font-size:13px;border-top:1px solid var(--line, rgba(60,60,67,.12))}.hb-fut-l .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hb-sub .a.v-fut{color:#D7263D}
 .hb-sub button:first-of-type{border-top:0}.hb-sub .a{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}
 .hb .v{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;min-width:64px}
 .track{position:relative;height:12px;background:var(--group);border-radius:4px;overflow:hidden}
@@ -1891,8 +1892,9 @@ function viewHome() {
   const spend = {}, income = {}, spendL = {}, incomeL = {}, addL = (m, n, l, a) => { (m[n] = m[n] || []).push([l, a]); };
   Object.entries(flow).forEach(([l, a]) => {
     if (a < 0) { const n = SB.friendly(P(), l); spend[n] = (spend[n] || 0) - a; addL(spendL, n, l, -a); }
-    else if (a > 0 && groupOf(l) === 'inc') { const n = devOf(l) || L(l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
-    else if (a > 0) { const n = SB.friendly(P(), l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
+    else if (a > 0 && groupOf(l) === 'inc') { const n = feeRowName(l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
+    else if (a > 0 && groupOf(l) === 'oinc') { const n = SB.friendly(P(), l); income[n] = (income[n] || 0) + a; addL(incomeL, n, l, a); }
+    /* the owner's money, loans and bills not yet paid are not income: they stay in Money and Reports, not on this chart */
   });
   const full = can.books();
   out.push(h('div', { class: 'widgets' },
@@ -1901,7 +1903,7 @@ function viewHome() {
     widget('Money in and out, last 12 months', 'Tk', barChart(months), 'span2', h('div', { class: 'legend' }, h('span', { style: '--c:var(--k-in)', text: 'Money in' }), h('span', { style: '--c:var(--k-out)', text: 'Money out' }))),
     widget('Waiting for you', q.length ? q.length + ' item' + (q.length > 1 ? 's' : '') : '', q.length ? wlist(q.slice(0, 6).map(queueItem)) : h('div', { class: 'w-empty', text: 'Nothing waiting. New entries and requests that need your check or approval show here.' })),
     widget('Where the money went', pr.label, hbars(spend, '#3A3A3C', 'went', spendL, pr)),
-    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came', incomeL, pr, full ? futureFees(incomeL) : null), null,
+    widget('Where the money came from', pr.label, hbars(income, 'var(--k-in)', 'came', incomeL, pr, full ? futureFees() : null), null,
       full ? h('div', { class: 'legend' }, h('span', { style: '--c:var(--k-in)', text: 'Received' }), h('span', { style: '--c:#D7263D', text: 'Still to come (agreed fees not yet received)' })) : null),
     full ? forecastBox() : null,
     full ? comingInBox() : null,
@@ -1951,18 +1953,25 @@ function barChart(mm) {
 function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x || 1))), f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
 function axisTk(v) { if (v >= 1e7) return (v / 1e7).toFixed(v % 1e7 ? 1 : 0) + 'cr'; if (v >= 1e5) return (v / 1e5).toFixed(v % 1e5 ? 1 : 0) + 'L'; if (v >= 1e3) return Math.round(v / 1e3) + 'k'; return String(v); }
 /* the top seven, then "everything else" — tap it to open the full list */
-/* fees still to come per line of "where the money came from": each project's agreed fee less what it has paid,
-   filed under the same name as its fee income account; projects with nothing received yet get a line of their own */
-function futureFees(incomeL) {
-  const list = memo('pjall', () => SB.projectReport(P(), curFY().from, today())), out = {}, keyOf = {};
-  Object.entries(incomeL || {}).forEach(([n, ls]) => ls.forEach(([l]) => { const pj = (S.ledgers[l] || {}).project; if (pj) keyOf[pj] = n; }));
+/* the row a fee income account belongs to on "where the money came from": its client group (the account's developer),
+   or the account itself for a one-off client */
+const feeRowName = l => devOf(l) || L(l);
+/* fees still to come per row of "where the money came from": each project's agreed fee less what it has paid,
+   filed under the same client row as its fee account, whether or not anything came in this period.
+   A project with no fee account yet joins its client's row if another project of that client has one. */
+function futureFees() {
+  const list = memo('pjall', () => SB.projectReport(P(), curFY().from, today())), out = {}, det = {}, keyOf = {}, byClient = {};
+  Object.keys(S.ledgers).forEach(l => { if (groupOf(l) !== 'inc') return; const pj = (S.ledgers[l] || {}).project; if (!pj) return;
+    keyOf[pj] = feeRowName(l); const cl = ((S.projects[pj] || {}).client || '').trim().toUpperCase(); if (cl && devOf(l)) byClient[cl] = devOf(l); });
   list.forEach(x => {
     if (!x.id || x.overhead) return; const f = S.projects[x.id] || {}; if (f.feeTba || f.free) return;
     const due = STOPPED(x.status) ? (+f.earned || 0) - x.revenueToDate : x.toCollect;
     if (!(due > 0.5)) return;
-    const n = keyOf[x.id] || [x.code, x.name].filter(Boolean).join(' · ');
-    out[n] = (out[n] || 0) + due;
+    const label = [x.code, x.name].filter(Boolean).join(' · ');
+    const n = keyOf[x.id] || byClient[(f.client || '').trim().toUpperCase()] || label;
+    out[n] = (out[n] || 0) + due; (det[n] = det[n] || []).push([label, due]);
   });
+  Object.defineProperty(out, 'det', { value: det, enumerable: false });
   return out;
 }
 function hbars(map, color, key, det, pr, fut) {
@@ -1975,9 +1984,13 @@ function hbars(map, color, key, det, pr, fut) {
   const top = open ? rows.slice() : rows.slice(0, 7); if (!open && rest > 0) top.push(['Everything else', rest, restRows.length]);
   const max = Math.max(...top.map(r => r[1] + (r[2] ? 0 : fut[r[0]] || 0)));
   const dOpen = S.hbDet || {}, dk = n => key + ':' + n;
-  const sub = n => { const ls = ((det || {})[n] || []).filter(x => x[1] > 0.5).sort((a, b) => b[1] - a[1]); if (!ls.length) return null;
-    return h('div', { class: 'hb-sub' }, h('div', { class: 'hb-sub-t', text: n }), ls.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' })))); };
-  const bar = ([n, v, cnt]) => { const can = !cnt && det && (det[n] || []).length, op = can && dOpen[dk(n)];
+  const fdet = n => ((fut.det || {})[n] || []).slice().sort((a, b) => b[1] - a[1]);
+  const sub = n => { const ls = ((det || {})[n] || []).filter(x => x[1] > 0.5).sort((a, b) => b[1] - a[1]), fs = fdet(n); if (!ls.length && !fs.length) return null;
+    return h('div', { class: 'hb-sub' }, h('div', { class: 'hb-sub-t', text: n }),
+      ls.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' }))),
+      fs.length ? h('div', { class: 'hb-sub-t', text: 'Still to come' }) : null,
+      fs.map(([lab, a]) => h('div', { class: 'hb-fut-l' }, h('span', { class: 'n', text: lab }), h('span', { class: 'a v-fut', text: '+' + fmt(a) })))); };
+  const bar = ([n, v, cnt]) => { const can = !cnt && ((det && (det[n] || []).length) || fdet(n).length > 1), op = can && dOpen[dk(n)];
     return [h(cnt && key || can ? 'button' : 'div', { class: 'hb' + (cnt && key ? ' hb-more' : '') + (can ? ' hb-can' : '') + (op ? ' is-open' : ''), type: cnt && key || can ? 'button' : null, 'aria-expanded': can ? String(!!op) : null,
       onclick: cnt && key ? tog : can ? () => { S.hbDet = Object.assign({}, dOpen, { [dk(n)]: !op }); render(true); } : null },
       h('span', { class: 'nm', title: n, text: cnt ? `${n} (${cnt}) ›` : n }), h('div', { class: 'track' + (!cnt && fut[n] > 0.5 ? ' track2' : '') }, v > 0.5 ? h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` }) : null, !cnt && fut[n] > 0.5 ? h('span', { class: 'fut', title: 'Still to come: Tk ' + fmt(fut[n]), style: `width:${Math.max(2, fut[n] / max * 100)}%` }) : null),
