@@ -2529,7 +2529,7 @@ async function boot(){
   db.collection('tasklib').onSnapshot(q=>{ S.lib={}; q.docs.forEach(d=>{S.lib[d.id]=d.data()}); schedule(); },()=>{});
   db.collection('projects').onSnapshot(q=>{ S.projects={}; q.docs.forEach(d=>{S.projects[d.id]=d.data()}); cxSync(); schedule(); },onSubErr);
   db.doc(`data/users/${S.uid}/notif`).onSnapshot(snap=>{ S.nst=snap.exists?snap.data():{}; schedule(); },()=>{ S.nst={}; });
-  db.collection('proposals').onSnapshot(q=>{ S.props={}; q.docs.forEach(d=>{S.props[d.id]=d.data()}); schedule(); },()=>{ S.props={}; });
+  db.collection('proposals').onSnapshot(q=>{ S.props={}; S.sign=''; q.docs.forEach(d=>{ if(d.id==='__signature'){ const x=d.data()||{}; S.sign=x.b64?'data:image/png;base64,'+x.b64:''; return; } S.props[d.id]=d.data(); }); schedule(); },()=>{ S.props={}; });
   db.collection('clients').onSnapshot(q=>{ S.clients={}; q.docs.forEach(d=>{S.clients[d.id]=d.data()}); schedule(); },()=>{ S.clients={}; });
   db.doc(`data/users/${S.uid}/todo`).onSnapshot(snap=>{ S.todo=(snap.exists&&snap.data().items)||[]; schedule(); },()=>{ S.todo=[]; });
   db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
@@ -3140,7 +3140,7 @@ function quickItems(){
     out.push({id:'rv:'+t.id,def:false,at:r.at,kind:'Revised date',title:t.title,meta:`${projLabel(S.projects[t.projectId])} · ${nameOf(r.by)} · ${fmtD(t.target)} → ${fmtD(r.date)} (${sh>0?'+':''}${sh}d) · becomes Date ${(t.revisions||0)+2}`,quote:r.reason,
       fn:async()=>{ const [pa,e]=approvalOf(t,''); await taskUpdate(t.id,pa,e); }}); });
   ts.filter(t=>t.assignReq).forEach(t=>{ const r=t.assignReq, c=loadOf(r.to,t.id);
-    out.push({id:'as:'+t.id,def:true,at:r.at,kind:'Support',title:`${nameOf(r.to)} for “${t.title}”`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,
+    out.push({id:'as:'+t.id,def:true,at:r.at,kind:'Support',title:`${nameOf(r.to)} for “${t.title}”`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:supWhy(t)||'No reason given',
       fn:()=>taskUpdate(t.id,{assignee:r.to,assignReq:null},[{type:'assignApproved',from:r.to,to:r.to,note:''}])}); });
   vfGroups().forEach(t=>{ const v=t.verify, tm=vfTiming(t), ms=t._mates;
     out.push({id:'vf:'+t.id,def:true,at:v.ts,kind:ms?'Completed · joint':'Completed',title:t.title,meta:ms?`${projLabel(S.projects[t.projectId])} · ${ms.map(m=>nameOf(m.assignee)).join(', ')} · all done`:`${projLabel(S.projects[t.projectId])} · ${nameOf(v.by)} · done ${fmtD(v.at)}`+(tm?' · '+tm:''),quote:ms?'':v.note,warn:ms?ms.some(m=>m.target&&(m.verify||{}).at>m.target):!!(t.target&&v.at>t.target),
@@ -3154,7 +3154,7 @@ function quickItems(){
   podRequests().forEach(x=>out.push({id:`pr:${x.pid}:${x.d.at}`,def:false,at:x.d.at,kind:'Pod team',title:`Add ${nameOf(x.pid)} to ${podLabel(x.d.pod)}`,meta:`requested by ${nameOf(x.author)}`+(/^pod\b/i.test(teamOf(x.pid))?` · moves them out of ${teamLabel(x.pid)}`:''),
     fn:()=>S.db.doc(`podjoin/${S.uid}/items/${x.pid}`).set({team:x.d.pod,status:'approved',reqAt:x.d.at,reqBy:x.author,from:teamOf(x.pid),at:now(),by:S.uid})}));
   memberReqs().forEach(x=>{ const c=loadOf(x.uid);
-    out.push({id:`mr:${x.pid}:${x.uid}`,def:false,at:x.m.at,kind:'Project team',title:`${nameOf(x.uid)} → ${projLabel(x.p)}`,meta:`${x.m.temp?(x.m.until?'temporary, until '+fmtD(x.m.until):'temporary'):'project member'} · asked by ${nameOf(x.m.by)} · ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,
+    out.push({id:`mr:${x.pid}:${x.uid}`,def:false,at:x.m.at,kind:'Project team',title:`${nameOf(x.uid)} → ${projLabel(x.p)}`,meta:`${x.m.temp?(x.m.until?'temporary, until '+fmtD(x.m.until):'temporary'):'project member'} · asked by ${nameOf(x.m.by)} · ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:(x.m.note||'').trim()||'No reason given',
       fn:()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,{...x.m,status:'approved',approvedBy:S.uid,approvedAt:now()}))}); });
   return out.sort((a,b)=>(a.at||'').localeCompare(b.at||''));
 }
@@ -6302,9 +6302,9 @@ function teamSection(p){
       form=h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:ap?'Add someone to this project':'Ask the COO to add someone'}),s,
         add.who?h('div',{class:'f-hint',text:cross?`${nameOf(add.who)} is in ${teamLabel(add.who)}, so they join as a temporary member.`:`${nameOf(add.who)} joins as a project member (not temporary).`}):null,
         add.who&&cross?h('label',{class:'field'},h('span',{class:'lbl',text:'Until *'}),h('input',{id:'pm-until',type:'date',min:td,value:add.until||'',style:'background:#fff',oninput:e=>{add.until=e.target.value}})):null,
-        h('input',{id:'pm-note',maxlength:120,placeholder:'What they will help with (optional)',value:add.note||'',style:'background:#fff',oninput:e=>{add.note=e.target.value}}),
+        h('label',{class:'field'},h('span',{class:'lbl',text:ap?'Why (optional)':'Why is the help needed? *'}),h('input',{id:'pm-note',maxlength:160,placeholder:'e.g. authority set due 16 Nov; POD 1 short after Mahi left',value:add.note||'',style:'background:#fff',oninput:e=>{add.note=e.target.value}})),
         h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy||!add.who,onclick:()=>{
-            if(cross&&!add.until) return toast('Choose until when they join.'); if(cross&&add.until<td) return toast('The end date can’t be in the past.');
+            if(!ap&&!(add.note||'').trim()) return toast('Say why the help is needed: the COO sees it when approving.'); if(cross&&!add.until) return toast('Choose until when they join.'); if(cross&&add.until<td) return toast('The end date can’t be in the past.');
             const now=new Date().toISOString(), m={status:ap?'approved':'pending',temp:!!cross,until:cross?add.until:'',team:teamOf(add.who),note:(add.note||'').trim(),by:S.uid,at:now,...(ap?{approvedBy:S.uid,approvedAt:now}:{})};
             run(()=>S.db.doc('projects/'+p.id).update(memberPatch(add.who,m)),ap?'Added to the project':'Sent to the COO for approval').then(ok=>{ if(ok){ sh.addMember=null; renderSheet(); } }); },text:ap?'Add':'Send for approval'}),
           h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.addMember=null; renderSheet(); },text:'Cancel'})));
@@ -6343,16 +6343,16 @@ function supportSection(p){
       h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'Start *'}),h('input',{id:'sp-start',type:'date',min:td,value:f.start||'',style:'background:#fff',oninput:e=>{ f.start=e.target.value; if(f.end&&f.end<f.start) f.end=''; renderSheet(); }})),
         h('label',{class:'field'},h('span',{class:'lbl',text:'Finish *'}),h('input',{id:'sp-end',type:'date',min:f.start||td,value:f.end||'',style:'background:#fff',oninput:e=>{ f.end=e.target.value; renderSheet(); }}))),
       wd?h('div',{class:'f-hint',style:'margin:-2px 2px 0',text:`${wd} working day${wd===1?'':'s'} (Sunday to Thursday)`}):null,
-      h('input',{id:'sp-note',maxlength:160,placeholder:'Note (optional)',value:f.note,style:'background:#fff',oninput:e=>{ f.note=e.target.value; }}),
+      h('label',{class:'field'},h('span',{class:'lbl',text:dir?'Why (optional)':'Why is support needed? *'}),h('input',{id:'sp-note',maxlength:160,placeholder:'e.g. two submissions due the same week',value:f.note,style:'background:#fff',oninput:e=>{ f.note=e.target.value; }})),
       h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{
           const title=it?it.t:(f.title||'').trim();
           if(!f.team) return toast('Choose the POD or team.'); if(!title) return toast(f.k?'Choose the task, or type what you need.':'Write what you need.');
           if(!f.start||!f.end) return toast('Choose the start and finish dates.'); if(f.start<td) return toast('The start can’t be in the past.'); if(f.end<f.start) return toast('The finish can’t be before the start.');
-          if(dir&&!f.who) return toast('Choose the person.'); if(!ppl.length) return toast('No one is in that team yet.');
+          if(!dir&&!(f.note||'').trim()) return toast('Say why support is needed: the COO sees it when approving.'); if(dir&&!f.who) return toast('Choose the person.'); if(!ppl.length) return toast('No one is in that team yet.');
           const to=f.who||ppl.slice().sort((a,b)=>loadOf(a).open-loadOf(b).open)[0];
           run(()=>createTask({projectId:p.id,title,kind:'Task',assignee:to,phase:f.k?phLabel(f.k,p):'Support',start:f.start,target:dir?f.end:'',proposed:dir?'':f.end,...(it?{clRef:{k:f.k,id:it.id}}:{}),
             note:[`Support ${fmtD(f.start)} to ${fmtD(f.end)}, ${wd} working day${wd===1?'':'s'}.`,(f.note||'').trim()].filter(Boolean).join(' '),
-            support:{team:f.team,any:!f.who,start:f.start,end:f.end,days:wd}}),dir?`Given to ${nameOf(to)}`:'Sent to the COO').then(ok=>{ if(ok){ sh.supAdd=null; renderSheet(); } }); },text:dir?'Assign':'Send request'}),
+            support:{team:f.team,any:!f.who,start:f.start,end:f.end,days:wd,why:(f.note||'').trim()}}),dir?`Given to ${nameOf(to)}`:'Sent to the COO').then(ok=>{ if(ok){ sh.supAdd=null; renderSheet(); } }); },text:dir?'Assign':'Send request'}),
         h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.supAdd=null; renderSheet(); },text:'Cancel'})),
       h('div',{class:'f-hint',text:dir?'It becomes their task on this project right away.':'The COO confirms the person (or picks one if you chose Anyone) and the date. Then it becomes their task on this project.'}));
   }
@@ -6363,13 +6363,15 @@ function supportSection(p){
     rows.length?h('div',{class:'list'},rows):null,form);
 }
 function memberReqs(){ const out=[]; for(const [pid,p] of Object.entries(S.projects)){ if(!isLive(p)) continue; for(const [uid,m] of projMembers(p)) if(m.status==='pending') out.push({pid,p:{...p,id:pid},uid,m}); } return out.sort((a,b)=>(a.m.at||'').localeCompare(b.m.at||'')); }
+/* why support was asked for: the stated reason, else the note written on the task */
+function supWhy(t){ const s=t&&t.support||{}; if(s.why) return s.why; const h0=((t&&t.history)||[]).find(e=>e.type==='created'), n=String((h0&&h0.note)||'').replace(/^Support [^.]*\.\s*/,'').trim(); return n; }
 function memberReqCards(){
   const xs=memberReqs(); if(!xs.length) return null;
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Project team requests'}),h('span',{class:'cnt',text:String(xs.length)})),
     h('div',{class:'list'},xs.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line)'},
       h('div',{class:'row-title'},h('span',{class:'who'},avaEl(x.uid,false,'sm'),`${nameOf(x.uid)} → `),h('button',{class:'linkish',type:'button',onclick:()=>openProjectView(x.pid),text:projLabel(x.p)})),
       h('div',{class:'row-meta'},h('span',{text:teamLabel(x.uid)}),h('span',{text:'·'}),h('span',{text:x.m.temp?(x.m.until?'Temporary, until '+fmtD(x.m.until):'Temporary'):'Project member'}),h('span',{text:'·'}),h('span',{text:'Asked by '+nameOf(x.m.by)})),
-      x.m.note?h('p',{class:'quote',text:x.m.note}):null,
+      h('p',{class:'quote',style:x.m.note?'':'color:var(--overdue)',text:x.m.note?'Why: '+x.m.note:'No reason given'}),
       loadPanel(x.uid),
       S.canWrite&&h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>run(()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,{...x.m,status:'approved',approvedBy:S.uid,approvedAt:new Date().toISOString()})),'Added to the project'),text:'Approve'}),
         h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>run(()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,null)),'Request declined'),text:'Decline'}))))));
@@ -9692,8 +9694,8 @@ tr.tot td{border-top-color:#C41E29;color:#C41E29}
 .amtbox{border-color:#C41E29}.amtbox b{color:#C41E29}
 .ref span b{color:#C41E29}
 .page{padding-top:${PB_TOP}mm}
-.pb-acc{justify-content:space-between;margin-top:24mm}.pb-acc div:last-child{text-align:right}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
-.pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:14mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}`;
+.pb-acc{justify-content:space-between;margin-top:30mm}.pb-acc div:last-child{text-align:right}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
+.pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:30mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc div{position:relative}.pb-sign{position:absolute;left:2mm;bottom:100%;height:17mm;width:auto;margin-bottom:-1.5mm;pointer-events:none}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}`;
 const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
 const pbLetterhead=()=>`<div class="lh-addr">${PB_ADDR.split('\n').map(pbEsc).join('<br>')}</div><div class="lh-tab"><div class="lh-mark">${PB_LOGO}</div><div class="lh-name">SLATE</div></div><div class="lh-wm">DESIGN<br>WITH<br>PURPOSE</div>`;
@@ -9758,7 +9760,7 @@ function pbBlocks(p,d){
   else if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(pbRevFee(d)?`Each further revision is charged at ${pbTk(d.revRate)} per katha of land, ${pbTk(pbRevFee(d))} for this project.`:'Further revisions are charged separately.'));
   if(+d.validDays>0) gen.push(`This offer is valid for ${+d.validDays} days, until ${fmtLong(addDays(d.date||today(),+d.validDays))}. After that the fee and terms may be revised.`);
   list('Terms and conditions',[...pbLines(d.terms),...gen]);
-  add(`<p class="pb-p" style="margin-top:6mm">We look forward to working with you.</p><div class="pb-acc"><div><b>${pbEsc(d.signName)}</b>${pbEsc(d.signTitle)}<br>SLATE</div><div><b>Accepted by</b>Name, signature and date<br>${pbEsc(d.toCompany||p.client||'')}</div></div>`);
+  add(`<p class="pb-p" style="margin-top:6mm">We look forward to working with you.</p><div class="pb-acc"><div>${S.sign&&d.autoSign!==false&&/imran/i.test(d.signName||'')?`<img class="pb-sign" src="${S.sign}" alt="">`:''}<b>${pbEsc(d.signName)}</b>${pbEsc(d.signTitle)}<br>SLATE</div><div><b>Accepted by</b>Name, signature and date<br>${pbEsc(d.toCompany||p.client||'')}</div></div>`);
   return B; }
 async function pbPages(p,d){
   const B=pbBlocks(p,d), ifr=document.createElement('iframe');
