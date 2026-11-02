@@ -1237,6 +1237,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .panel-wide .pq-one .pq-chk{grid-template-columns:1fr}
 .cl-tbl td{vertical-align:top}
 .q-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px}.q-acts{min-width:0}.q-acts select{flex:1 1 160px;min-width:0;width:100%;max-width:280px;background:#fff;font-size:13.5px;padding:6px 8px;border-radius:8px}
+.pq-visits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding-top:6px}.pq-vi{display:grid;gap:4px;align-content:end;white-space:nowrap;font-size:13px;color:var(--muted)}@media(max-width:700px){.pq-visits{grid-template-columns:1fr}}
 .pv-ver{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.pv-ver:last-child{border-bottom:0}
 .pq-fee-l{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .pq-fee{display:grid;gap:4px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}.pq-fee>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.pq-fee b{font-size:22px;font-variant-numeric:tabular-nums}
@@ -9151,13 +9152,14 @@ function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).t
   doc.parts=on.map(l=>doc.parts.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })());
   const addons=on.filter(pqIsAdd).map(l=>({label:l,...pqAddFee(sh,l,area)})), addSum=addons.reduce((a,x)=>a+x.amt,0), total=fee||0;
   doc.addons=addons.map(x=>({label:x.label,amount:x.amt,basis:x.t==='sft'?`Tk ${x.v}/sft`:'lump sum'})); doc.mainFee=fee||'';
-  const nv=on.includes('Site supervision')?Math.max(1,parseInt(d.visits,10)||SP_PLANS.comp.visits):0; doc.vFree=String(nv); doc.asBuilt='x';
+  const sup=on.includes('Site supervision'), nv=d.visits!=null&&String(d.visits).trim()!==''?Math.max(0,parseInt(d.visits,10)||0):(sup?SP_PLANS.comp.visits:0); doc.vFree=String(nv); doc.asBuilt='x';
+  const dLead=doc.vLead, dSen=doc.vSenior; ['vLead','vSenior'].forEach(k=>{ if(d[k]!=null&&String(d[k]).trim()!=='') doc[k]=String(Math.max(0,+d[k]||0)); });
   doc.parts.forEach(x=>{ if(x.label==='Site supervision') x.check=(x.check||[]).map(c=>/^Site visits at|site visits at construction stages/i.test(c.t)?{...c,t:`${nv} site visits at construction stages (setting-out, foundation, first slab, typical floor, facade and finishing, final)`}:c); });
   doc.lump=total?String(total):''; doc.sched=PQ_SCHED.map(([label,pct])=>({label,pct:String(pct)}));
   /* the timeline shows the marketing stage only when marketing materials are in the scope */
   if(doc.tl&&Array.isArray(doc.tl.rows)&&!on.includes('Marketing materials (3D, animation, brochure)')) doc.tl.rows=doc.tl.rows.filter(x=>!/^Marketing/i.test(x.label||''));
   if(fm==='sft'&&fv) doc.ownRate=String(fv); doc.plan=''; doc.cmp=false;
-  return {p,doc,guide,fee,fm,fv,addons,addSum,total}; }
+  return {p,doc,guide,fee,fm,fv,addons,addSum,total,nv,dLead,dSen}; }
 function pqCheck(on){ const out=[];
   if(on['Interior design']||on['Construction management (interior)']) out.push({lvl:'warn',t:'Interior design and interior construction management are MODO interior services: they usually go in a separate interior proposal.'});
   return out; }
@@ -9179,7 +9181,7 @@ function sheetPropQuick(){
         f.state==='err'?h('button',{class:'btn btn-primary',type:'button',onclick:()=>pqPdf(sh.done),text:'Try again'}):null,
         h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropEdit(sh.done),text:'Edit again'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
-  const {doc,guide,fee,fm,fv,addons,addSum,total}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
+  const {doc,guide,fee,fm,fv,addons,addSum,total,nv,dLead,dSen}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
   const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const sel=pqSel(sh), all=[...new Set([...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0]),...Object.keys(sel.on).filter(l=>sel.on[l])])].filter(l=>!PQ_PKG.includes(l)), n=all.filter(l=>sel.on[l]).length, ck=pqCheck(sel.on);
@@ -9222,7 +9224,11 @@ function sheetPropQuick(){
               const af=pqIsAdd(l)&&on?pqAddFee(sh,l,area):null, fx=(sel.fee=sel.fee||{});
               return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l',text:l}),
                 af?h('span',{class:'pq-ck-x',onclick:e=>e.preventDefault()},'+',h('input',{type:'number',min:0,step:af.t==='sft'?0.5:1000,inputmode:'decimal',value:af.v||'',placeholder:'fee',style:af.t==='lump'?'width:96px':'','aria-label':'Add-on fee for '+l,onclick:e=>e.stopPropagation(),onchange:e=>{ fx[l]={t:af.t,v:e.target.value}; renderSheet(); }}),h('i',{text:af.t==='sft'?'/sft':'Tk'})):h('span')); }))); })),
-      sel.on['Site supervision']?h('div',{class:'pq-svc'},h('div',{class:'pq-svc-h'},h('span',{class:'qs-k',text:'Site visits'}),h('div',{class:'pq-unit',style:'max-width:160px'},h('input',{id:'pq-visits',class:'tl-num qs-in',type:'number',min:1,step:1,inputmode:'numeric',value:d.visits||SP_PLANS.comp.visits,onchange:e=>{ d.visits=e.target.value; renderSheet(); }}),h('span',{text:'visits'})),h('span',{class:'f-hint',style:'margin:0',text:'included in the fee'}))):null,
+      h('div',{class:'pq-svc'},h('div',{class:'pq-grp-h'},h('b',{text:'Site visits'}),h('span',{class:'f-hint',style:'margin:0',text:'included visits are in the fee; extra visits are charged per visit'}),h('span')),
+        h('div',{class:'pq-visits'},
+          h('label',{class:'pq-vi'},h('span',{text:'Included (free)'}),h('div',{class:'pq-unit'},h('input',{id:'pq-visits',class:'tl-num qs-in',type:'number',min:0,step:1,inputmode:'numeric',value:d.visits!=null&&d.visits!==''?d.visits:String(nv),onchange:e=>{ d.visits=e.target.value; renderSheet(); }}),h('span',{text:'visits'}))),
+          h('label',{class:'pq-vi'},h('span',{text:'Extra visit · lead architect'}),h('div',{class:'pq-unit'},h('input',{id:'pq-vLead',class:'tl-num qs-in',type:'number',min:0,step:500,inputmode:'numeric',value:d.vLead!=null&&d.vLead!==''?d.vLead:String(+dLead||''),onchange:e=>{ d.vLead=e.target.value; renderSheet(); }}),h('span',{text:'Tk / visit'}))),
+          h('label',{class:'pq-vi'},h('span',{text:'Extra visit · senior architect'}),h('div',{class:'pq-unit'},h('input',{id:'pq-vSenior',class:'tl-num qs-in',type:'number',min:0,step:500,inputmode:'numeric',value:d.vSenior!=null&&d.vSenior!==''?d.vSenior:String(+dSen||''),onchange:e=>{ d.vSenior=e.target.value; renderSheet(); }}),h('span',{text:'Tk / visit'}))))),
       h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Total fee'}),h('b',{text:total?pbTk(total):'—'})),
         addons.length?h('div',{class:'pq-fee-l',style:'font-weight:600;margin-top:4px'},h('span',{text:'Add-ons, charged separately'}),h('span',{text:addSum?pbTk(addSum):''})):null,
         ...(addons.map(x=>h('div',{class:'pq-fee-l'},h('span',{text:x.label+(x.t==='sft'?` (Tk ${x.v}/sft)`:'')}),h('span',{style:x.amt?'':'color:var(--overdue)',text:x.amt?pbTk(x.amt):'give the fee'})))),
@@ -9240,7 +9246,7 @@ function openPropEdit(id){ const p=(S.props||{})[id]; if(!p) return; const q=p.q
   const sp=p.siteParts||null, has=k=>sp&&Object.prototype.hasOwnProperty.call(sp,k);
   const d={contact:p.contact||doc.toName||'',_title:doc.toTitle||'',client:p.client||doc.toCompany||'',_picked:p.client||'',_addr:doc.toAddress||'',dear:doc.dear||'Dear Sir,',
     sArea:sp?sp.area||'':p.location||'',sPlot:sp?sp.plot||'':'',sRoad:sp?sp.road||'':'',sKind:has('sector')?'Sector':has('block')?'Block':'',sSec:sp?sp.sector||sp.block||'':'',
-    name:p.name||'',use:doc.use||'',type:p.type||'dev',katha:p.katha||'',area:doc.area||'',visits:+doc.vFree?String(+doc.vFree):'',phone:p.phone||'',email:p.email||''};
+    name:p.name||'',use:doc.use||'',type:p.type||'dev',katha:p.katha||'',area:doc.area||'',visits:doc.vFree!=null?String(+doc.vFree||0):'',vLead:doc.vLead||'',vSenior:doc.vSenior||'',phone:p.phone||'',email:p.email||''};
   const on={}, fee={}; (doc.parts||[]).forEach(x=>{ on[x.label]=true; }); (doc.addons||[]).forEach(x=>{ on[x.label]=true; const m=/^Tk\s*([\d.]+)\/sft/.exec(x.basis||''); fee[x.label]=m?{t:'sft',v:m[1]}:{t:'lump',v:String(x.amount||'')}; });
   const own=+doc.ownRate||0; openPropQuick(d,id); Object.assign(S.sheet,{sel:{on,fee},fm:own?'sft':'lump',fv:own?String(own):String(doc.mainFee||doc.lump||''),areaSet:!!d.area}); renderSheet(); }
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
@@ -9798,7 +9804,7 @@ function pbBlocks(p,d){
         <tr class="tot"><td>Total</td><td class="n">${T.total}</td><td class="n">${T.start?fmtD(T.end):'about '+T.weeks+' weeks'}</td><td></td></tr></tbody></table>`); add(`<p class="pb-small">Days are working days, five a week: SLATE’s days + the client’s review days. In each bar the darker part is SLATE’s work and the lighter part the client’s review${T.rows.some(x=>x.par)?'; marketing materials are prepared alongside the other stages':''}. The programme starts ${T.start?'with the work order on '+fmtLong(T.start):'from the work order (signed agreement and advance)'}, with ${T.setup} setup day${T.setup===1?'':'s'} before stage 1. Time taken by RAJUK and other authorities, and delays in the client’s decisions or payments, are extra.</p>`); } }
   const sc=d.sched.filter(x=>x.label||+x.pct);
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
-  const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',+d.vFree?(+d.vFree)+' visits':'None (site supervision is optional)']:null,+d.vLead?[d.plan?'Extra site visit with the Principal':'Site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?[d.plan?'Extra site visit by a POD architect (within Dhaka)':'Site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
+  const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',+d.vFree?(+d.vFree)+' visits':'None']:null,+d.vLead?[d.plan?'Extra site visit with the Principal':'Additional site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?[d.plan?'Extra site visit by a POD architect (within Dhaka)':'Additional site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
     d.asBuilt!==''&&d.asBuilt!=null?['As-built drawings',d.asBuilt==='x'?'Excluded (additional service)':+d.asBuilt?pbTk(d.asBuilt)+' (fixed)':'Included']:null,+d.extra3d?['Additional 3D view',pbTk(d.extra3d)+' per image']:null,
     pbRevFee(d)?[d.revMode==='stage'?'Design revision round beyond those included':'Design revision beyond the '+(+d.revFree||0)+' included',pbTk(pbRevFee(d))+' per '+(d.revMode==='stage'?'round':'revision')+' ('+pbTk(d.revRate)+' per katha'+(+d.revCap>0?', up to '+pbTk(d.revCap):'')+')']:null].filter(Boolean);
   if(ex.length) add(`<h2>Site visits and additional services</h2><table>${ex.map(([k,v])=>`<tr><td>${pbEsc(k)}</td><td class="n">${pbEsc(v)}</td></tr>`).join('')}</table>`);
