@@ -10205,13 +10205,13 @@ function sheetPropView(){
       step(3,'Ready to quote?','The lead becomes a proposal and keeps its log.',false,B('Make a proposal →',()=>openProp(id,true),true))]
     :[
       step(1,'Proposal document',p.doc?`${pbTk(f.total)} · ${pd.ref||''}`:'Write the proposal the client receives, on the SLATE letterhead.',!!p.doc,B(p.doc?'Edit the proposal':'Build the proposal',()=>p.doc?openPropEdit(id):openPropDoc(id),!p.doc)),
-      step(2,'Send and follow up',p.sentOn?`Sent ${fmtD(p.sentOn)} · ${log.length} response${log.length===1?'':'s'} logged`+(p.next?' · next follow-up '+fmtD(p.next):''):p.sendPlan?`Scheduled: ${nameOf(p.sendPlan.to)} sends it by ${fmtD(p.sendPlan.date)}`+(p.sendPlan.taskId&&S.tasks[p.sendPlan.taskId]&&S.tasks[p.sendPlan.taskId].doneAt?' · task done':'')+'. Tap below once it’s sent.':p.doc?'Send the PDF to the client, then tap below.':'Build the proposal document first.',!!p.sentOn,
+      step(2,'Send and follow up',p.sentOn?`Sent ${fmtD(p.sentOn)} · ${log.length} response${log.length===1?'':'s'} logged`+(p.next?' · next follow-up '+fmtD(p.next):''):p.sendPlan?`Scheduled: ${nameOf(p.sendPlan.to)} sends it by ${fmtD(p.sendPlan.date)}`+(p.sendPlan.taskId&&S.tasks[p.sendPlan.taskId]&&S.tasks[p.sendPlan.taskId].doneAt?' · task done':'')+'. Tap below once it’s sent.':p.doc?'Send the PDF to the client, then tap below.':'Send the PDF to the client, then tap below. Sent one made outside SLATE OS? Tap below too.',!!p.sentOn,
         p.sentOn?B('Log what the client said',logOpen):h('div',{style:'display:flex;flex-wrap:wrap;gap:6px'},
           B('I’ve sent it: follow up in 3 days',async()=>{ const sp=p.sendPlan, t=sp&&sp.taskId&&S.tasks[sp.taskId];
             const ok=await save({log:[...(p.log||[]),{at:new Date().toISOString(),by:S.uid,kind:'sent',kindL:'Proposal sent',resp:'',respL:'',note:''}],sentOn:today(),stage:'sent',sendPlan:null,next:addWorkDays(today(),3)},'Marked as sent · follow-up '+fmtD(addWorkDays(today(),3)));
-            if(ok&&t&&!t.doneAt) try{ await finishTask({...t,id:sp.taskId},today(),'Proposal sent'); }catch(_){} },!!p.doc&&!p.sendPlan,!p.doc),
-          p.sendPlan?null:B('Schedule it as a task',()=>openPropTask(id,'send'),false,!p.doc))),
-      step(3,'Legal agreement','For stamp paper, made from the proposal. Make it once the client agrees.',!!p.agr,B(p.agr?'Open the agreement':'Make the agreement',()=>openAgrDoc(id),false,!p.doc),true),
+            if(ok&&t&&!t.doneAt) try{ await finishTask({...t,id:sp.taskId},today(),'Proposal sent'); }catch(_){} },!!p.doc&&!p.sendPlan),
+          p.sendPlan?null:B('Schedule it as a task',()=>openPropTask(id,'send')))),
+      step(3,'Legal agreement','For stamp paper, made from the proposal. Make it once the client agrees.',!!p.agr,B(p.agr?'Open the agreement':'Make the agreement',()=>openAgrDoc(id)),true),
       step(4,'Client confirmed',gaps.length?'Before you confirm, add: '+gaps.join(', ')+'.':'Everything is in. The project form and the fee are filled in from this proposal.',false,B('Make it a client project →',confirmIt,!!p.doc))];
     const nx=propNext(p);
     out.splice(3,0,h('div',{class:'card',style:'gap:0;padding-top:8px;padding-bottom:4px'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-bottom:2px',text:'Next steps'}),nx?h('div',{class:'pc-next u',style:'margin:2px 0 4px',text:'Now: '+nx.t}):null,...steps)); }
