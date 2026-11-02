@@ -754,7 +754,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .cl-row.na .cl-t{color:var(--faint);text-decoration:line-through}
 .cl-t{font-size:14px;overflow-wrap:anywhere}
 .cl-m{font-size:12px;color:var(--muted);display:flex;gap:4px 6px;flex-wrap:wrap;align-items:center;margin-top:2px}
-.cl-a{display:flex;gap:6px;align-items:center;justify-content:flex-end}.cl-a select{width:150px;max-width:150px;height:32px;font-size:13px;padding:0 26px 0 10px}.cl-lnk{all:unset;cursor:pointer;font-size:13px;color:var(--muted);padding:6px 6px;border-radius:6px}.cl-lnk:hover{color:var(--ink);background:var(--group)}.cl-lnk:disabled{opacity:.5;cursor:default}
+.cl-a{display:flex;gap:6px;align-items:center;justify-content:flex-end}.cl-row{grid-template-columns:28px minmax(0,1fr)}.cl-row>.cl-a{grid-column:2;justify-content:flex-start;flex-wrap:wrap}.cl-row>.chk,.cl-row>span.chk,.cl-row>button.chk{grid-row:1/3;align-self:start;margin-top:2px}
+.cl-a select.cl-sts{width:122px;max-width:122px}.chk.doing{border-color:var(--late);background:conic-gradient(var(--late) 0 50%,#fff 50% 100%)}.chk.paused{border-color:var(--muted);background:#fff;position:relative}.chk.paused::after{content:'';width:8px;height:9px;border-left:2.5px solid var(--muted);border-right:2.5px solid var(--muted);box-sizing:border-box}.cl-st.doing{color:var(--late);font-weight:600}.cl-st.paused{color:var(--muted);font-weight:600}.cl-pz{grid-column:2/-1;display:flex;gap:6px;align-items:center;padding-top:4px}.cl-pz input{flex:1;min-width:0;height:34px;background:#fff}
+.cl-a select{width:150px;max-width:150px;height:32px;font-size:13px;padding:0 26px 0 10px}.cl-lnk{all:unset;cursor:pointer;font-size:13px;color:var(--muted);padding:6px 6px;border-radius:6px}.cl-lnk:hover{color:var(--ink);background:var(--group)}.cl-lnk:disabled{opacity:.5;cursor:default}
 .cl-fold{all:unset;box-sizing:border-box;cursor:pointer;display:grid;gap:2px;width:100%;padding:9px 10px 9px 48px;border-bottom:1px solid var(--line);font-size:13px;font-weight:600;color:var(--muted)}.cl-fold:hover{background:#fafafa}.cl-fold-l{font-weight:400;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cl-none{padding:10px 10px 10px 48px;font-size:13px;color:var(--ontime);border-bottom:1px solid var(--line)}
 .cl-a select{width:auto;max-width:160px;font-size:12.5px;padding:5px 26px 5px 8px;background-color:var(--group)}
 .cl-h{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:10px 10px 4px;border-bottom:1px solid var(--line)}
@@ -1922,7 +1924,7 @@ const CL_ROLES={L:'POD Leader',J:'Junior Architect',D:'Drafting Pool',A:'Authori
 const PH3=[['Design freeze sheet prepared for signature','J',0,'','3-n1',0,'L'],['Architecture, structure, MEP and 3D alignment checked and signed off by a peer POD leader','R',0,'','3-8'],['Column layout and sizes frozen with the structural consultant','L',0,'','3-n3'],['From the consultants: structural and MEP sign-off of the frozen set (column sizes, shafts, plant rooms)','L',0,'','3-n4'],['Final coordination with the drafting team','L+J',0,'','3-n2'],['Principal design review, then submit','P',0,'','3-9'],
   ['Value engineering review with the consultants: structural system, slab type, member sizes','L',1,'','3-10'],['Facade compared with a simpler alternative, cost per sft stated','L',1,'','3-11'],['Material specification, best option','J',1,'','3-12',0,'L'],['Passive measures checked: shading, cross-ventilation, daylight','L',1,'','3-13'],['Final efficiency ratio recorded against the phase 0 target','J',1,'','3-14']];
 const PH={
-  '0':{no:'0',n:'Brief & feasibility',d:[5,3],gate:'Brief and FAR report accepted by the client',steps:[['final','Brief and FAR report accepted']],items:[
+  '0':{no:'0',n:'Brief & feasibility',d:[5,3],gate:'Brief and FAR report accepted by the client',steps:[['sub','Brief and FAR report sent to the client'],['final','Brief and FAR report accepted']],items:[
     ['Work order or agreement signed','C',0,'','0-n6'],['Project set up in SLATE OS; timeline approved','C',0,'','1-1'],['From the client or SLATE: structural and MEP consultants appointed, with their work orders (land share: at 3R when the project goes live again)','C',0,'','1-2',['share']],['Site visit with photos and site notes (optional; chargeable)','J',0,'','0-1'],['Land document checklist reviewed: deed, mutation, khatian, survey','L',0,'','0-0'],['FAR, MGC and height check (DAP, Imarot Nirman Bidhimala 2025; the 2008 or 1996 rules where an older approval applies)','L',0,'','0-2'],
     ['Preliminary area statement and saleable area','J',0,'','0-3'],['Authority route identified: RAJUK, Cantonment, Jolshiri or Bashundhara; PP (block development), DTCA and Fire triggers','L',0,'','0-4'],['Design brief: unit mix, parking, budget, landowner needs','L',0,'','0-n1'],
     ['From the client: deed, mutation and khatian copies; digital survey; soil test; landowner requirements; LO and developer floor distribution, allotment paper, NOC, LO and developer agreement','L',0,'','0-n2'],
@@ -6511,21 +6513,25 @@ function clientStep(p,k,s,fb,fbGot){
   const st=S.sheet.cs||(S.sheet.cs={}), d=st[k]||today();
   const finLbl=wd?'Mark issued':two?'Client approved':'Mark done', finTxt=((steps.find(x=>x[0]==='final')||[])[1]||'');
   let next=null, alt=null, info='';
+  const sentAt=((p.std||{}).sentAt||{})[k]||'';
   if(two&&sub&&!sub.doneAt){ if(pend(sub)) info=`Submitted ${fmtD(sub.verify.at)} · waiting for verification`; else next=['sub','Mark submitted']; }
+  else if(two&&!sub&&fin&&!fin.doneAt&&!sentAt&&!fbGot) next=['sent','Mark submitted'];
   else if(fin&&!fin.doneAt){ if(pend(fin)) info=`${finLbl.replace('Mark ','')} ${fmtD(fin.verify.at)} · waiting for verification`;
     else if(two&&!fbGot){ next=['fb','Feedback received']; alt=['final',finLbl]; } else next=['final',finLbl]; }
   if(!next&&!info) return null;
   const go=what=>run(async()=>{ const day=st[k]||today(); if(day>today()) throw new Error('The date can’t be in the future.');
     if(what==='fb'){ await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:day}}}); return; }
+    if(what==='sent'){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[], txt=(steps.find(x=>x[0]==='sub')||[])[1]||'Sent to the client';
+      await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:day}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'}}]}); return; }
     const t=what==='sub'?sub:fin; const [, txt]=steps.find(x=>x[0]===(what==='sub'?'sub':'final'))||[];
     await finishTask(t,day,'From the phase card');
     if(what==='sub'||wd){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[];
       if(!list.some(x=>x&&x.gate&&x.gate.k===k&&x.gate.step===(what==='sub'?'sub':'final')))
         await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'}}]}); }
-  },what==='fb'?'Client feedback received':what==='sub'?'Marked submitted. The client’s review clock has started':'Phase gate done').then(ok=>{ if(ok){ delete st[k]; renderSheet(); } });
+  },what==='fb'?'Client feedback received':what==='sub'||what==='sent'?'Marked submitted. The client’s review clock has started':'Phase gate done').then(ok=>{ if(ok){ delete st[k]; renderSheet(); } });
   return h('div',{class:'cstep'},
     info?h('span',{class:'f-hint',style:'margin:0',text:info}):[
-      h('span',{class:'cstep-l',text:next[0]==='sub'?'Sent to the client?':next[0]==='fb'?'Client comments in?':wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
+      h('span',{class:'cstep-l',text:next[0]==='sub'||next[0]==='sent'?'Sent to the client?':next[0]==='fb'?'Client comments in?':wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
       h('input',{type:'date',id:`cs-${k}`,value:d,max:today(),'aria-label':'Date',onchange:e=>{ st[k]=e.target.value||today(); }}),
       h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:next[1]}),
       alt?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>go(alt[0]),text:alt[1]}):null]);
@@ -6583,7 +6589,8 @@ const canManageCl=p=>S.canWrite&&(amApprover()||S.isOwner||isProjLead(p)||(amMgr
 const canTickCl=(p,x)=>S.canWrite&&(canManageCl(p)||x.who===S.uid);
 function clSet(p,k,id,patch,msg){ const cur=clOf(p,k,id); if(patch&&patch.done) fxMark(`cl:${p.id}:${k}:${id}`,'done');
   const closes=!cur.done&&!cur.na&&!!(patch&&(patch.done||patch.na))&&clLeft(p,k)===1&&!stdState(p,k).done;
-  return run(()=>S.db.doc('projects/'+p.id).update({cl:{[k]:{[id]:{...cur,...patch,at:new Date().toISOString(),by:S.uid}}}}),msg).then(ok=>{ if(ok&&closes) celebrate('ring',{p,k}); return ok; }); }
+  const nx={...cur,...patch,at:new Date().toISOString(),by:S.uid}; if(patch&&(patch.done||patch.na)){ nx.st=''; nx.why=''; }
+  return run(()=>S.db.doc('projects/'+p.id).update({cl:{[k]:{[id]:nx}}}),msg).then(ok=>{ if(ok&&closes) celebrate('ring',{p,k}); return ok; }); }
 /* ---------- Peer review (Principal, 2 Nov 2026) ----------
    Each peer-review item (role R) goes to the leader of another POD, in turn: POD 1 → POD 2 → POD 3 → POD 1. The Principal or
    the COO can change the peer. Only the peer signs it off, through a review with a result, what was reviewed and the points.
@@ -6679,11 +6686,16 @@ function clRow(p,k,it,manage){
       h('div',{class:'cl-a'},sel,!x.na?h('button',{class:'btn btn-sm'+((mine||fixMe)&&open?' btn-primary':''),type:'button',style:(mine||fixMe)&&open?'':'background:var(--group)',onclick:()=>openPeerRev(p.id,k,it.id),text:open?(mine?'Review':fixMe?'Fix points':'Open'):'Log'}):null,
         manage&&open&&amApprover()?h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo N/A':'N/A'}):null)); }
   const box=x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?(can?holdTick(fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on','aria-label':'Press and hold to untick “'+it.t+'”',disabled:S.busy,text:'✓'}),()=>clSet(p,k,it.id,{done:null},'Unticked'),'Untick'):h('span',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',text:'✓'})))
-    :can?holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'):h('span',{class:'chk off','aria-hidden':'true'});
+    :can?holdTick({class:'chk'+(x.st==='doing'?' doing':x.st==='paused'?' paused':''),'aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'):h('span',{class:'chk off','aria-hidden':'true'});
   let who=null; if(manage&&!x.done&&!x.na){ const opts=clWhoOpts(p); if(x.who&&!opts.some(o=>o[0]===x.who)) opts.push([x.who,nameOf(x.who)]); who=h('select',{id:`clw-${k}-${it.id}`,'aria-label':'Who does it',onchange:e=>clSet(p,k,it.id,{who:e.target.value},'Assigned')},opts.map(([v,l])=>h('option',{value:v,text:v?l:`Owner: ${clRole(it.r)}`}))); who.value=x.who||''; }
-  return h('div',{class:'cl-row'+(x.na?' na':'')},box,
-    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),h('div',{class:'cl-m'},who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk&&!x.done&&!x.na?h('span',{text:'· '+clRole(it.chk)+' checks'}):null,blk&&!x.done?h('span',{style:'color:var(--late)',text:'· waits for the peer review'}):null,...clHelpTasks(p,k,it.id).map(t=>{ const r=t.assignReq, g=r?r.to:(t.checkerGuide?t.checker:t.assignee); return h('span',{style:'color:var(--early)',text:`· help: ${nameOf(g)} (${(r&&r.guide)||t.checkerGuide?'guides and checks':'doing it'}${r?', waiting for the COO':''})`}); }),x.done?h('span',{title:'Ticked '+fmtD(x.done)+(x.by?' by '+nameOf(x.by):'')+(it.chk?' · checked by '+clRole(it.chk):''),text:'· '+fmtD(x.done)}):null)),
-    manage||(!x.done&&!x.na&&x.who===S.uid&&S.canWrite)?h('div',{class:'cl-a'},who,!x.done&&!x.na&&!p.closed&&S.canWrite?h('button',{class:'cl-lnk',type:'button',title:'Ask another POD leader, the COO or another team for help',disabled:S.busy,onclick:()=>openClHelp(p.id,k,it.id),text:'Help'}):null,manage&&!x.done?h('button',{class:'cl-lnk',type:'button',title:x.na?'Put it back on the list':'Not needed on this project',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo':'N/A'}):null):h('span'));
+  const pz=S.sheet&&S.sheet.clPause&&S.sheet.clPause.k===k&&S.sheet.clPause.id===it.id?S.sheet.clPause:null;
+  const pzBox=pz?h('div',{class:'cl-pz'},h('input',{id:`clpz-${k}-${it.id}`,maxlength:140,placeholder:'Why is it paused? e.g. waiting for the client’s unit mix',value:pz.why,oninput:e=>{ pz.why=e.target.value; }}),
+    h('button',{class:'btn btn-sm btn-primary',type:'button',disabled:S.busy,onclick:()=>{ const why=(pz.why||'').trim(); if(!why) return toast('Say why it is paused.'); S.sheet.clPause=null; clSet(p,k,it.id,{st:'paused',why,stAt:today(),stBy:S.uid},'Paused'); },text:'Pause'}),
+    h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.sheet.clPause=null; renderSheet(); },text:'Cancel'})):null;
+  if(pz) setTimeout(()=>{ const el=document.getElementById(`clpz-${k}-${it.id}`); el&&document.activeElement!==el&&el.focus(); },30);
+  return h('div',{class:'cl-row'+(x.na?' na':'')+(pz?' pz':'')},box,
+    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),h('div',{class:'cl-m'},who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk&&!x.done&&!x.na?h('span',{text:'· '+clRole(it.chk)+' checks'}):null,!x.done&&!x.na&&x.st==='doing'?h('span',{class:'cl-st doing',text:'· In progress since '+fmtD(x.stAt||today())}):null,!x.done&&!x.na&&x.st==='paused'?h('span',{class:'cl-st paused',text:'· Paused'+(x.why?': '+x.why:'')+' · since '+fmtD(x.stAt||today())}):null,blk&&!x.done?h('span',{style:'color:var(--late)',text:'· waits for the peer review'}):null,...clHelpTasks(p,k,it.id).map(t=>{ const r=t.assignReq, g=r?r.to:(t.checkerGuide?t.checker:t.assignee); return h('span',{style:'color:var(--early)',text:`· help: ${nameOf(g)} (${(r&&r.guide)||t.checkerGuide?'guides and checks':'doing it'}${r?', waiting for the COO':''})`}); }),x.done?h('span',{title:'Ticked '+fmtD(x.done)+(x.by?' by '+nameOf(x.by):'')+(it.chk?' · checked by '+clRole(it.chk):''),text:'· '+fmtD(x.done)}):null)),
+    manage||(!x.done&&!x.na&&x.who===S.uid&&S.canWrite)?h('div',{class:'cl-a'},!x.done&&!x.na&&canTickCl(p,x)?(()=>{ const e=h('select',{class:'cl-sts','aria-label':'Progress of “'+it.t+'”',disabled:S.busy,onchange:ev=>{ const v=ev.target.value; if(v==='paused'){ S.sheet.clPause={k,id:it.id,why:''}; renderSheet(); return; } clSet(p,k,it.id,{st:v,why:'',stAt:today(),stBy:S.uid},v==='doing'?'In progress':'Back to not started'); }},(x.st==='doing'?[['doing','In progress'],['paused','Paused…'],['','Not started']]:x.st==='paused'?[['paused','Paused'],['doing','Resume: in progress']]:[['','Not started'],['doing','In progress']]).map(([v,l])=>h('option',{value:v,text:l}))); e.value=x.st||''; return e; })():null,who,!x.done&&!x.na&&!p.closed&&S.canWrite?h('button',{class:'cl-lnk',type:'button',title:'Ask another POD leader, the COO or another team for help',disabled:S.busy,onclick:()=>openClHelp(p.id,k,it.id),text:'Help'}):null,manage&&!x.done?h('button',{class:'cl-lnk',type:'button',title:x.na?'Put it back on the list':'Not needed on this project',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo':'N/A'}):null):h('span'),pzBox);
 }
 function setPace(p,v){
   const from=paceOf(p); if(v===from) return;
@@ -6901,7 +6913,7 @@ function tlCompute(p,start,live,buf){
     // re-planned on the SLATE standard (tl.from): a phase not started by then starts no earlier than that day
     if(std.tl&&std.tl.from){ const s0=stdState(p,k); if(!(s0.sub&&s0.sub.doneAt)&&!(s0.fin&&s0.fin.doneAt)){ const f0=firstWD(std.tl.from); if(s<f0) s=f0; } }
     const st=live?stdState(p,k):{}, sd=buf?Math.ceil(slateDaysFor(p,k)*(1+buf)):slateDaysFor(p,k)+graceDays(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
-    const subA=live&&st.sub&&st.sub.doneAt?st.sub.doneAt.slice(0,10):'', finA=live&&st.fin&&st.fin.doneAt?st.fin.doneAt.slice(0,10):'';
+    const subA=live&&st.sub&&st.sub.doneAt?st.sub.doneAt.slice(0,10):live&&!st.sub&&std.sentAt&&std.sentAt[k]?std.sentAt[k]:'', finA=live&&st.fin&&st.fin.doneAt?st.fin.doneAt.slice(0,10):'';
     const deem=live&&std.deemed&&std.deemed[k]?std.deemed[k].on:'';
     // consultant window: SLATE works `pre` days, the plans go to the STR/MEP consultants, their drawings come back after `kd`
     // working days, then SLATE finishes the rest. Consultant delays move the submission and count as consultant time (R8).
