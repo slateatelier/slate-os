@@ -6618,7 +6618,7 @@ function tlCompute(p,start,live){
   const ks=tlPhases(p), td=today(), out={}, std=p.std||{}, take=+(((std.tl||{}).take)??TAKE_IN);
   ks.forEach((k,i)=>{
     const dep=tlDep(p,k); let s='';
-    if(dep.start) s=firstWD(start);
+    if(dep.start||(i===0&&!dep.resume)) s=firstWD(start);   /* the first phase in the plan starts the project, whichever phase it is (e.g. a proposal sprint that starts at phase 1) */
     else if(dep.resume) s=std.resume?firstWD(std.resume):'';
     else { const ref=dep.prev?out[ks[i-1]]:out[dep.k]; const at=dep.prev?'fin':dep.at; if(ref&&ref[at]) s=nextWD(ref[at]); }
     if(!s){ out[k]={k,none:true}; return; }
