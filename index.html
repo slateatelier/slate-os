@@ -1192,6 +1192,13 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-s{font-size:12.5px;color:var(--muted);line-height:1.35}
 .pq-f{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:6px}
 .pq-fee>.pq-own{display:grid;justify-content:stretch;grid-template-columns:120px minmax(0,1fr) 64px;gap:12px;white-space:nowrap;align-items:center;border-top:1px solid var(--line);padding-top:10px;margin-top:4px}.pq-own .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 64px 0 10px;font-size:15px}.pq-own>:last-child{text-align:right}
+#far-pop{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.32);display:grid;place-items:center;padding:16px}
+#far-pop .fp-card{display:flex;flex-direction:column;width:min(760px,100%);height:min(92vh,100%);background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+#far-pop .fp-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+#far-pop .fp-head b{font-size:17px}
+#far-pop .fp-foot{display:grid;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#fff}
+#far-pop .fp-val{display:flex;justify-content:space-between;align-items:baseline;gap:10px}#far-pop .fp-val b{font-size:17px;font-variant-numeric:tabular-nums}
+@media (max-width:560px){#far-pop{padding:0}#far-pop .fp-card{height:100%;border-radius:0}}
 .pq-svc{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 .pq-svc-h{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:28px}
 .pq-svc-sum{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pq-svc-go{font-size:13.5px;font-weight:600;text-decoration:underline}
@@ -8633,6 +8640,26 @@ function farFillFrom(p){ if(!p) return; const fu=Object.values(p.floorUnits||{})
         result:{far:+x.far||0,farType:x.farType||'',farArea:Math.round(x.farArea||0),saleable:Math.round(x.saleable||0),construction:Math.round(x.construction||0),maxUnits:x.maxUnits,totalUnits:x.totalUnits||0,zero:!(+x.far>0),
           totalCost:x.totalCost||null,pricePerSqft:x.pricePerSqft||null}}).catch(()=>{}); }
   }); })();
+/* FAR calculator as a pop-up over the page (Principal, 2 Nov 2026): opened from a proposal, filled with its land and name;
+   after Calculate, "Use this area" puts the construction area back into the proposal. The page underneath is never left. */
+function farPop(o){ document.getElementById('far-pop')?.remove();
+  const fr=h('iframe',{title:'SLATE FAR Calculator',src:'/far-tool/?os=1',style:'flex:1;width:calc(100% - 32px);margin:0 16px;border:0;background:#fff'});
+  const val=h('div',{class:'fp-val'},h('span',{class:'qs-k',text:'Construction area'}),h('b',{text:'Calculate to see it'}));
+  const use=h('button',{class:'btn btn-primary',type:'button',disabled:true,text:'Use this area'});
+  let area=0;
+  const close=()=>{ window.removeEventListener('message',onMsg); document.removeEventListener('keydown',onKey); box.remove(); };
+  const onKey=e=>{ if(e.key==='Escape') close(); };
+  const onMsg=e=>{ if(e.origin!==location.origin||e.source!==fr.contentWindow||!e.data||e.data.src!=='slate-far') return; const m=e.data;
+    if(m.type==='ready'){ try{ fr.contentWindow.postMessage({src:'slate-os',type:'fill',projName:o.name||'',katha:o.katha||'',basements:''},location.origin); }catch(_){} }
+    if(m.type==='calc'&&m.result){ area=Math.round(+m.result.construction||0); val.lastChild.textContent=area?(area.toLocaleString('en-IN')+' sft'+(m.result.far?` · FAR ${(+m.result.far).toFixed(2)}`:'')):'No buildable area for these inputs'; use.disabled=!area; } };
+  use.onclick=()=>{ if(!area) return; close(); o.onUse(area); };
+  const box=h('div',{id:'far-pop',role:'dialog','aria-modal':'true','aria-label':'FAR calculator'},
+    h('div',{class:'fp-card'},
+      h('div',{class:'fp-head'},h('b',{text:'FAR calculator'}),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:close,text:'×'})),
+      fr,
+      h('div',{class:'fp-foot'},val,h('div',{class:'actions',style:'margin:0'},use,h('button',{class:'btn',type:'button',onclick:close,text:'Close'})))));
+  box.addEventListener('click',e=>{ if(e.target===box) close(); });
+  window.addEventListener('message',onMsg); document.addEventListener('keydown',onKey); document.body.append(box); }
 /* FAR dashboard: every calculation in the log, for the Principal and the COO */
 function farDash(F){
   const all=farLogAll(), per=F.dp||'90', from=per==='all'?'':addDays(today(),-(+per));
@@ -8905,7 +8932,7 @@ function sheetPropQuick(){
       kv('Type',ty),
       kv('Land',h('div',{class:'pq-unit'},inp2('katha',{type:'number',min:0,step:'any',inputmode:'decimal',re:reArea,onchange:()=>renderSheet()}),h('span',{text:'katha'}))),
       kv('Built area',h('div',{style:'display:grid;gap:4px'},h('div',{class:'pq-unit'},h('input',{id:'pq-area',class:'tl-num qs-in',type:'number',min:0,step:100,inputmode:'numeric',value:d.area||'',oninput:e=>{ d.area=e.target.value; sh.areaSet=!!e.target.value; },onchange:()=>renderSheet()}),h('span',{text:'sft'})),
-        h('span',{class:'f-hint',style:'margin:0'},sh.areaSet?'Gross, with basement and parking. Check it on the ':'Estimated at 5,000 sft per katha. Put the real figure from the ',h('a',{href:'/far-tool/',target:'_blank',rel:'noopener',text:'FAR calculator'}),'.')),true)),
+        h('span',{class:'f-hint',style:'margin:0'},sh.areaSet?'Gross, with basement and parking. Check it on the ':'Estimated at 5,000 sft per katha. Put the real figure from the ',h('button',{type:'button',class:'linkish',style:'font-size:inherit;padding:0',onclick:()=>farPop({name:d.name,katha:d.katha,onUse:a=>{ d.area=String(a); sh.areaSet=true; renderSheet(); toast('Built area from the FAR calculator: '+a.toLocaleString('en-IN')+' sft'); }}),text:'FAR calculator'}),'.')),true)),
     h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Plan'}),
     h('div',{class:'pq-plans'},SP_MAIN.map(card)),
     P&&!P.fixed&&!P.tier?seg('Fee tier',Object.entries(SP_TIERS),d.tier,v=>{ d.tier=v; renderSheet(); }):null,
@@ -9293,7 +9320,7 @@ function sheetPropDoc(){
           h('div',{class:'form-row'},field('Service plan',ps),P&&!P.tier&&!P.fixed?field('Fee tier',seg('Tier',Object.entries(SP_TIERS).map(([k,l])=>[k,l]),d.tier||'s',v=>{ d.tier=v; renderSheet(); })):P?field('Fee tier',h('span',{class:'f-hint',style:'padding-top:10px',text:P.fixed?'Fixed fee':'Premium (always, for Signature)'})):null),
           P?h('div',{class:'f-hint',style:'margin:0',text:P.short+' · '+P.time+(P.visits?' · '+P.visits+' site visits':'')}):h('div',{class:'f-hint',style:'margin:0',text:'Choose a plan to fill the fee, services, payment stages, site visits, revisions, terms and timeline from the rate card. Existing proposals can stay as they are.'}),
           P&&!P.fixed?field('Built area, sft (gross: basement, parking and roof structures included)',h('input',{type:'number',min:0,step:1,inputmode:'numeric',value:d.area||'',onchange:e=>{ d.area=e.target.value; renderSheet(); }})):null,
-          P&&!P.fixed?h('div',{class:'f-hint',style:'margin:-4px 0 0'},'From the ',h('a',{href:'/far-tool/',target:'_blank',rel:'noopener',text:'FAR calculator'}),'. If the case is unusual, ask the POD leader first, then the Principal.'):null,
+          P&&!P.fixed?h('div',{class:'f-hint',style:'margin:-4px 0 0'},'From the ',h('button',{type:'button',class:'linkish',style:'font-size:inherit;padding:0',onclick:()=>farPop({name:p.name,katha:d.katha||p.katha,onUse:a=>{ d.area=String(a); renderSheet(); toast('Built area from the FAR calculator: '+a.toLocaleString('en-IN')+' sft'); }}),text:'FAR calculator'}),'. If the case is unusual, ask the POD leader first, then the Principal.'):null,
           P&&!P.fixed?h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',text:'Adjustments · seen only while preparing, not by the client'}),
             chk('dev','Developer-owned land (fast track): +10%'),chk('jol','Jolshiri or Cantonment: authority stage +10%'),chk('ctg','Chittagong: 85% of the Dhaka fee, travel at cost'),
             p.type==='private'&&(d.tier||'s')!=='p'?h('div',{class:'f-hint',style:'margin:0;color:var(--overdue)',text:'Private client: the rate card says Premium.'}):null):null,
