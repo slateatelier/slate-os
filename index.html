@@ -9076,7 +9076,7 @@ function openProp(id,convert){ if(window.SlatePin&&SlatePin.required()&&!SlatePi
   const p=id?(S.props||{})[id]:null;
   const d={name:'',client:'',contact:'',phone:'',location:'',katha:'',type:'',scope:[],feeBasis:'lump',fee:'',feeNote:'',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:'',...(p?JSON.parse(JSON.stringify(p)):{})};
   if(!Array.isArray(d.scope)) d.scope=[];
-  if(convert){ d.stage='prep'; d.next=addWorkDays(today(),3); }
+  if(convert){ d.stage='prep'; d.next=addWorkDays(today(),3); if(!d._title&&d.title) d._title=d.title; }
   if(!id||convert) return openPropQuick(d,id||null,!!convert);
   S.sheet={type:'prop',id:id||null,d,err:'',convert:!!convert}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-name'); el&&el.focus(); },30); }
 /* clients SLATE already knows: from client projects and proposals, newest details first. Picking one fills the contact
@@ -10159,7 +10159,7 @@ function sheetPropView(){
     h('div',{class:'sh-status'},open&&ld?h('span',{class:'pill s-'+ht[1],text:ht[0]}):open?h('span',{class:'pill s-'+(propDue(p)?'overdue':'open'),text:PROP_STAGE[p.stage]||'Preparing'}):h('span',{class:'pill s-'+(p.status==='won'?'ontime':'overdue'),text:PROP_OUT[p.status]||p.status}),
       open&&p.next?h('span',{class:'tag',style:propDue(p)?'color:var(--overdue)':'',text:(p.next<today()?'Follow-up was due ':p.next===today()?'Follow up today':'Next follow-up ')+(p.next===today()?'':fmtD(p.next))}):null,
       p.type?h('span',{class:'tag',text:propTypeName(p.type)}):null,p.src?h('span',{class:'tag',text:srcL(p.src)}):null),
-    h('div',{class:'facts'},fact('Client',p.client,[p.contact,p.phone,p.email].filter(Boolean).join(' · ')),fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),fact('Fee proposed',propFee(p)),
+    h('div',{class:'facts'},fact('Client',p.client,[[p.contact,p.title].filter(Boolean).join(', '),p.phone,p.email].filter(Boolean).join(' · ')),fact('Referred by',p.src==='referral'?p.refBy||'Not recorded':''),ld&&LEAD_HEAT[p.heat]?fact('Interest',LEAD_HEAT[p.heat][0],LEAD_HEAT[p.heat][2]):null,fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),fact('Fee proposed',propFee(p)),
       fact('Proposal sent',p.sentOn?fmtD(p.sentOn):''),fact(ld?'Project':'',ld&&p.name?p.name:''),fact('Lead since',p.leadAt&&!ld?fmtD(p.leadAt.slice(0,10)):''),fact('Added',p.createdAt?fmtTs(p.createdAt):'',p.createdBy?'by '+nameOf(p.createdBy):'')),
     (()=>{ const vs=(p.versions||[]).slice().reverse(); if(!vs.length&&!p.doc) return null; const st=S.sheet.vdl||(S.sheet.vdl={});
       const dl=async v=>{ st[v.rev]='making'; renderSheet(); try{ const r=await pbPdfRetry(p,v.doc,'both'); st[v.rev]=''; renderSheet(); dlFile(r.share); }catch(e){ st[v.rev]='err'; renderSheet(); toast(e.message||String(e)); } };
@@ -10262,33 +10262,39 @@ function propWon(id,pid){ const p=(S.props||{})[id]; if(!p) return Promise.resol
    A lead is a proposals/<id> record with lead:true, so it keeps its contact log when it moves on: Lead → Proposed → client project. */
 const LEAD_SRC=[['purbachal','Purbachal FAR campaign'],['referral','Referral'],['client','Existing client'],['social','Facebook or Instagram'],['linkedin','LinkedIn'],['web','Website or Google'],['walkin','Walk-in or call-in'],['outreach','Cold outreach'],['event','Event or meeting'],['other','Other']];
 const srcL=k=>(LEAD_SRC.find(x=>x[0]===k)||[])[1]||'Not recorded';
-const LEAD_HEAT={hot:['Hot','overdue'],warm:['Warm','late'],cold:['Cold','open']};
+const LEAD_HEAT={hot:['Hot','overdue','Ready to go: land in hand (or being bought), the decision-maker is talking to us, and they want a proposal or meeting within 2 weeks. Follow up within 2 working days.'],
+  warm:['Warm','late','Interested, with a real project, but the timing, budget or decision is not settled yet; expected to start within about 3 months. Follow up every 1 to 2 weeks.'],
+  cold:['Cold','open','Early enquiry: no clear project, land or timeline yet, or no reply to the last two follow-ups. Keep in touch about once a month.']};
 const isLead=p=>!!p&&p.lead===true;
 const pTitle=p=>p.name||p.client||'Lead';
 const lastTouch=p=>{ const l=propLast(p); return ((l&&l.at)||p.createdAt||'').slice(0,10); };
 const leadStale=p=>propOpen(p)&&isLead(p)&&!!lastTouch(p)&&diff(lastTouch(p),today())>14;
 function openLead(id){ if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlocked()){ SlatePin.ensure().then(ok=>{ if(ok) openLead(id); }); return; }
   const p=id?(S.props||{})[id]:null;
-  const d={client:'',contact:'',phone:'',email:'',src:'',name:'',location:'',katha:'',heat:'warm',next:addWorkDays(today(),2),note:'',...(p?JSON.parse(JSON.stringify(p)):{})};
+  const d={client:'',contact:'',phone:'',email:'',src:'',name:'',location:'',katha:'',heat:'warm',next:addWorkDays(today(),2),note:'',refBy:'',...(p?JSON.parse(JSON.stringify(p)):{})}; if(d._title==null) d._title=d.title||'';
   S.sheet={type:'lead',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-client'); el&&el.focus(); },30); }
 function sheetLead(){
   const d=S.sheet.d, id=S.sheet.id;
   const submit=e=>{ e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds leads.');
     const client=(d.client||'').trim(), phone=(d.phone||'').trim();
     if(!client) return fail('Who is the lead? Give a name or company.'); if(!phone) return fail('Add a phone number.'); if(!d.src) return fail('Where did this lead come from?');
+    if(d.src==='referral'&&!(d.refBy||'').trim()) return fail('Who referred them?'); if(!(d.contact||'').trim()) return fail('Add the contact person.'); if(!(d._title||'').trim()) return fail('Add the contact person’s designation (e.g. Chairman, MD, Owner).');
     if(d.katha!==''&&d.katha!=null&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     const now=new Date().toISOString(), pid=id||S.db.collection('proposals').doc().id, old=id?(S.props||{})[id]||{}:{};
-    const v={...old,lead:true,client,phone,email:(d.email||'').trim(),contact:(d.contact||'').trim(),src:d.src,name:(d.name||'').trim().toUpperCase(),location:(d.location||'').trim(),katha:d.katha===''||d.katha==null?'':String(+d.katha),heat:d.heat||'warm',next:d.next||'',note:(d.note||'').trim(),
+    const v={...old,lead:true,client,phone,email:(d.email||'').trim(),contact:(d.contact||'').trim(),title:(d._title||'').trim(),refBy:d.src==='referral'?(d.refBy||'').trim():'',src:d.src,name:(d.name||'').trim().toUpperCase(),location:(d.location||'').trim(),katha:d.katha===''||d.katha==null?'':String(+d.katha),heat:d.heat||'warm',next:d.next||'',note:(d.note||'').trim(),
       status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid,leadAt:now})};
     run(()=>propWrite(pid,v),id?'Lead updated':'Lead added').then(ok=>{ if(ok) openPropView(pid); }); };
   return [head(id?'Edit lead':'New lead',id?pTitle(d):'Only you and the COO see this'),
-    h('p',{class:'lead',style:'margin:0',text:'Name, phone and where it came from are enough. Add the rest when you know it.'}),
+    h('p',{class:'lead',style:'margin:0',text:'Name, contact person with designation, phone and where it came from are needed. Add the rest when you know it.'}),
     h('form',{class:'form',onsubmit:submit},
       field('Name or company *',clientPick(d,{ph:'e.g. Rupayan Housing'})),
       field('Phone *',inp('phone',{type:'tel',maxlength:40})),
-      field('Source *',sel('src',[['','Where did it come from?'],...LEAD_SRC])),
-      field('Interest',seg('Interest',Object.entries(LEAD_HEAT).map(([k,[l]])=>[k,l]),d.heat||'warm',v=>{ d.heat=v; renderSheet(); })),
-      h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Email',inp('email',{type:'email',maxlength:120}))),
+      h('div',{class:'form-row'},field('Contact person *',inp('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin'})),field('Designation *',inp('_title',{maxlength:80,placeholder:'e.g. Chairman, MD, Owner'}))),
+      field('Source *',(()=>{ const el=sel('src',[['','Where did it come from?'],...LEAD_SRC]); el.addEventListener('change',()=>renderSheet()); return el; })()),
+      d.src==='referral'?field('Referred by *',inp('refBy',{maxlength:120,placeholder:'e.g. Mr. Karim (existing client)'})):null,
+      field('Interest',h('div',{style:'display:grid;gap:6px'},seg('Interest',Object.entries(LEAD_HEAT).map(([k,[l]])=>[k,l]),d.heat||'warm',v=>{ d.heat=v; renderSheet(); }),
+        h('div',{class:'f-hint',style:'margin:0',text:(LEAD_HEAT[d.heat||'warm']||[])[2]||''}))),
+      field('Email',inp('email',{type:'email',maxlength:120})),
       field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'})),
       h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Next follow-up',inp('next',{type:'date'}))),
       field('Note',ta('note',{rows:3,placeholder:'What they want, budget, timing…'})),
