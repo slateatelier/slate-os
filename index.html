@@ -9725,7 +9725,7 @@ b,strong,h1,h2,th,tr.tot td,.to b,.ref span b,.sig b,.amtbox b,.lh-addr,.lh-name
 b,strong{font-weight:600}
 h1{font-size:15pt;font-weight:600;letter-spacing:.08em;margin:0 0 1.5mm;text-transform:uppercase}.dr{color:#C41E29;font-size:9pt;border:1pt solid #C41E29;padding:1px 6px;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
 .ref{display:flex;justify-content:space-between;gap:6mm;font-size:9pt;color:#545454;margin-bottom:7mm;flex-wrap:wrap}.ref span b{color:#000;font-weight:600}
-.to{margin:4mm 0 7mm;font-size:10.5pt;line-height:1.45}.to b{font-weight:700}.ref .dt{color:#000;font-size:10.5pt}.ref span.dt b{font-weight:700;color:#000!important}.docref{display:flex;justify-content:space-between;gap:6mm}.docref .dm{letter-spacing:.06em}.pb-tl td{padding-top:1.6mm;padding-bottom:1.6mm}.pb-just{font-size:10.5pt;line-height:1.5}.pb-subj{margin:0 0 3mm;font-size:10.5pt}.pb-subj b{font-weight:700}.pb-dear{margin:6mm 0 2.5mm;font-size:10.5pt}.pb-just{text-align:justify}.pb-ov .pb-k{color:#000}.pb-ov td{border-bottom:0!important;padding-top:1.4mm;padding-bottom:1.4mm}.pb-ov .pb-k b{font-weight:700}.pb-ov td b{font-weight:700}.pre{white-space:pre-line}
+.to{margin:4mm 0 7mm;font-size:10.5pt;line-height:1.45}.to b{font-weight:600}.ref .dt{color:#000;font-size:10.5pt}.ref span.dt b{font-weight:600;color:#000!important}.docref{display:flex;justify-content:space-between;gap:6mm}.docref .dm{letter-spacing:.06em}.pb-tl td{padding-top:1.6mm;padding-bottom:1.6mm}.pb-just{font-size:10.5pt;line-height:1.5}.pb-subj{margin:0 0 3mm;font-size:10.5pt}.pb-subj b{font-weight:600}.pb-dear{margin:6mm 0 2.5mm;font-size:10.5pt}.pb-just{text-align:justify}.pb-ov .pb-k{color:#000}.pb-ov td{border-bottom:0!important;padding-top:1.4mm;padding-bottom:1.4mm}.pb-ov .pb-k b{font-weight:600}.pb-ov td b{font-weight:600}.pre{white-space:pre-line}
 h2{font-size:8.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:7mm 0 2.5mm}
 table{width:100%;border-collapse:collapse;font-size:9.5pt}
 th{font-size:7.5pt;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#545454;text-align:left;padding:2mm 1mm 2mm 0;border-bottom:.75pt solid #000}
@@ -9754,7 +9754,9 @@ tr.tot td{border-top-color:#C41E29;color:#C41E29}
 /* one typeface and one size for the whole letter (Principal, 2 Nov 2026): Jost (free Futura look-alike) at 10pt; hierarchy by weight and colour only */
 body{font-family:"Jost","Futura",sans-serif}.page *{font-family:"Jost","Futura",sans-serif!important;font-size:10pt!important}
 .page .lh-addr{font-size:7.6pt!important}.page .lh-name{font-size:5.6pt!important}.page .lh-wm{font-size:32pt!important}
-h1,h2,th{letter-spacing:.04em}.docref{text-transform:none;letter-spacing:0;color:#545454}.docref .dm{letter-spacing:0}.sp-cmp th span,.pb-del,.pb-small,.words,.note{color:#545454}.pb-tl td{padding-top:1.1mm;padding-bottom:1.1mm;line-height:1.3}.pb-del{line-height:1.3;margin-top:.3mm}`;
+h1,h2,th{letter-spacing:.04em}.docref{text-transform:none;letter-spacing:0;color:#545454}.docref .dm{letter-spacing:0}.sp-cmp th span,.pb-del,.pb-small,.words,.note{color:#545454}.pb-tl td{padding-top:1.1mm;padding-bottom:1.1mm;line-height:1.3}.pb-del{line-height:1.3;margin-top:.3mm}
+/* every page starts on the same line (Principal, 2 Nov 2026): no top margin on a page's first heading */
+.pb-first>:first-child{margin-top:0!important}`;
 const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
 const pbLetterhead=()=>`<div class="lh-addr">${PB_ADDR.split('\n').map(pbEsc).join('<br>')}</div><div class="lh-tab"><div class="lh-mark">${PB_LOGO}</div><div class="lh-name">SLATE</div></div><div class="lh-wm">DESIGN<br>WITH<br>PURPOSE</div>`;
@@ -9840,7 +9842,7 @@ async function pbHTML(p,d,withBar,plain){
   const pages=await pbPages(p,d), ref=d.ref||'';
   return pbHead((p.name||'Proposal')+' · SLATE proposal')+`<body>${withBar?'<div class="bar"><button class="p" onclick="print()">Print or save as PDF</button><button onclick="close()">Close</button></div>':''}
 ${plain?'<style>.page{box-shadow:none}</style>':''}
-${pages.map((b,i)=>`<div class="page">${plain?'':pbLetterhead()}${b.map(x=>`<div class="pb-blk">${x}</div>`).join('')}<div class="docref">${madeTxt(d)?`<span class="dm">${pbEsc(madeTxt(d))}</span>`:''}<span>${pbEsc(ref)}${pbEsc(revTxt(d))} · page ${i+1} of ${pages.length}</span></div></div>`).join('')}
+${pages.map((b,i)=>`<div class="page">${plain?'':pbLetterhead()}${b.map((x,j)=>`<div class="pb-blk${j?'':' pb-first'}">${x}</div>`).join('')}<div class="docref">${madeTxt(d)?`<span class="dm">${pbEsc(madeTxt(d))}</span>`:''}<span>${pbEsc(ref)}${pbEsc(revTxt(d))} · page ${i+1} of ${pages.length}</span></div></div>`).join('')}
 ${withBar?`<script>(function(){function fit(){var px=210*96/25.4,w=document.documentElement.clientWidth,z=Math.min(1,(w-16)/px);document.querySelectorAll('.page').forEach(function(p){p.style.zoom=z;});}addEventListener('resize',fit);fit();})();<\/script>`:''}
 </body></html>`; }
 /* the proposal preview opens over the app (an iPhone home-screen app can't close a pop-up window) */
