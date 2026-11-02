@@ -9202,7 +9202,7 @@ function clientRec(name){ const k=cNorm(name); if(!k) return null; for(const [id
    direction marks. Kept as digits with one leading + only, whatever is typed or pasted into a phone box. */
 const phoneNorm=v=>{ const t=String(v==null?'':v).replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g,'').trim(); const plus=/^\s*(\+|00)/.test(t)&&t.replace(/\D/g,'').length>0; let d=t.replace(/\D/g,''); if(/^\s*00/.test(t)) d=d.replace(/^00/,''); return d?(plus?'+':'')+d:''; };
 document.addEventListener('input',e=>{ const el=e.target; if(!(el instanceof HTMLInputElement)) return; if(el.type!=='tel'&&!/phone/i.test(el.id||el.name||'')) return; const v=phoneNorm(el.value); if(v!==el.value&&!(el.value.trim()==='+')){ el.value=v; } },true);
-async function clientUpsert(v){ if(v&&v.phone) v={...v,phone:phoneNorm(v.phone)}; const name=String(v.name||'').trim(); if(!name||!S.db||!canProps()) return null; const ex=clientRec(name), now=new Date().toISOString();
+async function clientUpsert(v){ if(v&&v.phone) v={...v,phone:phoneNorm(v.phone)}; const name=String(v.name||'').trim().toUpperCase(); if(!name||!S.db||!canProps()) return null; const ex=clientRec(name), now=new Date().toISOString();
   if(ex){ const fill={}; CLIENT_F.forEach(f=>{ if(v[f]&&!ex[f]) fill[f]=String(v[f]).trim(); }); if(Object.keys(fill).length) await S.db.doc('clients/'+ex.id).update({...fill,updatedAt:now,updatedBy:S.uid}); return ex.id; }
   const ref=S.db.collection('clients').doc(); const rec={name}; CLIENT_F.forEach(f=>{ rec[f]=String(v[f]||'').trim(); });
   await ref.set({...rec,createdAt:now,createdBy:S.uid}); (S.clients=S.clients||{})[ref.id]=rec; return ref.id; }
@@ -9223,11 +9223,11 @@ function clientPick(d,opt){ const box=h('div',{style:'display:grid;gap:6px'}), l
   const show=()=>{ list.textContent=''; const q=String(d.client||'').trim().toLowerCase(); if(d._picked&&d._picked===d.client) return;
     const xs=clientDir().filter(c=>!q||c.name.toLowerCase().includes(q)).slice(0,q?6:4); if(!xs.length) return;
     xs.forEach(c=>list.append(h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:8px 12px;text-align:left;justify-content:flex-start;border-radius:10px',onclick:()=>{
-      d.client=c.name; d._picked=c.name; ['contact','phone','email'].forEach(f=>{ if(c[f]) d[f]=c[f]; }); if(c.title) d._title=c.title; if(c.address) d._addr=c.address; if(c.type&&d.clientType==null) d.clientType=c.type;
+      d.client=String(c.name||'').toUpperCase(); d._picked=d.client; ['contact','phone','email'].forEach(f=>{ if(c[f]) d[f]=c[f]; }); if(c.title) d._title=c.title; if(c.address) d._addr=c.address; if(c.type&&d.clientType==null) d.clientType=c.type;
       if(c.type&&!d.type) d.type=c.type; if(!d.src) d.src=c.projects?'client':(c.src||''); renderSheet(); }},
       h('span',{},h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?(c.live?c.live+' running':'')+(c.live&&c.projects>c.live?', ':'')+(c.projects>c.live?(c.projects-c.live)+' closed':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact,c.phone].filter(Boolean).join(' · ')}),c.id?null:h('span',{class:'muted',style:'font-size:11.5px',text:' · not in Clients yet'})))));
     list.prepend(h('div',{class:'f-hint',style:'margin:0',text:q?'Existing clients · tap to fill their details':'Your main clients · tap one, or type a new name'})); };
-  const inpEl=h('input',{id:'sh-client',maxlength:120,placeholder:opt&&opt.ph||'Company or person',value:d.client||'',autocomplete:'off',oninput:e=>{ d.client=e.target.value; d._picked=''; show(); }});
+  const inpEl=h('input',{id:'sh-client',maxlength:120,placeholder:opt&&opt.ph||'Company or person',value:d.client||'',autocomplete:'off',style:'text-transform:uppercase',autocapitalize:'characters',oninput:e=>{ d.client=e.target.value.toUpperCase(); d._picked=''; show(); }});
   box.append(inpEl,list); show();
   if(d._picked&&d._picked===d.client) box.append(h('div',{class:'f-hint',style:'margin:0;color:var(--ontime)',text:'Existing client: contact details filled in. Change them below if needed.'}));
   return box; }
@@ -9306,7 +9306,7 @@ const PQ_SCHED=[['Advance, on signing',30],['Schematic design approval',20],['De
 const pqKind=d=>d.sKind==null?'Sector':d.sKind;
 function pqAddr(d){ const a=pqT(d.sArea).toUpperCase(), K=pqKind(d), parts=[pqT(d.sPlot)&&'Plot '+pqT(d.sPlot),pqT(d.sRoad)&&'Road '+pqT(d.sRoad),K&&pqT(d.sSec)&&K+' '+pqT(d.sSec),a].filter(Boolean); return parts.length?parts.join(', '):pqT(d.location); }
 function pqAutoName(d){ const a=pqT(d.sArea).toUpperCase(); if(!a) return ''; const xs=[pqT(d.sPlot)&&'P '+pqT(d.sPlot),pqT(d.sRoad)&&'R '+pqT(d.sRoad),pqKind(d)&&pqT(d.sSec)&&pqKind(d)[0]+' '+pqT(d.sSec)].filter(Boolean); return (a+(xs.length?' '+xs.join(', '):'')).toUpperCase(); }
-function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:pqAddr(d),_known:!!(d._picked&&d._picked===d.client),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||'',use:d.use||'',known:!!(d._picked&&d._picked===d.client)}};
+function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).toUpperCase(),client:(d.client||'').trim().toUpperCase(),contact:(d.contact||'').trim(),location:pqAddr(d),_known:!!(d._picked&&d._picked===d.client),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||'',use:d.use||'',known:!!(d._picked&&d._picked===d.client)}};
   const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan='comp'; doc.dear=d.dear||'Dear Sir,'; doc.use=d.use||'Residential'; doc.tier=d.type==='private'?'p':'s'; doc.adj=sh.adj||spAdjDef(p); spApply(doc,p);
   const guide=+doc.lump||0, fm=sh.fm||'sft', fv=+sh.fv||0, area=+doc.area||0, fee=fm==='sft'?(fv>0&&area?Math.round(fv*area/1000)*1000:0):(fv>0?Math.round(fv):0);
   const on=Object.keys(pqSel(sh).on).filter(l=>sh.sel.on[l]), ord=[...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0])]; on.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
@@ -9448,7 +9448,7 @@ function sheetProp(){
   const d=S.sheet.d, id=S.sheet.id, quick=!id&&!S.sheet.convert;
   const sec=t=>h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:t});
   const submit=(e,draft)=>{ if(e) e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds proposed projects.');
-    const name=(d.name||'').trim().toUpperCase()||(draft?'UNTITLED PROPOSAL':''), client=(d.client||'').trim();
+    const name=(d.name||'').trim().toUpperCase()||(draft?'UNTITLED PROPOSAL':''), client=(d.client||'').trim().toUpperCase();
     if(!name) return fail('Give the project a name.'); if(!client) return fail('Who is the client?');
     if(d.katha!==''&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     if(d.fee!==''&&!(+d.fee>0)) return fail('Fee should be a number, or leave it empty.');
@@ -10467,7 +10467,7 @@ function openLead(id){ if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlock
 function sheetLead(){
   const d=S.sheet.d, id=S.sheet.id;
   const submit=e=>{ e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds leads.');
-    const client=(d.client||'').trim(), phone=phoneNorm(d.phone);
+    const client=(d.client||'').trim().toUpperCase(), phone=phoneNorm(d.phone);
     if(!client) return fail('Who is the lead? Give a name or company.'); if(!phone) return fail('Add a phone number.'); if(!d.src) return fail('Where did this lead come from?');
     if(d.src==='referral'&&!(d.refBy||'').trim()) return fail('Who referred them?'); if(!(d.contact||'').trim()) return fail('Add the contact person.'); if(!(d._title||'').trim()) return fail('Add the contact person’s designation (e.g. Chairman, MD, Owner).');
     if(d.katha!==''&&d.katha!=null&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
@@ -11414,7 +11414,7 @@ function viewMoney(){
     side('in','Where the money came from','Fees and anything else that paid for SLATE: loans, the owner’s money, and bills not paid yet. Tap a line for the accounts.'),
     side('out','Where the money went','Running costs, and money spent on equipment, deposits and earlier bills. Tap a line for the accounts.')));
   /* 4. fees by client and by project */
-  const PJ=M.P, byC={}, byP=Object.entries(C.projFee).filter(([,a])=>Math.abs(a)>=1).map(([p,a])=>{ const x=PJ[p]||{}, cl=(x.client||'').trim()||'No client recorded'; byC[cl]=(byC[cl]||0)+a; return {p,name:x.name||p,code:x.code||'',st:x.status||'',a}; }).sort((a,b)=>b.a-a.a);
+  const PJ=M.P, byC={}, byP=Object.entries(C.projFee).filter(([,a])=>Math.abs(a)>=1).map(([p,a])=>{ const x=PJ[p]||{}, cl=(x.client||'').trim().toUpperCase()||'NO CLIENT RECORDED'; byC[cl]=(byC[cl]||0)+a; return {p,name:x.name||p,code:x.code||'',st:x.status||'',a}; }).sort((a,b)=>b.a-a.a);
   const untag=C.fees-C.feesTagged, cl=Object.entries(byC).sort((a,b)=>b[1]-a[1]), topN=B.mallp?byP.length:10, mxp=Math.max(1,...byP.map(x=>x.a));
   out.push(h('div',{class:'mn-cols'},
     h('section',{class:'sec'},h('div',{class:'sec-h biz-sec'},h('h2',{text:'Fees by client'}),h('span',{class:'cnt',text:String(cl.length)})),
@@ -11465,8 +11465,8 @@ function openClient(id,seed){ const c=id?{...(S.clients||{})[id]}:{...(seed||{})
   S.sheet={type:'client',id,d,err:''}; renderSheet(); }
 function sheetClient(){ const sh=S.sheet, d=sh.d, id=sh.id, k=cNorm(d.name);
   const projs=projects().filter(p=>cNorm(p.client)===k||((d.aka||'').split(',').some(a=>cNorm(a)&&cNorm(a)===cNorm(p.client)))), props=propList().filter(p=>cNorm(p.client)===k);
-  const save=()=>{ const name=d.name.trim(); if(!name) return fail('Give the client’s name.'); const dup=clientRec(name); if(dup&&dup.id!==id) return fail('A client with this name is already saved. Open it from the list.');
-    const now=new Date().toISOString(), v={name,aka:d.aka.split(',').map(x=>x.trim()).filter(Boolean)}; CLIENT_F.forEach(f=>{ v[f]=String(d[f]||'').trim(); });
+  const save=()=>{ const name=d.name.trim().toUpperCase(); if(!name) return fail('Give the client’s name.'); const dup=clientRec(name); if(dup&&dup.id!==id) return fail('A client with this name is already saved. Open it from the list.');
+    const now=new Date().toISOString(), v={name,aka:d.aka.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean)}; CLIENT_F.forEach(f=>{ v[f]=String(d[f]||'').trim(); });
     run(()=>id?S.db.doc('clients/'+id).update({...v,updatedAt:now,updatedBy:S.uid}):S.db.collection('clients').doc().set({...v,createdAt:now,createdBy:S.uid}),id?'Client updated':'Client saved').then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const rec=id?(S.clients||{})[id]:null, pend=rec&&rec.delReq;
   const del=()=>{ if(!sh.delAsk){ sh.delAsk={why:'',props:false}; renderSheet(); return; } };
@@ -11474,14 +11474,14 @@ function sheetClient(){ const sh=S.sheet, d=sh.d, id=sh.id, k=cNorm(d.name);
   const kv=(l,v,top)=>h('div',{class:'qs-kv'+(top?' qs-top':'')},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
   return [head('Business › Clients',id?d.name||'Client':'New client'),
     h('div',{class:'qs-box qs-wide'},
-      kv('Client',tx('name',{maxlength:120,placeholder:'Company or person'})),
+      kv('Client',tx('name',{maxlength:120,placeholder:'Company or person',style:'text-transform:uppercase',autocapitalize:'characters'})),
       kv('Contact person',tx('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin'})),
       kv('Designation',tx('title',{maxlength:80,placeholder:'e.g. Chairman'})),
       kv('Phone',tx('phone',{type:'tel',maxlength:40})),
       kv('Email',tx('email',{type:'email',maxlength:120})),
       kv('Address',h('textarea',{id:'cl-address',class:'tl-num qs-in pq-ta',rows:3,maxlength:240,value:d.address||'',oninput:e=>{ d.address=e.target.value; }}),true),
       kv('Client type',(()=>{ const el=h('select',{id:'cl-type',class:'tl-num qs-in',onchange:e=>{ d.type=e.target.value; }},h('option',{value:'',text:'Not set'}),Object.entries(STD_DEF).filter(([x])=>x!=='proposal'&&x!=='interior').map(([x,t])=>h('option',{value:x,text:t.name}))); el.value=d.type||''; return el; })()),
-      kv('Other names',tx('aka',{maxlength:200,placeholder:'e.g. FORTRESS, Fortress RE (comma separated)'})),
+      kv('Other names',tx('aka',{maxlength:200,placeholder:'e.g. FORTRESS, FORTRESS RE (comma separated)',style:'text-transform:uppercase',autocapitalize:'characters'})),
       kv('Note',h('textarea',{id:'cl-note',class:'tl-num qs-in pq-ta',rows:2,maxlength:400,value:d.note||'',oninput:e=>{ d.note=e.target.value; }}),true)),
     projs.length||props.length?h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',text:'Work with this client'}),
       ...projs.map(p=>h('button',{class:'linkish',type:'button',style:'justify-self:start;text-decoration:none',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); },text:`${projLabel(p)}${p.closed?' · closed':''}`})),
@@ -12269,7 +12269,7 @@ function sheetChalkProject(){
   const who=h('select',{id:'ck-who','aria-label':'Assign the suggested tasks to',onchange:e=>{d.who=e.target.value}},chalkAssignOpts().map(([v,l])=>h('option',{value:v,text:v?l:'Leave unassigned'}))); who.value=d.who||'';
   return [head('Chalk Create',id?'Edit project':'New project'),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); saveChalkProject(); }},
-      field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Bashundhara tower brochure'})),
+      field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Bashundhara tower brochure',style:'text-transform:uppercase',autocapitalize:'characters'})),
       h('div',{class:'form-row'},field('Type *',tsel),field('Client',inp('client',{maxlength:80}))),
       field('Due date (optional)',inp('dueDate',{type:'date'})),
       !id&&d.type&&canChalkAssign()?h('div',{class:'card',style:'background:#fff;gap:8px'},
@@ -12285,7 +12285,7 @@ function saveChalkProject(){
   const sh=S.sheet, d=sh.d, id=sh.id, name=(d.name||'').trim();
   if(!name) return fail('Give the project a name.'); if(!d.type) return fail('Choose the type.');
   const now=new Date().toISOString(), ref=id?S.db.doc('projects/'+id):S.db.collection('projects').doc();
-  const v={name:name.toUpperCase(),client:(d.client||'').trim(),type:d.type,dueDate:d.dueDate||'',note:(d.note||'').trim()};
+  const v={name:name.toUpperCase(),client:(d.client||'').trim().toUpperCase(),type:d.type,dueDate:d.dueDate||'',note:(d.note||'').trim()};
   run(async()=>{
     if(id) await ref.update(v);
     else { await ref.set({...v,pod:chalkTeam(),code:'',closed:false,status:'active',createdAt:now,createdBy:S.uid,approvedBy:S.uid,approvedAt:now});

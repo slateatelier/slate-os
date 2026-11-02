@@ -1711,7 +1711,7 @@ function invoicePDF(id) {
   doc.text(R, y + 14, 'Date ' + fmtD(inv.date, true), { size: 10, align: 'right' });
   if (inv.due) doc.text(R, y + 28, 'Due ' + fmtD(inv.due, true), { size: 10, align: 'right' });
   y += 44; doc.line(M, y, R, y, { w: 1.2 }); y += 22;
-  doc.text(M, y, 'Bill to', { size: 8.5, color: '#55565a' }); doc.text(M + 90, y, inv.clientName || L(inv.client), { size: 11, bold: true }); y += 16;
+  doc.text(M, y, 'Bill to', { size: 8.5, color: '#55565a' }); doc.text(M + 90, y, cliN(inv), { size: 11, bold: true }); y += 16;
   if (inv.project) { doc.text(M, y, 'Project', { size: 8.5, color: '#55565a' }); doc.text(M + 90, y, projLabel(inv.project), { size: 10 }); y += 16; }
   y += 12; doc.rect(M, y, R - M, 20, { fill: '#EFF2F4' });
   doc.text(M + 8, y + 13.5, 'Description', { size: 8.5, bold: true }); doc.text(R - 8, y + 13.5, 'Amount (Tk)', { size: 8.5, bold: true, align: 'right' }); y += 20;
@@ -2001,7 +2001,7 @@ function clientsOwe() {
   const open = invList().filter(x => ['unpaid', 'part', 'overdue'].includes(invStatus(x)));
   if (!open.length) return h('div', { class: 'w-empty' }, 'No open invoices. ', can.enter() ? h('button', { class: 'linkish', type: 'button', onclick: () => openInvoice(), text: 'Raise an invoice' }) : null, ' to track what clients owe.');
   return h('div', { class: 'wl' }, open.slice(0, 6).map(x => h('button', { type: 'button', onclick: () => openSheet({ type: 'invoice', id: x._id }) },
-    h('span', { class: 't', text: (x.clientName || L(x.client)) }), h('span', { class: 'm', text: (x.no || '') + ' · ' + (ST_LABEL[invStatus(x)]) }), h('span', { class: 'd', text: tk(invTotals(x).due) }))));
+    h('span', { class: 't', text: (cliN(x)) }), h('span', { class: 'm', text: (x.no || '') + ' · ' + (ST_LABEL[invStatus(x)]) }), h('span', { class: 'd', text: tk(invTotals(x).due) }))));
 }
 function latestMoves(n) {
   const list = Object.entries(S.vouchers).filter(([, v]) => v && v.status !== 'void' && v.status !== 'split').map(([id, v]) => Object.assign({ id }, v))
@@ -2185,7 +2185,7 @@ function viewInvoices() {
   else out.push(h('div', { class: 'list' }, list.map(x => {
     const t = invTotals(x), s = invStatus(x);
     return h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'invoice', id: x._id }) }, h('span', { class: 'ico doc', text: 'INV' }),
-      h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: x.clientName || L(x.client) }), pill(s)), h('div', { class: 'row-meta' }, h('span', { text: x.no || 'Draft' }), h('span', { text: '· ' + fmtD(x.date) }), x.project ? h('span', { text: '· ' + projLabel(x.project) }) : null, x.due ? h('span', { text: '· due ' + fmtD(x.due) }) : null)),
+      h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: cliN(x) }), pill(s)), h('div', { class: 'row-meta' }, h('span', { text: x.no || 'Draft' }), h('span', { text: '· ' + fmtD(x.date) }), x.project ? h('span', { text: '· ' + projLabel(x.project) }) : null, x.due ? h('span', { text: '· due ' + fmtD(x.due) }) : null)),
       h('div', { class: 'row-amt' }, h('span', { class: 'a', text: fmt(s === 'paid' ? t.total : t.due) }), h('span', { class: 'b', text: s === 'paid' ? 'paid' : 'of ' + fmt(t.total) })));
   })));
   return out;
@@ -2358,7 +2358,7 @@ function sheetMoney() {
     if (jv) { if (d.jvSplit == null) d.jvSplit = !(S.ledgers[d.cat] || {}).noJvShare; const a = parseAmt(d.amount) || 0; fields.push(chk('jvSplit', `Share this cost with ${L(jv.partner)}: SLATE ${jv.share}%${a ? ' (' + tk(a * jv.share / 100) + ')' : ''}, ${L(jv.partner)} ${100 - jv.share}%${a ? ' (' + tk(a - a * jv.share / 100) + ', which they owe SLATE)' : ''}`)); }
     if (k === 'in') {
       const inv = invList().filter(x => ['unpaid', 'part', 'overdue'].includes(invStatus(x)) && (!d.cat || x.client === d.cat) || x._id === d.inv);
-      if (inv.length) fields.push(field('Against invoice', sel('inv', [['', 'Not against an invoice']].concat(inv.map(x => [x._id, `${x.no} · ${x.clientName || L(x.client)} · due ${tk(invTotals(x).due)}`])))));
+      if (inv.length) fields.push(field('Against invoice', sel('inv', [['', 'Not against an invoice']].concat(inv.map(x => [x._id, `${x.no} · ${cliN(x)} · due ${tk(invTotals(x).due)}`])))));
     }
   }
   fields.push(field('Note', ta('narr', { rows: 2, placeholder: k === 'out' ? 'What was bought or paid, and why' : k === 'in' ? 'What this payment is for' : 'Why the money moved' })));
@@ -2750,7 +2750,7 @@ function sheetInvForm() {
     h('input', { placeholder: 'Amount', inputmode: 'decimal', 'aria-label': 'Amount', id: 'ii-a' + i, value: x.amount, oninput: e => { x.amount = e.target.value; } }),
     h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remove line', onclick: () => { d.items.splice(i, 1); if (!d.items.length) d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '−' }));
   const fields = [field('Client', sel('client', clients), 'Clients are the fee accounts in the books. Add a new one in More › Accounts.'),
-    field('Name on the invoice', inp('clientName', { placeholder: 'Leave blank to use the client account name' })),
+    field('Name on the invoice', inp('clientName', { placeholder: 'Leave blank to use the client account name', style: 'text-transform:uppercase', autocapitalize: 'characters' })),
     field('Project', sel('project', projOpts())),
     h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Due by', inp('due', { type: 'date' }))),
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
@@ -2764,14 +2764,14 @@ function saveInvoice(status) {
   const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => ({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const id = S.sheet.editId || 'i' + uidShort(), old = S.invoices[id];
-  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), files: d.files || [],
+  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), files: d.files || [],
     status: old ? (old.status === 'draft' && status === 'issued' ? 'issued' : old.status) : status, trail: old ? trailAdd(old.trail, 'edited') : trailAdd([], status === 'issued' ? 'issued' : 'created'), at: new Date().toISOString(), by: old ? old.by : S.uid };
   run(() => Store.put('invoices', id, doc), old ? 'Saved' : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
 }
 function sheetInvoice() {
   const raw = S.invoices[S.sheet.id]; if (!raw) return [head('Invoice', 'Not found')];
   const x = Object.assign({ _id: S.sheet.id }, raw), t = invTotals(x), st = invStatus(x);
-  const out = [head('Invoice · ' + (x.no || ''), x.clientName || L(x.client))];
+  const out = [head('Invoice · ' + (x.no || ''), cliN(x))];
   out.push(h('div', { class: 'sh-status' }, pill(st), x.project ? h('span', { class: 'tag', text: projLabel(x.project) }) : null));
   out.push(h('div', { class: 'big-amt', text: tk(st === 'paid' ? t.total : t.due) }), h('div', { class: 'f-hint', style: 'margin-top:-12px', text: st === 'paid' ? 'Paid in full' : `Still to collect, of ${tk(t.total)}` }));
   out.push(h('div', { class: 'facts' }, fact('Date', fmtD(x.date, true)), fact('Due by', x.due ? fmtD(x.due, true) : '—'), fact('Total', tk(t.total), x.vatMode !== 'none' ? `VAT ${tk(t.vat)}` : 'No VAT'), fact('Received', tk(t.received), t.pays.length + ' payment' + (t.pays.length === 1 ? '' : 's'))));
@@ -2779,7 +2779,7 @@ function sheetInvoice() {
   const acts = [];
   if (can.enter() && ['unpaid', 'part', 'overdue'].includes(st)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openMoney('in', { cat: x.client, proj: x.project, inv: x._id, amount: String(t.due), party: x.clientName || '', narr: 'Against invoice ' + x.no }), text: 'Record a payment' }));
   if (can.enter() && st === 'draft') acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'issued', trail: trailAdd(raw.trail, 'issued') }), 'Issued'), text: 'Issue' }));
-  if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(invoicePDF(x._id), safeName(`${x.no} ${x.clientName || L(x.client)}`) + '.pdf'), text: 'Invoice (PDF)' }));
+  if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(invoicePDF(x._id), safeName(`${x.no} ${cliN(x)}`) + '.pdf'), text: 'Invoice (PDF)' }));
   if (can.enter() && st !== 'cancelled') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openInvoice(x._id), text: 'Edit' }));
   if (can.enter() && st !== 'cancelled' && !t.pays.length) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'cancelled', trail: trailAdd(raw.trail, 'cancelled') }), 'Cancelled'), text: 'Cancel invoice' }));
   if (acts.length) out.push(h('div', { class: 'actions' }, acts));
@@ -3552,7 +3552,7 @@ function projDraft(k) { const p = S.projects[k] || {}; return { code: p.code || 
 function sheetProject() {
   const id = S.sheet.id, ro = !can.setup(), os = !!(id && S.projects[id] && S.projects[id].src === 'os');
   const fields = [h('div', { class: 'form-row' }, field('Project code', inp('code', { placeholder: 'e.g. JOL-NAVA039-5K-2629', disabled: ro || os }), 'As in SLATE OS.'), field('Status', sel('status', [['Active', 'Active'], ['Construction support', 'Construction support'], ['On hold', 'On hold'], ['Completed', 'Completed'], ['Closed', 'Closed'], ['Cancelled', 'Cancelled']], { disabled: ro || os }))),
-    field('Project name', inp('name', { required: true, disabled: ro || os })), field('Client', inp('client', { disabled: ro }), os ? 'The client’s name as it goes on invoices.' : ''),
+    field('Project name', inp('name', { required: true, disabled: ro || os, style: 'text-transform:uppercase', autocapitalize: 'characters' })), field('Client', inp('client', { disabled: ro, style: 'text-transform:uppercase', autocapitalize: 'characters' }), os ? 'The client’s name as it goes on invoices.' : ''),
     field('Fee agreed for SLATE (Tk)', inp('contract', { inputmode: 'decimal', disabled: ro || os }), 'Used to show what is still to be collected.'),
     STOPPED(D().status) ? field('Fee SLATE has earned for work done (Tk)', inp('earned', { inputmode: 'decimal', disabled: ro }), 'For a paused or cancelled project: the fee for the work done up to now. What has not been received yet still shows as to come.') : null,
     h('div', { class: 'form-row' }, field('Joint venture with', sel('jvPartner', [['', 'Not a joint venture']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'pay' && activeL(k)).sort((a, b) => L(a).localeCompare(L(b))).map(k => [k, L(k)])), { disabled: ro }), 'The partner who shares fees and costs.'),
@@ -3562,9 +3562,9 @@ function sheetProject() {
   return [head(id ? 'Project' : 'New project', id ? projLabel(id) : 'New project'), os ? h('div', { class: 'callout ok' }, 'From SLATE OS: the code, name, fee and open or closed are set in Studio and Business › Fees. Here you add the client’s name for invoices, a joint venture, overheads and notes.') : null, ro ? h('div', { class: 'form' }, fields) : form(null, fields, 'Save', () => {
     const d = D(); if (!d.name.trim()) return fail('Give the project a name.');
     if (d.code.trim() && Object.entries(S.projects).some(([k, p]) => k !== id && (p.code || '').trim().toLowerCase() === d.code.trim().toLowerCase())) return fail('Another project already uses this code.');
-    if (os) return run(() => Store.patch('projects', id, { client: d.client.trim(), overhead: !!d.overhead, notes: (d.notes || '').trim(), jvPartner: d.jvPartner || '', jvShare: d.jvPartner ? r2(parseAmt(d.jvShare) || 0) : 0, earned: d.status !== 'Active' ? r2(parseAmt(d.earned) || 0) : 0 }), 'Saved').then(ok => { if (ok) closeSheet(); });
+    if (os) return run(() => Store.patch('projects', id, { client: d.client.trim().toUpperCase(), overhead: !!d.overhead, notes: (d.notes || '').trim(), jvPartner: d.jvPartner || '', jvShare: d.jvPartner ? r2(parseAmt(d.jvShare) || 0) : 0, earned: d.status !== 'Active' ? r2(parseAmt(d.earned) || 0) : 0 }), 'Saved').then(ok => { if (ok) closeSheet(); });
     const nid = id || nextId('p', S.projects);
-    run(() => Store.put('projects', nid, Object.assign({}, S.projects[id] || {}, { code: d.code.trim(), name: d.name.trim(), client: d.client.trim(), contract: r2(parseAmt(d.contract) || 0), status: d.status, overhead: !!d.overhead, notes: (d.notes || '').trim(), jvPartner: d.jvPartner || '', jvShare: d.jvPartner ? r2(parseAmt(d.jvShare) || 0) : 0, earned: d.status !== 'Active' ? r2(parseAmt(d.earned) || 0) : 0 })), 'Saved').then(ok => { if (ok) closeSheet(); });
+    run(() => Store.put('projects', nid, Object.assign({}, S.projects[id] || {}, { code: d.code.trim(), name: d.name.trim().toUpperCase(), client: d.client.trim().toUpperCase(), contract: r2(parseAmt(d.contract) || 0), status: d.status, overhead: !!d.overhead, notes: (d.notes || '').trim(), jvPartner: d.jvPartner || '', jvShare: d.jvPartner ? r2(parseAmt(d.jvShare) || 0) : 0, earned: d.status !== 'Active' ? r2(parseAmt(d.earned) || 0) : 0 })), 'Saved').then(ok => { if (ok) closeSheet(); });
   }, h('span', { class: 'actions' }, extra))];
 }
 
@@ -3736,7 +3736,7 @@ function exportAll() {
   const all = { from: '2000-01-01', to: '2999-12-31' };
   const acc = [['Id', 'Account', 'Kind', 'Opening', 'Balance today', 'In use', 'Notes']].concat(Object.keys(S.ledgers).sort((a, b) => L(a).localeCompare(L(b))).map(k => { const b = SB.balances(P(), null, today())[k] || {}; return [k, L(k), (SB.GROUP[groupOf(k)] || {}).name || '', +S.ledgers[k].opening || 0, b.close || 0, S.ledgers[k].active === false ? 'No' : 'Yes', S.ledgers[k].notes || '']; }));
   const pj = [['Id', 'Code', 'Project', 'Client', 'Status', 'Fee agreed', 'Overheads', 'Notes']].concat(Object.entries(S.projects).map(([k, p]) => [k, p.code || '', p.name, p.client || '', p.status || '', +p.contract || 0, p.overhead ? 'Yes' : '', p.notes || '']));
-  const inv = [['No', 'Date', 'Due', 'Client', 'Project', 'Total', 'Received', 'Due now', 'Status']].concat(invList().map(x => { const t = invTotals(x); return [x.no, x.date, x.due || '', x.clientName || L(x.client), projLabel(x.project), t.total, t.received, t.due, ST_LABEL[invStatus(x)] || invStatus(x)]; }));
+  const inv = [['No', 'Date', 'Due', 'Client', 'Project', 'Total', 'Received', 'Due now', 'Status']].concat(invList().map(x => { const t = invTotals(x); return [x.no, x.date, x.due || '', cliN(x), projLabel(x.project), t.total, t.received, t.due, ST_LABEL[invStatus(x)] || invStatus(x)]; }));
   const rq = [['Ref', 'Type', 'Date', 'Asked by', 'What for', 'Amount', 'Pay to', 'Status', 'Voucher']].concat(allRequests().map(r => ['R-' + r.id.slice(-5).toUpperCase(), REQ_TYPES[r.type], r.date, nameOf(r.owner), r.title, r.amount, r.payTo || '', ST_LABEL[reqStatus(r)] || reqStatus(r), (S.reqdec[r.key] || {}).voucherNo || '']));
   saveXlsx(`SLATE Books ${today()}.xlsx`, [{ name: 'Accounts', rows: acc, wide: [1, 2, 6] }, { name: 'Projects', rows: pj, wide: [2, 3] }].concat(daybookSheet(all), [{ name: 'Invoices', rows: inv, wide: [3, 4] }, { name: 'Requests', rows: rq, wide: [4] }], countsSheet()));
 }
@@ -4276,7 +4276,8 @@ function sheetJvCost() {
 /* where each joint venture stands with the partner */
 /* what the client paid the partner, as the partner reports it. A note only: nothing in the books moves until the partner pays SLATE */
 const jvIns = p => Object.entries(S.jvin || {}).map(([id, x]) => Object.assign({ id }, x)).filter(x => x.proj === p).sort((a, b) => b.date.localeCompare(a.date));
-const clientOf = p => (S.projects[p] || {}).client || 'The client';
+const clientOf = p => String((S.projects[p] || {}).client || 'The client').toUpperCase();
+const cliN = x => String(x.clientName || L(x.client) || '').toUpperCase();
 function jvBox() {
   const ps = jvProjects(); if (!ps.length || !can.books()) return null;
   const B = memo('bal:now', () => SB.balances(P(), null, today()));
