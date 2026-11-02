@@ -1191,6 +1191,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-n{font-weight:700;font-size:15px;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}.pq-n i{font-style:normal;font-weight:600;font-size:11px;color:var(--ontime)}
 .pq-s{font-size:12.5px;color:var(--muted);line-height:1.35}
 .pq-f{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:6px}
+.pq-fee>.pq-own{display:grid;justify-content:stretch;grid-template-columns:120px minmax(0,1fr) 64px;gap:12px;white-space:nowrap;align-items:center;border-top:1px solid var(--line);padding-top:10px;margin-top:4px}.pq-own .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 64px 0 10px;font-size:15px}.pq-own>:last-child{text-align:right}
 .pq-fee{display:grid;gap:4px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}.pq-fee>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.pq-fee b{font-size:22px;font-variant-numeric:tabular-nums}
 .qs-box{display:grid;gap:0;background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .qs-kv{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:12px;min-height:52px;padding:6px 14px;border-bottom:1px solid var(--line)}
@@ -8855,7 +8856,10 @@ function openPropQuick(d0,id,convert){ const d={...d0}; d.type=d.type||'dev'; d.
   S.sheet={type:'propQuick',id,convert,d,err:'',more:false,areaSet:!!d.area,adj:null,cmp:true,done:null,pdf:null}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-client'); el&&!el.value&&el.focus(); },30); }
 const pqArea=k=>+k>0?String(Math.round(+k*5000/100)*100):'';
 function pqDoc(sh){ const d=sh.d, p={name:(d.name||'').trim().toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||''}};
-  const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan=d.plan; doc.tier=d.tier; doc.adj=sh.adj||spAdjDef(p); doc.cmp=!!sh.cmp; spApply(doc,p); return {p,doc}; }
+  const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan=d.plan; doc.tier=d.tier; doc.adj=sh.adj||spAdjDef(p); doc.cmp=!!sh.cmp; spApply(doc,p);
+  const P=SP_PLANS[doc.plan], card=+doc.lump||0, own=sh.own&&sh.own.plan===doc.plan&&+sh.own.v>0?+sh.own.v:0;
+  if(own){ const fee=P.fixed?Math.round(own):Math.round(own*(+doc.area||0)/1000)*1000; if(fee>0){ doc.lump=String(fee); doc.sched=spSched(doc,p,fee)||doc.sched; doc.ownRate=P.fixed?'':String(own); } }
+  return {p,doc,card,own}; }
 function sheetPropQuick(){
   const sh=S.sheet, d=sh.d; if(!sh.adj) sh.adj=spAdjDef({type:d.type,location:d.location});
   const kv=(l,v,top)=>h('div',{class:'qs-kv'+(top?' qs-top':'')},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
@@ -8874,7 +8878,7 @@ function sheetPropQuick(){
         f.state==='err'?h('button',{class:'btn btn-primary',type:'button',onclick:()=>pqPdf(sh.done),text:'Try again'}):null,
         h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropDoc(sh.done),text:'Edit details'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
-  const {p,doc}=pqDoc(sh), F=spFee(doc)||{}, P=SP_PLANS[d.plan];
+  const {p,doc,card:cardFee,own}=pqDoc(sh), F=spFee(doc)||{}, P=SP_PLANS[d.plan], fee=+doc.lump||0, area=+doc.area||0, eff=P&&!P.fixed&&area&&cardFee?Math.round(cardFee/area*100)/100:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
   const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; if(d.plan!=='sig') d.tier=d.type==='private'?'p':(d.tier==='p'?'s':d.tier); renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const card=k=>{ const Q=SP_PLANS[k], fe=spFee({...doc,plan:k}), on=d.plan===k;
@@ -8896,8 +8900,11 @@ function sheetPropQuick(){
     h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Plan'}),
     h('div',{class:'pq-plans'},SP_MAIN.map(card)),
     P&&!P.fixed&&!P.tier?seg('Fee tier',Object.entries(SP_TIERS),d.tier,v=>{ d.tier=v; renderSheet(); }):null,
-    h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:F.fee?pbTk(F.fee):'—'})),
-      h('span',{class:'f-hint',style:'margin:0',text:F.noArea?'Give the built area to work out the fee.':[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(F.C?` · Tk ${F.C.rate}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')})),
+    h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:fee?pbTk(fee):'—'})),
+      h('span',{class:'f-hint',style:'margin:0',text:F.noArea?'Give the built area to work out the fee.':own?`Your ${P.fixed?'fee':'rate'} · rate card ${pbTk(cardFee)}${eff?` (Tk ${eff}/sft)`:''} · plus VAT and AIT`:[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(eff?` · Tk ${eff}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')}),
+      P&&(P.fixed||area)?h('div',{class:'pq-own'},h('span',{class:'qs-k',text:P.fixed?'Your fee':'Your rate'}),
+        h('div',{class:'pq-unit'},h('input',{id:'pq-own',class:'tl-num qs-in',type:'number',min:0,step:P.fixed?1000:0.5,inputmode:'decimal',placeholder:P.fixed?String(cardFee):String(eff||''),value:sh.own&&sh.own.plan===d.plan?sh.own.v:'',onchange:e=>{ sh.own=e.target.value?{plan:d.plan,v:e.target.value}:null; renderSheet(); }}),h('span',{text:P.fixed?'Tk':'Tk/sft'})),
+        own?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ sh.own=null; renderSheet(); },text:'Reset'}):h('span',{class:'f-hint',style:'margin:0',text:'Optional'})):null),
     d.type==='private'&&P&&!P.fixed&&spTier(doc)!=='p'?h('div',{class:'f-hint',style:'margin:0;color:var(--overdue)',text:'Private client: the rate card says Premium.'}):null,
     h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{ sh.more=!sh.more; renderSheet(); },text:sh.more?'Hide more options ‹':'More options ›'}),
     sh.more?h('div',{class:'card',style:'gap:8px'},h('div',{class:'lbl',text:'Adjustments · seen only while preparing, not by the client'}),
