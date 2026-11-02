@@ -5,6 +5,8 @@
 #   SUPABASE_DB_PASSWORD  the database password (Supabase › Project Settings › Database), on its own
 #   BACKUP_PASSPHRASE     a long passphrase, kept by the Principal and the COO; without it a backup can't be opened
 # The rest of the connection (session pooler, Mumbai) is not secret and is set below.
+# A copy also goes to Google Drive (SLATE OS Archive / Backups, kept one year) when these three are set:
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN  (slateos.archive@gmail.com, drive.file scope)
 # Run it any time from Actions › Weekly database backup › Run workflow.
 name: Weekly database backup
 
@@ -97,3 +99,49 @@ jobs:
           path: out/*.gpg
           retention-days: 90
           if-no-files-found: error
+
+      - name: Copy the encrypted backup to Google Drive
+        env:
+          G_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          G_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          G_REFRESH: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$G_ID" ] || [ -z "$G_SECRET" ] || [ -z "$G_REFRESH" ]; then
+            echo "::warning::Google secrets not set: the backup is kept here only, not copied to Drive."; exit 0
+          fi
+          TOKEN=$(curl -fsS https://oauth2.googleapis.com/token -d client_id="$G_ID" -d client_secret="$G_SECRET" \
+            -d refresh_token="$G_REFRESH" -d grant_type=refresh_token | jq -r .access_token) \
+            || TOKEN=''
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = null ]; then
+            echo "::error title=Google sign-in failed::The refresh token may be revoked: make a new one in the OAuth Playground."; exit 1
+          fi
+          API=https://www.googleapis.com/drive/v3
+          AUTH="Authorization: Bearer $TOKEN"
+          FOLDER=application/vnd.google-apps.folder
+          # drive.file: SLATE OS sees only the folders it made itself (the same ones the bills archive uses)
+          find_or_make() {   # name [parent]
+            local q="name='$1' and mimeType='$FOLDER' and trashed=false${2:+ and '$2' in parents}"
+            local id; id=$(curl -fsS -G "$API/files" -H "$AUTH" --data-urlencode "q=$q" -d fields='files(id)' -d pageSize=1 | jq -r '.files[0].id // empty')
+            if [ -z "$id" ]; then
+              id=$(curl -fsS "$API/files?fields=id" -H "$AUTH" -H 'Content-Type: application/json' \
+                -d "$(jq -nc --arg n "$1" --arg p "${2:-}" '{name:$n, mimeType:"application/vnd.google-apps.folder"} + (if $p=="" then {} else {parents:[$p]} end)')" | jq -r .id)
+            fi
+            echo "$id"
+          }
+          ROOT=$(find_or_make 'SLATE OS Archive')
+          DIR=$(find_or_make 'Backups' "$ROOT")
+          for f in out/*.gpg; do
+            META=$(jq -nc --arg n "$(basename "$f")" --arg p "$DIR" '{name:$n, parents:[$p]}')
+            AT=$(curl -fsS -D - -o /dev/null "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id" -H "$AUTH" \
+              -H 'Content-Type: application/json; charset=UTF-8' -H 'X-Upload-Content-Type: application/octet-stream' -d "$META" \
+              | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')
+            [ -n "$AT" ] && curl -fsS -X PUT "$AT" -H 'Content-Type: application/octet-stream' --data-binary "@$f" > /dev/null \
+              || { echo "::error title=Drive upload failed::$(basename "$f") wasn't copied to Drive (Drive full or access removed?)."; exit 1; }
+            echo "Copied $(basename "$f") to Drive"
+          done
+          # keep a year of weekly backups on Drive
+          CUT=$(date -u -d '-365 days' +%Y-%m-%dT%H:%M:%S)
+          curl -fsS -G "$API/files" -H "$AUTH" --data-urlencode "q='$DIR' in parents and trashed=false and createdTime < '$CUT'" -d fields='files(id,name)' -d pageSize=200 \
+            | jq -r '.files[].id' | while read -r old; do curl -fsS -X DELETE "$API/files/$old" -H "$AUTH" > /dev/null || true; done
+          echo "- Copied to Google Drive: SLATE OS Archive › Backups" >> "$GITHUB_STEP_SUMMARY"
