@@ -1226,8 +1226,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 @media (min-width:1000px){.panel.panel-wide{width:min(1180px,94vw)}.panel-wide .pq-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}.panel-wide .pq-chk{grid-template-columns:1fr 1fr;column-gap:20px}.panel-wide .pq-ck:nth-last-child(2):nth-child(odd){border-bottom:0}}
 .pq-to{font-size:14px;line-height:1.45;padding:2px 0 2px 8.5px;border-left:3px solid var(--line)}
 .pq-ta{height:auto!important;min-height:64px;padding:8px 10px!important;resize:vertical;line-height:1.4;font-family:inherit}
-.pq-site{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr));gap:6px}.pq-site .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 10px;font-size:15px}
-@media (max-width:560px){.pq-site{grid-template-columns:repeat(3,minmax(0,1fr))}.pq-site>:first-child{grid-column:1/-1}}
+.pq-site{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr));gap:6px}.pq-site select.qs-in{padding:0 4px}.pq-site .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 10px;font-size:15px}
+@media (max-width:560px){.pq-site{grid-template-columns:repeat(4,minmax(0,1fr))}.pq-site>:first-child{grid-column:1/-1}}
 .pq-svc{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 .pq-svc-h{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:28px}
 .pq-svc-sum{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pq-svc-go{font-size:13.5px;font-weight:600;text-decoration:underline}
@@ -9125,8 +9125,10 @@ const pqT=x=>String(x||'').trim();
 const PQ_USE=['Residential','Commercial','Mixed-use','Institutional','Industrial'];
 /* SLATE's payment stages for new proposals (Mridula's markup, 2 Nov 2026) */
 const PQ_SCHED=[['Advance, on signing',30],['Schematic design approval',20],['Design finalisation',20],['Authority set handover',20],['Working drawings (WD-1 to WD-3)',10]];
-function pqAddr(d){ const a=pqT(d.sArea).toUpperCase(), parts=[pqT(d.sPlot)&&'Plot '+pqT(d.sPlot),pqT(d.sRoad)&&'Road '+pqT(d.sRoad),pqT(d.sSec)&&'Sector '+pqT(d.sSec),a].filter(Boolean); return parts.length?parts.join(', '):pqT(d.location); }
-function pqAutoName(d){ const a=pqT(d.sArea).toUpperCase(); if(!a) return ''; const xs=[pqT(d.sPlot)&&'P '+pqT(d.sPlot),pqT(d.sRoad)&&'R '+pqT(d.sRoad),pqT(d.sSec)&&'S '+pqT(d.sSec)].filter(Boolean); return (a+(xs.length?' '+xs.join(', '):'')).toUpperCase(); }
+/* the third part of an address is a Sector, a Block or nothing (Principal, 2 Nov 2026) */
+const pqKind=d=>d.sKind==null?'Sector':d.sKind;
+function pqAddr(d){ const a=pqT(d.sArea).toUpperCase(), K=pqKind(d), parts=[pqT(d.sPlot)&&'Plot '+pqT(d.sPlot),pqT(d.sRoad)&&'Road '+pqT(d.sRoad),K&&pqT(d.sSec)&&K+' '+pqT(d.sSec),a].filter(Boolean); return parts.length?parts.join(', '):pqT(d.location); }
+function pqAutoName(d){ const a=pqT(d.sArea).toUpperCase(); if(!a) return ''; const xs=[pqT(d.sPlot)&&'P '+pqT(d.sPlot),pqT(d.sRoad)&&'R '+pqT(d.sRoad),pqKind(d)&&pqT(d.sSec)&&pqKind(d)[0]+' '+pqT(d.sSec)].filter(Boolean); return (a+(xs.length?' '+xs.join(', '):'')).toUpperCase(); }
 function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:pqAddr(d),_known:!!(d._picked&&d._picked===d.client),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||'',use:d.use||'',known:!!(d._picked&&d._picked===d.client)}};
   const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan='comp'; doc.dear=d.dear||'Dear Sir,'; doc.use=d.use||'Residential'; doc.tier=d.type==='private'?'p':'s'; doc.adj=sh.adj||spAdjDef(p); spApply(doc,p);
   const guide=+doc.lump||0, fm=sh.fm||'sft', fv=+sh.fv||0, area=+doc.area||0, fee=fm==='sft'?(fv>0&&area?Math.round(fv*area/1000)*1000:0):(fv>0?Math.round(fv):0);
@@ -9137,6 +9139,8 @@ function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).t
   const nv=on.includes('Site supervision')?Math.max(1,parseInt(d.visits,10)||SP_PLANS.comp.visits):0; doc.vFree=String(nv); doc.asBuilt='x';
   doc.parts.forEach(x=>{ if(x.label==='Site supervision') x.check=(x.check||[]).map(c=>/^Site visits at|site visits at construction stages/i.test(c.t)?{...c,t:`${nv} site visits at construction stages (setting-out, foundation, first slab, typical floor, facade and finishing, final)`}:c); });
   doc.lump=total?String(total):''; doc.sched=PQ_SCHED.map(([label,pct])=>({label,pct:String(pct)}));
+  /* the timeline shows the marketing stage only when marketing materials are in the scope */
+  if(doc.tl&&Array.isArray(doc.tl.rows)&&!on.includes('Marketing materials (3D, animation, brochure)')) doc.tl.rows=doc.tl.rows.filter(x=>!/^Marketing/i.test(x.label||''));
   if(fm==='sft'&&fv) doc.ownRate=String(fv); doc.plan=''; doc.cmp=false;
   return {p,doc,guide,fee,fm,fv,addons,addSum,total}; }
 function pqCheck(on){ const out=[];
@@ -9176,8 +9180,10 @@ function sheetPropQuick(){
       kv('Salutation',h('div',{class:'pq-fb'},seg('Salutation',[['Dear Sir,','Dear Sir'],['Dear Madam,','Dear Madam'],['Dear Sir/Madam,','Sir/Madam']],d.dear||'Dear Sir,',v=>{ d.dear=v; renderSheet(); }))),
       kv('Site',h('div',{style:'display:grid;gap:4px'},h('div',{class:'pq-site'},
           h('input',{id:'pq-sArea',class:'tl-num qs-in',placeholder:'Area, e.g. Purbachal',value:d.sArea||'',style:'text-transform:uppercase',oninput:e=>{ d.sArea=e.target.value; },onchange:()=>{ sh.adj=null; renderSheet(); }}),
-          ...[['sPlot','Plot'],['sRoad','Road'],['sSec','Sector']].map(([k,l])=>h('input',{id:'pq-'+k,class:'tl-num qs-in',placeholder:l,'aria-label':l,value:d[k]||'',oninput:e=>{ d[k]=e.target.value; },onchange:()=>renderSheet()}))),
-        h('span',{class:'f-hint',style:'margin:0',text:pqAddr(d)||'Address: Plot, Road, Sector, Area'})),true),
+          ...[['sPlot','Plot'],['sRoad','Road']].map(([k,l])=>h('input',{id:'pq-'+k,class:'tl-num qs-in',placeholder:l,'aria-label':l,value:d[k]||'',oninput:e=>{ d[k]=e.target.value; },onchange:()=>renderSheet()})),
+          (()=>{ const el=h('select',{id:'pq-sKind',class:'tl-num qs-in','aria-label':'Sector or block',onchange:e=>{ d.sKind=e.target.value; renderSheet(); }},[['Sector','Sector'],['Block','Block'],['','None']].map(([v,l])=>h('option',{value:v,text:l}))); el.value=pqKind(d); return el; })(),
+          pqKind(d)?h('input',{id:'pq-sSec',class:'tl-num qs-in',placeholder:pqKind(d),'aria-label':pqKind(d),value:d.sSec||'',oninput:e=>{ d.sSec=e.target.value; },onchange:()=>renderSheet()}):h('span')),
+        h('span',{class:'f-hint',style:'margin:0',text:pqAddr(d)||'Address: Plot, Road, Sector or Block, Area'})),true),
       kv('Project',h('div',{style:'display:grid;gap:4px'},inp2('name',{maxlength:120,placeholder:pqAutoName(d)||'e.g. PURBACHAL P 00, R 00, S 00',style:'text-transform:uppercase',autocapitalize:'characters',onchange:()=>renderSheet()}),
         !(d.name||'').trim()&&pqAutoName(d)?h('span',{class:'f-hint',style:'margin:0',text:'No name given: it will be '+pqAutoName(d)}):null),!(d.name||'').trim()&&!!pqAutoName(d)),
       kv('Project type',h('div',{style:'display:grid;gap:4px'},(()=>{ const el=h('select',{id:'pq-use',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.use=e.target.value; renderSheet(); }},h('option',{value:'',text:'Choose the project type…'}),PQ_USE.map(u=>h('option',{value:u,text:u+' building'}))); el.value=d.use||''; return el; })(),
@@ -9214,7 +9220,7 @@ function sheetPropQuick(){
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
   const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&pqDoc(sh).addons.some(x=>!x.amt)) return fail('Give the fee for each add-on.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc);
-  const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),sector:pqT(d.sSec)},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
+  const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),[(pqKind(d)||'none').toLowerCase()]:pqKind(d)?pqT(d.sSec):''},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
     ...(sh.id?{}:{createdAt:now,createdBy:S.uid}),proposedAt:now,...(sh.convert?{lead:false}:{}),doc:{...doc,total:Math.round(F.total),savedAt:now},...(draft?{draft:true}:{})};
   delete v._hint; if(!draft) delete v.draft;
@@ -9678,7 +9684,7 @@ b,strong,h1,h2,th,tr.tot td,.to b,.ref span b,.sig b,.amtbox b,.lh-addr,.lh-name
 b,strong{font-weight:600}
 h1{font-size:15pt;font-weight:600;letter-spacing:.08em;margin:0 0 1.5mm;text-transform:uppercase}.dr{color:#C41E29;font-size:9pt;border:1pt solid #C41E29;padding:1px 6px;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
 .ref{display:flex;justify-content:space-between;gap:6mm;font-size:9pt;color:#545454;margin-bottom:7mm;flex-wrap:wrap}.ref span b{color:#000;font-weight:600}
-.to{margin:4mm 0 7mm;font-size:10.5pt;line-height:1.45}.to b{font-weight:700}.ref .dt{color:#000;font-size:10.5pt}.ref span.dt b{font-weight:700;color:#000}.pb-subj{margin:0 0 3mm;font-size:10.5pt}.pb-subj b{font-weight:700}.pb-dear{margin:6mm 0 2.5mm;font-size:10.5pt}.pb-just{text-align:justify}.pb-ov .pb-k{color:#000}.pb-ov td{border-bottom:0!important;padding-top:1.4mm;padding-bottom:1.4mm}.pb-ov .pb-k b{font-weight:700}.pb-ov td b{font-weight:700}.pre{white-space:pre-line}
+.to{margin:4mm 0 7mm;font-size:10.5pt;line-height:1.45}.to b{font-weight:700}.ref .dt{color:#000;font-size:10.5pt}.ref span.dt b{font-weight:700;color:#000!important}.pb-tl td{padding-top:1.6mm;padding-bottom:1.6mm}.pb-just{font-size:10.5pt;line-height:1.5}.pb-subj{margin:0 0 3mm;font-size:10.5pt}.pb-subj b{font-weight:700}.pb-dear{margin:6mm 0 2.5mm;font-size:10.5pt}.pb-just{text-align:justify}.pb-ov .pb-k{color:#000}.pb-ov td{border-bottom:0!important;padding-top:1.4mm;padding-bottom:1.4mm}.pb-ov .pb-k b{font-weight:700}.pb-ov td b{font-weight:700}.pre{white-space:pre-line}
 h2{font-size:8.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:7mm 0 2.5mm}
 table{width:100%;border-collapse:collapse;font-size:9.5pt}
 th{font-size:7.5pt;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#545454;text-align:left;padding:2mm 1mm 2mm 0;border-bottom:.75pt solid #000}
@@ -9713,7 +9719,7 @@ const pbHead=t=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><met
 function pbBlocks(p,d){
   const f=pbFee(d), B=[], add=(html,keep,brk)=>B.push({html,keep:!!keep,brk:!!brk}), list=(title,items,brk)=>{ items.forEach((x,i)=>add((i===0?`<h2>${pbEsc(title)}</h2>`:'')+`<ul class="pb-ul"><li>${pbEsc(x)}</li></ul>`,i===0,brk&&i===0)); };
   /* addressed as SLATE's letters (Principal, 2 Nov 2026): Date, then To, / name / designation / company in bold / address */
-  add(`<div class="ref"><span class="dt"><b>Date:</b> ${pbEsc(fmtLong(d.date).toUpperCase())}</span><span>Ref <b>${pbEsc(d.ref)}</b></span></div>
+  add(`<div class="ref"><span class="dt"><b>Date:</b> ${pbEsc(fmtLong(d.date).toUpperCase())}</span><span class="dt"><b>Ref:</b> ${pbEsc(d.ref)}</span></div>
     ${(()=>{ const co=String(d.toCompany||'').trim(), nm=String(d.toName||'').trim(), sameCo=!co||co.toLowerCase()===nm.toLowerCase();
       return `<div class="to">To,${nm?'<br>'+(sameCo?'<b>'+pbEsc(nm)+'</b>':pbEsc(nm)):''}${d.toTitle?'<br>'+pbEsc(d.toTitle):''}${!sameCo?'<br><b>'+pbEsc(co)+'</b>':''}${d.toAddress?'<br><span class="pre">'+pbEsc(d.toAddress)+'</span>':''}</div>`; })()}
     <p class="pb-subj"><b>Subject:</b> ${pbEsc(d.subject)}</p>
@@ -9778,7 +9784,7 @@ async function pbPages(p,d){
     const doc=ifr.contentDocument; doc.open(); doc.write(pbHead('measure')+`<body><div class="page" id="pg">${B.map((b,i)=>`<div class="pb-blk" data-i="${i}">${b.html}</div>`).join('')}</div></body></html>`); doc.close();
     await new Promise(r=>{ if(doc.readyState==='complete') r(); else ifr.onload=()=>r(); setTimeout(r,2500); });
     try{ await Promise.race([doc.fonts.ready,new Promise(r=>setTimeout(r,2500))]); }catch(_){}
-    const mm=96/25.4, avail=(263-PB_TOP)*mm /* text may run over the DESIGN WITH PURPOSE watermark */, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
+    const mm=96/25.4, avail=(236-PB_TOP)*mm /* content stops above the DESIGN WITH PURPOSE watermark */, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
     const pages=[[]]; let used=0;
     B.forEach((b,i)=>{ const need=hs[i]+(b.keep&&i+1<B.length?hs[i+1]:0);
       if(used>0&&(b.brk||used+need>avail)){ pages.push([]); used=0; } pages[pages.length-1].push(b.html); used+=hs[i]; });
