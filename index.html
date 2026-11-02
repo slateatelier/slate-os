@@ -1223,6 +1223,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-ck-x{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}.pq-ck-x input{width:56px;height:32px;box-sizing:border-box;border:1.5px solid var(--faint);border-radius:8px;padding:0 6px;text-align:right;font:inherit;font-size:14px;color:var(--ink);background:#fff}.pq-ck-x i{font-style:normal}
 .pq-cols{display:grid;gap:12px}.pq-c{display:grid;gap:12px;align-content:start;min-width:0}
 @media (min-width:1000px){.panel.panel-wide{width:min(1180px,94vw)}.panel-wide .pq-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}.panel-wide .pq-chk{grid-template-columns:1fr 1fr;column-gap:20px}.panel-wide .pq-ck:nth-last-child(2):nth-child(odd){border-bottom:0}}
+.pq-to{font-size:14px;line-height:1.45;padding:2px 0 2px 8.5px;border-left:3px solid var(--line)}
 .pq-ta{height:auto!important;min-height:64px;padding:8px 10px!important;resize:vertical;line-height:1.4;font-family:inherit}
 .pq-site{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr));gap:6px}.pq-site .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 10px;font-size:15px}
 @media (max-width:560px){.pq-site{grid-template-columns:repeat(3,minmax(0,1fr))}.pq-site>:first-child{grid-column:1/-1}}
@@ -9119,11 +9120,13 @@ function sheetPropQuick(){
   return [head('Only you and the COO see this',sh.convert?'Make a proposal':'New proposal'),
     h('p',{class:'lead',style:'margin:0',text:'Fill in the project, give the fee and tick the services. Payment stages, terms and the timeline are filled in for you.'}),
     h('div',{class:'pq-cols'},h('div',{class:'pq-c'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Client and project'}),h('div',{class:'qs-box qs-wide'},
-      kv('Client',clientPick(d),true),
-      kv('To (person)',inp2('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin'})),
+      kv('To',inp2('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin',onchange:()=>renderSheet()})),
+      kv('Designation',inp2('_title',{maxlength:80,placeholder:'e.g. Chairman',onchange:()=>renderSheet()})),
+      kv('Company / client',clientPick(d),true),
+      kv('Address',h('textarea',{id:'pq-addr',class:'tl-num qs-in pq-ta',rows:2,maxlength:240,placeholder:'e.g. Level 07, Plot 77 & 78, Block I, Bashundhara R/A, Dhaka',value:d._addr||'',oninput:e=>{ d._addr=e.target.value; },onchange:()=>renderSheet()}),true),
+      (()=>{ const nm=pqT(d.contact), co=pqT(d.client), same=!co||co.toLowerCase()===nm.toLowerCase(); if(!nm&&!co) return null;
+        return kv('In the letter',h('div',{class:'pq-to'},h('div',{text:'To,'}),nm?h('div',{style:same?'font-weight:700':'',text:nm}):null,pqT(d._title)?h('div',{text:pqT(d._title)}):null,!same?h('div',{style:'font-weight:700',text:co}):null,pqT(d._addr)?h('div',{style:'white-space:pre-line',text:pqT(d._addr)}):null),true); })(),
       kv('Salutation',h('div',{class:'pq-fb'},seg('Salutation',[['Dear Sir,','Dear Sir'],['Dear Madam,','Dear Madam'],['Dear Sir/Madam,','Sir/Madam']],d.dear||'Dear Sir,',v=>{ d.dear=v; renderSheet(); }))),
-      kv('Designation',inp2('_title',{maxlength:80,placeholder:'e.g. Chairman'})),
-      kv('Client address',h('textarea',{id:'pq-addr',class:'tl-num qs-in pq-ta',rows:2,maxlength:240,placeholder:'e.g. Level 07, Plot 77 & 78, Block I, Bashundhara R/A, Dhaka',value:d._addr||'',oninput:e=>{ d._addr=e.target.value; }}),true),
       kv('Site',h('div',{style:'display:grid;gap:4px'},h('div',{class:'pq-site'},
           h('input',{id:'pq-sArea',class:'tl-num qs-in',placeholder:'Area, e.g. Purbachal',value:d.sArea||'',style:'text-transform:uppercase',oninput:e=>{ d.sArea=e.target.value; },onchange:()=>{ sh.adj=null; renderSheet(); }}),
           ...[['sPlot','Plot'],['sRoad','Road'],['sSec','Sector']].map(([k,l])=>h('input',{id:'pq-'+k,class:'tl-num qs-in',placeholder:l,'aria-label':l,value:d[k]||'',oninput:e=>{ d[k]=e.target.value; },onchange:()=>renderSheet()}))),
