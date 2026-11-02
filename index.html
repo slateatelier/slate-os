@@ -1219,6 +1219,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-grp{display:grid;gap:4px;padding-top:6px}.pq-grp-h{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:4px 0}.pq-grp-h b{font-size:13px;text-transform:uppercase;letter-spacing:.04em}
 .pq-ck{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
 .pq-ck:last-child{border-bottom:0}.pv-ov{position:fixed;inset:0;z-index:300;margin:0;padding:0;max-width:none;width:auto;height:auto;border-radius:0;background:rgba(20,20,20,.55);display:flex;flex-direction:column}.pv-bar{box-sizing:border-box;width:100%;min-height:54px;margin:0;border-radius:0;flex:none;display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}.pv-bar b{font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pv-bar .pv-note{color:var(--muted);font-size:13px;flex:1}.pv-frame{flex:1;width:100%;border:0;background:#E6E8EA}.pv-wait{margin:auto;color:#fff;font-size:15px}
+.tlc td,.tlc th{white-space:nowrap}.tlc td:first-child{white-space:normal;min-width:220px}.tlc-p{cursor:pointer}.tlc-p:hover td{background:#fafafa}.tlc-ph td{font-size:13px;color:var(--muted);background:#fbfbfc}.tlc-ph td:first-child{padding-left:28px}.tlc-bar{width:120px;height:8px;border-radius:4px;background:#eee;overflow:hidden}.tlc-bar i{display:block;height:100%}
 .pq-vat{display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--line)}.pq-vat input{width:20px;height:20px;margin:0;accent-color:var(--ink)}
 .pq-inc{display:flex;align-items:center;gap:6px;margin-left:8px;color:var(--ink);font-size:13px;cursor:pointer;white-space:nowrap}.pq-inc input[type=checkbox]{width:18px!important;height:18px!important;margin:0;padding:0;accent-color:var(--ink)}.pq-ck-x input:disabled{opacity:.45}
 .pq-ckw{border-bottom:1px solid var(--line)}.pq-ckw .pq-ck{border-bottom:0}.pq-sub-nums{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px 20px}.pq-sub-n{display:flex;align-items:center;gap:8px;font-size:13.5px}.pq-sub-n input{width:72px;height:32px;box-sizing:border-box;border:1.5px solid var(--faint);border-radius:8px;padding:0 6px;text-align:right;font:inherit;font-size:14px;background:#fff}.pq-sub-n i{font-style:normal;color:var(--muted);font-size:13px}
@@ -4089,6 +4090,49 @@ function woTimeline(rows,st){
       S.canWrite?h('button',{class:'btn btn-sm',type:'button','aria-label':'Remove work order',onclick:()=>{ if(!confirm('Remove this work order?')) return; const cur=((S.clientFin.cl||{})[o.r.k]||{}).orders||[]; run(()=>saveClient(o.r.k,{name:o.r.name,orders:cur.filter(x=>x.id!==o.id)}),'Removed').then(()=>render(true)); },text:'×'}):h('span')))));
   return widget('Work orders by month','last two years · dot size = orders that month',h('div',{style:'display:grid;gap:12px'},body),true);
 }
+/* Timelines (Principal, 2 Nov 2026): the client is promised SLATE's standard days + 30%; the studio works to the standard.
+   For every project on the standard process: the studio standard finish, the client timeline finish, and what the studio
+   achieved (phases approved) or now forecasts, with the margin against each. Client review days are the same in both. */
+function tlCmp(p){ const t=tlOf(p); if(!t) return null; const ks=tlPhases(p); let S0,C0,L0;
+  try{ S0=tlBase(p)||tlCompute(p,t.start,false); C0=tlCompute(p,t.start,false,PROP_BUF); L0=tlCompute(p,t.start,true); }catch(e){ return null; }
+  const rows=ks.map(k=>{ const s=S0[k]||{}, c=C0[k]||{}, l=L0[k]||{}, done=stdState(p,k).done||!!l.deem;
+      return {k,studio:s.none?'':s.fin||'',client:c.none?'':c.fin||'',got:l.none?'':(done?(l.finA||l.deem||l.fin):l.fin)||'',done,none:!!l.none,auth:!!l.auth}; });
+  const dated=rows.filter(r=>r.studio&&r.client&&r.got), last=(f)=>maxD(...dated.map(r=>r[f]));
+  const studio=last('studio'), client=last('client'), got=last('got'), allDone=rows.length&&rows.every(r=>r.done);
+  const sgn=(a,b)=>!a||!b?null:a<=b?wdBetween(a,b):-wdBetween(b,a);   // + = working days to spare, - = days over
+  const buf=studio&&client?wdBetween(studio,client):0, used=studio&&got?(got>studio?wdBetween(studio,got):0):0;
+  return {p,rows,start:t.start,studio,client,got,allDone,vsC:sgn(got,client),vsS:sgn(got,studio),buf,used,nDone:rows.filter(r=>r.done).length,undated:rows.some(r=>r.none)}; }
+function tlDash(){ const D=S.dash, F=D.tlf||(D.tlf={pod:'',st:'',done:false}), td=today();
+  const all=projects().filter(p=>p&&p.std&&tlOf(p)&&!isInternalP(p)&&(F.done||!p.closed)).map(tlCmp).filter(x=>x&&x.got);
+  const stOf=x=>x.vsC==null?'':x.vsC<0?'over':x.vsS!=null&&x.vsS>=0?'std':'buf';
+  const ST={std:['Within the studio standard','s-ontime'],buf:['Using the client buffer','s-late'],over:['Past the client timeline','s-overdue']};
+  const xs=all.filter(x=>(!F.pod||podsOfProject(x.p).includes(F.pod))&&(!F.st||stOf(x)===F.st)).sort((a,b)=>(a.vsC??999)-(b.vsC??999));
+  const n=k=>all.filter(x=>stOf(x)===k).length, dd=v=>v==null?'—':v===0?'on the day':v>0?`${v}d to spare`:`${-v}d over`;
+  const podSel=h('select',{'aria-label':'POD',style:'flex:0 1 170px',onchange:e=>{ F.pod=e.target.value; render(true); }},h('option',{value:'',text:'All PODs'}),pods().map(x=>h('option',{value:x,text:podLabel(x)}))); podSel.value=F.pod;
+  const stSel=h('select',{'aria-label':'Status',style:'flex:0 1 220px',onchange:e=>{ F.st=e.target.value; render(true); }},h('option',{value:'',text:'Every status'}),Object.entries(ST).map(([k,[l]])=>h('option',{value:k,text:l}))); stSel.value=F.st;
+  const bar=x=>{ const tot=Math.max(1,x.buf), u=Math.min(x.used,tot+Math.round(tot*0.25)), pc=Math.min(100,Math.round(u/tot*100));
+    return h('div',{class:'tlc-bar',title:x.buf?`${x.used} of ${x.buf} buffer working days used`:'No buffer'},h('i',{style:`width:${pc}%;background:${x.vsC!=null&&x.vsC<0?'var(--overdue)':x.used?'var(--late)':'var(--ontime)'}`})); };
+  const open=D.tlo||(D.tlo={});
+  const out=[h('div',{class:'callout',style:'font-size:13.5px',text:'The client is promised SLATE’s standard days + 30%; the studio works to the standard. Each project: the studio standard finish, the client timeline finish, and the finish achieved (all phases approved) or now forecast. Client review days are the same in both. Working days.'}),
+    h('div',{class:'kpis'},kpi('Projects',all.length),kpi('Within the studio standard',n('std'),'early'),kpi('Using the client buffer',n('buf'),'late'),kpi('Past the client timeline',n('over'),'overdue')),
+    h('div',{class:'bar'},podSel,stSel,h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',checked:!!F.done,onchange:e=>{ F.done=e.target.checked; render(true); }}),h('span',{text:'Include closed projects'})))];
+  if(!xs.length){ out.push(h('div',{class:'card',text:'No projects with a standard timeline match.'})); return out; }
+  const phRows=x=>x.rows.map(r=>h('tr',{class:'tlc-ph'},h('td',{},h('span',{text:phLabel(r.k,x.p)}),r.auth?h('span',{class:'sub2',text:' · waits for the authority go-ahead'}):null),h('td',{text:''}),
+    h('td',{class:'n',text:r.studio?fmtD(r.studio):'—'}),h('td',{class:'n',text:r.client?fmtD(r.client):'—'}),
+    h('td',{class:'n',style:r.done?'font-weight:600':'',text:r.got?(r.done?'✓ ':'')+fmtD(r.got):'—'}),
+    h('td',{class:'n',style:r.got&&r.client&&r.got>r.client?'color:var(--overdue)':'',text:r.got&&r.client?dd(r.got<=r.client?wdBetween(r.got,r.client):-wdBetween(r.client,r.got)):'—'}),h('td',{})));
+  out.push(h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'tlc'},
+    h('thead',{},h('tr',{},['Project','Phases done','Studio standard','Client timeline','Achieved / forecast','Against the client','Client buffer used'].map((t,i)=>h('th',{class:i>1&&i<6?'n':'',text:t})))),
+    h('tbody',{},xs.flatMap(x=>{ const [l,c]=ST[stOf(x)]||['',''], o=!!open[x.p.id];
+      return [h('tr',{class:'tlc-p',role:'button',tabindex:'0',onclick:()=>{ open[x.p.id]=!o; render(true); }},
+        h('td',{},h('div',{style:'font-weight:600',text:(o?'▾ ':'▸ ')+projLabel(x.p)}),h('div',{class:'sub2',text:[podsOfProject(x.p).map(podLabel).join(', '),'started '+fmtD(x.start),x.undated?'some phases not dated yet':''].filter(Boolean).join(' · ')}),l?h('span',{class:'pill '+c,style:'margin-top:4px;display:inline-block',text:l}):null),
+        h('td',{class:'n',text:`${x.nDone} of ${x.rows.length}`}),h('td',{class:'n',text:fmtD(x.studio)}),h('td',{class:'n',text:fmtD(x.client)}),
+        h('td',{class:'n',style:'font-weight:600',text:(x.allDone?'✓ ':'')+fmtD(x.got)}),
+        h('td',{class:'n',style:x.vsC!=null&&x.vsC<0?'color:var(--overdue);font-weight:600':'',text:dd(x.vsC)}),
+        h('td',{},bar(x),h('div',{class:'sub2',text:x.buf?`${Math.min(x.used,x.buf)} of ${x.buf} days`+(x.used>x.buf?` · ${x.used-x.buf} over`:''):''}))),
+        ...(o?phRows(x):[])]; })))));
+  out.push(h('p',{class:'f-hint',style:'margin:6px 2px 0',text:'Tap a project for its phases. ✓ = approved (achieved); other dates are today’s forecast. “To spare” counts working days before the client timeline; “over” counts days past it.'}));
+  return out; }
 function clientsDash(){
   const C=S.clientFin; if(!C||C.state==='idle'||(C.state==='ok'&&Date.now()-C.at>120000)) loadClientFin();
   const {rows,hasFee}=clientRows(), out=[], st=C&&C.state;
@@ -4153,18 +4197,19 @@ function viewDash(){
   const D=S.dash, r=range(D.kind,D.offset);
   if(D.person===undefined) D.person=fullView()||amPodLead()?'':S.uid;
   if(!D.scope) D.scope='detail';
-  if(D.scope==='clients'&&!canClients()) D.scope='detail';
+  if(D.scope==='clients'&&!canClients()) D.scope='detail'; if(D.scope==='tl'&&!amApprover()) D.scope='detail'; const tv=D.scope==='tl';
   const ov=D.scope==='overall', cv=D.scope==='clients', mp=myPod();
   const inPod=t=>!notTeamPerf(t.assignee)&&!isChalkTask(t)&&(!D.pod||(/^pod\b/i.test(D.pod)?podsOf(t).includes(D.pod):teamOf(t.assignee)===D.pod))&&(!D.person||t.assignee===D.person||(t.assignReq&&t.assignReq.to===D.person&&false));
   const items=inPeriod(r,'approved').filter(inPod), c=count(items,'approved'), rt=rate(c), tg=target();
   const podSel=h('select',{id:'d-pod','aria-label':'Pod',style:'flex:0 1 160px',onchange:e=>{D.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),h('optgroup',{label:'Pods'},pods().map(p=>h('option',{value:p,text:podLabel(p)}))),h('optgroup',{label:'Support teams'},teams().filter(t=>!/^pod\b/i.test(t)).map(p=>h('option',{value:p,text:p})))); podSel.value=D.pod||'';
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:r.label}),h('h1',{class:'h1',text:'Dashboard'})),
-    h('div',{class:'bar'},seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall'],...(canClients()?[['clients','Clients']]:[])],D.scope,v=>{D.scope=v;render(true)}),cv?null:seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),fullView()&&!ov&&!cv?podSel:null,ov||cv?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&!isChalkP(id)&&(!isPriv(id)||seePriv())).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
+    h('div',{class:'bar'},seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall'],...(amApprover()?[['tl','Timelines']]:[]),...(canClients()?[['clients','Clients']]:[])],D.scope,v=>{D.scope=v;render(true)}),cv||tv?null:seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),fullView()&&!ov&&!cv&&!tv?podSel:null,ov||cv||tv?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&!isChalkP(id)&&(!isPriv(id)||seePriv())).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
         const el=h('select',{id:'d-person','aria-label':'Person',style:'flex:0 1 170px',onchange:e=>{ const v=e.target.value; if(hd){ D.pod=v==='@team'?hd:''; D.person=v==='@team'?'':v; } else D.person=v; render(true)}},opts.map(([v,l])=>h('option',{value:v,text:l}))); el.value=hd&&!D.person&&D.pod===hd?'@team':(D.person||''); return el; })(),
-      cv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous period',onclick:()=>{D.offset--;render(true)},text:'‹'}),
-      !cv&&D.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{D.offset=0;render(true)},text:'Today'}),
-      cv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Next period',onclick:()=>{D.offset++;render(true)},text:'›'})))];
+      cv||tv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous period',onclick:()=>{D.offset--;render(true)},text:'‹'}),
+      !cv&&!tv&&D.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{D.offset=0;render(true)},text:'Today'}),
+      cv||tv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Next period',onclick:()=>{D.offset++;render(true)},text:'›'})))];
   if(cv){ out[0].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(clientsDash()); }
+  if(tv){ out[0].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(tlDash()); }
   if(ov) return out.concat(overallDash(r));
 
   const sc=canSeeScoring();
@@ -6808,7 +6853,7 @@ function wdGoBox(p){ if(!wdWaiting(p)||!S.canWrite) return null; const can=amApp
     h('div',{class:'bar',style:'margin:0;align-items:center'},h('input',{type:'date',value:st.on,max:today(),style:'max-width:170px',oninput:e=>{ st.on=e.target.value; }}),
       h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!st.on) return toast('Choose the date.'); run(()=>wdGoSave(p,st.on,false),'Go-ahead recorded: working drawings are dated').then(ok=>ok&&renderSheet()); },text:'Go-ahead received'}),
       coo?h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!confirm('Start working drawings now, before the authority approval? This is an at-risk start.')) return; run(()=>wdGoSave(p,today(),true),'Working drawings start today (at risk)').then(ok=>ok&&renderSheet()); },text:'Start now, before approval'}):null)); }
-function tlCompute(p,start,live){
+function tlCompute(p,start,live,buf){
   const ks=tlPhases(p), td=today(), out={}, std=p.std||{}, take=+(((std.tl||{}).take)??TAKE_IN);
   ks.forEach((k,i)=>{
     const dep=tlDep(p,k); let s='';
@@ -6823,7 +6868,7 @@ function tlCompute(p,start,live){
       if(go){ const g=nextWD(go); if(s<g) s=g; } }
     // re-planned on the SLATE standard (tl.from): a phase not started by then starts no earlier than that day
     if(std.tl&&std.tl.from){ const s0=stdState(p,k); if(!(s0.sub&&s0.sub.doneAt)&&!(s0.fin&&s0.fin.doneAt)){ const f0=firstWD(std.tl.from); if(s<f0) s=f0; } }
-    const st=live?stdState(p,k):{}, sd=slateDaysFor(p,k)+graceDays(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
+    const st=live?stdState(p,k):{}, sd=buf?Math.ceil(slateDaysFor(p,k)*(1+buf)):slateDaysFor(p,k)+graceDays(p,k), cd=clientDaysOf(p,k), steps=stepsOf(std.type,k).map(x=>x[0]);
     const subA=live&&st.sub&&st.sub.doneAt?st.sub.doneAt.slice(0,10):'', finA=live&&st.fin&&st.fin.doneAt?st.fin.doneAt.slice(0,10):'';
     const deem=live&&std.deemed&&std.deemed[k]?std.deemed[k].on:'';
     // consultant window: SLATE works `pre` days, the plans go to the STR/MEP consultants, their drawings come back after `kd`
