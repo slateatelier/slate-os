@@ -115,6 +115,14 @@ main.wrap.wrap-desk{max-width:1480px}
   #gsearch .gs-c{font-size:12px;color:var(--muted)}
   #gsearch .gs-s{font-size:12px;color:var(--muted);white-space:nowrap;flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis}
   #gsearch .gs-none{padding:12px 10px;color:var(--muted);font-size:13.5px}
+  /* every screen starts at the same left edge, so the switches at the top of a screen (List · Board · Timeline,
+     Calendar · Meetings, Upcoming · Weekly · …) sit in the same place in every area; each screen keeps its own width */
+  body.side-on #view.wrap,body.side-on #far-host.wrap{margin-left:32px;margin-right:auto}
+  body.side-on #view>.seg,body.side-on #view>.seg-row>.seg{flex:0 0 auto;width:max-content;max-width:100%;justify-self:start;align-self:start}
+  body.side-on #view>.seg-row{justify-content:space-between}
+  body.side-on #view>.seg-row>.seg:first-child{flex:0 0 auto}
+  /* Report an issue sits in the content area, clear of the profile at the foot of the menu */
+  body.side-on #slate-report{left:256px}
   /* the task beside the list */
   body.sheet-dock #sheet{left:auto;width:520px;top:var(--chrome-h,68px);border-left:1px solid var(--border);z-index:4}
   body.sheet-dock #sheet .panel{width:100%}
