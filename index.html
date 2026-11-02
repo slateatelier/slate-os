@@ -69,6 +69,63 @@
 .desk-b .pod-p{box-sizing:border-box}.mid-cl .desk-b>.sec>.sec-h h2,.mid-cl .desk-b>.sec>.sec-h .cnt{display:none}.mid-cl .desk-b>.sec>.sec-h{justify-content:flex-end;padding-top:0}.desk-nx b{font-weight:600;color:#3a3a3c}
 .desk-foot{display:flex;justify-content:flex-end;padding:8px 2px 0;font-size:13px}
 main.wrap.wrap-desk{max-width:1480px}
+
+/* ---------- Option A (3 Nov 2026): PC sidebar, search, task beside the list, Today Home ---------- */
+.ret-note{color:#B25000;font-weight:500}
+.rem-note{color:var(--muted)}
+.rem-pill{font-size:11px;font-weight:700;color:#fff;background:#D7262B;border-radius:5px;padding:1px 6px;margin-left:8px;vertical-align:1px;white-space:nowrap}
+.tag-more{background:none;border:1px solid var(--border);color:var(--muted)}
+.seg-row{display:flex;gap:12px;align-items:center}
+.seg-row>.seg:first-child{flex:1 1 auto}
+.seg-row>.seg-mine{flex:0 0 auto}
+.seg-mine button{padding-left:16px;padding-right:16px}
+#side,#gsearch{display:none}
+@media (min-width:1100px){
+  body.side-on{padding-left:240px}
+  body.side-on .chrome{left:240px}
+  body.side-on .chrome nav,body.side-on .chrome .top-in>.logo,body.side-on .chrome .top-in>.divider,body.side-on .chrome .top-in>.product,body.side-on .chrome .mini-logo,body.side-on #me-slot{display:none!important}
+  body.side-on .chrome .top-in{position:relative;justify-content:flex-start;min-height:68px;padding:0 24px 0 32px}
+  body.side-on #bell-slot .bell{left:auto!important;right:24px!important;top:50%!important;transform:translateY(-50%)!important}
+  body.side-on #space-slot{right:76px!important;left:auto!important;top:50%!important;transform:translateY(-50%)!important;position:absolute!important;flex:none!important}
+  body.side-on #books-pane{left:240px!important}
+  #side{display:flex;position:fixed;left:0;top:0;bottom:0;width:240px;z-index:6;background:#fff;border-right:1px solid var(--border);flex-direction:column;gap:2px;padding:16px 12px 12px;overflow-y:auto}
+  #side .sb-logo{appearance:none;border:0;background:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:2px 10px 20px;text-align:left}
+  #side .sb-logo .logo{height:36px;width:auto;display:block}
+  #side .sb-logo .divider{width:1px;height:24px;background:var(--border)}
+  #side .sb-nav{display:grid;gap:2px}
+  #side .tab{width:100%;justify-content:flex-start;gap:10px;border:0;border-radius:10px;padding:10px 12px;font-size:15px;text-decoration:none}
+  #side .tab:hover{background:var(--group);color:var(--ink)}
+  #side .tab[aria-current="page"]{background:var(--group);color:var(--ink);font-weight:600}
+  #side .tab .badge{margin-left:auto}
+  #side .sb-sep{height:1px;background:var(--border);margin:10px 8px}
+  #side .sb-me{appearance:none;border:0;background:none;cursor:pointer;margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 8px 4px;border-top:1px solid var(--border);text-align:left;width:100%}
+  #side .sb-me .ava{width:32px;height:32px;flex:none}
+  #side .sb-me-t{display:grid;min-width:0}#side .sb-me-t b{font-size:13.5px;font-weight:600}#side .sb-me-t span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.space-biz #side{border-right-color:rgba(215,38,43,.25)}
+  /* search */
+  #gsearch{display:flex;position:relative;align-items:center;gap:9px;width:min(460px,42vw);height:40px;padding:0 14px;border-radius:10px;background:var(--group);color:var(--muted)}
+  #gsearch:focus-within{background:#fff;box-shadow:0 0 0 1px var(--border),0 0 0 4px rgba(0,122,255,.12)}
+  #gsearch input{flex:1;min-width:0;border:0;background:none;outline:none;font-size:14px;color:var(--ink);padding:0}
+  #gsearch input::placeholder{color:var(--muted)}
+  #gsearch .gs-res{position:absolute;top:46px;left:0;width:min(560px,60vw);max-height:min(70vh,560px);overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.14),0 2px 6px rgba(0,0,0,.06);padding:6px;z-index:9}
+  #gsearch .gs-g{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 10px 4px}
+  #gsearch .gs-i{appearance:none;border:0;background:none;width:100%;text-align:left;display:flex;align-items:baseline;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--ink);font-size:14px}
+  #gsearch .gs-i.on{background:var(--group)}
+  #gsearch .gs-l{display:flex;gap:8px;min-width:0;flex:1 1 auto;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  #gsearch .gs-c{font-size:12px;color:var(--muted)}
+  #gsearch .gs-s{font-size:12px;color:var(--muted);white-space:nowrap;flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis}
+  #gsearch .gs-none{padding:12px 10px;color:var(--muted);font-size:13.5px}
+  /* the task beside the list */
+  body.sheet-dock #sheet{left:auto;width:520px;top:var(--chrome-h,68px);border-left:1px solid var(--border);z-index:4}
+  body.sheet-dock #sheet .panel{width:100%}
+  body.sheet-dock #view.wide{max-width:none;margin-left:32px;margin-right:552px}
+  .row.row-open{background:#fff;box-shadow:inset 3px 0 0 var(--ink)}
+  body.sheet-dock #fab{display:none!important}
+  /* Today Home */
+  .desk.desk-today{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)}
+  .desk.desk-today.desk-one{grid-template-columns:minmax(0,1fr)}
+  .desk-today .desk-b>.sec{margin-top:6px}
+}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -1456,6 +1513,10 @@ const canProjReq=()=>amApprover()||amPodLead();
 const seePriv=()=>S.isOwner||isCOO(S.uid);
 const fullView=()=>S.isOwner||isApprover(S.uid)||(isMgr(S.uid)&&!myPod());
 const amPodLead=()=>!!myPod()&&isPodLead(S.uid,myPod());
+/* POD members (not POD leaders, the Principal, the COO, the drafting lead or Chalk): plainer words and fewer screens (Option A, 3 Nov 2026) */
+const isMember=()=>!!S.uid&&!S.isOwner&&!amApprover()&&!isCOO(S.uid)&&!amPodLead()&&!amMgr()&&!amChalkLead()&&!myHeadTeam();
+/* the PC layout: sidebar, search, task beside the list */
+const sideOn=()=>window.innerWidth>=1100;
 const inMyPodProject=p=>podsOfProject(p).includes(myPod());
 const visiblePeople=()=>fullView()?people():people().filter(id=>id===S.uid||(myPod()&&teamOf(id)===myPod())||(myHeadTeam()&&teamOf(id)===myHeadTeam()));
 const myPod=()=>{ const t=teamOf(S.uid); return /^pod\b/i.test(t)?t:''; };
@@ -1530,13 +1591,13 @@ const leadWin=()=>today()<=leadUntil();
 const leadFree=pid=>{ const p=pid&&S.projects[pid]; return !!p&&leadWin()&&r4on()&&S.canWrite&&!p.closed&&p.pod!=='Studio'&&!isInternalP(p)&&isProjLead(p); };
 function pill(t,basis='approved'){
   if(t.legacy) return h('span',{class:'pill '+(t.legacyOk?'s-open':'s-late'),title:'Finished before SLATE OS; not scored',text:t.legacyOk?'Before SLATE OS':'Before SLATE OS · COO to approve'});
-  if(t.verify&&!t.doneAt){ const tm=vfTiming(t); return h('span',{class:'pill s-verify',title:'Marked done '+fmtD(t.verify.at)+'; waiting for '+vfWho(t)+' to verify',text:tm&&/late/.test(tm)?`To verify · ${tm}`:'Awaiting verification'}); }
+  if(t.verify&&!t.doneAt){ const tm=vfTiming(t); return h('span',{class:'pill s-verify',title:'Marked done '+fmtD(t.verify.at)+'; waiting for '+vfWho(t)+' to verify',text:waitTxt(t)+(tm&&/late/.test(tm)?` · ${tm}`:'')}); }
   if(t.ongoing&&!t.target&&!t.doneAt) return h('span',{class:'pill s-open',title:'Continuous task; no target date, not scored',text:'Ongoing'});
   const s=status(t,basis), g=tgt(t,basis); let txt;
   if(s==='early') txt=`Done ${diff(t.doneAt,g)}d early`;
   else if(s==='ontime') txt='Done on time';
   else if(s==='late') txt=`Done ${diff(g,t.doneAt)}d late`;
-  else if(s==='overdue') txt=`Overdue ${diff(g,today())}d`;
+  else if(s==='overdue') txt=`${isMember()?'Late':'Overdue'} ${diff(g,today())}d`;
   else if(s==='soon'){ const n=diff(today(),g); txt=n===0?'Due today':`Due in ${n}d`; }
   else txt=g?`${diff(today(),g)}d left`:(t.request?`Proposed ${fmtD(t.request.date)}`:'Needs a date');
   return h('span',{class:'pill s-'+s,title:ST[s],text:txt});
@@ -1682,7 +1743,7 @@ function celebrateDone(t,doneAt){
 
 /* a tick on a row that is about to leave the list: show the tick first, then do it */
 /* press and hold to tick: a quick tap or click never marks anything done. A ring fills while held; letting go early cancels. */
-const HOLD_MS=1200; let holdHintAt=0;
+const HOLD_MS=800; let holdHintAt=0;
 function holdTick(props,fn,label){
   const ring=svgEl('svg',{class:'hold-ring',viewBox:'0 0 24 24','aria-hidden':'true'},svgEl('circle',{cx:12,cy:12,r:10.5}));
   const b=h('button',{...props,class:(props.class||'chk')+' hold',type:'button',title:(label||'Press and hold')+' (press and hold)'},ring);
@@ -2462,7 +2523,7 @@ async function openNotice(id,kind){
   if(kind==='backup') return goView(amApprover()?'backup':'mine');
   if(kind==='proposal'){ S.biz={...(S.biz||{q:'',st:'active'}),tab:'proposed'}; return goView(canProps()?'biz':'mine'); }
   if(kind==='accounts'){ S.pf={...(S.pf||{q:'',pod:''}),st:'acct'}; acctLoad(true); return goView('projects'); }
-  if(kind==='nudge'||kind==='brief'||kind==='daywrap') return goView('mine');
+  if(kind==='nudge'||kind==='brief'||kind==='daywrap'||kind==='check_waiting') return goView('mine');
   if(kind==='issue_report') return goView('reports');
   if(kind==='access_request'){ if(window.SlatePin&&!(await SlatePin.ensure())) return; S.books=false; S.biz={...(S.biz||{q:'',st:'active'}),tab:'hr'}; S.accReq=null; return goView('biz'); }
   if(kind==='conveyance'){ S.conv&&(S.conv.state='idle'); S.convF={tab:convApprover()?'wait':'mine',sel:new Set()}; return goView('conv'); }
@@ -2752,7 +2813,7 @@ function renderHeader(){
   const full=fullView(), mp=myPod();
   /* Chalk Create is off for now; when its space is built it sits beside Studio and Business in the switch */
   const cmem=amChalkMember(), ck=[];
-  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],['meet','Meetings'],['team','Team'],['dash','Dashboard'],...(canProps()&&S.canWrite?[['biz','Business',propList().filter(propDue).length]]:[]),...ck,['more','More',nUnseenCount()]]; /* daily work first, then reviews, then Business and Chalk; People lives in More */
+  const list=cmem?[['mine','Home'],['all','My tasks'],['cal','Calendar'],['acct','Account']]:[['mine','Home'],...(amApprover()?[['queue','Approvals',reqs]]:[]),['all',!full&&mp?'Pod tasks':'Tasks'],['projects','Projects'],['cal','Calendar'],...(isMember()?[]:[['team','Team'],['dash','Dashboard']]),...(canProps()&&S.canWrite?[['biz','Business',propList().filter(propDue).length]]:[]),...ck,['more','More',nUnseenCount()]]; /* daily work first, then reviews, then Business and Chalk; People lives in More */
   /* the Principal and the COO work in two spaces: Studio (the studio's screens, as the team sees them) and Business.
      The space follows the screen: Business is S.view 'biz'; everything else is Studio. */
   const spaces=!cmem&&canProps()&&S.canWrite, inBiz=spaces&&S.view==='biz';
@@ -2760,8 +2821,9 @@ function renderHeader(){
   if(!inBiz&&S.view!=='biz') S.lastStudio=S.view;
   const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk','drafting','review'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
-  if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
-  const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
+  if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(cmem?[]:['meet','team','dash']),...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
+  const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view))||(k==='cal'&&S.view==='meet'&&!cmem);
+  S.navAllowed=[...list.map(x=>x[0]),...TASKV,...MOREV,...(cmem?[]:['meet','team','dash'])];
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
   const sw=spaces?h('div',{class:'space-sw',role:'group','aria-label':'Space'},[['studio','Studio'],['biz','Business',propList().filter(propDue).length],['books','Books']].map(([k,l,n])=>h('button',{type:'button',class:'space-b'+((k==='books'?!!S.books:(!S.books&&(k==='biz')===inBiz))?' on':''),'aria-pressed':String(k==='books'?!!S.books:(!S.books&&(k==='biz')===inBiz)),
@@ -2785,6 +2847,7 @@ function renderHeader(){
       ...(FIN_UI&&window.slateFinanceRole?[h('a',{class:'tab',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none'},'Finance ↗')]:[]));
   } else
   tabs.replaceChildren(...(dock?[dock]:[]),...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
+  try{ sideBuild(tabs,!!inBiz); gsearchMount(); }catch(e){ console.warn('sidebar',e); }
   try{ document.body.dataset.view=S.view; const fh=document.getElementById('far-host'); if(fh) fh.hidden=S.view!=='far'||!!(S.state!=='ready')||!!(S.far&&S.far.tab==='dash'&&canSeeScoring()); }catch(e){}
   const fab=$('#fab'), fm=S.view==='mine'?fabItems():[]; if(S.view!=='mine') fabClose();
   fab.hidden=!(fm.length>1||(canNewTask()&&['mine','all','board','gantt','projects'].includes(S.view))); fab.onclick=()=>fm.length>1?fabToggle():openNewTask();
@@ -2799,7 +2862,11 @@ function buildView(){
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
   const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
-  if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
+  if(['all','board','gantt'].includes(S.view)){ const tv=seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); });
+    if(S.view==='all'&&!fullView()&&myPod()&&!amChalkMember()) out.push(h('div',{class:'seg-row'},tv,h('div',{class:'seg seg-mine',role:'group','aria-label':'Whose tasks'},[[true,'Mine'],[false,'Whole POD']].map(([v,l])=>h('button',{type:'button','aria-pressed':String(!!S.f.mine===v),onclick:()=>{ S.f.mine=v; render(true); },text:l})))));
+    else out.push(tv); }
+  /* Calendar and Meetings are one place in the menu; this switches between them */
+  if(['cal','meet'].includes(S.view)&&!amChalkMember()) out.push(seg('Calendar and meetings',[['cal','Calendar'],['meet','Meetings']],S.view,x=>{ S.view=x; render(true); window.scrollTo(0,0); }));
   if(NAV_SUB.includes(S.view)) out.push(amChalkMember()?navBack('Home',()=>{ S.view='mine'; render(true); }):navBack('More',()=>{ S.view='more'; render(true); }));
   return out.concat(v());
 }
@@ -2979,6 +3046,13 @@ const mustVerify=t=>!t.legacy&&vfOn(vfCat(t))&&!canVerify(t)&&!(t.projectId&&lea
 const podLeadOf=t=>{ const p=S.projects[t.projectId], pd=p&&podsOfProject(p).find(x=>x===teamOf(t.assignee)); return pd?people().find(id=>isPodLead(id,pd)&&id!==t.assignee):null; };
 const vfWho=t=>isChalkTask(t)||isCOO(t.assignee)?'the Principal':['task','repeat'].includes(vfCat(t))&&podLeadOf(t)?`${nameOf(podLeadOf(t)).split(' ')[0]} (your POD leader) or the COO`:'the Principal or the COO';
 const vfReturned=t=>!!t.lastReturn&&!t.verify&&!t.doneAt&&!t.archived;
+/* waiting for a check: who has it and for how many working days (Friday, Saturday and holidays not counted) */
+const workDaysSince=d=>{ if(!d) return 0; let n=0, x=String(d).slice(0,10); const td=today(); for(let i=0;x<td&&i<400;i++){ if(isWorkDay(x)) n++; x=addDays(x,1); } return n; };
+const checkerRole=t=>isChalkTask(t)||isCOO(t.assignee)?'Principal':['task','repeat'].includes(vfCat(t))&&podLeadOf(t)?'POD leader':'COO';
+const amChecker=t=>{ const r=checkerRole(t); return r==='POD leader'?podVerifies(t):r==='COO'?(isCOO(S.uid)||(amApprover()&&!S.isOwner)):!!S.isOwner; };
+const waitDays=t=>workDaysSince(t.verify&&t.verify.at);
+const waitTxt=t=>{ const n=waitDays(t); return `${amChecker(t)?'With you':'With '+checkerRole(t)} · ${n?n+' day'+(n>1?'s':''):'since today'}`; };
+const retNote=t=>{ const x=((t.lastReturn&&t.lastReturn.note)||'').trim(); return x?'Returned: '+x.charAt(0).toLowerCase()+x.slice(1):'Returned'; };
 const vfTiming=t=>{ const v=t.verify; if(!v||!t.target) return ''; return v.at<t.target?`${diff(v.at,t.target)}d early`:v.at===t.target?'on time':`${diff(t.target,v.at)}d late`; };
 /* joint tasks: one copy per person, linked by joint.id; the group goes for verification only when every copy is finished */
 const jointOf=t=>t&&t.joint&&t.joint.id?t.joint:null;
@@ -3066,23 +3140,27 @@ function row(t,o={}){
   if(noTech(p)) meta.push(h('span',{class:'tech-mark',title:TECH_TIP+(p.techNote?': '+p.techNote:''),'aria-label':TECH_TIP,text:'⚠ No client tech'}));
   if(t.phase) meta.push(h('span',{text:t.phase}));
   if(o.person!==false){ const pid=arq(t)?t.assignReq.to:t.assignee; meta.push(h('span',{class:'who'},pid?avaEl(pid,false,'sm'):null,arq(t)?`${nameOf(t.assignReq.to)} (awaiting approval)`:nameOf(t.assignee))); }
+  if(vfReturned(t)) meta.push(h('span',{class:'ret-note',title:'Returned by '+nameOf(t.lastReturn.by),text:retNote(t)}));
+  if(t.verify&&!t.doneAt&&amChecker(t)&&t.assignee!==S.uid&&waitDays(t)>=1) meta.push(h('span',{class:'rem-note',text:'reminder sent to you'}));
   const metaEls=meta.flatMap((x,i)=>i?[h('span',{'aria-hidden':'true',text:'·'}),x]:[x]);
   const can=canQuickDone(t);
-  return h('div',fxA('task:'+t.id,['in','move'],{class:'row',role:'button',tabindex:'0',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); openTask(t.id); } }}),
-    t.doneAt?h('span',fxA('task:'+t.id,['done'],{class:'chk on','aria-label':'Completed',text:'✓'})):t.verify?h('span',{class:'chk vf',title:'Done '+fmtD(t.verify.at)+' · waiting for '+vfWho(t)+' to verify','aria-label':'Waiting for verification',text:'…'}):can?holdTick({class:'chk','aria-label':'Press and hold to mark “'+t.title+'” done',disabled:S.busy},()=>quickDone(t),'Mark done'):h('span',{class:'chk off','aria-hidden':'true'}),
-    h('div',{class:'row-main'},
-      h('div',{class:'row-title'},h('span',{text:t.title}),
-        t.gate?h('span',{class:'tag',text:'Gate'}):t.kind==='Deliverable'&&h('span',{class:'tag',text:'Deliverable'}),
+  /* labels: members don't see Gate or Deliverable; at most two show, the rest fold into +n */
+  const tags=[t.gate&&!isMember()?h('span',{class:'tag',text:'Gate'}):t.kind==='Deliverable'&&!isMember()&&h('span',{class:'tag',text:'Deliverable'}),
         t.assignReq&&h('span',{class:'tag tag-req',text:t.assignReq.guide?`Guide pending: ${shortName(t.assignReq.to)}`:'Assignment pending'}),
         t.checkerGuide&&t.checker&&!t.doneAt?h('span',{class:'tag',text:'Guided by '+shortName(t.checker)}):null,
         t.delivReq&&h('span',{class:'tag tag-req',text:'Deliverable · awaiting COO'}),
         t.repeat&&h('span',{class:'tag',text:'↻ '+(t.repeat==='weekly'?'Weekly':'Monthly')}),
-        t.request&&h('span',{class:'tag tag-req',text:'Date request'}),
-        vfReturned(t)&&h('span',{class:'tag tag-req',title:'Returned by '+nameOf(t.lastReturn.by),text:'Returned'}),
+        t.request&&h('span',{class:'tag tag-req',text:isMember()?'New date asked':'Date request'}),
         jointOf(t)&&!t.doneAt&&(()=>{ const ms=jointMates(t), n=(jointOf(t).with||[]).length||ms.length, dn=ms.filter(x=>x.verify||x.doneAt).length; return h('span',{class:'tag',title:'Joint task with '+(jointOf(t).with||[]).filter(id=>id!==t.assignee).map(nameOf).join(', ')+'. It goes for approval when everyone has finished.',text:`Joint · ${Math.min(dn,n)}/${n} done`}); })(),
         t.parentId&&h('span',{class:'tag',style:'color:var(--early)',text:'Client revision'}),
         t.revCount&&h('span',{class:'tag',text:`${t.revCount} revision${t.revCount>1?'s':''}`}),
-        t.archived&&h('span',{class:'tag',text:t.held?'Frozen':t.dropped?'Dropped':'Archived'})),
+        t.archived&&h('span',{class:'tag',text:t.held?'Frozen':t.dropped?'Dropped':'Archived'})].filter(Boolean);
+  const tagsShown=tags.length>2?[...tags.slice(0,2),h('span',{class:'tag tag-more',title:tags.slice(2).map(x=>x.textContent).join(' · '),text:'+'+(tags.length-2)})]:tags;
+  const isOpenRow=S.sheet&&S.sheet.type==='task'&&S.sheet.id===t.id&&document.body.classList.contains('sheet-dock');
+  return h('div',fxA('task:'+t.id,['in','move'],{class:'row'+(isOpenRow?' row-open':''),role:'button',tabindex:'0',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); openTask(t.id); } }}),
+    t.doneAt?h('span',fxA('task:'+t.id,['done'],{class:'chk on','aria-label':'Completed',text:'✓'})):t.verify?h('span',{class:'chk vf',title:'Done '+fmtD(t.verify.at)+' · waiting for '+vfWho(t)+' to verify','aria-label':'Waiting for verification',text:'…'}):can?holdTick({class:'chk','aria-label':'Press and hold to mark “'+t.title+'” done',disabled:S.busy},()=>quickDone(t),'Mark done'):h('span',{class:'chk off','aria-hidden':'true'}),
+    h('div',{class:'row-main'},
+      h('div',{class:'row-title'},h('span',{text:t.title}),...tagsShown),
       metaEls.length?h("div",{class:"row-meta"},metaEls):null,
       o.project!==false&&p&&p.code?h('div',{class:'row-pn',text:p.name}):null),
     h('div',{class:'row-date'},h('div',{class:'lbl',text:t.doneAt?'Completed':t.target?((t.revisions||0)?`Target · Date ${(t.revisions||0)+1}`:'Target'):'Target'}),h('div',{class:'mono',text:t.doneAt||t.target?fmtD(t.doneAt||t.target):'Pending'}),!t.doneAt&&t.time?h('div',{class:'mono',style:'font-size:12px;color:var(--muted)',text:fmtTime(t.time)}):null),
@@ -3541,13 +3619,14 @@ const deskOn=()=>window.innerWidth>=1100&&!(pref&&pref.fullHome);
 function deskTask(t,o={}){ const st=status(t), td=today(), p=S.projects[t.projectId];
   const due=t.target?(t.target<td?`${diff(t.target,td)}d late`:t.target===td?'today':fmtD(t.target)):'no date';
   return hRow({dot:st==='overdue'?'var(--overdue)':st==='soon'?'var(--late)':t.verify?'var(--early)':'var(--faint)',strong:t.title,
-    meta:[p?(p.name||p.code):'',t.phase||'',o.person?nameOf(t.assignee):'',due].filter(Boolean).join(' · '),onclick:()=>openTask(t.id),
+    meta:[vfReturned(t)?retNote(t):'',p?(p.name||p.code):'',t.phase||'',o.person?nameOf(t.assignee):'',t.verify&&!t.doneAt?waitTxt(t):due].filter(Boolean).join(' · '),onclick:()=>openTask(t.id),
     right:o.done&&canQuickDone(t)&&!t.verify?h('button',{class:'btn btn-sm h-btn',type:'button',disabled:S.busy,title:'Mark done today',onclick:()=>quickDone(t),text:'✓'}):null}); }
 function deskCol(title,extra,blocks,cls){ const kids=blocks.filter(Boolean);
   return h('section',{class:'desk-col'+(cls?' '+cls:'')},h('div',{class:'desk-h'},h('h2',{text:title}),extra||null),h('div',{class:'desk-b'},kids.length?kids:[h('p',{class:'f-hint',style:'margin:8px 4px',text:'Nothing here right now.'})])); }
 function deskSub(title,rows,n,go){ rows=rows.filter(Boolean); if(!rows.length) return null;
   return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:title}),h('b',{text:String(n==null?rows.length:n)}),go?h('button',{class:'linkish',type:'button',onclick:go,text:'All'}):null),h('div',{class:'h-list'},rows)); }
 function viewDesk(){
+  if(!(amApprover()||S.isOwner)&&!myHeadTeam()&&!amChalkMember()&&!amChalkLead()&&myPod()) return viewDeskToday();
   const td=today(), ap=amApprover()||S.isOwner, lead=amPodLead()&&!ap, head=!!myHeadTeam(), mine=activeTasks().filter(t=>t.assignee===S.uid&&!t.archived);
   const hr=new Date().getHours(), first=(nameOf(S.uid)||'').split(' ')[0], wk=addDays(td,7);
   const top=h('div',{class:'desk-top'},
@@ -3600,6 +3679,129 @@ function viewDesk(){
   return [top,h('div',{class:'desk'},left,mid,right),
     h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
 }
+/* ---------- PC menu (Option A, 3 Nov 2026): the tab row becomes a sidebar on screens 1100px and wider.
+   It mirrors the tab row (same items, same counts, same actions), so phones keep the tabs exactly as before. ---------- */
+function sideBuild(tabs,inBiz){
+  let sb=document.getElementById('side');
+  if(S.state!=='ready'){ if(sb) sb.remove(); document.body.classList.remove('side-on'); return; }
+  if(!sb){ sb=h('aside',{id:'side','aria-label':'Menu'}); document.body.append(sb); }
+  document.body.classList.add('side-on');
+  const logo=document.querySelector('.chrome .top-in .logo'), prod=document.querySelector('.chrome .top-in .product');
+  const head=h('button',{class:'sb-logo',type:'button','aria-label':'Home',onclick:()=>{ if(S.books) S.books=false; if(document.body.classList.contains('sheet-dock')) closeSheet(); goView(inBiz?'biz':'mine'); }},
+    logo?logo.cloneNode(true):null,logo?h('span',{class:'divider','aria-hidden':'true'}):null,prod?prod.cloneNode(true):null);
+  const items=[...tabs.children].filter(b=>b.matches('.tab'));
+  const nav=h('nav',{class:'sb-nav','aria-label':'Sections'},items.flatMap(b=>{ const k=b.dataset.k||'', c=b.cloneNode(true);
+    if(k==='cal'&&!amChalkMember()){ [...c.childNodes].filter(n=>n.nodeType===3).forEach(n=>n.remove()); c.insertBefore(document.createTextNode('Calendar & meetings'),c.querySelector('.badge')); }
+    if(b.tagName==='BUTTON') c.onclick=e=>{ e.preventDefault(); if(document.body.classList.contains('sheet-dock')) closeSheet(); if(S.books){ S.books=false; } b.click(); };
+    return k==='more'?[h('div',{class:'sb-sep','aria-hidden':'true'}),c]:[c]; }));
+  const me=h('button',{class:'sb-me',type:'button',onclick:openProfile,title:'My profile'},avaEl(S.uid,true),
+    h('span',{class:'sb-me-t'},h('b',{text:nameOf(S.uid)}),h('span',{text:[roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':''),myPod()?podLabel(myPod()):''].filter(Boolean).join(' · ')})));
+  sb.replaceChildren(head,nav,me);
+}
+
+/* ---------- search: projects, tasks, people and screens, only what this person can already see ---------- */
+const GS_SCREENS={mine:'Home',queue:'Approvals',all:'Tasks',projects:'Projects',cal:'Calendar',meet:'Meetings',team:'Team',dash:'Dashboard',more:'More',
+  notice:'Notice board',activity:'Activity log',std:'SLATE standard process',help:'How to use SLATE OS',far:'FAR calculator',conv:'Expense claims',holidays:'Holidays',
+  reports:'Issue reports',backup:'Backup',entries:'Entry log',people:'People',tlstatus:'Project status',risk:'Risk and grace',drafting:'Drafting board',review:'Review logins',setup:'Settings'};
+function gsearchFind(q){
+  const out=[], has=x=>String(x||'').toLowerCase().includes(q), leave=()=>{ if(S.books) S.books=false; };
+  projects().filter(p=>(fullView()||canSeeProjectDetail(p))&&(has(p.name)||has(p.code)||has(p.client))).slice(0,5)
+    .forEach(p=>out.push({g:'Projects',l:p.name,c:p.code||'',s:[podLabel(p.pod||''),p.client||''].filter(Boolean).join(' · '),go:()=>{ leave(); openProjectView(p.id); }}));
+  activeTasks().filter(t=>{ const p=S.projects[t.projectId]; return has(t.title)||(p&&(has(p.name)||has(p.code))); })
+    .sort((a,b)=>(!!a.doneAt-!!b.doneAt)||byTarget(a,b)).slice(0,6)
+    .forEach(t=>{ const p=S.projects[t.projectId]; out.push({g:'Tasks',l:t.title,s:[p?p.name:'',nameOf(t.assignee),t.doneAt?'done':t.target?fmtD(t.target):''].filter(Boolean).join(' · '),go:()=>{ leave(); openTask(t.id); }}); });
+  (fullView()?people():visiblePeople()).filter(id=>has(nameOf(id))).slice(0,4)
+    .forEach(id=>out.push({g:'People',l:nameOf(id),s:[roleOf(id),teamOf(id)!=='No team set'?podLabel(teamOf(id)):''].filter(Boolean).join(' · ')+' · see their tasks',go:()=>{ leave(); Object.assign(S.f,{person:id,mine:false,project:'',q:'',status:'active'}); S.fInit=1; goView('all'); }}));
+  Object.entries(GS_SCREENS).filter(([k,l])=>(S.navAllowed||[]).includes(k)&&has(l)).slice(0,4)
+    .forEach(([k,l])=>out.push({g:'Screens',l,s:'',go:()=>{ leave(); goView(k); }}));
+  return out;
+}
+function gsearchMount(){
+  let g=document.getElementById('gsearch');
+  if(S.state!=='ready'||amChalkMember()){ if(g) g.hidden=true; return; }
+  if(g){ g.hidden=false; return; }
+  const ti=document.querySelector('.chrome .top-in'); if(!ti) return;
+  const res=h('div',{class:'gs-res',role:'listbox'}); res.hidden=true;
+  const inp=h('input',{type:'search',id:'gs-in',placeholder:'Search projects, tasks, people and screens',autocomplete:'off',spellcheck:'false','aria-label':'Search SLATE OS'});
+  let sel=0, items=[];
+  const close=()=>{ res.hidden=true; };
+  const pick=x=>{ inp.value=''; close(); inp.blur(); x.go(); };
+  const paint=()=>{ if(!items.length){ res.replaceChildren(h('div',{class:'gs-none',text:'Nothing found'})); res.hidden=false; return; }
+    let last=''; const kids=[];
+    items.forEach((x,i)=>{ if(x.g!==last){ kids.push(h('div',{class:'gs-g',text:x.g})); last=x.g; }
+      kids.push(h('button',{type:'button',role:'option',class:'gs-i'+(i===sel?' on':''),'aria-selected':String(i===sel),onpointerenter:()=>{ sel=i; res.querySelectorAll('.gs-i').forEach((b,j)=>b.classList.toggle('on',j===i)); },onclick:()=>pick(x)},
+        h('span',{class:'gs-l'},x.c?h('span',{class:'mono gs-c',text:x.c}):null,h('span',{text:x.l})),x.s?h('span',{class:'gs-s',text:x.s}):null)); });
+    res.replaceChildren(...kids); res.hidden=false; };
+  const draw=()=>{ const q=inp.value.trim().toLowerCase(); if(q.length<2){ items=[]; close(); return; } items=gsearchFind(q); sel=0; paint(); };
+  inp.addEventListener('input',draw); inp.addEventListener('focus',draw);
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ inp.value=''; close(); inp.blur(); }
+    else if(e.key==='ArrowDown'&&items.length){ e.preventDefault(); sel=Math.min(sel+1,items.length-1); paint(); }
+    else if(e.key==='ArrowUp'&&items.length){ e.preventDefault(); sel=Math.max(sel-1,0); paint(); }
+    else if(e.key==='Enter'&&items[sel]){ e.preventDefault(); pick(items[sel]); } });
+  document.addEventListener('pointerdown',e=>{ if(!g.contains(e.target)) close(); });
+  g=h('div',{id:'gsearch',class:'gsearch'},svgEl('svg',{viewBox:'0 0 24 24',width:'17',height:'17',fill:'none',stroke:'currentColor','stroke-width':'2.2','stroke-linecap':'round','aria-hidden':'true'},svgEl('circle',{cx:'11',cy:'11',r:'7'}),svgEl('path',{d:'M20 20l-3.5-3.5'})),inp,res);
+  ti.append(g);
+}
+
+/* ---------- Home on a PC for POD members and POD leaders (Option A): one Today list in the order to work on it,
+   with the to-do box in it; the POD's next gates, the plan and the checklist on the right, only when they have something. ---------- */
+function viewDeskToday(){
+  const td=today(), wk=addDays(td,7), lead=amPodLead(), mp=myPod(), hr=new Date().getHours(), first=(nameOf(S.uid)||'').split(' ')[0];
+  const mine=activeTasks().filter(t=>t.assignee===S.uid&&!t.archived);
+  const top=h('div',{class:'desk-top'},
+    h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||'Member'}`}),
+      h('div',{class:'desk-hi'},h('b',{text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),daySummary(mine,td,false))),
+    h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap'},S.canWrite?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
+  /* returned work: red dot, and the note in orange at the start of the line */
+  const red=r=>{ const d=r&&r.querySelector('.h-dot'), m=r&&r.querySelector('.h-m'); if(d) d.style.background='var(--overdue)';
+    if(m&&/^Returned/.test(m.textContent)){ const i=m.textContent.indexOf(' · '), a=i<0?m.textContent:m.textContent.slice(0,i), b=i<0?'':m.textContent.slice(i); m.replaceChildren(h('span',{class:'ret-note',text:a}),b); } return r; };
+  /* POD leader: what the POD sent for checking, oldest first, with how long it has waited */
+  const sent=lead?activeTasks().filter(t=>t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.archived&&((t.stage==='review'&&(t.checker===S.uid||teamOf(t.assignee)===mp))||(t.verify&&podVerifies(t))))
+    .sort((a,b)=>((a.verify&&a.verify.at)||a.target||'9999').localeCompare((b.verify&&b.verify.at)||b.target||'9999')):[];
+  const sentRow=t=>{ const n=t.verify?waitDays(t):0, p=S.projects[t.projectId];
+    const r=hRow({dot:'var(--early)',strong:t.title,meta:[nameOf(t.assignee),t.verify?`done, check it · waiting ${n?n+' day'+(n>1?'s':''):'since today'}`:'in review',p?p.name:''].filter(Boolean).join(' · '),onclick:()=>openTask(t.id)});
+    if(t.verify&&n>=1){ const tt=r.querySelector('.h-t'); if(tt) tt.append(h('span',{class:'rem-pill',title:'You were reminded after 1 working day',text:'Reminder'})); }
+    return r; };
+  const open=mine.filter(t=>!t.doneAt&&!t.verify);
+  const now=open.filter(t=>vfReturned(t)||(t.target&&t.target<=td)).sort(byTarget);
+  const week=open.filter(t=>!now.includes(t)&&t.target&&t.target<=wk).sort(byTarget);
+  const later=open.filter(t=>!now.includes(t)&&!week.includes(t));
+  const waiting=mine.filter(t=>t.verify&&!t.doneAt).sort((a,b)=>(a.verify.at||'').localeCompare(b.verify.at||''));
+  const meetAll=homeMeetRows(td,false), meetToday=meetAll.filter(r=>/Today|Yesterday|minutes/i.test(r.textContent||''));
+  const goMine=st=>()=>{ Object.assign(S.f,{person:'',mine:true,project:'',q:'',status:st}); S.fInit=1; goView('all'); };
+  const left=deskCol('Today',h('span',{class:'cnt',style:'font-weight:400;font-size:12.5px;color:var(--muted)',text:'in the order to work on it'}),[
+    deskSub('Your POD sent you',sent.slice(0,12).map(sentRow),sent.length),
+    deskSub('Needs you now',[...now.map(t=>vfReturned(t)?red(deskTask(t,{done:true})):deskTask(t,{done:true})),...kFollow(td,false),...meetToday],null),
+    deskSub('This week',week.slice(0,15).map(t=>deskTask(t,{done:true})),week.length,goMine('week')),
+    deskSub('Waiting for check',waiting.map(t=>deskTask(t)),waiting.length),
+    todoSec(),
+    later.length?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px;margin:2px 6px',onclick:goMine('active'),text:`${later.length} more due later · open My tasks`}):null]);
+  /* right: only what has something in it */
+  const right_=[];
+  if(lead){ const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)&&inMyPodProject(p));
+    const ord={off:0,risk:1,ok:2,none:3,done:4};
+    const line=p=>{ const st=projStats(p), hl=HEALTH[st.health]||HEALTH.none, cp=curPhase(p), nx=gateTasks(p.id).filter(t=>!t.doneAt&&t.target).sort(byTarget)[0];
+      return h('button',{type:'button',class:'pod-p',title:[p.code,hl[0]].join(' · '),onclick:()=>openProjectView(p.id)},h('i',{style:`background:var(--${hl[1]})`}),
+        h('span',{class:'pod-pn'},p.name,isIntP(p)?h('b',{class:'pod-modo',text:'MODO'}):null),
+        h('span',{class:'desk-nx'},nx?[h('b',{style:nx.target<td?'color:var(--overdue)':'',text:nx.target<td?diff(nx.target,td)+'d late':fmtD(nx.target)}),' '+nx.title]:''),
+        h('span',{class:'pod-ph',text:cp?(/^\d/.test(phNo(cp))?'P'+phNo(cp):phNo(cp)):'—'})); };
+    if(ps.length) right_.push(h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:'My POD · next gate'}),h('b',{text:String(ps.length)})),
+      h('div',{class:'pod-list',style:'padding:0'},ps.sort((a,b)=>(ord[projStats(a).health]??9)-(ord[projStats(b).health]??9)||String(a.name).localeCompare(String(b.name))).map(line)))); }
+  const nt=nAll().filter(n=>nLive(n)&&!nSeen(n)).sort((a,b)=>(b.important-a.important)||b.created_at.localeCompare(a.created_at))[0];
+  if(nt) right_.push(h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})));
+  { const W=subsIn('week'), M=subsIn('month'), ts=[['week',W],['month',M]].filter(([k,X])=>X.xs.length);
+    if(ts.length) right_.push(h('div',{class:'gl-grid'},ts.map(([k,X])=>h('button',{type:'button',class:'gl-tile',onclick:()=>{ S.sheet={type:'subsView',k}; renderSheet(); }},
+      h('span',{class:'gl-l',text:X.P.lbl}),h('b',{class:'gl-n',text:String(X.xs.length)}),h('span',{class:'gl-m'},h('i',{style:'background:var(--ontime)'}),`${X.done.length} done`,X.over.length?[h('i',{style:'background:var(--overdue);margin-left:8px'}),`${X.over.length} late`]:null))))); }
+  { const mcl=myChecklist(); if(mcl.length) right_.push(h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:'My checklist'}),h('b',{text:String(mcl.length)})),myChecklistSec(mcl,{grouped:true}))); }
+  if(lead){ const rows=dbRows(), stt=dbStats(rows), xs=dbDrafters().filter(id=>(stt[id]||{}).open);
+    if(xs.length) right_.push(deskSub('Drafting team',xs.map(id=>{ const g=stt[id]; return hRow({dot:g.late?'var(--overdue)':'var(--faint)',strong:shortName(id),title:`${g.open} open`+(g.late?` · ${g.late} late`:''),onclick:()=>{ S.dbF={pod:'',who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); }}); }),xs.length)); }
+  { const later_=meetAll.filter(r=>!meetToday.includes(r)).slice(0,3); if(later_.length) right_.push(deskSub('Coming meetings',later_,null,()=>{ S.mhub='up'; goView('meet'); })); }
+  const right=right_.length?deskCol(lead?'My POD and plan':'Plan',null,right_):null;
+  return [top,h('div',{class:'desk desk-today'+(right?'':' desk-one')},left,right),
+    h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
+}
+
 function fitDesk(){ const d=document.querySelector('.desk'); if(!d) return; const top=d.getBoundingClientRect().top; d.style.height=Math.max(420,window.innerHeight-top-34)+'px'; }
 window.addEventListener('resize',()=>{ const was=!!document.querySelector('.desk'); if(S.view==='mine'&&was!==deskOn()) render(true); else fitDesk(); });
 function viewMineBody(){
@@ -3694,10 +3896,11 @@ function viewMineBody(){
 function viewAll(){
   const f=S.f, q=f.q.trim().toLowerCase(), wk=addDays(today(),7);
   /* opens on this week's open work for people who don't see everything; the full list is one tap away */
-  if(!S.fInit){ S.fInit=1; if(!fullView()&&f.status==='active'&&!f.person&&!f.project&&!f.q) f.status='week'; }
+  if(!S.fInit){ S.fInit=1; if(!fullView()&&f.status==='active'&&!f.person&&!f.project&&!f.q) f.status='week'; if(f.mine===undefined) f.mine=isMember()&&!!myPod(); }
+  if(fullView()||!myPod()) f.mine=false;
   /* new tasks: the + button; new projects: the Projects tab */
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:fullView()?'All projects':'Your projects'}),h('h1',{class:'h1',text:'Tasks & deliverables'})))];
-  if(!fullView()&&myPod()){ const pc=podTeamCard(); if(pc) out.push(pc); }
+  if(!fullView()&&myPod()&&!f.mine){ const pc=podTeamCard(); if(pc) out.push(pc); }
   { const mr=myProjReqs(); if(mr) out.push(mr); const nt=newProjectsCard(); if(nt) out.push(nt); }
   if(!projects().length&&!allTasks().length){ out.push(onboarding()); return out; }
   const pSel=h('select',{id:'f-project','aria-label':'Project',onchange:e=>{f.project=e.target.value;render(true)}},h('option',{value:'',text:'All projects'}),projects().filter(p=>fullView()||inMyPodProject(p)).map(p=>h('option',{value:p.id,text:projLabel(p)})));pSel.value=f.project;
@@ -3705,9 +3908,9 @@ function viewAll(){
   const sSel=h('select',{id:'f-status','aria-label':'Status',onchange:e=>{f.status=e.target.value;render(true)}},
     [['week','Due this week'],['active','Open tasks'],['overdue','Overdue'],['soon','Due soon'],['nodate','No date yet'],['requests','Date requests'],['done','Completed'],['early',ST.early],['ontime',ST.ontime],['late',ST.late],['all','Everything'],['archived','Archived']].map(([v,l])=>h('option',{value:v,text:l})));sSel.value=f.status;
   /* one line of counts on top: tap one to see just those */
-  { const base=allTasks().filter(t=>!t.archived&&!t.doneAt&&(!f.project||t.projectId===f.project)&&(!f.person||t.assignee===f.person));
+  { const base=allTasks().filter(t=>!t.archived&&!t.doneAt&&(!f.project||t.projectId===f.project)&&(!f.person||t.assignee===f.person)&&(!f.mine||t.assignee===S.uid));
     const n={week:base.filter(t=>t.target&&t.target<=wk).length,overdue:base.filter(t=>status(t)==='overdue').length,soon:base.filter(t=>status(t)==='soon').length,nodate:base.filter(t=>!t.target&&!t.ongoing).length,requests:base.filter(t=>t.request).length,active:base.length};
-    out.push(h('div',{class:'tsum',role:'group','aria-label':'Quick filters'},[['week','This week',''],['overdue','Overdue','s-overdue'],['soon','Due in 3 days','s-late'],['nodate','No date',''],['requests','Date requests',''],['active','All open','']].map(([k,l,c])=>
+    out.push(h('div',{class:'tsum',role:'group','aria-label':'Quick filters'},[['week','This week',''],['overdue',isMember()?'Late':'Overdue','s-overdue'],['soon','Due in 3 days','s-late'],['nodate','No date',''],['requests',isMember()?'New date asked':'Date requests',''],['active','All open','']].map(([k,l,c])=>
       h('button',{type:'button',class:c+(f.status===k?' on':''),'aria-pressed':String(f.status===k),onclick:()=>{ f.status=f.status===k&&k!=='active'?'active':k; render(true); }},h('b',{text:String(n[k])}),h('span',{text:l}))))); }
   /* search and the three filters fold behind one button; they stay open while any of them is set */
   { const set=[f.q,f.project,f.person].filter(Boolean).length, shown=f.open||set>0;
@@ -3718,6 +3921,7 @@ function viewAll(){
     if(f.status==='archived'){ if(!t.archived) return false; } else if(t.archived) return false;
     if(f.project&&t.projectId!==f.project) return false;
     if(f.person&&t.assignee!==f.person) return false;
+    if(f.mine&&t.assignee!==S.uid) return false;
     const s=status(t);
     if(f.status==='active'&&t.doneAt) return false;
     if(f.status==='week'&&(t.doneAt||!t.target||t.target>wk)) return false;
@@ -3737,7 +3941,7 @@ function viewAll(){
   const stats=new Map([...groups].map(([k,v])=>[k,gst(v)]));
   const order=[...projects().map(p=>p.id),'_none'].filter(k=>groups.has(k)).sort((a,b)=>{ const x=stats.get(a), y=stats.get(b); return (y.over-x.over)||(y.soon-x.soon)||((x.next&&x.next.target)||'9999').localeCompare((y.next&&y.next.target)||'9999'); });
   if(!order.length){ out.push(h('p',{class:'muted',text:'No tasks match these filters.'})); return out; }
-  const narrowed=!!(q||f.person||f.project||!['active','week'].includes(f.status))||order.length<=2;
+  const narrowed=!!(q||f.person||f.project||f.mine||!['active','week'].includes(f.status))||order.length<=2;
   const opened=new Set(pref.tgOpen||[]), folded=new Set(pref.tgFold||[]), foldDef=fullView();
   const isOpen=k=>narrowed||(foldDef?opened.has(k):!folded.has(k));
   const toggle=k=>{ const o=isOpen(k); if(foldDef){ o?opened.delete(k):opened.add(k); savePref('tgOpen',[...opened]); } else { o?folded.add(k):folded.delete(k); savePref('tgFold',[...folded]); } render(true); };
@@ -3746,7 +3950,7 @@ function viewAll(){
   for(const k of order){ const p=S.projects[k]; const items=groups.get(k), st=stats.get(k), op=isOpen(k);
     const need=p&&leadsProj(k)&&S.canWrite?unscheduled(k).filter(t=>!t.request||amApprover()).length:0;
     const title=p?(isInternalP(p)?'Studio · '+(areaName(p.type)||p.name):projLabel(p)):'No project';
-    const meta=[st.over?h('span',{class:'o',text:`${st.over} overdue`}):null,st.soon?h('span',{class:'s',text:`${st.soon} due soon`}):null,st.nod?h('span',{text:`${st.nod} no date`}):null,
+    const meta=[st.over?h('span',{class:'o',text:`${st.over} ${isMember()?'late':'overdue'}`}):null,st.soon?h('span',{class:'s',text:`${st.soon} due soon`}):null,st.nod?h('span',{text:`${st.nod} no date`}):null,
       st.next?h('span',{text:`Next ${fmtD(st.next.target)}`}):null,p&&p.pod&&!isInternalP(p)?h('span',{text:podLabel(p.pod)}):null].filter(Boolean);
     out.push(h('section',{class:'tg'+(op?' open':'')},h('div',{class:'tg-row'},
       h('button',{class:'tg-h',type:'button','aria-expanded':String(op),onclick:()=>toggle(k)},
@@ -5759,7 +5963,7 @@ function salPrivSec(){
     h('p',{class:'f-hint',style:'margin:0 0 8px',text:'Tick a person to hide their salary from the COO everywhere: Business › HR, Finance staff, advances, salary sheets and the change log. Pay ticked people on a separate private salary sheet in Finance. The COO sees only that their salary is private, not the amount. Nobody is ticked unless you tick them.'}),body); }
 
 /* ---------- sheet ---------- */
-function openTask(id){ S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); }
+function openTask(id){ const was=document.body.classList.contains('sheet-dock'); S.sheet={type:'task',id,mode:null,d:{},err:'',dn:''}; renderSheet(); if(dockable()||was) render(true); }
 function openNewTask(){ const f=S.f, okP=id=>id&&S.projects[id]&&isLive(S.projects[id])&&workable(S.projects[id]), okA=id=>id&&newTaskPeople().some(x=>x[0]===id); S.sheet={type:'newTask',more:false,d:{projectId:okP(f.project)?f.project:okP(pref.lastProject)?pref.lastProject:'',title:'',phase:'',note:'',kind:'Task',assignee:okA(f.person)?f.person:okA(pref.lastAssignee)?pref.lastAssignee:amMgr()?'':S.uid,target:''},err:'',added:[]}; renderSheet(); setTimeout(()=>{const el=document.getElementById(S.sheet&&S.sheet.d.projectId?'sh-title':'sh-projectId'); el&&el.focus()},30); }
 /* site address: plot, road and block or sector are kept apart from the area, and read as one line wherever the site is shown.
    Plot and road are required, except for projects kept only as a record (completed before SLATE OS, or closed). */
@@ -5794,14 +5998,16 @@ function openProject(id){ const p=id?S.projects[id]:{}; const d={}; PFIELDS.forE
   d.pods=id?podsOfProject(p):(myPod()&&!amApprover()?[myPod()]:[]); d.people=[];
   { const pl=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null; d.ph=p.std?{sel:[...stdPhases(p)],ed:JSON.parse(JSON.stringify(p.std.ed||{})),open:null,type:p.std.type||p.type}:{sel:pl?[...pl.sel]:null,ed:JSON.parse(JSON.stringify((pl&&pl.ed)||{})),open:null,type:pl?p.type:''}; }
   S.sheet={type:'project',id:id||null,d,err:''}; renderSheet(); setTimeout(()=>{const el=document.getElementById('sh-code');el&&el.focus()},30); }
-function closeSheet(){ S.sheet=null; renderSheet(); }
+function closeSheet(){ const was=document.body.classList.contains('sheet-dock'); S.sheet=null; renderSheet(); if(was){ document.body.classList.remove('sheet-dock'); render(true); } }
+/* on a PC, a task opened from the task list sits beside it and the list stays usable */
+const dockable=()=>sideOn()&&!!S.sheet&&S.sheet.type==='task'&&S.view==='all';
 function renderSheet(fromData){
   applyStd();
   const el=$('#sheet');
   if(!S.sheet){
     if(!el.hidden&&el.firstChild&&!motionOff()){ if(el.dataset.closing) return; el.dataset.closing='1'; el.classList.add('sh-out');
       setTimeout(()=>{ delete el.dataset.closing; el.classList.remove('sh-out'); if(!S.sheet){ el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked'); } },170); return; }
-    el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked'); return; }
+    el.hidden=true; el.replaceChildren(); document.body.classList.remove('locked','sheet-dock'); return; }
   if(el.dataset.closing){ delete el.dataset.closing; el.classList.remove('sh-out'); }
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
@@ -5809,8 +6015,10 @@ function renderSheet(fromData){
   const body=S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(S.sheet.type==='propQuick'&&!S.sheet.done?' panel-wide':'')+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
-  el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
-  secInfo(panel); el.hidden=false; document.body.classList.add('locked'); panel.scrollTop=top; restoreFocus(k);
+  const dock=dockable(); document.body.classList.toggle('sheet-dock',dock);
+  el.replaceChildren(...(dock?[]:[h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl})]),panel);
+  if(dock) panel.setAttribute('aria-modal','false');
+  secInfo(panel); el.hidden=false; document.body.classList.toggle('locked',!dock); panel.scrollTop=top; restoreFocus(k);
 }
 const D=()=>S.sheet.d;
 /* times are picked in 15-minute steps (7:00 am to 10:45 pm); a time saved before that stays selectable */
