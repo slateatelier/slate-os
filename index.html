@@ -9054,15 +9054,19 @@ const pqArea=k=>+k>0?String(Math.round(+k*5000/100)*100):'';
 /* plan ↔ services check (Principal, 2 Nov 2026): the plan sets the fee, payment stages, timeline and site visits; the ticks set
    the scope written in the letter. They must agree: the plan's own services ticked, nothing ticked twice, and anything the
    plan's rate-card fee does not cover either priced in the Fee line or left out. */
-const PQ_PART={'Architecture, common area interior, landscape and coordination':['Architectural design','Common area interior design','Landscape design','Design coordination'],
-  'Approval design package':['Architectural design'],'Lean construction set':['Architectural design'],'Launch design package':['Architectural design','3D visualization','Real estate solutions (plans, area, specifications)']};
-const PQ_INPLAN={sig:['Landscape design','Common area interior design','3D visualization'],launch:['3D visualization','Real estate solutions (plans, area, specifications)']};
-function pqCheck(plan,on,fm){ const P=SP_PLANS[plan]||{}, req=P.svc||[], ticked=Object.keys(on).filter(l=>on[l]), out=[];
+/* no package-type services in the list (Principal, 2 Nov 2026): only single services. Each plan is described by the single
+   services it needs (PQ_REQ); for plans built on a package in the letter (Essentials, Launch), ticking Architectural design
+   writes that plan's own package wording, so the letter still matches the plan. */
+const PQ_PKG=['Architecture, common area interior, landscape and coordination','Approval design package','Lean construction set','Launch design package'];
+const PQ_REQ={feas:['Feasibility study'],ess:['Architectural design'],essb:['Architectural design'],launch:['Architectural design','3D visualization','Real estate solutions (plans, area, specifications)'],
+  comp:['Architectural design','Design coordination','Site supervision'],sig:['Architectural design','Signature design direction','Design coordination','Site supervision']};
+const PQ_INPLAN={sig:['Landscape design','Common area interior design','3D visualization']};
+const pqReq=plan=>PQ_REQ[plan]||((SP_PLANS[plan]||{}).svc||[]).filter(l=>!PQ_PKG.includes(l));
+function pqCheck(plan,on,fm){ const P=SP_PLANS[plan]||{}, req=pqReq(plan), ticked=Object.keys(on).filter(l=>on[l]), out=[];
   const miss=req.filter(l=>!on[l]); if(miss.length) out.push({lvl:'err',t:`${P.n} includes ${miss.join(', ')}: tick ${miss.length===1?'it':'them'} or choose another plan.`,fix:miss});
-  Object.entries(PQ_PART).forEach(([pk,parts])=>{ if(!on[pk]) return; const dup=parts.filter(l=>on[l]); if(dup.length) out.push({lvl:'warn',t:`“${pk}” already covers ${dup.join(', ')}: untick one so the letter doesn’t list it twice.`}); });
   const inPlan=(PQ_INPLAN[plan]||[]).filter(l=>on[l]); if(inPlan.length) out.push({lvl:'warn',t:`${P.n} already includes ${inPlan.join(', ').toLowerCase()}; ticking ${inPlan.length===1?'it':'them'} lists ${inPlan.length===1?'it':'them'} twice.`});
   if(plan==='feas'){ const big=ticked.filter(l=>l!=='Feasibility study'); if(big.length) out.push({lvl:'err',t:`Feasibility is a fixed fee for the FAR and massing check only. ${big.join(', ')} ${big.length===1?'is':'are'} not part of it: choose a bigger plan or untick ${big.length===1?'it':'them'}.`}); }
-  else { const own=new Set([...req,...(PQ_INPLAN[plan]||[]),...req.flatMap(l=>PQ_PART[l]||[])]), extra=ticked.filter(l=>!own.has(l)&&!((PQ_PART[l]||[]).length&&PQ_PART[l].every(x=>own.has(x))));
+  else { const own=new Set([...req,...(PQ_INPLAN[plan]||[])]), extra=ticked.filter(l=>!own.has(l));
     if(extra.length&&(fm||'card')==='card') out.push({lvl:'warn',t:`Not in the ${P.n} rate-card fee: ${extra.join(', ')}. Put the full fee in the Fee line (per sft or lump sum), or untick ${extra.length===1?'it':'them'}.`});
     if(!P.build&&on['Site supervision']) out.push({lvl:'warn',t:`${P.n} has no construction stage, so site supervision has no site visits in its terms.`}); }
   if(on['Interior design']||on['Construction management (interior)']) out.push({lvl:'warn',t:'Interior design and interior construction management are MODO interior services: they usually go in a separate interior proposal.'});
@@ -9073,7 +9077,11 @@ function pqDoc(sh){ const d=sh.d, p={name:(d.name||'').trim().toUpperCase(),clie
   const P=SP_PLANS[doc.plan], card=+doc.lump||0, fm=sh.fm||'card', fv=+sh.fv||0, area=+doc.area||0, own=fm==='sft'&&fv>0&&area?Math.round(fv*area/1000)*1000:fm==='lump'&&fv>0?Math.round(fv):0;
   if(sh.sel){ const base=doc.parts, on=Object.keys(sh.sel.on).filter(l=>sh.sel.on[l]);
     if(on.length){ const ord=[...base.map(x=>x.label),...PB_SERVICES.map(x=>x[0])]; on.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
-      doc.parts=on.map(l=>base.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })()); } }
+      const pk=base.filter(x=>PQ_PKG.includes(x.label)), out=[];
+      /* Essentials and Launch: "Architectural design" carries that plan's own scope wording, under the single service's name */
+      on.forEach(l=>{ if(l==='Architectural design'&&pk.length){ out.push({label:l,rate:'',desc:pk.map(x=>x.desc).filter(Boolean).join(' '),check:pk.flatMap(x=>x.check||[])}); return; }
+        out.push(base.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })()); });
+      doc.parts=out; } }
   const extra=Math.round(doc.parts.reduce((a,x)=>a+(x.add?(+x.rate||0):0),0)*(+doc.area||0)/1000)*1000;
   let fee=own||card; if(own&&fm==='sft') doc.ownRate=String(fv);
   if(fee>0&&(own||extra)){ fee+=extra; doc.lump=String(fee); doc.sched=spSched(doc,p,fee)||doc.sched; }
@@ -9122,7 +9130,7 @@ function sheetPropQuick(){
     h('div',{class:'pq-c'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Plan'}),
     h('div',{class:'pq-plans'},SP_MAIN.map(card)),
     P&&!P.fixed&&!P.tier?seg('Fee tier',Object.entries(SP_TIERS),d.tier,v=>{ d.tier=v; renderSheet(); }):null,
-    (()=>{ const base=[...((SP_PLANS[d.plan]||{}).svc||[])], sel=pqSel(sh), all=[...new Set([...base,...PB_SERVICES.map(x=>x[0])])];
+    (()=>{ const base=pqReq(d.plan), sel=pqSel(sh), all=[...new Set([...base,...PB_SERVICES.map(x=>x[0]),...Object.keys(sel.on).filter(l=>sel.on[l])])].filter(l=>!PQ_PKG.includes(l));
       const n=all.filter(l=>sel.on[l]).length;
       return h('div',{class:'pq-svc'},
         h('div',{class:'pq-svc-h'},h('span',{class:'qs-k',text:'Services'}),h('span',{class:'pq-svc-sum',style:n?'':'color:var(--overdue)',text:n?`${n} selected`:'Tick the services to include'}),h('span')),
