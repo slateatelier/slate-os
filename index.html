@@ -3904,6 +3904,8 @@ function creditOf(t){ const s=status(t); let c=null;
 const jointBonus=t=>t&&t.ownDoneAt&&t.doneAt&&t.ownDoneAt<t.doneAt?Math.min(0.1,0.02*diff(t.ownDoneAt,t.doneAt)):0;
 function perf(ts){ let pos=0,earn=0,n=0,fp=0,fe=0; for(const t of ts){ if(t.legacy||t.unscored) continue; const c=creditOf(t); if(c==null) continue; const w=weightOf(t), wf=weightOf(t,true); pos+=w; earn+=w*c; fp+=wf; fe+=wf*c; n++; } return {pos,earn,n,q:fp?fe/fp:null}; }
 /* team performance leaves out the Principal, the COO and Chalk Create */
+/* office support staff and the accounts login carry no project work: left out of the workload and team tables (Principal, 3 Nov 2026) */
+const isOfficeStaff=id=>!!id&&(teamOf(id)==='Office Support'||/^accounts$/i.test((nameOf(id)||'').trim()));
 const notTeamPerf=id=>!!id&&(id===ownerId()||isCOO(id)||isChalkP(id));
 function periodRaw(r){ const own=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>!t.archived&&!t.legacy&&!t.unscored&&t.target&&t.target>=r.s&&t.target<=r.e&&!preCut(r,t)&&!isPriv(t.assignee)&&!isChalkTask(t)&&!notTeamPerf(t.assignee)); return own.concat(anonRows(r,new Set(own.map(t=>t.id))).filter(t=>!notTeamPerf(t.assignee))); }
 /* score inputs for tasks this person can't see: no titles, projects or names (from the database) */
@@ -4234,7 +4236,7 @@ function viewDash(){
 
   const W=[];
   { const row=(name,sub,x,me)=>h('tr',{style:me?'font-weight:600':''},h('td',{},h('div',{text:name}),sub&&h('div',{class:'sub2',text:sub})),h('td',{class:'n',text:x.pos.toFixed(2)}),h('td',{class:'n',text:x.earn.toFixed(2)}),h('td',{class:'n',text:x.q==null?'—':Math.round(x.q*100)+'%'}),h('td',{class:'n',text:x.bc?'+'+x.bc.toFixed(1):'—'}),h('td',{class:'n',text:x.bs?'+'+x.bs.toFixed(1):'—'}),h('td',{class:'n',style:'font-weight:600'+(x.idx!=null&&x.idx<100?';color:var(--overdue)':''),title:x.empty?'Nothing due in this period yet':x.ns?'Interns and other staff are not scored':x.solo?'Only one person in this role: timeliness against the studio average':null,text:x.idx==null?(x.ns?'Not scored':'—'):String(x.idx)}));
-    const hdT=myHeadTeam(), ptAll=fullView()?[...pt.people,...people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&!isPriv(id)&&!isChalkP(id)&&(/^pod\b/i.test(teamOf(id)||'')||isSupport(id))&&!pt.people.some(x=>x.k===id)).map(id=>({k:id,pos:0,earn:0,q:null,idx:null,bc:0,bs:0,rg:rgK(id),empty:true}))]:pt.people,
+    const hdT=myHeadTeam(), ptAll=fullView()?[...pt.people,...people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&!isPriv(id)&&!isChalkP(id)&&(/^pod\b/i.test(teamOf(id)||'')||isSupport(id))&&!isOfficeStaff(id)&&!pt.people.some(x=>x.k===id)).map(id=>({k:id,pos:0,earn:0,q:null,idx:null,bc:0,bs:0,rg:rgK(id),empty:true}))]:pt.people,
       peopleRows=fullView()?ptAll.filter(x=>!isCOO(x.k)&&(!isPriv(x.k)||seePriv())):amPodLead()?pt.people.filter(x=>teamOf(x.k)===mp||x.k===S.uid):hdT?pt.people.filter(x=>teamOf(x.k)===hdT||x.k===S.uid):pt.people.filter(x=>x.k===S.uid);
     const podRowsT=fullView()?pt.pods:pt.pods.filter(x=>x.k===mp);
     /* team members get plain sentences; the full table stays for leaders, the drafting lead and management */
@@ -4464,7 +4466,7 @@ function viewTvDue(){ const g=S.gantt, td=today(), w1=addDays(td,6), w2=addDays(
 /* workload by person and week: for the Principal and the COO only (Dashboard). settings.loadCap = a normal week */
 function workloadW(){ if(!canSeeScoring()) return null; const td=today(), cap=+((S.settings||{}).loadCap)||6;
   const xs=activeTasks().filter(t=>t.target&&t.assignee&&!t.doneAt&&!t.legacy&&!isChalkTask(t)&&t.target<addDays(td,28));
-  const ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&(xs.some(t=>t.assignee===id)||/^pod\b/i.test(teamOf(id)||'')||isSupport(id))).filter(id=>!isChalkP(id)&&!isPriv(id));
+  const ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&(xs.some(t=>t.assignee===id)||/^pod\b/i.test(teamOf(id)||'')||isSupport(id))).filter(id=>!isChalkP(id)&&!isPriv(id)&&!isOfficeStaff(id));
   const wk=i=>[addDays(td,i*7),addDays(td,i*7+6)], cnt=(id,i)=>{ const [a,b]=wk(i); return xs.filter(t=>t.assignee===id&&(i===0?t.target<=b:t.target>=a&&t.target<=b)).length; };
   const rows=ids.map(id=>({id,n:[0,1,2,3].map(i=>cnt(id,i))})).sort((a,b)=>Math.max(...b.n)-Math.max(...a.n));
   const bar=n=>{ const max=cap*1.6, col=n>cap?'var(--overdue)':n>=cap*0.8?'var(--late)':'var(--ontime)'; return h('div',{class:'wl-c'},h('div',{class:'wl-b',style:`--cap:${cap/max*100}%`},h('i',{style:`width:${Math.min(100,n/max*100)}%;background:${col}`}),h('em')),h('span',{text:n?String(n):'—'})); };
