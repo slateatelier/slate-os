@@ -1990,7 +1990,7 @@ function hbars(map, color, key, det, pr, fut) {
       ls.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' }))),
       fs.length ? h('div', { class: 'hb-sub-t', text: 'Still to come' }) : null,
       fs.map(([lab, a]) => h('div', { class: 'hb-fut-l' }, h('span', { class: 'n', text: lab }), h('span', { class: 'a v-fut', text: '+' + fmt(a) })))); };
-  const bar = ([n, v, cnt]) => { const can = !cnt && ((det && (det[n] || []).length) || fdet(n).length > 1), op = can && dOpen[dk(n)];
+  const bar = ([n, v, cnt]) => { const can = !cnt && ((det && (det[n] || []).length) || fdet(n).length > 0), op = can && dOpen[dk(n)];
     return [h(cnt && key || can ? 'button' : 'div', { class: 'hb' + (cnt && key ? ' hb-more' : '') + (can ? ' hb-can' : '') + (op ? ' is-open' : ''), type: cnt && key || can ? 'button' : null, 'aria-expanded': can ? String(!!op) : null,
       onclick: cnt && key ? tog : can ? () => { S.hbDet = Object.assign({}, dOpen, { [dk(n)]: !op }); render(true); } : null },
       h('span', { class: 'nm', title: n, text: cnt ? `${n} (${cnt}) ›` : n }), h('div', { class: 'track' + (!cnt && fut[n] > 0.5 ? ' track2' : '') }, v > 0.5 ? h('span', { style: `width:${Math.max(2, v / max * 100)}%;--c:${color}` }) : null, !cnt && fut[n] > 0.5 ? h('span', { class: 'fut', title: 'Still to come: Tk ' + fmt(fut[n]), style: `width:${Math.max(2, fut[n] / max * 100)}%` }) : null),
