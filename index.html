@@ -168,6 +168,32 @@ main.wrap.wrap-desk{max-width:1480px}
   .desk.desk-today.desk-one{grid-template-columns:minmax(0,1fr)}
   .desk-today .desk-b>.sec{margin-top:6px}
 }
+
+/* ---------- Daily work log ---------- */
+.wl-due{display:flex;align-items:center;justify-content:space-between;gap:14px;background:#FFF4F4;border:1px solid rgba(215,38,43,.25);border-radius:12px;padding:12px 14px;margin:2px 0 8px}
+.wl-due>div{display:grid;gap:2px}.wl-due b{color:#B3141A;font-size:14.5px}.wl-due span{font-size:13px;color:#3a3a3c}
+.wl-ys{display:grid;gap:8px}
+.wl-y{display:grid;gap:8px;background:var(--group);border-radius:12px;padding:10px 12px}
+.wl-yt{display:grid;gap:2px}.wl-yt b{font-size:13.5px}.wl-yt span{font-size:13.5px;color:#3a3a3c}
+.wl-lines{display:grid;gap:10px}
+.wl-line{display:grid;gap:6px;background:var(--group);border-radius:12px;padding:10px 12px}
+.wl-sel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center}
+.wl-sel select{min-width:0}
+.wl-text{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:9px 11px;font:inherit;font-size:14.5px;resize:vertical;background:#fff;min-height:58px}
+.wl-n{font-size:12px;color:var(--late);justify-self:end}.wl-n.ok{color:var(--ontime)}
+@media (max-width:560px){.wl-sel{grid-template-columns:1fr auto}.wl-sel select:nth-child(2){grid-column:1/-1}}
+.who-plan{grid-area:t;display:grid;gap:3px;min-width:0;font-size:13.5px}
+.who-pl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.who-pl b{font-weight:600}.who-pl span{color:#3a3a3c}
+.who-plan.none{color:var(--late);font-size:13px}.who-plan.none.late{color:var(--overdue);font-weight:600}
+.who-more{font-size:12px;color:var(--muted)}
+.wl-day{font-weight:600;font-size:14px;white-space:nowrap;padding:0 4px}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.wl-card{background:var(--group);border-radius:14px;padding:12px 14px;display:grid;gap:8px;align-content:start}
+.wl-ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.wl-ch b{font-size:14.5px}.wl-ch .muted{font-size:12.5px}
+.wl-at{margin-left:auto;font-size:12px;color:var(--muted)}.wl-at.late{color:var(--late)}
+.wl-ls{display:grid;gap:6px;background:#fff;border-radius:10px;padding:8px 10px}
+.wl-l{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:start;font-size:13.5px}
+.wl-st{font-weight:700;text-align:center;line-height:1.4}.wl-tx{color:#3a3a3c}.wl-sub{font-size:11.5px;color:var(--muted)}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>SLATE OS</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -2566,6 +2592,8 @@ async function openNotice(id,kind){
   if(kind==='proposal'){ S.biz={...(S.biz||{q:'',st:'active'}),tab:'proposed'}; return goView(canProps()?'biz':'mine'); }
   if(kind==='accounts'){ S.pf={...(S.pf||{q:'',pod:''}),st:'acct'}; acctLoad(true); return goView('projects'); }
   if(kind==='nudge'||kind==='brief'||kind==='daywrap'||kind==='check_waiting') return goView('mine');
+  if(kind==='plan_missing'){ goView('mine'); if(!wlGet(S.uid,today())) openWlog(); return; }
+  if(kind==='plan_missing_pod') return goView('worklog');
   if(kind==='issue_report') return goView('reports');
   if(kind==='access_request'){ if(window.SlatePin&&!(await SlatePin.ensure())) return; S.books=false; S.biz={...(S.biz||{q:'',st:'active'}),tab:'hr'}; S.accReq=null; return goView('biz'); }
   if(kind==='conveyance'){ S.conv&&(S.conv.state='idle'); S.convF={tab:convApprover()?'wait':'mine',sel:new Set()}; return goView('conv'); }
@@ -2640,7 +2668,7 @@ async function boot(){
   S.me=await user.me(); S.uid=S.me.id; S.isOwner=!!S.me.isOwner;
   if(!S.uid){ S.state='signedout'; render(true); return; }
   const cw=await user.can('data.write'); S.canWrite=cw!==false;
-  S.state='ready'; render(true); noticesLive();
+  S.state='ready'; render(true); noticesLive(); try{ wlLive(); }catch(e){}
 
   settingsRef().onSnapshot(snap=>{
     if(snap.exists) S.settings=snap.data();
@@ -2810,7 +2838,7 @@ function render(force){
   if(!force&&isTyping(view)){ S.pendingRender=true; return; }
   const k=keepFocus(view);
   renderHeader();
-  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','all','projects','team','cal','risk','drafting'].includes(S.view)?' wide':'');
+  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','all','projects','team','cal','risk','drafting','worklog'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView())); secInfo(view);
   view.classList.toggle('wrap-desk',S.view==='mine'&&!!view.querySelector('.desk'));
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
@@ -2861,7 +2889,7 @@ function renderHeader(){
   const spaces=!cmem&&canProps()&&S.canWrite, inBiz=spaces&&S.view==='biz';
   if(spaces){ const i=list.findIndex(x=>x[0]==='biz'); if(i>=0) list.splice(i,1); }
   if(!inBiz&&S.view!=='biz') S.lastStudio=S.view;
-  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk','drafting','review'];
+  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','worklog','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk','drafting','review'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(cmem?[]:['meet','team','dash']),...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view))||(k==='cal'&&S.view==='meet'&&!cmem);
@@ -2903,7 +2931,7 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,worklog:viewWorklog,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ const tv=seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); });
     if(S.view==='all'&&!fullView()&&myPod()&&!amChalkMember()) out.push(h('div',{class:'seg-row'},tv,h('div',{class:'seg seg-mine',role:'group','aria-label':'Whose tasks'},[[true,'Mine'],[false,'Whole POD']].map(([v,l])=>h('button',{type:'button','aria-pressed':String(!!S.f.mine===v),onclick:()=>{ S.f.mine=v; render(true); },text:l})))));
     else out.push(tv); }
@@ -3061,7 +3089,7 @@ function viewMore(){
     ...grp('Tools',canDBoard()?item('drafting','Drafting board',(()=>{ const r=dbRows(); const late=r.filter(x=>x.st==='late').length; return r.length?`${r.filter(x=>x.st!=='done').length} open with the drafting team${late?` · ${late} late`:''}`:'What the drafting team is doing for every POD'; })(),dbRows().filter(x=>x.st==='late').length):null,item('conv','Expense claims',convApprover()&&convWaiting().length?`${convWaiting().length} to approve · transport, meals and client costs`:'Claim transport and meals for site visits, meetings and errands',convApprover()?convWaiting().length:0),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
       S.booksRole&&!(S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||''))?h('a',{class:'more-i',href:'/books?solo=1',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Books'}),h('div',{class:'mi-d',text:S.booksRole==='Office staff'?'Monthly office shopping list':S.booksRole==='Accountant'?'SLATE’s accounts':'SLATE’s accounts · view only'})),h('span',{class:'mi-a',text:'›'})):null,
       FIN_UI&&window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
-    ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
+    ...grp('Records',WL.loaded&&wlPeople().length?item('worklog','Day log',amApprover()||S.isOwner?'What each person in the PODs planned and finished, day by day':amPodLead()?'What your POD planned and finished, day by day':'Your plans and what you finished, day by day'):null,item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
       item('reports','Issue reports',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
@@ -3750,7 +3778,7 @@ function sideBuild(tabs,inBiz){
 
 /* ---------- search: projects, tasks, people and screens, only what this person can already see ---------- */
 const GS_SCREENS={mine:'Home',queue:'Approvals',all:'Tasks',projects:'Projects',cal:'Calendar',meet:'Meetings',team:'Team',dash:'Dashboard',more:'More',
-  notice:'Notice board',activity:'Activity log',std:'SLATE standard process',help:'How to use SLATE OS',far:'FAR calculator',conv:'Expense claims',holidays:'Holidays',
+  notice:'Notice board',activity:'Activity log',worklog:'Day log',std:'SLATE standard process',help:'How to use SLATE OS',far:'FAR calculator',conv:'Expense claims',holidays:'Holidays',
   reports:'Issue reports',backup:'Backup',entries:'Entry log',people:'People',tlstatus:'Project status',risk:'Risk and grace',drafting:'Drafting board',review:'Review logins',setup:'Settings'};
 function gsearchFind(q){
   const out=[], has=x=>String(x||'').toLowerCase().includes(q), leave=()=>{ if(S.books) S.books=false; };
@@ -3796,6 +3824,126 @@ function gsearchMount(){
 /* ---------- Home on a PC for POD members and POD leaders (Option A): one Today list in the order to work on it,
    with the to-do box in it; the POD's next gates, the plan and the checklist on the right, only when they have something. ---------- */
 
+/* ---------- Daily work log (3 Nov 2026): each working morning everyone in a POD writes which projects and tasks they are
+   working on today, in their own words; the next morning they close yesterday's lines (done, carried on, stopped).
+   A record for the Principal, the COO and the POD leader; not scored. Data: public.work_logs (m_work_logs.sql). ---------- */
+const WL={rows:{},on:false,loaded:false,from:''};
+const wlKey=(u,d)=>u+'|'+d;
+const needPlan=id=>!!id&&!isLeft(id)&&/^pod\b/i.test(teamOf(id)||'')&&!isChalkP(id);
+const wlGet=(u,d)=>WL.rows[wlKey(u,d)]||null;
+const wlPrevDay=d=>{ let x=addDays(d,-1); for(let i=0;i<14&&!isWorkDay(x);i++) x=addDays(x,-1); return x; };
+const wlTime=ts=>{ try{ return new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}); }catch(e){ return ''; } };
+const wlLate=r=>!!r&&wlTime(r.submitted_at)>'11:00';
+const wlProjName=pid=>{ if(!pid) return 'Studio work'; const p=S.projects[pid]; return p?(p.name||p.code):'Project'; };
+const wlTaskName=tid=>{ const t=tid&&S.tasks[tid]; return t?t.title:''; };
+async function wlLoad(from,to){ const sb=window.slateSupabase; if(!sb) return false;
+  const {data,error}=await sb.from('work_logs').select('*').gte('day',from).lte('day',to);
+  if(error){ WL.err=error.message; return false; }
+  (data||[]).forEach(r=>{ WL.rows[wlKey(r.user_id,r.day)]=r; }); WL.loaded=true; if(!WL.from||from<WL.from) WL.from=from; return true; }
+function wlLive(){ if(WL.on||S.state!=='ready'||!window.slateSupabase) return; WL.on=true; const td=today();
+  wlLoad(addDays(td,-21),td).then(ok=>{ if(!ok) return; render(true); setTimeout(wlMaybePrompt,1500); });
+  try{ window.slateSupabase.channel('slate-worklogs').on('postgres_changes',{event:'*',schema:'public',table:'work_logs'},ev=>{ const r=ev.new; if(r&&r.user_id){ WL.rows[wlKey(r.user_id,r.day)]=r; schedule(); } }).subscribe(); }catch(e){}
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ const t=today(); wlLoad(addDays(t,-3),t).then(ok=>{ if(ok){ render(true); wlMaybePrompt(); } }); } }); }
+/* opens the plan once a working morning (after the greeting); closing it without saving waits 30 minutes before asking again */
+function wlMaybePrompt(){
+  if(!WL.loaded||!S.canWrite||window.slateReview||!needPlan(S.uid)) return; const td=today();
+  if(!isWorkDay(td)||wlGet(S.uid,td)) return;
+  if(S.sheet||document.getElementById('day-splash')||document.hidden){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,20000); return; }
+  if(pref.planLater&&pref.planLater.d===td&&Date.now()-pref.planLater.at<30*60000){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,Math.max(60000,30*60000-(Date.now()-pref.planLater.at))); return; }
+  savePref('planLater',{d:td,at:Date.now()}); openWlog(); }
+function openWlog(){ S.sheet={type:'wlog'}; renderSheet(); }
+const wlNewLine=(x={})=>({id:Math.random().toString(36).slice(2,10),projectId:x.projectId==null?null:x.projectId,taskId:x.taskId||'',text:x.text||'',status:'planned',...(x.from?{from:x.from}:{})});
+function wlMyProjects(){ return projects().filter(p=>!p.closed&&(fullView()||inMyPodProject(p)||isMemberOk(p,S.uid)||activeTasks().some(t=>t.projectId===p.id&&t.assignee===S.uid)))
+  .sort((a,b)=>String(a.name||a.code).localeCompare(String(b.name||b.code))); }
+function sheetWlog(){
+  const sh=S.sheet, td=today(), y=wlPrevDay(td), yLog=wlGet(S.uid,y), cur=wlGet(S.uid,td);
+  const yOpen=yLog?(yLog.lines||[]).filter(l=>(l.status||'planned')==='planned'):[];
+  if(!sh.init){ sh.init=1; sh.y={}; yOpen.forEach(l=>{ sh.y[l.id]=''; }); sh.lines=cur?(cur.lines||[]).map(l=>({...l})):[]; if(!sh.lines.length) sh.lines=[wlNewLine()]; sh.err=''; }
+  const ps=wlMyProjects();
+  const setY=(l,v)=>{ const was=sh.y[l.id]; sh.y[l.id]=was===v?'':v;
+    sh.lines=sh.lines.filter(x=>x.from!==l.id);
+    if(sh.y[l.id]==='carried'){ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[]; sh.lines.unshift(wlNewLine({projectId:l.projectId||'',taskId:l.taskId,text:l.text,from:l.id})); }
+    if(!sh.lines.length) sh.lines=[wlNewLine()]; sh.err=''; renderSheet(); };
+  const yRow=l=>h('div',{class:'wl-y'},h('div',{class:'wl-yt'},h('b',{text:wlProjName(l.projectId)+(l.taskId&&wlTaskName(l.taskId)?' · '+wlTaskName(l.taskId):'')}),h('span',{text:l.text})),
+    h('div',{class:'ci-seg',role:'radiogroup','aria-label':'How did it go?'},[['done','Done'],['carried','Carry on today'],['stopped','Stopped']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String(sh.y[l.id]===k),class:'ci-opt'+(sh.y[l.id]===k?' on '+(k==='done'?'done':k==='carried'?'doing':'todo'):''),onclick:()=>setY(l,k),text:lb}))));
+  const line=(l,i)=>{ const tasks=l.projectId==null?[]:activeTasks().filter(t=>t.projectId===(l.projectId||'')&&!t.doneAt&&!t.archived&&l.projectId)
+      .sort((a,b)=>((a.assignee===S.uid)?0:1)-((b.assignee===S.uid)?0:1)||byTarget(a,b)).slice(0,60);
+    const pSel=h('select',{'aria-label':'Project',onchange:e=>{ l.projectId=e.target.value==='~'?null:e.target.value==='studio'?'':e.target.value; l.taskId=''; sh.err=''; renderSheet(); }},
+      h('option',{value:'~',text:'Choose a project…'}),h('option',{value:'studio',text:'Studio work (not a project)'}),ps.map(p=>h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')})));
+    pSel.value=l.projectId==null?'~':l.projectId===''?'studio':l.projectId;
+    const tSel=h('select',{'aria-label':'Task',disabled:!l.projectId,onchange:e=>{ l.taskId=e.target.value; renderSheet(); }},
+      h('option',{value:'',text:l.projectId?'Which task? (optional)':'—'}),tasks.map(t=>h('option',{value:t.id,text:t.title+(t.assignee!==S.uid?' · '+shortName(t.assignee):'')+(t.target?' · '+fmtD(t.target):'')})));
+    tSel.value=l.taskId||'';
+    const n=(l.text||'').trim().length;
+    return h('div',{class:'wl-line'},
+      h('div',{class:'wl-sel'},pSel,tSel,sh.lines.length>1?h('button',{class:'icon-btn',type:'button','aria-label':'Remove this line',title:'Remove',onclick:()=>{ sh.lines.splice(i,1); if(l.from) sh.y[l.from]=''; renderSheet(); },text:'×'}):null),
+      h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:'What exactly will you do on it today? e.g. 4th floor plan: kitchen and toilet layout, revise after client comments',value:l.text||'',
+        oninput:e=>{ l.text=e.target.value; const c=e.target.parentNode.querySelector('.wl-n'); const k=e.target.value.trim().length; if(c){ c.textContent=k<10?`${10-k} more characters`:'✓'; c.classList.toggle('ok',k>=10); } }}),
+      h('div',{class:'wl-n'+(n>=10?' ok':''),text:n<10?`${10-n} more characters`:'✓'}));
+  };
+  const save=()=>{
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':yOpen.find(l=>!sh.y[l.id])?'Say how each of yesterday’s lines went: Done, Carry on today or Stopped.':'';
+    if(bad){ sh.err=bad; renderSheet(); return; }
+    const sb=window.slateSupabase, lines=sh.lines.map(l=>({id:l.id,projectId:l.projectId||'',taskId:l.taskId||'',text:l.text.trim(),status:l.status||'planned',...(l.from?{from:l.from}:{}),...(l.note?{note:l.note}:{})}));
+    run(async()=>{
+      if(yLog&&yOpen.length){ const yl=(yLog.lines||[]).map(l=>sh.y[l.id]?{...l,status:sh.y[l.id],closedAt:new Date().toISOString()}:l);
+        const {data,error}=await sb.from('work_logs').update({lines:yl}).eq('user_id',S.uid).eq('day',y).select().maybeSingle(); if(error) throw new Error(error.message); if(data) WL.rows[wlKey(S.uid,y)]=data; }
+      const {data,error}=await sb.from('work_logs').upsert({user_id:S.uid,day:td,lines},{onConflict:'user_id,day'}).select().maybeSingle(); if(error) throw new Error(error.message); if(data) WL.rows[wlKey(S.uid,td)]=data;
+    },cur?'Today’s plan updated':'Thanks, your plan is in').then(ok=>{ if(ok){ closeSheet(); render(true); } });
+  };
+  return [head(fmtD(td)+' · '+(cur?'update':'every working morning'),cur?'Update today’s plan':'What are you working on today?'),
+    h('p',{class:'lead',style:'margin:0',text:'Which projects and which tasks, in your own words. Your POD leader, the COO and the Principal see it. It is a work record, not a score.'}),
+    yOpen.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Yesterday · '+fmtD(y)}),h('span',{class:'cnt',text:'how did it go?'})),h('div',{class:'wl-ys'},yOpen.map(yRow))):null,
+    h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Today'}),h('span',{class:'cnt',text:`${sh.lines.length} line${sh.lines.length>1?'s':''}`})),
+      h('div',{class:'wl-lines'},sh.lines.map(line)),
+      sh.lines.length<8?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13.5px',onclick:()=>{ sh.lines.push(wlNewLine()); renderSheet(); },text:'+ Add another project or task'}):null),
+    sh.err?h('div',{class:'err',text:sh.err}):null,
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:save,text:cur?'Save changes':'Submit today’s plan'}),
+      cur?null:h('button',{class:'btn',type:'button',onclick:()=>{ savePref('planLater',{d:td,at:Date.now()}); closeSheet(); },text:'Later'}))];
+}
+/* Home: your own plan for today, or a reminder to write it */
+function wlMyCard(){
+  if(!WL.loaded||!needPlan(S.uid)||!isWorkDay(today())) return null; const r=wlGet(S.uid,today());
+  if(!r) return h('div',{class:'wl-due'},h('div',{},h('b',{text:'Write today’s plan'}),h('span',{text:'Which projects and tasks are you working on today? It takes a minute.'})),h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:openWlog,text:'Write now'}));
+  return deskSub('Today’s plan',(r.lines||[]).map(l=>hRow({dot:'var(--early)',strong:wlProjName(l.projectId)+(l.taskId&&wlTaskName(l.taskId)?' · '+wlTaskName(l.taskId):''),meta:l.text,onclick:openWlog})),null,openWlog);
+}
+/* Who is doing what: today's plan lines for a person, or that it isn't written yet */
+function wlWhoLines(id){ if(!WL.loaded||!needPlan(id)) return null; const td=today(); if(!isWorkDay(td)) return null; const r=wlGet(id,td);
+  if(!r){ const late=new Date().getHours()>=11; return h('span',{class:'who-plan none'+(late?' late':''),text:late?'No plan written today':'No plan yet today'}); }
+  const ls=r.lines||[], show=ls.slice(0,3);
+  return h('span',{class:'who-plan'},show.map(l=>h('span',{class:'who-pl'},h('b',{text:wlProjName(l.projectId)}),h('span',{text:' · '+l.text}))),ls.length>3?h('span',{class:'who-more',text:`+${ls.length-3} more`}):null); }
+
+/* ---------- Day log: what each person planned and how it went, day by day ---------- */
+const WL_ST={done:['✓','Done','var(--ontime)'],carried:['→','Carried on','var(--early)'],stopped:['✕','Stopped','var(--muted)'],planned:['•','Planned','var(--ink)']};
+function wlPeople(){ const all=people().filter(id=>!isLeft(id)&&needPlan(id));
+  if(amApprover()||S.isOwner||isCOO(S.uid)) return all; if(amPodLead()) return all.filter(id=>teamOf(id)===myPod()); return all.filter(id=>id===S.uid); }
+function viewWorklog(){
+  const V=S.wlv||(S.wlv={d:today(),pod:'',who:''}), td=today(), ap=amApprover()||S.isOwner;
+  if(!WL.loaded) return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Records'}),h('h1',{class:'h1',text:'Day log'}))),h('p',{class:'muted',text:WL.err?'The day log isn’t set up yet: run m_work_logs.sql in Supabase.':'Loading…'})];
+  if(V.d<WL.from&&!V.loading){ V.loading=1; wlLoad(addDays(V.d,-14),WL.from).then(()=>{ V.loading=0; render(true); }); }
+  if(V.who&&addDays(td,-28)<WL.from&&!V.loading){ V.loading=1; wlLoad(addDays(td,-35),WL.from).then(()=>{ V.loading=0; render(true); }); }
+  let ids=wlPeople(); if(V.pod) ids=ids.filter(id=>teamOf(id)===V.pod);
+  const go=n=>{ let x=addDays(V.d,n); for(let i=0;i<14&&!isWorkDay(x);i++) x=addDays(x,n); if(x>td) x=td; V.d=x; render(true); };
+  const podSel=ap?h('select',{'aria-label':'POD',onchange:e=>{ V.pod=e.target.value; render(true); }},h('option',{value:'',text:'All PODs'}),pods().map(p=>h('option',{value:p,text:podLabel(p)}))):null; if(podSel) podSel.value=V.pod;
+  const all=wlPeople(), whoSel=all.length>1?h('select',{'aria-label':'Person',onchange:e=>{ V.who=e.target.value; render(true); }},h('option',{value:'',text:'Everyone'}),all.map(id=>h('option',{value:id,text:nameOf(id)}))):null; if(whoSel) whoSel.value=V.who;
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Records · '+(ap?'every POD':amPodLead()?podLabel(myPod()):'your own')}),h('h1',{class:'h1',text:'Day log'})),
+    h('div',{class:'bar dash-bar'},podSel,whoSel,V.who?null:[V.d!==td?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ V.d=td; render(true); },text:'Today'}):null,
+      h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous day',onclick:()=>go(-1),text:'‹'}),h('span',{class:'wl-day',text:fmtD(V.d)+(V.d===td?' · today':'')}),h('button',{class:'btn btn-sm',type:'button','aria-label':'Next day',disabled:V.d>=td,onclick:()=>go(1),text:'›'})]))];
+  const lineEl=(l,day)=>{ const st=(l.status||'planned')==='planned'&&day<td?['?','Not closed','var(--late)']:WL_ST[l.status||'planned'];
+    return h('div',{class:'wl-l'},h('span',{class:'wl-st',title:st[1],style:`color:${st[2]}`,text:st[0]}),h('div',{},h('b',{text:wlProjName(l.projectId)+(l.taskId&&wlTaskName(l.taskId)?' · '+wlTaskName(l.taskId):'')}),h('div',{class:'wl-tx',text:l.text}),l.from?h('div',{class:'wl-sub',text:'carried on from the day before'}):null)); };
+  const card=(id,day,showName)=>{ const r=wlGet(id,day);
+    return h('div',{class:'wl-card'},h('div',{class:'wl-ch'},showName?[avaEl(id,false,'sm'),h('b',{text:nameOf(id)}),h('span',{class:'muted',text:podLabel(teamOf(id))})]:h('b',{text:fmtD(day)}),
+        h('span',{class:'wl-at'+(wlLate(r)?' late':''),text:r?'written '+wlTime(r.submitted_at):isWorkDay(day)?(day===td&&new Date().getHours()<11?'not yet':'no plan written'):'day off'})),
+      r?h('div',{class:'wl-ls'},(r.lines||[]).map(l=>lineEl(l,day))):null); };
+  if(V.who){ const days=[]; let x=td; for(let i=0;i<40&&days.length<20;i++){ if(isWorkDay(x)) days.push(x); x=addDays(x,-1); }
+    out.push(h('div',{class:'wl-grid'},days.map(d=>card(V.who,d,false)))); return out; }
+  if(!ids.length){ out.push(h('p',{class:'muted',text:'No one in a POD to show.'})); return out; }
+  const wrote=ids.filter(id=>wlGet(id,V.d)).length;
+  out.push(h('div',{class:'f-hint',style:'margin:0 4px',text:isWorkDay(V.d)?`${wrote} of ${ids.length} wrote a plan`:'Not a working day'}));
+  out.push(h('div',{class:'wl-grid'},ids.map(id=>card(id,V.d,true))));
+  return out;
+}
+
 /* ---------- Studio now (Principal and COO, and a POD leader's own POD) ---------- */
 /* who is doing what: each person in the PODs and support teams, the task they are on now, and their open, late and waiting counts */
 function whoDoingSec(){
@@ -3814,11 +3962,11 @@ function whoDoingSec(){
     rows.push(h('button',{type:'button',class:'who-r',title:'Open '+nameOf(id).split(' ')[0]+'’s tasks',onclick:()=>{ Object.assign(S.f,{person:id,mine:false,project:'',q:'',status:'active'}); S.fInit=1; goView('all'); }},
       avaEl(id,false,'sm'),
       h('span',{class:'who-n'},h('b',{text:shortName(id)}),isPodLead(id,team)?h('span',{class:'who-l',text:'Lead'}):null),
-      h('span',{class:'who-t'},now?[h('span',{class:'who-d',style:`background:${now.stage==='doing'?'var(--early)':now.target&&now.target<td?'var(--overdue)':'var(--faint)'}`}),h('span',{class:'who-tt',text:now.title}),p?h('span',{class:'who-p',text:' · '+(p.name||p.code)}):null]:h('span',{class:'who-p',text:wait.length?'Waiting for checks':'Nothing open'})),
-      h('span',{class:'who-due'+(now&&now.target&&now.target<td?' late':''),text:due}),
+      wlWhoLines(id)||h('span',{class:'who-t'},now?[h('span',{class:'who-d',style:`background:${now.stage==='doing'?'var(--early)':now.target&&now.target<td?'var(--overdue)':'var(--faint)'}`}),h('span',{class:'who-tt',text:now.title}),p?h('span',{class:'who-p',text:' · '+(p.name||p.code)}):null]:h('span',{class:'who-p',text:wait.length?'Waiting for checks':'Nothing open'})),
+      wlGet(id,td)&&needPlan(id)?h('span',{class:'who-due'}):h('span',{class:'who-due'+(now&&now.target&&now.target<td?' late':''),text:due}),
       h('span',{class:'who-c'},h('span',{title:'Open tasks',text:`${open.length} open`}),late.length?h('span',{class:'late',text:`${late.length} late`}):null,wait.length?h('span',{class:'wait',title:'Sent for checking',text:`${wait.length} to check`}):null)));
   }
-  return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:'Who is doing what'}),h('b',{text:String(ids.length)}),h('button',{class:'linkish',type:'button',onclick:()=>goView('team'),text:'Team'})),h('div',{class:'who-list'},rows));
+  return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:'Who is doing what'}),h('b',{text:String(ids.length)}),WL.loaded?h('button',{class:'linkish',type:'button',onclick:()=>goView('worklog'),text:'Day log'}):null,h('button',{class:'linkish',type:'button',onclick:()=>goView('team'),text:'Team'})),h('div',{class:'who-list'},rows));
 }
 /* every project's next gate: name, phase, the gate, its date and who has it, on two lines so nothing is cut off */
 function projGateSec(ps,byPod){
@@ -3864,6 +4012,7 @@ function viewDeskToday(){
   const meetAll=homeMeetRows(td,false), meetToday=meetAll.filter(r=>/Today|Yesterday|minutes/i.test(r.textContent||''));
   const goMine=st=>()=>{ Object.assign(S.f,{person:'',mine:true,project:'',q:'',status:st}); S.fInit=1; goView('all'); };
   const left=deskCol('Today',h('span',{class:'cnt',style:'font-weight:400;font-size:12.5px;color:var(--muted)',text:'in the order to work on it'}),[
+    wlMyCard(),
     deskSub('Your POD sent you',sent.slice(0,12).map(sentRow),sent.length),
     deskSub('Needs you now',[...now.map(t=>vfReturned(t)?red(deskTask(t,{done:true})):deskTask(t,{done:true})),...kFollow(td,false),...meetToday],null),
     deskSub('This week',week.slice(0,15).map(t=>deskTask(t,{done:true})),week.length,goMine('week')),
@@ -3921,6 +4070,7 @@ function viewMineBody(){
   /* end of the day (from 17:00 on a working day): what was due today and is still open, with the two answers */
   if(new Date().getHours()>=17&&isWorkDay(td)&&S.canWrite) mine.filter(t=>!t.doneAt&&!t.verify&&!t.archived&&t.target===td&&stageOf(t)!=='review'&&!t.request).forEach(t=>today_.push(hRow({dot:'var(--late)',strong:'Before you leave',title:t.title,meta:projLabel(S.projects[t.projectId])+' · due today',onclick:()=>openTask(t.id),
     right:h('div',{style:'display:flex;gap:6px'},h('button',{class:'btn btn-sm btn-primary h-btn',type:'button',disabled:S.busy,onclick:()=>quickDone(t),text:'✓ Done'}),h('button',{class:'btn btn-sm h-btn',type:'button',onclick:()=>{ openTask(t.id); setMode('request',{date:'',reason:''}); },text:'New date'}))})));
+  { const wc=wlMyCard(); if(wc) out.push(wc); }
   const tg=hGroup('Today',today_); if(tg) out.push(tg);
   const SL={}; const head_=out.length;
   SL.glance=glanceTiles(); SL.risk=riskTile();
@@ -4775,7 +4925,7 @@ function workloadW(){ if(!canSeeScoring()) return null; const td=today(), cap=+(
 const CI_MS=120000;
 function ciItems(){ const td=today(), soon=addWorkDays(td,2);
   return activeTasks().filter(t=>t.assignee===S.uid&&!t.doneAt&&!t.verify&&!t.legacy&&!t.held&&(stageOf(t)==='doing'||(t.target&&t.target<=soon))).sort((a,b)=>(a.target||'9').localeCompare(b.target||'9')); }
-function checkinArm(){ if(S.state!=='ready'||!S.uid||S.isOwner) return; const key=today()+':'+S.uid;
+function checkinArm(){ if(S.state!=='ready'||!S.uid||S.isOwner||needPlan(S.uid)) return;   /* POD people write the day's plan instead */ const key=today()+':'+S.uid;
   if(pref.checkin===key||pref.daySplash!==key||window.slateCiTimer||[5,6].includes(new Date().getDay())) return;
   const at=+(pref.ciArm&&pref.ciArm.k===key?pref.ciArm.at:0)||Date.now(); if(!(pref.ciArm&&pref.ciArm.k===key)) savePref('ciArm',{k:key,at});
   window.slateCiTimer=setTimeout(function fire(){ window.slateCiTimer=null;
@@ -6102,7 +6252,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(S.sheet.type==='propQuick'&&!S.sheet.done?' panel-wide':'')+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   const dock=dockable(); document.body.classList.toggle('sheet-dock',dock);
@@ -12651,7 +12801,7 @@ function sheetChalkProj(){
    Back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
    back and the buttons never disagree. */
 const NAV={i:0,stack:[],snap:[],ready:false,applying:false,pending:0,pendT:0,hintAt:0};
-const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','tlstatus','holidays','risk','drafting','review'];   /* pages reached from More */
+const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','worklog','tlstatus','holidays','risk','drafting','review'];   /* pages reached from More */
 const NAV_TASKV=['all','board','gantt'];                                                      /* one tab, three layouts */
 const NAV_VIEWER=['task','projView','notif','profile','myprofile','meeting','pmeet','timeline','chalkProj','rota'];  /* sheets that open other sheets */
 const NAV_OV='.slate-sheet:not(#slate-auth),#share-card';                                     /* popups laid over everything */
