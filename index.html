@@ -1257,7 +1257,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .qs-t{display:block;padding-left:11.5px}
 .qs-v .qs-in{width:220px;max-width:100%;height:42px;padding:0 10px;font-size:15px;font-weight:500;text-align:left;box-sizing:border-box}
 .qs-tbl td,.qs-tbl th{padding-block:9px}
-.qs-tbl .n{width:110px}.qs-days{width:64px!important;min-width:0;height:32px;box-sizing:border-box;border:1.5px solid var(--faint);border-radius:8px;padding:0 8px;text-align:right;font:inherit;font-size:14px;background:#fff}.qs-days.set{font-weight:700;border-color:var(--ink)}.qs-fit{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}.qs-fit input[type=date]{max-width:180px}
+.qs-tbl .n{width:110px}.btn-go{background:#1F9D4B;color:#fff;border-color:#1F9D4B;font-weight:600}.btn-go:hover{background:#188A40}.btn-go:disabled{opacity:.5}.start-card{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:14px;align-items:center;padding:16px;border-radius:14px;background:#EEF8F1;border:1px solid #CFEBD8}.start-ico{width:44px;height:44px;border-radius:50%;background:#1F9D4B;color:#fff;display:grid;place-items:center;font-size:16px}@media(max-width:560px){.start-card{grid-template-columns:44px minmax(0,1fr)}.start-card .btn-go{grid-column:1/-1}}
+.qs-sum{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:var(--group)}.qs-sum b{font-size:16px}.qs-step{display:grid;gap:6px}.qs-step>.lbl{font-size:13px;font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0}.qs-days{width:64px!important;min-width:0;height:32px;box-sizing:border-box;border:1.5px solid var(--faint);border-radius:8px;padding:0 8px;text-align:right;font:inherit;font-size:14px;background:#fff}.qs-days.set{font-weight:700;border-color:var(--ink)}.qs-fit{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}.qs-fit input[type=date]{max-width:180px}
 .qs-last td{font-weight:700;border-top:1.5px solid var(--faint)}
 .tl-num{background:#fff!important;border:1.5px solid var(--faint)!important;border-radius:8px;font-weight:600;font-size:15px}
 .tl-num:focus{border-color:var(--early)!important;outline:none}
@@ -6723,8 +6724,11 @@ function stdDots(p){ const ks=stdPhases(p); if(!ks.length) return null; const ac
 function stdSection(p){
   const tp=p.type&&T()[p.type], det=canViewProjectDetail(p), own=canSeeProjectDetail(p);
   if(!p.std){ if(!tp||!tp.std||p.pod==='Studio') return null;
-    return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'})),h('div',{class:'card'},h('div',{text:`Not started yet. Give the start date and the phases, gate deliverables, checklists and dates are made in one go.`}),
-      own&&amMgr()&&S.canWrite&&!p.closed?h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Start the project'})):h('div',{class:'f-hint',text:'The POD leader starts the project.'}))); }
+    const canStart=own&&amMgr()&&S.canWrite&&!p.closed;
+    return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'})),h('div',{class:'start-card'},
+      h('div',{class:'start-ico','aria-hidden':'true',text:'▶'}),
+      h('div',{style:'min-width:0;display:grid;gap:4px'},h('b',{text:'Ready to start'}),h('span',{class:'f-hint',style:'margin:0',text:canStart?'Pick the start date. SLATE OS sets up the phases, gate deliverables, checklists and dates for you.':'The POD leader starts the project.'})),
+      canStart?h('button',{class:'btn btn-go',type:'button',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Start the project'}):null)); }
   const ks=stdPhases(p), act=activePhases(p), cur=act[0]||null, manage=own&&canManageCl(p), open=S.sheet&&S.sheet.openPh!==undefined?S.sheet.openPh:cur, fbEdit=S.canWrite&&(amApprover()||isProjLead(p));
   const closed=ks.filter(k=>stdState(p,k).done).length;
   const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub=t.legacyOk?'before SLATE OS':'before SLATE OS · COO to approve'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
@@ -7334,32 +7338,32 @@ function sheetStdPlan(){
       pr?h('div',{class:'form-row'},stepsOf(sh.tpl,k).map(([st])=>h('label',{class:'field'},h('span',{class:'lbl',text:(st==='sub'?'Submitted on':st==='final'?'Final on':'Done on')+' (optional)'}),h('input',{id:`pre-${k}-${st}`,type:'date',max:preLive(),value:pr[st]||'',oninput:e=>{pr[st]=e.target.value}})))):null,
       pr?h('div',{class:'f-hint',text:'Recorded as history: the gate shows as closed with these dates and the checklist is closed. It never counts in scores.'}):null); })():null;
   const kv=(l,v)=>h('div',{class:'qs-kv'},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
+  const nDated=rows.filter(r=>r.f.fin).length, custom=Object.keys(q.sd||{}).length;
   return [head(projLabel(p),'Start the project'),
-    h('p',{class:'lead',style:'margin:0',text:'Give the start date. Phases, gate deliverables, checklists and dates are made from the SLATE standard in one go.'}),
-    h('div',{class:'qs-box'},
-      kv('Start date',h('input',{id:'qs-start',type:'date',value:sh.start,class:'tl-num qs-in',oninput:e=>{ sh.start=e.target.value; },onchange:()=>renderSheet()})),
-      kv('POD leader',ld),
-      kv('Type',h('span',{class:'qs-t',text:tp.name+(sh.pace&&sh.pace!=='std'?' · '+paceName({type:sh.tpl},sh.pace):'')})),
-      kv('Phases',h('span',{class:'qs-t',text:`${n} phase${n===1?'':'s'}`}))),
-    sh.start&&n&&!preAny?h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{class:'qs-tbl'},
+    h('div',{class:'qs-step'},h('span',{class:'lbl',text:'1. When does the work start?'}),h('input',{id:'qs-start',type:'date',value:sh.start,class:'tl-num qs-in',style:'max-width:220px',oninput:e=>{ sh.start=e.target.value; },onchange:()=>renderSheet()}),h('span',{class:'f-hint',style:'margin:0',text:'Usually the work order or advance date.'})),
+    h('div',{class:'qs-step'},h('span',{class:'lbl',text:'2. Who leads it?'}),(()=>{ ld.style.maxWidth='320px'; return ld; })()),
+    sh.start&&n?h('div',{class:'qs-step'},h('span',{class:'lbl',text:'3. Check the plan'}),
+      h('div',{class:'qs-sum'},h('div',{style:'display:grid;gap:2px'},h('b',{text:last?`Last gate ${fmtD(last)}`:'Dates follow later'}),h('span',{class:'f-hint',style:'margin:0',text:`${tp.name} · ${n} phase${n===1?'':'s'}`+(sh.pace&&sh.pace!=='std'?' · '+paceName({type:sh.tpl},sh.pace):'')+(custom?' · custom days':'')+(nDated<n&&nDated?` · ${n-nDated} dated later`:'')})),
+        preAny?null:h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.dates=!sh.dates; renderSheet(); },text:sh.dates?'Hide the dates':'See or change the dates'}))):null,
+    sh.start&&n&&!preAny&&sh.dates?h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{class:'qs-tbl'},
       h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'Our days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
       h('tbody',{},rows.map(({k,f})=>h('tr',{},h('td',{text:`${phNo(k)} ${phName(k,q.np)}`}),h('td',{class:'n'},h('input',{type:'number',min:1,step:1,class:'qs-days'+(q.sd[k]?' set':''),'aria-label':'SLATE working days for '+phName(k,q.np),value:String(q.sd[k]||stdSlateDays(q.np,k)),onchange:e=>{ const v=Math.round(+e.target.value); sh.sd=sh.sd||{}; if(v>0&&v!==stdSlateDays(q.np,k)) sh.sd[k]=v; else delete sh.sd[k]; sh.fitTo=''; renderSheet(); }})),h('td',{class:'n',text:f.none?'—':f.sub?fmtD(f.sub):'—'}),f.none?h('td',{class:'n muted',style:'font-family:inherit;font-size:13px',text:f.auth?'after authority':'after WD-1'}):h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):'—'}))),
         last?h('tr',{class:'qs-last'},h('td',{text:rows.some(r=>r.f.none)?'Last dated gate':'Last gate'}),h('td'),h('td'),h('td',{class:'n',text:fmtD(last)})):null))):null,
-    sh.start&&n&&!preAny?h('div',{class:'qs-fit'},h('span',{class:'qs-k',text:'Finish by'}),h('input',{type:'date',class:'tl-num qs-in',min:sh.start,value:sh.fitTo||'',oninput:e=>{ sh.fitTo=e.target.value; }}),
+    sh.start&&n&&!preAny&&sh.dates?h('div',{class:'qs-fit'},h('span',{class:'qs-k',text:'Finish by'}),h('input',{type:'date',class:'tl-num qs-in',min:sh.start,value:sh.fitTo||'',oninput:e=>{ sh.fitTo=e.target.value; }}),
       h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ if(!sh.fitTo) return toast('Choose the finish date.'); const sd=qsFit(sh,{...p,id:sh.projectId},sh.fitTo); if(!sd){ sh.err='That date is too early even at a fifth of the standard days. Choose a later date or fewer phases.'; renderSheet(); return; } sh.err=''; sh.sd=sd; renderSheet(); toast('Our days fitted to finish by '+fmtD(sh.fitTo)); },text:'Fit the days'}),
       Object.keys(q.sd).length?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ sh.sd={}; sh.fitTo=''; renderSheet(); },text:'Back to the standard'}):null,
       h('span',{class:'f-hint',style:'margin:0;flex-basis:100%',text:Object.keys(q.sd).length?'Changed days are in bold. Client review days stay the same. Working drawings waiting for the authority go-ahead are not dated yet, so the finish date counts the dated phases.':'Type SLATE’s working days per phase, or give a finish date and fit the days to it. Client review days stay the same.'})):null,
     preAny?h('div',{class:'callout',style:'font-size:13.5px',text:'Some phases were finished before SLATE OS. After set-up the timeline opens so the start date and days can be checked.'}):null,
-    h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{ sh.more=!sh.more; renderSheet(); },text:sh.more?'Hide phases and pace ‹':'Change phases or pace ›'}),
+    h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{ sh.more=!sh.more; renderSheet(); },text:sh.more?'Hide phases and pace ‹':'More options: phases and pace ›'}),
     sh.more?h('div',{style:'display:grid;gap:12px'},
       field('Pace',h('div',{style:'display:grid;gap:6px'},seg('Pace',Object.keys(PACE).filter(k=>k!=='fast'||canPace()||sh.pace==='fast').map(k=>[k,paceName({type:sh.tpl},k)]),sh.pace,v=>{ if(sh.tpl==='proposal'&&(v==='fast')!==(sh.pace==='fast')){ sh.m.sel=sh.m.sel.filter(x=>x!=='0'); if(v!=='fast') sh.m.sel=phaseOrder(sh.tpl,['0',...sh.m.sel]); } sh.pace=v; renderSheet(); }),
         h('div',{class:'f-hint',text:(sh.pace==='fast'&&sh.tpl==='proposal'?PACE_NOTE.sprint:PACE_NOTE[sh.pace])+(canPace()?'':' Fast track is set by the Principal or the COO.')}))),
       phaseEditor(sh.m,{type:sh.tpl,idp:'sp',extra:pre}),
       sh.running?h('p',{class:'f-hint',style:'margin:0',text:`This project was already running. Tick each phase finished before SLATE OS went live (${fmtD(goLive())}).`}):null):null,
-    h('div',{class:'f-hint',style:'margin:0',text:(ap?'The dates become the gate dates and the original plan (R4).':'The dates go to the COO as proposed gate dates.')+' Phases and their tasks can be changed later from Edit phases; a POD leader’s change is approved by the COO.'}),
+    ap?null:h('div',{class:'f-hint',style:'margin:0',text:'The dates go to the COO for approval.'}),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
-      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!n||!sh.start,onclick:createStdPlan,text:!n?'Choose at least one phase':!sh.start?'Give the start date':'Start the project'}),
+      h('button',{class:'btn btn-go',type:'button',disabled:S.busy||!n||!sh.start,onclick:createStdPlan,text:!n?'Choose at least one phase':!sh.start?'Give the start date':'Start the project'}),
       h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Later'}))];
 }
 function createStdPlan(){
