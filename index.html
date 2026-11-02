@@ -1199,6 +1199,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 #far-pop .fp-foot{display:grid;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#fff}
 #far-pop .fp-val{display:flex;justify-content:space-between;align-items:baseline;gap:10px}#far-pop .fp-val b{font-size:17px;font-variant-numeric:tabular-nums}
 @media (max-width:560px){#far-pop{padding:0}#far-pop .fp-card{height:100%;border-radius:0}}
+.pr-dot{border:1.5px dashed var(--faint)!important;background:#fff!important}.pr-dot.bad{border-color:var(--overdue)!important}
+.pr-round{gap:6px}.pr-notes{margin:0;padding-left:20px;font-size:14px;display:grid;gap:3px}
 .pq-svc{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 .pq-svc-h{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:28px}
 .pq-svc-sum{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pq-svc-go{font-size:13.5px;font-weight:600;text-decoration:underline}
@@ -4460,6 +4462,12 @@ function viewRisk(){
     sec('Needs your decision','Grace suggestions, at-risk starts, deemed approvals and dates behind a client delay.',decide),
     sec('Watch','Late on our side, late clients and consultants, and client buffers running out.',watch),
     !decide.length&&!watch.length?h('div',{class:'empty'},h('h3',{text:'Nothing at risk'}),h('p',{class:'muted',style:'margin:0',text:'No decisions waiting and nothing late.'})):null,
+    (()=>{ const P=peerScan(); const rows=P.open.sort((a,b)=>(revOf(b.x).state==='changes')-(revOf(a.x).state==='changes'));
+      const st=[...P.stat.entries()].filter(([id])=>pods().includes(teamOf(id))||amApprover());
+      return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Peer reviews'}),h('span',{class:'cnt',text:String(rows.length)})),h('p',{class:'f-hint',style:'margin:-4px 4px 0',text:'Open peer reviews in phases now running, then how many reviews each POD leader has given and received.'}),
+        rows.length?h('div',{class:'list'},rows.map(y=>card(y.p,`Phase ${phLabel(y.k,y.p)} · ${peerStateTxt(y.x)}`,`Peer: ${y.peer?nameOf(y.peer):'none'} · ${y.it.t}`,B('Open',()=>openPeerRev(y.p.id,y.k,y.it.id))))):h('div',{class:'f-hint',text:'No peer review open.'}),
+        st.length?h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line);margin-top:10px'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'POD leader'}),h('th',{class:'n',text:'Reviews given'}),h('th',{class:'n',text:'Passed'}),h('th',{class:'n',text:'Changes asked'}),h('th',{class:'n',text:'Rounds received'}),h('th',{class:'n',text:'Sent back to them'}))),
+          h('tbody',{},st.map(([id,g])=>h('tr',{},h('td',{text:nameOf(id)}),h('td',{class:'n',text:String(g.given)}),h('td',{class:'n',text:String(g.passed)}),h('td',{class:'n',text:String(g.changes)}),h('td',{class:'n',text:String(g.received)}),h('td',{class:'n',text:String(g.recChanges)})))))):null); })(),
     h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Grace used'}),h('span',{class:'cnt',text:String(R.used.length)})),h('p',{class:'f-hint',style:'margin:-4px 4px 0',text:'POD-load grace (+20% SLATE days) given so far: by POD, then by the member whose deliverables got the extra days. A POD that keeps needing grace is a capacity question, not a timeline one.'}),usedTbl,whoTbl)];
 }
 /* Gantt by phase (Principal, 1 Nov 2026): one row per project, one bar per phase, the same marks as the project cards:
@@ -5669,7 +5677,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -6445,14 +6453,77 @@ const canTickCl=(p,x)=>S.canWrite&&(canManageCl(p)||x.who===S.uid);
 function clSet(p,k,id,patch,msg){ const cur=clOf(p,k,id); if(patch&&patch.done) fxMark(`cl:${p.id}:${k}:${id}`,'done');
   const closes=!cur.done&&!cur.na&&!!(patch&&(patch.done||patch.na))&&clLeft(p,k)===1&&!stdState(p,k).done;
   return run(()=>S.db.doc('projects/'+p.id).update({cl:{[k]:{[id]:{...cur,...patch,at:new Date().toISOString(),by:S.uid}}}}),msg).then(ok=>{ if(ok&&closes) celebrate('ring',{p,k}); return ok; }); }
+/* ---------- Peer review (Principal, 2 Nov 2026) ----------
+   Each peer-review item (role R) goes to the leader of another POD, in turn: POD 1 → POD 2 → POD 3 → POD 1. The Principal or
+   the COO can change the peer. Only the peer signs it off, through a review with a result, what was reviewed and the points.
+   "Changes needed" goes to the project's POD leader, who fixes the points and sends it back; every round is kept.
+   The Principal's review in the same phase waits until the peer review has passed. The Principal and the COO can record a pass. */
+const isPeerIt=it=>!!it&&it.r==='R';
+const podNum=pd=>parseInt(String(pd).replace(/\D+/g,''),10)||99;
+const peerLeadOf=pd=>people().find(id=>isPodLead(id,pd))||'';
+function peerFor(p){ const own=podsOfProject(p), ps=pods().filter(pd=>peerLeadOf(pd)).sort((a,b)=>podNum(a)-podNum(b)); if(!ps.length) return '';
+  const i=ps.findIndex(pd=>own.includes(pd));
+  for(let j=1;j<=ps.length;j++){ const pd=ps[((i<0?-1:i)+j)%ps.length]; if(own.includes(pd)) continue; const id=peerLeadOf(pd); if(id&&!own.includes(teamOf(id))) return id; } return ''; }
+const clWho=(p,it,x)=>x.who||(isPeerIt(it)?peerFor(p):'');
+const peerOpen=x=>!x.done&&!x.na;
+const revOf=x=>(x&&x.rev)||{state:'',rounds:[]};
+const peerStateTxt=x=>{ const r=revOf(x), n=r.rounds.length; return x.done?(r.override?'Passed (recorded by '+nameOf(x.by)+')':'Passed'+(n>1?` after ${n} rounds`:'')):r.state==='changes'?`Changes needed · round ${n}`:r.state==='fixed'?`Fixed, back with the peer · round ${n+1}`:'Waiting for the peer'; };
+/* the Principal's review waits for the peer review in the same phase */
+const peerBlocks=(p,k,it)=>it.r==='P'&&clItems(k).some(r=>isPeerIt(r)&&peerOpen(clOf(p,k,r.id)));
+function openPeerRev(pid,k,id){ S.sheet={type:'peerRev',pid,k,id,res:'pass',set:'',notes:'',fix:'',err:''}; renderSheet(); }
+function sheetPeerRev(){ const sh=S.sheet, p0=S.projects[sh.pid]; if(!p0) return [head('Peer review','Not found')];
+  const p={...p0,id:sh.pid}, it=clItems(sh.k).find(x=>x.id===sh.id)||{t:'Peer review'}, x=clOf(p,sh.k,sh.id), r=revOf(x), peer=clWho(p,it,x), mePeer=peer===S.uid, boss=amApprover(), lead=isProjLead(p);
+  const canRev=S.canWrite&&peerOpen(x)&&(mePeer||boss)&&r.state!=='changes', canFix=S.canWrite&&peerOpen(x)&&r.state==='changes'&&(lead||boss);
+  const save=patch=>{ const cur=clOf(S.projects[sh.pid],sh.k,sh.id); return S.db.doc('projects/'+sh.pid).update({cl:{[sh.k]:{[sh.id]:{...cur,...patch,at:new Date().toISOString(),by:S.uid}}}}); };
+  const submit=()=>{ const notes=sh.notes.split('\n').map(t=>t.trim()).filter(Boolean);
+    if(sh.res==='changes'&&!notes.length) return fail('Write the points to change, one per line.');
+    const round={at:new Date().toISOString(),by:S.uid,res:sh.res,set:sh.set.trim(),notes}, rounds=[...r.rounds,round], ov=!mePeer;
+    run(()=>save(sh.res==='pass'?{done:today(),na:false,who:peer,rev:{state:'passed',rounds,...(ov?{override:true}:{})}}:{who:peer,rev:{state:'changes',rounds}}),sh.res==='pass'?'Peer review passed':'Sent back to the POD leader with '+notes.length+' point'+(notes.length===1?'':'s'))
+      .then(ok=>{ if(ok){ S.sheet={type:'projView',id:sh.pid,openPh:sh.k}; renderSheet(); } }); };
+  const fixed=()=>{ const rounds=r.rounds.map((y,i)=>i===r.rounds.length-1?{...y,fixedAt:new Date().toISOString(),fixedBy:S.uid,fixNote:sh.fix.trim()}:y);
+    run(()=>save({rev:{state:'fixed',rounds}}),'Sent back to '+nameOf(peer).split(' ')[0]+' for review').then(ok=>{ if(ok){ S.sheet={type:'projView',id:sh.pid,openPh:sh.k}; renderSheet(); } }); };
+  const kv=(l,v)=>h('div',{class:'qs-kv'},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},h('span',{class:'qs-t',style:'padding-left:0',text:v})));
+  return [head(projLabel(p),'Peer review'),
+    h('div',{class:'qs-box'},kv('Phase',phLabel(sh.k,p)),kv('Check',it.t),kv('Peer',peer?nameOf(peer)+' · '+teamLabel(peer):'No other POD leader'),kv('Status',peerStateTxt(x))),
+    r.rounds.length?h('div',{style:'display:grid;gap:8px'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em',text:'Review log'}),
+      ...r.rounds.map((y,i)=>h('div',{class:'card pr-round'},
+        h('div',{class:'pc-row'},h('b',{text:`Round ${i+1} · ${y.res==='pass'?'Passed':'Changes needed'}`}),h('span',{class:'f-hint',style:'margin:0',text:`${nameOf(y.by)} · ${fmtTs(y.at)}`})),
+        y.set?h('div',{class:'f-hint',style:'margin:0',text:'Reviewed: '+y.set}):null,
+        y.notes&&y.notes.length?h('ol',{class:'pr-notes'},y.notes.map(t=>h('li',{text:t}))):null,
+        y.fixedAt?h('div',{class:'f-hint',style:'margin:0;color:var(--ontime)',text:`Fixed by ${nameOf(y.fixedBy)} · ${fmtTs(y.fixedAt)}`+(y.fixNote?' · '+y.fixNote:'')}):null))):null,
+    canRev?h('div',{class:'card',style:'gap:10px'},h('b',{text:mePeer?'Your review':'Record the review (Principal or COO)'}),
+      seg('Result',[['pass','Passed'],['changes','Changes needed']],sh.res,v=>{ sh.res=v; renderSheet(); }),
+      field('What you reviewed',h('input',{maxlength:120,placeholder:'e.g. Concept set rev 2, 4 Nov',value:sh.set,oninput:e=>{ sh.set=e.target.value; }})),
+      field(sh.res==='changes'?'Points to change, one per line *':'Comments (optional), one per line',h('textarea',{rows:4,value:sh.notes,oninput:e=>{ sh.notes=e.target.value; }})),
+      !mePeer?h('div',{class:'f-hint',style:'margin:0',text:'You are recording this instead of the peer; it shows as recorded by you.'}):null,
+      h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:submit,text:sh.res==='pass'?'Pass the review':'Send back with the points'}))):null,
+    canFix?h('div',{class:'card',style:'gap:10px'},h('b',{text:'Fix the points, then send back'}),
+      field('Note to the peer (optional)',h('input',{maxlength:160,placeholder:'e.g. All fixed in rev 3',value:sh.fix,oninput:e=>{ sh.fix=e.target.value; }})),
+      h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:fixed,text:'Points fixed: send back'}))):null,
+    !canRev&&!canFix&&peerOpen(x)?h('div',{class:'f-hint',text:r.state==='changes'?'With the project’s POD leader to fix the points.':'Waiting for '+(peer?nameOf(peer):'the peer')+' to review.'}):null,
+    sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
+    h('div',{class:'actions'},h('button',{class:'btn',type:'button',onclick:()=>{ S.sheet={type:'projView',id:sh.pid,openPh:sh.k}; renderSheet(); },text:'Back'}))]; }
+function peerScan(){ const open=[], stat=new Map(), st=id=>{ if(!stat.has(id)) stat.set(id,{given:0,passed:0,changes:0,received:0,recChanges:0}); return stat.get(id); };
+  for(const [pid,p0] of Object.entries(S.projects)){ const p={...p0,id:pid}; if(!p.std) continue; const lead=p.std.lead||personFor('lead',p.pod);
+    for(const k of stdPhases(p)) clItems(k).filter(isPeerIt).forEach(it=>{ const x=clOf(p,k,it.id), r=revOf(x);
+      r.rounds.forEach(y=>{ const g=st(y.by); g.given++; if(y.res==='pass') g.passed++; else g.changes++; if(lead){ const q=st(lead); q.received++; if(y.res!=='pass') q.recChanges++; } });
+      if(!p.closed&&peerOpen(x)&&activePhases(p).includes(k)) open.push({p,k,it,x,peer:clWho(p,it,x)}); }); }
+  return {open,stat}; }
 function clWhoOpts(p){ const ps=podsOfProject(p); return [['','Owner: role'],...people().filter(id=>!isCOO(id)&&!isPriv(id)&&id!==ownerId()&&(ps.includes(teamOf(id))||(amApprover()&&isSupport(id)))).map(id=>[id,nameOf(id)])]; }
 function clRow(p,k,it,manage){
-  const x=clOf(p,k,it.id), can=canTickCl(p,x), whoTxt=x.who?nameOf(x.who):clRole(it.r);
+  const x=clOf(p,k,it.id), peer=isPeerIt(it), pw=peer?clWho(p,it,x):'', blk=peerBlocks(p,k,it), can=!peer&&!blk&&canTickCl(p,x), whoTxt=pw?nameOf(pw):x.who?nameOf(x.who):clRole(it.r);
+  if(peer){ const r=revOf(x), open=peerOpen(x), mine=pw===S.uid&&r.state!=='changes', fixMe=r.state==='changes'&&isProjLead(p);
+    let sel=null; if(manage&&open&&amApprover()){ const own=podsOfProject(p), opts=people().filter(id=>pods().some(pd=>pd===teamOf(id)&&!own.includes(pd)&&isPodLead(id,pd))).map(id=>[id,nameOf(id)+' · '+teamLabel(id)]);
+      sel=h('select',{'aria-label':'Peer',onchange:e=>clSet(p,k,it.id,{who:e.target.value},'Peer changed')},h('option',{value:'',text:'In turn: '+(peerFor(p)?nameOf(peerFor(p)):'none')}),opts.map(([v,l])=>h('option',{value:v,text:l}))); sel.value=x.who||''; }
+    return h('div',{class:'cl-row'+(x.na?' na':'')},x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?h('span',{class:'chk on',text:'✓'}):h('span',{class:'chk off pr-dot'+(r.state==='changes'?' bad':''),'aria-hidden':'true'}),
+      h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),h('div',{class:'cl-m'},sel?null:pw?h('span',{class:'who'},avaEl(pw,false,'sm'),'Peer: '+nameOf(pw)):h('span',{text:'No other POD leader'}),h('span',{style:r.state==='changes'&&open?'color:var(--overdue);font-weight:600':'',text:'· '+peerStateTxt(x)}),x.done?h('span',{text:'· '+fmtD(x.done)}):null)),
+      h('div',{class:'cl-a'},sel,!x.na?h('button',{class:'btn btn-sm'+((mine||fixMe)&&open?' btn-primary':''),type:'button',style:(mine||fixMe)&&open?'':'background:var(--group)',onclick:()=>openPeerRev(p.id,k,it.id),text:open?(mine?'Review':fixMe?'Fix points':'Open'):'Log'}):null,
+        manage&&open&&amApprover()?h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo N/A':'N/A'}):null)); }
   const box=x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?(can?holdTick(fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on','aria-label':'Press and hold to untick “'+it.t+'”',disabled:S.busy,text:'✓'}),()=>clSet(p,k,it.id,{done:null},'Unticked'),'Untick'):h('span',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',text:'✓'})))
     :can?holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'):h('span',{class:'chk off','aria-hidden':'true'});
   let who=null; if(manage&&!x.done&&!x.na){ const opts=clWhoOpts(p); if(x.who&&!opts.some(o=>o[0]===x.who)) opts.push([x.who,nameOf(x.who)]); who=h('select',{id:`clw-${k}-${it.id}`,'aria-label':'Who does it',onchange:e=>clSet(p,k,it.id,{who:e.target.value},'Assigned')},opts.map(([v,l])=>h('option',{value:v,text:v?l:`Owner: ${clRole(it.r)}`}))); who.value=x.who||''; }
   return h('div',{class:'cl-row'+(x.na?' na':'')},box,
-    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),h('div',{class:'cl-m'},who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk?h('span',{text:'· checked by '+clRole(it.chk)}):null,x.done?h('span',{text:'· ticked '+fmtD(x.done)+(x.by&&x.by!==x.who?' by '+nameOf(x.by):'')}):null,x.na?h('span',{text:'· not applicable'}):null)),
+    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),h('div',{class:'cl-m'},who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk?h('span',{text:'· checked by '+clRole(it.chk)}):null,blk&&!x.done?h('span',{style:'color:var(--late)',text:'· waits for the peer review'}):null,x.done?h('span',{text:'· ticked '+fmtD(x.done)+(x.by&&x.by!==x.who?' by '+nameOf(x.by):'')}):null,x.na?h('span',{text:'· not applicable'}):null)),
     manage?h('div',{class:'cl-a'},who,!x.done?h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo N/A':'N/A'}):null):h('span'));
 }
 function setPace(p,v){
@@ -7284,8 +7355,10 @@ const clTaskKey=t=>t&&t.clRef?`${t.projectId}|${t.clRef.k}|${t.clRef.id}`:'';
 function clTasks(){ const m={}; Object.entries(S.tasks).forEach(([id,t])=>{ if(t&&!t.archived&&t.clRef) m[clTaskKey(t)]={...t,id}; }); return m; }
 function myChecklist(){ const out=[], due=phDueMap(), ct=clTasks();
   for(const p of projects()){ if(!p.std||!workable(p)) continue; for(const k of activePhases(p)){
-    clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(x.who===S.uid&&!x.done&&!x.na){ const t=ct[`${p.id}|${k}|${it.id}`]; if(t&&t.assignee===S.uid&&!t.doneAt) return; out.push({p,k,it,due:due(p,k)}); } }); } }
-  return out.sort(byDue); }
+    clItems(k).forEach(it=>{ const x=clOf(p,k,it.id);
+      if(isPeerIt(it)){ if(!peerOpen(x)) return; const r=revOf(x); if(r.state==='changes'?isProjLead(p):clWho(p,it,x)===S.uid) out.push({p,k,it,due:due(p,k),peer:r.state==='changes'?'fix':'review'}); return; }
+      if(x.who===S.uid&&!x.done&&!x.na){ const t=ct[`${p.id}|${k}|${it.id}`]; if(t&&t.assignee===S.uid&&!t.doneAt) return; out.push({p,k,it,due:due(p,k)}); } }); } }
+  return out.sort((a,b)=>(!!b.peer)-(!!a.peer)||byDue(a,b)); }
 /* drafting queue (Design Associate Lead): every open drafting-pool and authority-drafter item in a live phase,
    not yet with someone outside the drafting team. Assigning one makes it a dated task for that person. */
 const isDraftItem=it=>/[DA]/.test(it.r||'');
@@ -7324,10 +7397,11 @@ function tickMany(xs){ if(!xs.length) return; const by=new Map(), now=new Date()
   return run(async()=>{ for(const {p,cl} of by.values()) await S.db.doc('projects/'+p.id).update({cl}); },`${xs.length} item${xs.length===1?'':'s'} ticked`).then(ok=>{ if(ok){ S.clSel=null; render(true); } }); }
 function myChecklistSec(list,o={}){
   const sel=S.clSel, key=(p,k,it)=>`${p.id}|${k}|${it.id}`;
-  const pick=(p,k,it)=>{ const x=key(p,k,it); sel.has(x)?sel.delete(x):sel.add(x); render(true); };
-  const one=({p,k,it,due},grp)=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
+  const pick=(p,k,it)=>{ if(isPeerIt(it)) return openPeerRev(p.id,k,it.id); const x=key(p,k,it); sel.has(x)?sel.delete(x):sel.add(x); render(true); };
+  const one=({p,k,it,due,peer},grp)=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ if(peer) return openPeerRev(p.id,k,it.id); if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
+      isPeerIt(it)?h('span',{class:'chk pr-dot'+(peer==='fix'?' bad':''),'aria-hidden':'true'}):
       sel?h('span',{class:'chk'+(sel.has(key(p,k,it))?' on':''),'aria-hidden':'true',text:sel.has(key(p,k,it))?'✓':''}):holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'),
-      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),
+      h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:peer==='fix'?'Fix the peer review points (phase '+phNo(k)+')':peer?(/^peer review/i.test(it.t)?'Peer review to do':'Peer review: '+it.t):it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),
         h('div',{class:'row-meta'},...(grp?[]:[h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'})]),h('span',{text:'Phase '+phLabel(k,p)}),...(due?[h('span',{text:'·'}),dueTxt(due)]:[])),!grp&&p.code?h('div',{class:'row-pn',text:p.name}):null),
       h('span'),h('span'));
   let body;
