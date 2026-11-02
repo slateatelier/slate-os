@@ -1182,6 +1182,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .now-sum{display:flex;gap:14px;flex-wrap:wrap;margin:-4px 2px 0}
 .now-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 2px}
 .now-legend .now-chip{min-width:20px;height:20px;font-size:11px;animation:none}
+.tl-num{background:#fff!important;border:1.5px solid var(--faint)!important;border-radius:8px;font-weight:600;font-size:15px}
+.tl-num:focus{border-color:var(--early)!important;outline:none}
+.tl-num:disabled{border-style:dashed!important;color:var(--muted);font-weight:500}
 .rk-tile{all:unset;box-sizing:border-box;display:grid;gap:10px;width:100%;padding:12px 14px;border-radius:12px;background:#fff;border:1px solid var(--line);cursor:pointer;margin:0 0 12px}
 .rk-tile:hover{border-color:var(--faint)}.rk-tile:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .rk-h{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.rk-go{text-transform:none;letter-spacing:0;font-weight:500}
@@ -6964,7 +6967,7 @@ function sheetTl(){
   const pv={...p,std:{...p.std,sd:Object.fromEntries(ks.map(k=>[k,+d.sd[k]||0])),cd:Object.fromEntries(ks.map(k=>[k,+d.cd[k]||0])),kd:Object.fromEntries(ks.filter(kwOf).map(k=>[k,d.kd[k]===''||d.kd[k]==null?consultDaysOf(p,k):+d.kd[k]||0])),resume:d.resume,tl:{take:+d.take||0}}};
   if(!had&&d.start){ const gr=graceFor(pv,tlCompute({...pv,std:{...pv.std,grace:{}}},d.start,false)); pv.std.grace=Object.fromEntries(Object.keys(gr).map(k=>[k,GRACE])); S.sheet.grace=gr; }
   const plan=d.start?tlCompute(pv,d.start,false):{};
-  const num=(f,k,dis)=>h('input',{type:'number',min:'0',max:'120',value:d[f][k],disabled:dis,style:'width:58px;padding:4px 6px;text-align:center',oninput:e=>{ d[f][k]=e.target.value; },onchange:()=>renderSheet()});
+  const num=(f,k,dis)=>h('input',{type:'number',min:'0',max:'120',inputmode:'numeric','aria-label':(f==='sd'?'Our':f==='cd'?'Client':'Consultant')+' days, phase '+k,value:d[f][k],disabled:dis,class:'tl-num',title:dis?'Only the COO or the Principal changes our days':'Tap to change',style:'width:64px;padding:6px 6px;text-align:center',oninput:e=>{ d[f][k]=e.target.value; },onchange:()=>renderSheet()});
   const grN=!had&&S.sheet.grace?Object.keys(S.sheet.grace):[];
   return [head(projLabel(p),had?'Timeline days':'Set the timeline'),
     grN.length?h('div',{class:'callout',style:'font-size:13.5px',text:`POD load: ${grN.map(k=>phLabel(k,p)).join(', ')} ${grN.length===1?'runs':'run'} while the POD has 3 or more heavy phases on, so ${grN.length===1?'it gets':'they get'} +20% SLATE days (grace). Included in the dates below.`}):null,
@@ -6976,6 +6979,11 @@ function sheetTl(){
           if(!had){ const gr=graceFor(pv,tlCompute(pv,d.start,false)), g={}; Object.keys(gr).forEach(k=>{ g[k]=GRACE; }); pv.std.grace=g; upd.std.grace=g; upd.std.tl={start:d.start,at:new Date().toISOString(),by:S.uid,take:+d.take||0,base:tlPlanSnap(pv,d.start)}; }
           else upd.std.tl={take:+d.take||0};
           await S.db.doc('projects/'+p.id).update(upd);
+          /* days changed on a timeline already set: the open gates from the first changed phase on move to the new dates (Principal or COO) */
+          if(had&&ap){ const ch=ks.findIndex(k=>(+d.sd[k]||0)!==slateDaysFor(p,k)||(+d.cd[k]||0)!==clientDaysOf(p,k)||(kwOf(k)&&d.kd[k]!==''&&d.kd[k]!=null&&+d.kd[k]!==consultDaysOf(p,k)));
+            if(ch>=0){ const np={...p,std:{...p.std,...upd.std,tl:{...p.std.tl,take:+d.take||0}}}, lv=tlCompute(np,tlOf(p).start,true);
+              for(const k of ks.slice(ch)){ const f=lv[k], st=stdState(p,k); if(!f||f.none) continue;
+                for(const [t,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(t&&!t.doneAt&&date&&t.target!==date) await taskUpdate(t.id,{target:date,request:null},[{type:'target',from:t.target||'',to:date,note:'Phase days changed on the timeline'}]); } } }
           const resumed=had&&d.resume&&d.resume!==((p.std&&p.std.resume)||'');
           if((!had&&d.gates)||resumed){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
             for(const [t,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!t||t.doneAt||t.target||t.request) continue;
@@ -6985,7 +6993,8 @@ function sheetTl(){
       h('div',{class:'form-row'},field('Start *',h('input',{type:'date',value:d.start,disabled:had,oninput:e=>{ d.start=e.target.value; },onchange:()=>renderSheet()}),had?'Fixed once set; it starts the original plan.':'Usually the work order date.'),
         field(useBand(p)?'Of the WD days, days to take the NFC feedback in for GFC':'Days to take NFC feedback in before GFC',h('input',{type:'number',min:'0',max:'20',value:d.take,oninput:e=>{ d.take=e.target.value; },onchange:()=>renderSheet()}))),
       ks.includes('3r')?field('Land share: work resumes on',h('input',{type:'date',value:d.resume,oninput:e=>{ d.resume=e.target.value; },onchange:()=>renderSheet()}),'Leave it empty while the project is paused after the launch: 3R and later phases wait, with no dates, and nothing goes late. Enter the date when work restarts; 3R and the phases after it get their dates from it.'):null,
-      h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'SLATE days'}),h('th',{class:'n',text:'Consultant days'}),h('th',{class:'n',text:'Client days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
+      h('div',{class:'f-hint',style:'margin:0',text:'Tap a number to change the working days for that phase; the submission and gate dates update. Scroll the table sideways to see them.'}),
+      h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{},h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'Our days'}),h('th',{class:'n',text:'Consultants'}),h('th',{class:'n',text:'Client days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
         h('tbody',{},ks.map(k=>{ const f=plan[k]||{}; return h('tr',{},h('td',{text:`${PH[k].no} ${phName(k,p)}`}),h('td',{class:'n'},num('sd',k,!ap)),h('td',{class:'n'},kwOf(k)?num('kd',k,false):h('span',{class:'muted',text:'—'})),h('td',{class:'n'},num('cd',k,false)),
           h('td',{class:'n',text:f.sub?fmtD(f.sub):'—'}),h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):(f.none?'after resume':'—')})); })))),
       h('div',{class:'f-hint',text:'Consultant days: how long the structural and MEP consultants take to return their drawings once SLATE shares the plans, as agreed in their work orders (R8). The same days apply to both.'}),
