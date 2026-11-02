@@ -9030,7 +9030,7 @@ function flowStrip(at){ const all=propList().filter(propOpen), L=all.filter(isLe
     h('span',{class:'flow-n',text:n}),h('span',{class:'flow-t'},h('b',{text:t+(c?' · '+c:'')}),h('span',{text:i===3?(c?'this month':sub):sub}))))); }
 const propFee=p=>{ const n=+p.fee||0; if(!n) return p.feeNote||''; return (p.feeBasis==='sft'?taka(n)+' per sft':bdt(n)+' lump sum')+(p.feeNote?' · '+p.feeNote:''); };
 const propTypeName=k=>k&&STD_DEF[k]?STD_DEF[k].name:'';
-const propLine=e=>e?[(PROP_KIND.find(x=>x[0]===e.kind)||[])[1]||'',(PROP_RESP.find(x=>x[0]===e.resp&&x[0])||[])[1]||''].filter(Boolean).join(' · '):'';
+const propLine=e=>e?[(PROP_KIND.find(x=>x[0]===e.kind)||[])[1]||e.kindL||'',(PROP_RESP.find(x=>x[0]===e.resp&&x[0])||[])[1]||''].filter(Boolean).join(' · '):'';
 async function propPin(){ if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlocked()){ const ok=await SlatePin.ensure(); if(!ok) throw new Error('Unlock Business with your PIN to save proposals.'); } }
 const propWrite=async(id,p)=>{ await propPin(); return S.db.doc('proposals/'+id).set({...p,updatedAt:new Date().toISOString(),updatedBy:S.uid}); };
 function openPropView(id){ S.sheet={type:'propView',id,lg:{kind:'call',resp:'',note:'',next:''},err:''}; renderSheet(); }
@@ -9090,7 +9090,8 @@ async function propVersion(id,d){ const cur=(S.props||{})[id]; if(!cur) return d
   const now=new Date().toISOString(), rev=last?(+last.rev||0)+1:0, F=pbFee(d);
   Object.assign(d,{rev,madeAt:now,madeBy:S.uid}); const doc=JSON.parse(JSON.stringify(d));
   const nv=[...vs,{rev,at:now,by:S.uid,total:Math.round(F.total||0),doc}];
-  await propWrite(id,{...cur,doc,versions:nv,fee:F.total?String(Math.round(F.total)):cur.fee||''}); (S.props[id]={...cur,doc,versions:nv});
+  const log=[...(cur.log||[]),{at:now,by:S.uid,kind:'version',kindL:rev?'Rev '+rev+' made':'First issue made',note:F.total?'Fee '+pbTk(Math.round(F.total))+' + VAT/AIT':''}];
+  await propWrite(id,{...cur,doc,versions:nv,log,fee:F.total?String(Math.round(F.total)):cur.fee||''}); (S.props[id]={...cur,doc,versions:nv,log});
   return d; }
 const revTxt=d=>d&&+d.rev?' · Rev '+d.rev:'';
 const madeTxt=d=>d&&d.madeAt?`Prepared by ${nameOf(d.madeBy)} · ${fmtTs(d.madeAt)}`:'';
@@ -9148,7 +9149,7 @@ function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).t
   const guide=+doc.lump||0, fm=sh.fm||'sft', fv=+sh.fv||0, area=+doc.area||0, fee=fm==='sft'?(fv>0&&area?Math.round(fv*area/1000)*1000:0):(fv>0?Math.round(fv):0);
   const on=Object.keys(pqSel(sh).on).filter(l=>sh.sel.on[l]), ord=[...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0])]; on.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
   doc.parts=on.map(l=>doc.parts.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })());
-  const addons=on.filter(pqIsAdd).map(l=>({label:l,...pqAddFee(sh,l,area)})), addSum=addons.reduce((a,x)=>a+x.amt,0), total=fee?fee+addSum:0;
+  const addons=on.filter(pqIsAdd).map(l=>({label:l,...pqAddFee(sh,l,area)})), addSum=addons.reduce((a,x)=>a+x.amt,0), total=fee||0;
   doc.addons=addons.map(x=>({label:x.label,amount:x.amt,basis:x.t==='sft'?`Tk ${x.v}/sft`:'lump sum'})); doc.mainFee=fee||'';
   const nv=on.includes('Site supervision')?Math.max(1,parseInt(d.visits,10)||SP_PLANS.comp.visits):0; doc.vFree=String(nv); doc.asBuilt='x';
   doc.parts.forEach(x=>{ if(x.label==='Site supervision') x.check=(x.check||[]).map(c=>/^Site visits at|site visits at construction stages/i.test(c.t)?{...c,t:`${nv} site visits at construction stages (setting-out, foundation, first slab, typical floor, facade and finishing, final)`}:c); });
@@ -9176,14 +9177,15 @@ function sheetPropQuick(){
         f.state==='ok'&&f.print?h('button',{class:'btn',type:'button',onclick:()=>dlFile(f.print),text:'Download print copy (pad)'}):null,
         f.state==='ok'&&navigator.canShare?h('button',{class:'btn',type:'button',onclick:()=>share('file'),text:'Share'}):null,
         f.state==='err'?h('button',{class:'btn btn-primary',type:'button',onclick:()=>pqPdf(sh.done),text:'Try again'}):null,
-        h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropDoc(sh.done),text:'Edit details'}),
+        h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropEdit(sh.done),text:'Edit again'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
   const {doc,guide,fee,fm,fv,addons,addSum,total}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
   const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const sel=pqSel(sh), all=[...new Set([...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0]),...Object.keys(sel.on).filter(l=>sel.on[l])])].filter(l=>!PQ_PKG.includes(l)), n=all.filter(l=>sel.on[l]).length, ck=pqCheck(sel.on);
-  return [head('Only you and the COO see this',sh.convert?'Make a proposal':'New proposal'),
-    h('p',{class:'lead',style:'margin:0',text:'Fill in the project, give the fee and tick the services. Payment stages, terms and the timeline are filled in for you.'}),
+  const ed=!!(sh.id&&!sh.convert&&((S.props||{})[sh.id]||{}).doc), vs0=ed?((S.props[sh.id].versions)||[]):[], nx=vs0.length?(+vs0[vs0.length-1].rev||0)+1:0;
+  return [head('Only you and the COO see this',sh.convert?'Make a proposal':ed?'Edit proposal':'New proposal'),
+    h('p',{class:'lead',style:'margin:0',text:ed?`Change what is needed and make the PDF again: it is kept as ${nx?'Rev '+nx:'the first issue'}, with your name, the date and time. Earlier versions stay on the proposal.`:'Fill in the project, give the fee and tick the services. Payment stages, terms and the timeline are filled in for you.'}),
     h('div',{class:'pq-cols'},h('div',{class:'pq-c'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Client and project'}),h('div',{class:'qs-box qs-wide'},
       kv('To',inp2('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin',onchange:()=>renderSheet()})),
       kv('Designation',inp2('_title',{maxlength:80,placeholder:'e.g. Chairman',onchange:()=>renderSheet()})),
@@ -9221,24 +9223,37 @@ function sheetPropQuick(){
               return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l',text:l}),
                 af?h('span',{class:'pq-ck-x',onclick:e=>e.preventDefault()},'+',h('input',{type:'number',min:0,step:af.t==='sft'?0.5:1000,inputmode:'decimal',value:af.v||'',placeholder:'fee',style:af.t==='lump'?'width:96px':'','aria-label':'Add-on fee for '+l,onclick:e=>e.stopPropagation(),onchange:e=>{ fx[l]={t:af.t,v:e.target.value}; renderSheet(); }}),h('i',{text:af.t==='sft'?'/sft':'Tk'})):h('span')); }))); })),
       sel.on['Site supervision']?h('div',{class:'pq-svc'},h('div',{class:'pq-svc-h'},h('span',{class:'qs-k',text:'Site visits'}),h('div',{class:'pq-unit',style:'max-width:160px'},h('input',{id:'pq-visits',class:'tl-num qs-in',type:'number',min:1,step:1,inputmode:'numeric',value:d.visits||SP_PLANS.comp.visits,onchange:e=>{ d.visits=e.target.value; renderSheet(); }}),h('span',{text:'visits'})),h('span',{class:'f-hint',style:'margin:0',text:'included in the fee'}))):null,
-      h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:total?pbTk(total):'—'})),
-        addons.length&&fee?h('div',{class:'pq-fee-l'},h('span',{text:'Main fee'}),h('span',{text:pbTk(fee)})):null,
-        ...(fee?addons.map(x=>h('div',{class:'pq-fee-l'},h('span',{text:'+ '+x.label+(x.t==='sft'?` (Tk ${x.v}/sft)`:'')}),h('span',{style:x.amt?'':'color:var(--overdue)',text:x.amt?pbTk(x.amt):'give the fee'}))):[]),
+      h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Total fee'}),h('b',{text:total?pbTk(total):'—'})),
+        addons.length?h('div',{class:'pq-fee-l',style:'font-weight:600;margin-top:4px'},h('span',{text:'Add-ons, charged separately'}),h('span',{text:addSum?pbTk(addSum):''})):null,
+        ...(addons.map(x=>h('div',{class:'pq-fee-l'},h('span',{text:x.label+(x.t==='sft'?` (Tk ${x.v}/sft)`:'')}),h('span',{style:x.amt?'':'color:var(--overdue)',text:x.amt?pbTk(x.amt):'give the fee'})))),
         h('span',{class:'f-hint',style:'margin:0',text:fee?[fm==='sft'?`Tk ${fv}/sft on ${area.toLocaleString('en-IN')} sft`:'Lump sum'+(area?` · about Tk ${Math.round(fee/area*10)/10}/sft`:''),guide?`rate card guide ${pbTk(guide)}`:'','plus VAT and AIT'].filter(Boolean).join(' · '):fm==='sft'?'Give the rate per sft and the built area.':'Give the lump sum.'})))),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions sticky-acts'},
-      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>pqMake(false),text:'Make the proposal PDF'}),
+      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>pqMake(false),text:ed?'Save and make the new version':'Make the proposal PDF'}),
       h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>pqMake(true),text:'Save draft'}),
       h('button',{class:'btn',type:'button',onclick:()=>sh.id?openPropView(sh.id):closeSheet(),text:'Cancel'}))];
 }
+/* edit a proposal in the same form as a new one (Principal, 2 Nov 2026). The form is saved with the proposal; older
+   proposals are read back from the saved letter. Each time the PDFs are made after a change, a new version is kept. */
+function openPropEdit(id){ const p=(S.props||{})[id]; if(!p) return; const q=p.quick, doc=p.doc||{};
+  if(q&&q.d){ openPropQuick(q.d,id); Object.assign(S.sheet,{sel:{on:{...(q.on||{})},fee:{...(q.fee||{})}},fm:q.fm||'sft',fv:q.fv||'',areaSet:!!q.areaSet}); return renderSheet(); }
+  const sp=p.siteParts||null, has=k=>sp&&Object.prototype.hasOwnProperty.call(sp,k);
+  const d={contact:p.contact||doc.toName||'',_title:doc.toTitle||'',client:p.client||doc.toCompany||'',_picked:p.client||'',_addr:doc.toAddress||'',dear:doc.dear||'Dear Sir,',
+    sArea:sp?sp.area||'':p.location||'',sPlot:sp?sp.plot||'':'',sRoad:sp?sp.road||'':'',sKind:has('sector')?'Sector':has('block')?'Block':'',sSec:sp?sp.sector||sp.block||'':'',
+    name:p.name||'',use:doc.use||'',type:p.type||'dev',katha:p.katha||'',area:doc.area||'',visits:+doc.vFree?String(+doc.vFree):'',phone:p.phone||'',email:p.email||''};
+  const on={}, fee={}; (doc.parts||[]).forEach(x=>{ on[x.label]=true; }); (doc.addons||[]).forEach(x=>{ on[x.label]=true; const m=/^Tk\s*([\d.]+)\/sft/.exec(x.basis||''); fee[x.label]=m?{t:'sft',v:m[1]}:{t:'lump',v:String(x.amount||'')}; });
+  const own=+doc.ownRate||0; openPropQuick(d,id); Object.assign(S.sheet,{sel:{on,fee},fm:own?'sft':'lump',fv:own?String(own):String(doc.mainFee||doc.lump||''),areaSet:!!d.area}); renderSheet(); }
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
   const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&pqDoc(sh).addons.some(x=>!x.amt)) return fail('Give the fee for each add-on.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
-  const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc);
+  const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc), editing=!!(sh.id&&old.doc&&!sh.convert);
+  if(old.doc&&old.doc.ref) doc.ref=old.doc.ref;
   const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),[(pqKind(d)||'none').toLowerCase()]:pqKind(d)?pqT(d.sSec):''},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
-    ...(sh.id?{}:{createdAt:now,createdBy:S.uid}),proposedAt:now,...(sh.convert?{lead:false}:{}),doc:{...doc,total:Math.round(F.total),savedAt:now},...(draft?{draft:true}:{})};
+    ...(sh.id?{}:{createdAt:now,createdBy:S.uid}),proposedAt:now,...(sh.convert?{lead:false}:{}),doc:{...doc,total:Math.round(F.total),savedAt:now},...(draft?{draft:true}:{}),
+    quick:{d:{...JSON.parse(JSON.stringify(d)),_picked:p.client},on:{...((sh.sel||{}).on||{})},fee:{...((sh.sel||{}).fee||{})},fm:sh.fm||'sft',fv:sh.fv||'',areaSet:!!sh.areaSet},
+    ...(editing?{stage:old.stage||'prep',sentOn:old.sentOn||'',next:old.next||addWorkDays(today(),3),proposedAt:old.proposedAt||now}:{})};
   delete v._hint; if(!draft) delete v.draft;
-  run(async()=>{ await propWrite(pid,v); try{ await clientUpsert({name:p.client,contact:p.contact,title:d._title,phone:d.phone,email:d.email,address:d._addr,type:d.type}); }catch(_){} },draft?'Draft saved. Continue any time from Business › Proposals':'Proposal saved').then(ok=>{ if(!ok) return; (S.props=S.props||{})[pid]={...(S.props[pid]||{}),...v}; if(draft) return openPropView(pid); sh.id=pid; sh.done=pid; pqPdf(pid); }); }
+  run(async()=>{ await propWrite(pid,v); try{ await clientUpsert({name:p.client,contact:p.contact,title:d._title,phone:d.phone,email:d.email,address:d._addr,type:d.type}); }catch(_){} },draft?'Draft saved. Continue any time from Business › Proposals':editing?'Proposal updated: making the new version':'Proposal saved').then(ok=>{ if(!ok) return; (S.props=S.props||{})[pid]={...(S.props[pid]||{}),...v}; if(draft) return openPropView(pid); sh.id=pid; sh.done=pid; pqPdf(pid); }); }
 async function pqPdf(pid){ const sh=S.sheet; if(!sh||sh.type!=='propQuick') return; sh.pdf={state:'making'}; renderSheet();
   try{ await propVersion(pid,S.props[pid].doc); const p=(S.props||{})[pid]; const r=await pbPdfRetry(p,p.doc,'both'); if(S.sheet===sh){ sh.pdf={state:'ok',file:r.share,print:r.print}; renderSheet(); } }
   catch(e){ if(S.sheet===sh){ sh.pdf={state:'err',err:e.message||String(e)}; renderSheet(); } } }
@@ -9723,7 +9738,11 @@ tr.tot td{border-top-color:#C41E29;color:#C41E29}
 .ref span b{color:#C41E29}
 .page{padding-top:${PB_TOP}mm}
 .pb-acc{justify-content:space-between;margin-top:30mm}.pb-acc div:last-child{text-align:right}.pb-ul li{margin:0 0 1.3mm}.pb-p{margin:0 0 3mm}.pb-k{color:#545454;width:34%}
-.pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:30mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc div{position:relative}.pb-sign{position:absolute;left:2mm;bottom:100%;height:17mm;width:auto;margin-bottom:-1.5mm;pointer-events:none}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}`;
+.pb-blk{margin:0}.pb-blk h2{margin-top:6mm}.pb-small{font-size:8.5pt;color:#545454;margin:2mm 0 0}.pb-acc{display:flex;gap:20mm;margin-top:30mm}.pb-acc div{min-width:62mm;border-top:.75pt solid #000;padding-top:2mm;font-size:9pt}.pb-acc div{position:relative}.pb-sign{position:absolute;left:2mm;bottom:100%;height:17mm;width:auto;margin-bottom:-1.5mm;pointer-events:none}.pb-acc b{display:block;font-family:"Jost","Futura",sans-serif;font-weight:600}
+/* one typeface and one size for the whole letter (Principal, 2 Nov 2026): Jost (free Futura look-alike) at 10pt; hierarchy by weight and colour only */
+body{font-family:"Jost","Futura",sans-serif}.page *{font-family:"Jost","Futura",sans-serif!important;font-size:10pt!important}
+.page .lh-addr{font-size:7.6pt!important}.page .lh-name{font-size:5.6pt!important}.page .lh-wm{font-size:32pt!important}
+h1,h2,th{letter-spacing:.04em}.docref{text-transform:none;letter-spacing:0;color:#545454}.docref .dm{letter-spacing:0}.sp-cmp th span,.pb-del,.pb-small,.words,.note{color:#545454}.pb-tl td{padding-top:1.1mm;padding-bottom:1.1mm;line-height:1.3}.pb-del{line-height:1.3;margin-top:.3mm}`;
 const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
 const pbLetterhead=()=>`<div class="lh-addr">${PB_ADDR.split('\n').map(pbEsc).join('<br>')}</div><div class="lh-tab"><div class="lh-mark">${PB_LOGO}</div><div class="lh-name">SLATE</div></div><div class="lh-wm">DESIGN<br>WITH<br>PURPOSE</div>`;
@@ -9756,7 +9775,8 @@ function pbBlocks(p,d){
       ${d.parts.filter(x=>x.label||+x.rate).map((x,i)=>`<tr><td>${d.scopeAuto?(i+1)+'. ':''}${pbEsc(x.label)}</td>${+x.rate?`<td class="n">${(+x.rate).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate)*(+d.area||0)).toLocaleString('en-IN')}</td>`:'<td class="n">—</td><td class="n">Included</td>'}</tr>`).join('')}
       ${f.disc?`<tr class="sub"><td>Subtotal (${(+d.area||0).toLocaleString('en-IN')} sft × Tk ${(f.rawRate||0).toLocaleString('en-IN')})</td><td></td><td class="n">${Math.round(f.sub).toLocaleString('en-IN')}</td></tr><tr class="sub"><td>Less special discount${d.discMode==='sft'?` (Tk ${(+d.disc||0).toLocaleString('en-IN')}/sft)`:''}</td><td></td><td class="n">−${Math.round(f.disc).toLocaleString('en-IN')}</td></tr>`:''}
       <tr class="tot"><td>Total fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`;
-  } else fee=`${(d.addons||[]).length&&+d.mainFee?`<table><tbody><tr><td>Design fee for services in the scope of work</td><td class="n">${pbTk(d.mainFee)}</td></tr>${d.addons.map(x=>`<tr><td>Add-on: ${pbEsc(x.label)} (${pbEsc(x.basis)})</td><td class="n">${pbTk(x.amount)}</td></tr>`).join('')}</tbody></table>`:''}<div class="amtbox"><span>Total fee${d.plan&&SP_PLANS[d.plan]?' ('+SP_PLANS[d.plan].n+' plan)':''}${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${d.scopeAuto&&d.parts.some(x=>x.label)?`<p class="pb-small">The fee covers services 1 to ${d.parts.filter(x=>x.label).length} in the scope of work.</p>`:''}`;
+  } else fee=`<div class="amtbox"><span>Total fee${d.plan&&SP_PLANS[d.plan]?' ('+SP_PLANS[d.plan].n+' plan)':''}${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${(()=>{ if(!d.scopeAuto) return ''; const al=(d.addons||[]).map(x=>x.label), ps=d.parts.filter(x=>x.label), nums=ps.map((x,i)=>al.includes(x.label)?0:i+1).filter(Boolean); if(!nums.length) return '';
+      const run=nums.every((n,i)=>n===i+1); return `<p class="pb-small">The total fee covers services ${run&&nums.length>1?'1 to '+nums.length:nums.join(', ')} in the scope of work${al.length?'; add-on services are charged separately, as listed below':''}.</p>`; })()}${(d.addons||[]).length?`<table style="margin-top:4mm"><thead><tr><th>Add-on services (charged separately, not in the total fee)</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${d.addons.map(x=>`<tr><td>${pbEsc(x.label)} (${pbEsc(x.basis)})</td><td class="n">${+x.amount?pbTk(x.amount):'To be agreed'}</td></tr>`).join('')}</tbody></table><p class="pb-small">Add-on fees are invoiced when the add-on service starts.</p>`:''}`;
   add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${d.tax==='incl'?'The fee includes VAT and AIT.':'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
   if(d.plan&&SP_PLANS[d.plan]&&d.cmp) add(spCompare(d));
   if(d.iab&&f.area){ const I=pbIab(d,f);
@@ -9775,8 +9795,7 @@ function pbBlocks(p,d){
       add(`<h2>Project timeline</h2><table class="pb-tl"><thead><tr><th>Stage and what you receive</th><th class="n">Days</th><th class="n">${T.start?'Dates':'Weeks'}</th><th style="width:26%"></th></tr></thead><tbody>
         ${T.setup?`<tr><td><b>0. Work order and setup</b><span class="pb-del">Work order${T.start?' on '+fmtD(T.start):''}; project team, files and kick-off meeting</span></td><td class="n">${T.setup}</td><td class="n">${T.start?fmtD(T.start)+' – '+fmtD(T.dt(T.setup)):wk(0,T.setup)}</td><td>${bar(0,T.setup,T.setup)}</td></tr>`:''}
         ${T.rows.map((x,i)=>`<tr><td><b>${i+1}. ${pbEsc(x.label)}</b>${x.del?`<span class="pb-del">${pbEsc(x.del)}</span>`:''}</td><td class="n">${+x.w||0} + ${+x.r||0}</td><td class="n">${when(x.from,x.to)}</td><td>${bar(x.from,x.n,+x.w||0)}</td></tr>`).join('')}
-        <tr class="tot"><td>Total</td><td class="n">${T.total}</td><td class="n">${T.start?fmtD(T.end):'about '+T.weeks+' weeks'}</td><td></td></tr></tbody></table>
-        <p class="pb-small">Days are working days, five a week: SLATE’s days + the client’s review days. In each bar the darker part is SLATE’s work and the lighter part the client’s review${T.rows.some(x=>x.par)?'; marketing materials are prepared alongside the other stages':''}. The programme starts ${T.start?'with the work order on '+fmtLong(T.start):'from the work order (signed agreement and advance)'}, with ${T.setup} setup day${T.setup===1?'':'s'} before stage 1. Time taken by RAJUK and other authorities, and delays in the client’s decisions or payments, are extra.</p>`); } }
+        <tr class="tot"><td>Total</td><td class="n">${T.total}</td><td class="n">${T.start?fmtD(T.end):'about '+T.weeks+' weeks'}</td><td></td></tr></tbody></table>`); add(`<p class="pb-small">Days are working days, five a week: SLATE’s days + the client’s review days. In each bar the darker part is SLATE’s work and the lighter part the client’s review${T.rows.some(x=>x.par)?'; marketing materials are prepared alongside the other stages':''}. The programme starts ${T.start?'with the work order on '+fmtLong(T.start):'from the work order (signed agreement and advance)'}, with ${T.setup} setup day${T.setup===1?'':'s'} before stage 1. Time taken by RAJUK and other authorities, and delays in the client’s decisions or payments, are extra.</p>`); } }
   const sc=d.sched.filter(x=>x.label||+x.pct);
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
   const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',+d.vFree?(+d.vFree)+' visits':'None (site supervision is optional)']:null,+d.vLead?[d.plan?'Extra site visit with the Principal':'Site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?[d.plan?'Extra site visit by a POD architect (within Dhaka)':'Site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
@@ -9788,7 +9807,7 @@ function pbBlocks(p,d){
   else if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(pbRevFee(d)?`Each further revision is charged at ${pbTk(d.revRate)} per katha of land, ${pbTk(pbRevFee(d))} for this project.`:'Further revisions are charged separately.'));
   if(+d.validDays>0) gen.push(`This offer is valid for ${+d.validDays} days, until ${fmtLong(addDays(d.date||today(),+d.validDays))}. After that the fee and terms may be revised.`);
   list('Terms and conditions',[...pbLines(d.terms),...gen]);
-  add(`<p class="pb-p" style="margin-top:6mm">We look forward to working with you.</p><div class="pb-acc"><div>${S.sign&&d.autoSign!==false&&/imran/i.test(d.signName||'')?`<img class="pb-sign" src="${S.sign}" alt="">`:''}<b>${pbEsc(d.signName)}</b>${pbEsc(d.signTitle)}<br>SLATE</div><div><b>Accepted by</b>Name, signature and date<br>${pbEsc(d.toCompany||p.client||'')}</div></div>`);
+  add(`<p class="pb-p" style="margin-top:6mm">We look forward to working with you.</p><div class="pb-acc"><div>${S.sign&&d.autoSign!==false&&/imran/i.test(d.signName||'')?`<img class="pb-sign" src="${S.sign}" alt="">`:''}<b>${pbEsc(d.signName)}</b>${pbEsc(d.signTitle)}<br>SLATE</div><div><b>Accepted by</b>${(()=>{ const nm=String(d.toName||p.contact||'').trim(), co=String(d.toCompany||p.client||'').trim(), tt=String(d.toTitle||'').trim(); return [nm,tt,co&&co.toLowerCase()!==nm.toLowerCase()?co:''].filter(Boolean).map(pbEsc).join('<br>')||'Name'; })()}<br>Signature and date</div></div>`);
   return B; }
 async function pbPages(p,d){
   const B=pbBlocks(p,d), ifr=document.createElement('iframe');
@@ -10093,7 +10112,7 @@ function sheetPropView(){
       fact('Proposal sent',p.sentOn?fmtD(p.sentOn):''),fact(ld?'Project':'',ld&&p.name?p.name:''),fact('Lead since',p.leadAt&&!ld?fmtD(p.leadAt.slice(0,10)):''),fact('Added',p.createdAt?fmtTs(p.createdAt):'',p.createdBy?'by '+nameOf(p.createdBy):'')),
     (()=>{ const vs=(p.versions||[]).slice().reverse(); if(!vs.length&&!p.doc) return null; const st=S.sheet.vdl||(S.sheet.vdl={});
       const dl=async v=>{ st[v.rev]='making'; renderSheet(); try{ const r=await pbPdfRetry(p,v.doc,'both'); st[v.rev]=''; renderSheet(); dlFile(r.share); }catch(e){ st[v.rev]='err'; renderSheet(); toast(e.message||String(e)); } };
-      return h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:'Versions'}),S.canWrite&&p.doc?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openPropDoc(p.id||S.sheet.id),text:'Edit and make a new version'}):null),
+      return h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:'Versions'}),S.canWrite&&p.doc?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openPropEdit(p.id||S.sheet.id),text:'Edit and make a new version'}):null),
         vs.length?h('div',{class:'list'},vs.map((v,i)=>h('div',{class:'pv-ver'},h('div',{},h('b',{text:(v.rev?'Rev '+v.rev:'First issue')+(i===0?' · current':'')}),h('div',{class:'f-hint',style:'margin:0',text:`${fmtTs(v.at)} · ${nameOf(v.by)} · ${v.total?pbTk(v.total):'—'}`})),
           h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:st[v.rev]==='making',onclick:()=>dl(v),text:st[v.rev]==='making'?'Making…':'Download PDF'})))):h('div',{class:'f-hint',style:'margin:0',text:'No PDF made yet. Each time the PDFs are made after a change, a new version is kept here.'})); })(),
     (p.scope||[]).length?h('div',{},h('div',{class:'lbl',text:'Scope proposed'}),h('div',{class:'chips',style:'margin-top:4px'},p.scope.map(x=>h('span',{class:'chip',style:'padding-right:12px',text:x})))):null,
@@ -10134,7 +10153,7 @@ function sheetPropView(){
       step(2,'Follow up',log.length?`${log.length} response${log.length>1?'s':''} logged`+(p.next?' · next '+fmtD(p.next):''):'Call or meet them, then log what they said.',log.length>0,B('Log a call or meeting',logOpen,!log.length)),
       step(3,'Ready to quote?','The lead becomes a proposal and keeps its log.',false,B('Make a proposal →',()=>openProp(id,true),true))]
     :[
-      step(1,'Proposal document',p.doc?`${pbTk(f.total)} · ${pd.ref||''}`:'Write the proposal the client receives, on the SLATE letterhead.',!!p.doc,B(p.doc?'Open the proposal':'Build the proposal',()=>openPropDoc(id),!p.doc)),
+      step(1,'Proposal document',p.doc?`${pbTk(f.total)} · ${pd.ref||''}`:'Write the proposal the client receives, on the SLATE letterhead.',!!p.doc,B(p.doc?'Edit the proposal':'Build the proposal',()=>p.doc?openPropEdit(id):openPropDoc(id),!p.doc)),
       step(2,'Send and follow up',p.sentOn?`Sent ${fmtD(p.sentOn)} · ${log.length} response${log.length===1?'':'s'} logged`+(p.next?' · next follow-up '+fmtD(p.next):''):p.sendPlan?`Scheduled: ${nameOf(p.sendPlan.to)} sends it by ${fmtD(p.sendPlan.date)}`+(p.sendPlan.taskId&&S.tasks[p.sendPlan.taskId]&&S.tasks[p.sendPlan.taskId].doneAt?' · task done':'')+'. Tap below once it’s sent.':p.doc?'Send the PDF to the client, then tap below.':'Build the proposal document first.',!!p.sentOn,
         p.sentOn?B('Log what the client said',logOpen):h('div',{style:'display:flex;flex-wrap:wrap;gap:6px'},
           B('I’ve sent it: follow up in 3 days',async()=>{ const sp=p.sendPlan, t=sp&&sp.taskId&&S.tasks[sp.taskId];
