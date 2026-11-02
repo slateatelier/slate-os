@@ -1515,7 +1515,11 @@ function status(t,basis='approved'){
 const goLive=()=>(S.settings&&S.settings.goLive)||'2026-11-01';
 const preLive=()=>addDays(goLive(),-1);
 /* scores count from this day (settings.scoreFrom); work due before it is a trial run: shown, never scored */
-const scoreFrom=()=>(S.settings&&S.settings.scoreFrom)||'2026-11-10';
+const scoreLive=()=>(S.settings&&S.settings.scoreFrom)||'2026-11-10';
+/* test run (Principal, 3 Nov 2026): the Principal and the COO see scores counted from settings.scoreTrialFrom (3 Nov) until the
+   live day; everyone else still sees the practice period. View only: anything saved (date revisions) follows the live day. */
+const scoreTrial=()=>{ const t=(S.settings&&S.settings.scoreTrialFrom)||'2026-11-03'; return seePriv()&&t<scoreLive()&&today()<scoreLive()?t:''; };
+const scoreFrom=()=>scoreTrial()||scoreLive();
 const preScore=t=>!!(t&&t.target)&&t.target<scoreFrom();
 /* a period that runs past the scoring start counts only work due from that day; a period entirely before it is shown in full as practice */
 const preCut=(r,t)=>!!r&&r.e>=scoreFrom()&&preScore(t);
@@ -4218,7 +4222,8 @@ function viewDash(){
   if(ov) return out.concat(overallDash(r));
 
   const sc=canSeeScoring();
-  if(r.s<scoreFrom()) out.push(h('div',{class:'callout',style:'font-size:13.5px',text:r.e<scoreFrom()?`Practice period: scores count from ${fmtD(scoreFrom())}. These numbers show how the team is doing but are not final scores.`:`Scores count from ${fmtD(scoreFrom())}: work due before that day is left out of this period.`}));
+  if(scoreTrial()) out.push(h('div',{class:'callout',style:'font-size:13.5px',text:`Test run, seen only by you and the COO: scores here count work due from ${fmtD(scoreTrial())}. The team still sees a practice period; their scores count from ${fmtD(scoreLive())}, when this test view ends.`}));
+  else if(r.s<scoreFrom()) out.push(h('div',{class:'callout',style:'font-size:13.5px',text:r.e<scoreFrom()?`Practice period: scores count from ${fmtD(scoreFrom())}. These numbers show how the team is doing but are not final scores.`:`Scores count from ${fmtD(scoreFrom())}: work due before that day is left out of this period.`}));
   const pt=perfTable(r), mine=perf(items);
   const idxOf=D.person?(pt.people.find(x=>x.k===D.person)||{}).idx:(D.pod&&/^pod\b/i.test(D.pod)?(pt.pods.find(x=>x.k===D.pod)||{}).idx:null);
   out.push(h('div',{class:'kpis'},
@@ -5934,7 +5939,7 @@ function sheetTask(){
       if(!t.target) return run(()=>taskUpdate(t.id,{target:d.date,originalTarget:d.date,revisions:0,request:null},[{type:'scheduled',to:d.date}]),'Target date set').then(ok=>ok&&setMode(null));
       if(!(d.reason||'').trim()) return fail('Give a reason for the change.');
       const rev=(t.revisions||0)+1;
-      run(()=>taskUpdate(t.id,today()<scoreFrom()?{target:d.date,originalTarget:d.date,revisions:0,request:null}:{target:d.date,revisions:rev,request:null},[{type:'target',from:t.target,to:d.date,rev:today()<scoreFrom()?0:rev,note:d.reason.trim()+(today()<scoreFrom()?' (before scores count)':'')}]),'Target date changed').then(ok=>ok&&setMode(null));
+      run(()=>taskUpdate(t.id,today()<scoreLive()?{target:d.date,originalTarget:d.date,revisions:0,request:null}:{target:d.date,revisions:rev,request:null},[{type:'target',from:t.target,to:d.date,rev:today()<scoreLive()?0:rev,note:d.reason.trim()+(today()<scoreLive()?' (before scores count)':'')}]),'Target date changed').then(ok=>ok&&setMode(null));
     }));
   if(m==='rename') out.push(form('Rename',[field('Task name',inp('title',{maxlength:140,autocomplete:'off'}),'The old name stays in the history.')],'Save name',()=>{
       const title=(d.title||'').trim().replace(/\s+/g,' '); if(!title) return fail('The name can’t be empty.'); if(title===t.title) return setMode(null);
