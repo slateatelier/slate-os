@@ -1218,7 +1218,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-chk{display:grid;border-top:1px solid var(--line)}
 .pq-grp{display:grid;gap:4px;padding-top:6px}.pq-grp-h{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:4px 0}.pq-grp-h b{font-size:13px;text-transform:uppercase;letter-spacing:.04em}
 .pq-ck{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
-.pq-ck:last-child{border-bottom:0}.pq-inc{display:flex;align-items:center;gap:6px;margin-left:8px;color:var(--ink);font-size:13px;cursor:pointer;white-space:nowrap}.pq-inc input[type=checkbox]{width:18px!important;height:18px!important;margin:0;padding:0;accent-color:var(--ink)}.pq-ck-x input:disabled{opacity:.45}
+.pq-ck:last-child{border-bottom:0}.pv-ov{position:fixed;inset:0;z-index:300;margin:0;padding:0;max-width:none;width:auto;height:auto;border-radius:0;background:rgba(20,20,20,.55);display:flex;flex-direction:column}.pv-bar{box-sizing:border-box;width:100%;min-height:54px;margin:0;border-radius:0;flex:none;display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}.pv-bar b{font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pv-bar .pv-note{color:var(--muted);font-size:13px;flex:1}.pv-frame{flex:1;width:100%;border:0;background:#E6E8EA}.pv-wait{margin:auto;color:#fff;font-size:15px}
+.pq-inc{display:flex;align-items:center;gap:6px;margin-left:8px;color:var(--ink);font-size:13px;cursor:pointer;white-space:nowrap}.pq-inc input[type=checkbox]{width:18px!important;height:18px!important;margin:0;padding:0;accent-color:var(--ink)}.pq-ck-x input:disabled{opacity:.45}
 .pq-ckw{border-bottom:1px solid var(--line)}.pq-ckw .pq-ck{border-bottom:0}.pq-sub{display:flex;flex-wrap:wrap;gap:6px 18px;padding:0 0 10px 34px}.pq-sub-ck{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;min-height:32px}.pq-sub-ck input{width:18px;height:18px;margin:0;accent-color:var(--ink)}.pq-ck input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--ink)}
 .pq-ck-l{color:var(--muted)}.pq-ck.on .pq-ck-l{color:var(--ink);font-weight:500}
 .pq-ck-r{font-size:12.5px;color:var(--muted)}
@@ -9285,6 +9286,7 @@ function sheetPropQuick(){
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions sticky-acts'},
       h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>pqMake(false),text:ed?'Save and make the new version':'Make the proposal PDF'}),
+      h('button',{class:'btn',type:'button',onclick:()=>{ const r=pqDoc(sh); if(!r.p.client) return fail('Who is the client?'); const old=sh.id&&(S.props||{})[sh.id]; if(old&&old.doc&&old.doc.ref) r.doc.ref=old.doc.ref; pbPreview({...(old||{}),...r.p,name:r.p.name||'UNTITLED PROPOSAL'},r.doc,r.p.name||'Proposal preview'); },text:'Preview'}),
       h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>pqMake(true),text:'Save draft'}),
       h('button',{class:'btn',type:'button',onclick:()=>sh.id?openPropView(sh.id):closeSheet(),text:'Cancel'}))];
 }
@@ -9887,6 +9889,13 @@ async function pbPages(p,d){
     return pages;
   } finally { ifr.remove(); } }
 const fmtLong=s=>{ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return `${d} ${['January','February','March','April','May','June','July','August','September','October','November','December'][m-1]} ${y}`; };
+/* preview the letter as it will print, without saving or making a version (Principal, 2 Nov 2026) */
+async function pbPreview(p,d,title){ const ov=document.createElement('div'); ov.className='pv-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-label','Proposal preview');
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',esc); }, esc=e=>{ if(e.key==='Escape') close(); };
+  ov.innerHTML='<div class="pv-bar"><b></b><span class="pv-note">Preview · not saved, no version made</span><button type="button" class="btn btn-sm">Close</button></div><div class="pv-wait">Preparing the preview…</div>';
+  ov.querySelector('b').textContent=title||'Proposal preview'; ov.querySelector('button').onclick=close; document.addEventListener('keydown',esc); document.body.append(ov);
+  try{ const html=await pbHTML(p,JSON.parse(JSON.stringify(d)),false,false); const fr=document.createElement('iframe'); fr.className='pv-frame'; fr.title='Proposal preview'; fr.srcdoc=html; ov.querySelector('.pv-wait').replaceWith(fr); }
+  catch(e){ ov.querySelector('.pv-wait').textContent='Could not prepare the preview: '+(e.message||e); } }
 async function pbHTML(p,d,withBar,plain){
   const pages=await pbPages(p,d), ref=d.ref||'';
   return pbHead((p.name||'Proposal')+' · SLATE proposal')+`<body>${withBar?'<div class="bar"><button class="p" onclick="print()">Print or save as PDF</button><button onclick="close()">Close</button></div>':''}
@@ -10177,7 +10186,8 @@ function sheetPropView(){
       const dl=async v=>{ st[v.rev]='making'; renderSheet(); try{ const r=await pbPdfRetry(p,v.doc,'both'); st[v.rev]=''; renderSheet(); dlFile(r.share); }catch(e){ st[v.rev]='err'; renderSheet(); toast(e.message||String(e)); } };
       return h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row',style:'flex-wrap:wrap;gap:8px'},h('b',{text:'Versions'}),h('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},S.canWrite&&p.doc?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openPropEdit(p.id||S.sheet.id),text:'Edit and make a new version'}):null,S.canWrite&&p.doc?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openPropCopy(p.id||S.sheet.id),text:'Duplicate for another client'}):null)),
         vs.length?h('div',{class:'list'},vs.map((v,i)=>h('div',{class:'pv-ver'},h('div',{},h('b',{text:(v.rev?'Rev '+v.rev:'First issue')+(i===0?' · current':'')}),h('div',{class:'f-hint',style:'margin:0',text:`${fmtTs(v.at)} · ${nameOf(v.by)} · ${v.total?pbTk(v.total):'—'}`})),
-          h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:st[v.rev]==='making',onclick:()=>dl(v),text:st[v.rev]==='making'?'Making…':'Download PDF'})))):h('div',{class:'f-hint',style:'margin:0',text:'No PDF made yet. Each time the PDFs are made after a change, a new version is kept here.'})); })(),
+          h('div',{style:'display:flex;gap:6px'},h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>pbPreview(p,v.doc,`${p.name||'Proposal'} · ${v.rev?'Rev '+v.rev:'First issue'}`),text:'Preview'}),
+          h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:st[v.rev]==='making',onclick:()=>dl(v),text:st[v.rev]==='making'?'Making…':'Download PDF'}))))):h('div',{class:'f-hint',style:'margin:0',text:'No PDF made yet. Each time the PDFs are made after a change, a new version is kept here.'})); })(),
     (p.scope||[]).length?h('div',{},h('div',{class:'lbl',text:'Scope proposed'}),h('div',{class:'chips',style:'margin-top:4px'},p.scope.map(x=>h('span',{class:'chip',style:'padding-right:12px',text:x})))):null,
     p.note?h('p',{class:'f-hint',style:'margin:0;white-space:pre-wrap',text:p.note}):null,
     !open&&(p.outcomeNote||pj)?h('div',{class:'card',style:'gap:6px'},h('b',{text:PROP_OUT[p.status]+(p.closedAt||p.wonAt?' · '+fmtTs(p.wonAt||p.closedAt):'')}),p.outcomeNote?h('span',{class:'muted',text:p.outcomeNote}):null,
