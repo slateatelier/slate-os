@@ -9113,6 +9113,8 @@ function pqSel(sh){ return sh.sel||(sh.sel={on:{}}); }
    With no project name, the name is "PURBACHAL P 00, R 00, S 00". */
 const pqT=x=>String(x||'').trim();
 const PQ_USE=['Residential','Commercial','Mixed-use','Institutional','Industrial'];
+/* SLATE's payment stages for new proposals (Mridula's markup, 2 Nov 2026) */
+const PQ_SCHED=[['Advance, on signing',30],['Schematic design approval',20],['Design finalisation',20],['Authority set handover',20],['Working drawings (WD-1 to WD-3)',10]];
 function pqAddr(d){ const a=pqT(d.sArea).toUpperCase(), parts=[pqT(d.sPlot)&&'Plot '+pqT(d.sPlot),pqT(d.sRoad)&&'Road '+pqT(d.sRoad),pqT(d.sSec)&&'Sector '+pqT(d.sSec),a].filter(Boolean); return parts.length?parts.join(', '):pqT(d.location); }
 function pqAutoName(d){ const a=pqT(d.sArea).toUpperCase(); if(!a) return ''; const xs=[pqT(d.sPlot)&&'P '+pqT(d.sPlot),pqT(d.sRoad)&&'R '+pqT(d.sRoad),pqT(d.sSec)&&'S '+pqT(d.sSec)].filter(Boolean); return (a+(xs.length?' '+xs.join(', '):'')).toUpperCase(); }
 function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:pqAddr(d),_known:!!(d._picked&&d._picked===d.client),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||'',use:d.use||'',known:!!(d._picked&&d._picked===d.client)}};
@@ -9122,7 +9124,9 @@ function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).t
   doc.parts=on.map(l=>doc.parts.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })());
   const addons=on.filter(pqIsAdd).map(l=>({label:l,...pqAddFee(sh,l,area)})), addSum=addons.reduce((a,x)=>a+x.amt,0), total=fee?fee+addSum:0;
   doc.addons=addons.map(x=>({label:x.label,amount:x.amt,basis:x.t==='sft'?`Tk ${x.v}/sft`:'lump sum'})); doc.mainFee=fee||'';
-  doc.vFree=on.includes('Site supervision')?String(SP_PLANS.comp.visits):'0'; doc.lump=total?String(total):''; doc.sched=spSched(doc,p,total||guide)||doc.sched;
+  const nv=on.includes('Site supervision')?Math.max(1,parseInt(d.visits,10)||SP_PLANS.comp.visits):0; doc.vFree=String(nv); doc.asBuilt='x';
+  doc.parts.forEach(x=>{ if(x.label==='Site supervision') x.check=(x.check||[]).map(c=>/^Site visits at|site visits at construction stages/i.test(c.t)?{...c,t:`${nv} site visits at construction stages (setting-out, foundation, first slab, typical floor, facade and finishing, final)`}:c); });
+  doc.lump=total?String(total):''; doc.sched=PQ_SCHED.map(([label,pct])=>({label,pct:String(pct)}));
   if(fm==='sft'&&fv) doc.ownRate=String(fv); doc.plan=''; doc.cmp=false;
   return {p,doc,guide,fee,fm,fv,addons,addSum,total}; }
 function pqCheck(on){ const out=[];
@@ -9186,6 +9190,7 @@ function sheetPropQuick(){
               const af=pqIsAdd(l)&&on?pqAddFee(sh,l,area):null, fx=(sel.fee=sel.fee||{});
               return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l',text:l}),
                 af?h('span',{class:'pq-ck-x',onclick:e=>e.preventDefault()},'+',h('input',{type:'number',min:0,step:af.t==='sft'?0.5:1000,inputmode:'decimal',value:af.v||'',placeholder:'fee',style:af.t==='lump'?'width:96px':'','aria-label':'Add-on fee for '+l,onclick:e=>e.stopPropagation(),onchange:e=>{ fx[l]={t:af.t,v:e.target.value}; renderSheet(); }}),h('i',{text:af.t==='sft'?'/sft':'Tk'})):h('span')); }))); })),
+      sel.on['Site supervision']?h('div',{class:'pq-svc'},h('div',{class:'pq-svc-h'},h('span',{class:'qs-k',text:'Site visits'}),h('div',{class:'pq-unit',style:'max-width:160px'},h('input',{id:'pq-visits',class:'tl-num qs-in',type:'number',min:1,step:1,inputmode:'numeric',value:d.visits||SP_PLANS.comp.visits,onchange:e=>{ d.visits=e.target.value; renderSheet(); }}),h('span',{text:'visits'})),h('span',{class:'f-hint',style:'margin:0',text:'included in the fee'}))):null,
       h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:total?pbTk(total):'—'})),
         addons.length&&fee?h('div',{class:'pq-fee-l'},h('span',{text:'Main fee'}),h('span',{text:pbTk(fee)})):null,
         ...(fee?addons.map(x=>h('div',{class:'pq-fee-l'},h('span',{text:'+ '+x.label+(x.t==='sft'?` (Tk ${x.v}/sft)`:'')}),h('span',{style:x.amt?'':'color:var(--overdue)',text:x.amt?pbTk(x.amt):'give the fee'}))):[]),
@@ -9257,7 +9262,7 @@ function sheetProp(){
 const PB_SCOPE={
   dev:['Architectural design: concept, design development, authority (RAJUK) drawings, working drawings and finishing drawings','Common area interior design','Landscape design','3D visualization: 8–10 rendered views','Real estate solutions: brochure floor plans, area calculation, specifications','Structural and MEP (electrical and plumbing) design','Design coordination with all consultants','5 site visits during construction'],
   det:['Architectural design: concept, design development, authority (RAJUK) drawings, working drawings and finishing drawings','Common area interior design','Landscape design','Structural design','MEP design: electrical, plumbing, fire','Marketing: 10–15 rendered views, an animation and brochure design','Design coordination with all consultants','10 site visits during construction','As-built drawings']};
-const PB_DELIV=['Full A3 drawing booklets (2 sets) and authority approval drawings','Soft copies in AutoCAD and PDF','Print-ready high-resolution renders'];
+const PB_DELIV=['Full A3 drawing booklets: 2 printed sets and a soft copy (PDF)','Authority approval drawings: printed sets in the standard number of copies required by RAJUK / CDA, and a soft copy (PDF)','Soft copies of all issued drawings in PDF','Print-ready high-resolution renders, where 3D views are in the scope'];
 const PB_TERMS=['The fee is adjusted to the final approved design area.','Additional 3D views, drawings and services beyond this scope are charged separately.','Intercity and overseas travel is borne by the client.','If two consecutive milestone payments are not made, SLATE may issue a termination notice.','SLATE retains the copyright of the design; on full payment the client may use it for this project.'];
 const PB_PARTS={dev:[['Architecture, common area interior, landscape and coordination',40],['Structural design',6],['MEP design',4],['3D visualization',0],['Real estate solutions (plans, area, specifications)',0]],
   det:[['Architecture, common area interior, landscape and coordination',25],['Structural design',8],['MEP design',5],['Marketing materials (3D, animation, brochure)',2]]};
@@ -9274,9 +9279,9 @@ const PB_SVC_INFO={
  'Architectural design':['Architectural design of the building from concept to working drawings, ready for approval and construction.',
    ['Site study and planning analysis (FAR, MGC, setbacks, parking)','Concept design options','Design development: plans, sections and elevations','Facade design and material selection','Planning permit and RAJUK approval drawings','Working drawings, details, door and window schedules','Finishing and specification schedules']],
  'Common area interior design':['Interior design of the shared spaces of the building, so arrival and circulation feel finished and consistent with the architecture.',
-   ['Entrance lobby and reception','Lift lobbies on every floor','Corridors and staircases','Community hall, gym or prayer room where provided','Ceiling, lighting, wall and floor finishes','Signage and wayfinding','Material board and 3D views of key spaces']],
+   ['Entrance lobby and reception','Lift lobbies on every floor','Corridors and staircases','Community hall, gym or prayer room where provided','Ceiling, lighting, wall and floor finishes']],
  'Landscape design':['Landscape design of the open areas of the site and the building.',
-   ['Ground floor, driveway and setback landscape','Podium and rooftop garden','Hard landscape: paving, steps, seating and water features','Soft landscape: tree and plant selection suited to Dhaka','Outdoor lighting layout','Drainage and irrigation points coordinated with MEP']],
+   ['Ground floor, driveway, setback and rooftop landscape','Hard landscape: paving, steps, seating and water features (if any)','Lighting, drainage and irrigation points coordinated with MEP']],
  'Structural design':['Structural analysis and design of the building by SLATE’s structural consultant, to BNBC 2020.',
    ['Soil test review and foundation design','Structural analysis and design to BNBC 2020 (earthquake and wind)','Structural drawings for RAJUK approval','Detailed structural working drawings and reinforcement details','Design calculation report','Answers to RAJUK and contractor queries']],
  'MEP design':['Mechanical, electrical and plumbing design by SLATE’s MEP consultant.',
@@ -9290,9 +9295,9 @@ const PB_SVC_INFO={
  'BOQ and cost estimate':['Quantities and cost estimate of the works, for budgeting and tender.',
    ['Bill of quantities (BOQ) from the working drawings','Cost estimate at current market rates','Material specifications for tender','Comparison of contractor quotations']],
  'Design coordination':['Coordinating the drawings of all consultants so they agree before work starts on site.',
-   ['Coordination meetings with structural and MEP consultants','Clash check between architecture, structure and services','Combined services layout for ceilings and shafts','Updated drawings issued after coordination']],
+   ['Coordination meetings with structural and MEP consultants','Clash check between architecture, structure and services']],
  'Site supervision':['Periodic visits by SLATE’s architects to check the work on site follows the design.',
-   ['Site visits at key stages (number as listed in this proposal)','Inspection of setting-out, finishes and facade work','Site visit report after each visit','Answers to contractor queries (RFIs)','Approval of material samples and shop drawings']],
+   ['Site visits at key stages (number as listed in this proposal)','Inspection of setting-out, finishes and facade work','Answers to contractor queries (RFIs)','Approval of material samples and shop drawings']],
  'Interior design':['Complete interior design of the space, from layout to furniture, finishes and details.',
    ['Space planning and furniture layout','Concept mood board and material palette','3D views of the main spaces','Ceiling, lighting and electrical layouts','Floor, wall and joinery details','Loose furniture, lighting and sanitary fittings selection','Finishing schedule and BOQ']],
  'Construction management (interior)':['SLATE manages the interior works on site through its own team and vendors, to the approved design, budget and programme.',
@@ -9309,7 +9314,7 @@ function pbScopeAuto(d){ const L=[];
   d.parts.filter(x=>x.label).forEach((x,i)=>L.push({n:i+1,label:x.label,...pbSvcView(x)}));
   const more=[];
   if(+d.vFree>0) more.push(`${+d.vFree} site visits during construction; further visits are charged as listed under additional services`);
-  if(d.asBuilt!==''&&d.asBuilt!=null) more.push(+d.asBuilt?`As-built drawings, at the fixed fee listed under additional services`:'As-built drawings, included in the fee');
+  if(d.asBuilt!==''&&d.asBuilt!=null&&d.asBuilt!=='x') more.push(+d.asBuilt?`As-built drawings, at the fixed fee listed under additional services`:'As-built drawings, included in the fee');
   return {svc:L,more:[...more,...pbLines(d.scopeExtra)]}; }
 /* IAB recommended scale of minimum fees (Schedule D, 2018). Part I, category B: basic architectural design, Tk per sft of total
    floor area, by floor-area band and jurisdiction; architecture and allied design services are 1.5 times these rates.
@@ -9426,12 +9431,12 @@ function spSched(d,p,fee){ const P=SP_PLANS[d.plan]; if(!P) return null;
 const SP_TERMS=['Fees are quoted net. VAT and AIT are added to each invoice at the rates in force, or the invoice is grossed up if the client deducts at source.',
   'Invoices are due within 15 days. The next stage starts only when no invoice is overdue.',
   'If an invoice is 30 days overdue, work pauses and the programme is extended accordingly. At 60 days overdue, SLATE may suspend the services and hold signed sets and CAD files until payment is cleared.',
-  'If the design stage runs beyond 3 months from mobilisation because of the client, the schematic design approval payment falls due.',
-  'Signed drawing sets and editable CAD files are released against cleared payment for the stage concerned. Drawings remain SLATE’s intellectual property and are licensed to the client for the paid stages only.',
-  'If the client cancels, the invoiced stages and the stage in progress are payable, the stage in progress in proportion to the work done and at least half of it. The mobilisation payment is not refundable.',
+  'If the design stage runs beyond 3 months from the advance payment because of the client, the schematic design approval payment falls due.',
+  'Signed drawing sets are released against cleared payment for the stage concerned. Drawings remain SLATE’s intellectual property and are licensed to the client for the paid stages only.',
+  'If the client cancels, the invoiced stages and the stage in progress are payable, the stage in progress in proportion to the work done and at least half of it. The advance payment is not refundable.',
   'If the project is on hold for more than 90 days, restarting needs a re-mobilisation payment of 5% of the remaining fee. After 12 months on hold, the remaining fee moves to the rate card in force at restart.',
   'Changes after a stage is signed off, or required by a change in authority rules, are additional services.',
-  'Intercity and overseas travel is borne by the client. Cash payments are acknowledged with a numbered money receipt.'];
+  'Intercity and overseas travel is borne by the client.','Payment can be made in cash or by cheque (please confirm with SLATE before paying).'];
 function spTerms(d){ const k=d.plan, t=[...SP_TERMS];
   if(k==='ess') t.push('Essentials drawings are for authority approval only and are not for construction. Before construction, the client adds the Build set or moves to Complete; SLATE records it in writing if the client builds without either.');
   if(k==='essb') t.push('The lean construction set is based on SLATE’s standard details. Full working drawings are available by moving to Complete.');
@@ -9663,7 +9668,7 @@ b,strong,h1,h2,th,tr.tot td,.to b,.ref span b,.sig b,.amtbox b,.lh-addr,.lh-name
 b,strong{font-weight:600}
 h1{font-size:15pt;font-weight:600;letter-spacing:.08em;margin:0 0 1.5mm;text-transform:uppercase}.dr{color:#C41E29;font-size:9pt;border:1pt solid #C41E29;padding:1px 6px;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
 .ref{display:flex;justify-content:space-between;gap:6mm;font-size:9pt;color:#545454;margin-bottom:7mm;flex-wrap:wrap}.ref span b{color:#000;font-weight:600}
-.to{margin:4mm 0 7mm;font-size:10.5pt;line-height:1.45}.to b{font-weight:700}.ref .dt{color:#000;font-size:10.5pt}.ref span.dt b{font-weight:700;color:#000}.pb-subj{margin:0 0 3mm;font-size:10.5pt}.pb-subj b{font-weight:700}.pb-dear{margin:6mm 0 2.5mm;font-size:10.5pt}.pb-just{text-align:justify}.pb-ov .pb-k{color:#000}.pb-ov .pb-k b{font-weight:700}.pb-ov td b{font-weight:700}.pre{white-space:pre-line}
+.to{margin:4mm 0 7mm;font-size:10.5pt;line-height:1.45}.to b{font-weight:700}.ref .dt{color:#000;font-size:10.5pt}.ref span.dt b{font-weight:700;color:#000}.pb-subj{margin:0 0 3mm;font-size:10.5pt}.pb-subj b{font-weight:700}.pb-dear{margin:6mm 0 2.5mm;font-size:10.5pt}.pb-just{text-align:justify}.pb-ov .pb-k{color:#000}.pb-ov td{border-bottom:0!important;padding-top:1.4mm;padding-bottom:1.4mm}.pb-ov .pb-k b{font-weight:700}.pb-ov td b{font-weight:700}.pre{white-space:pre-line}
 h2{font-size:8.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:7mm 0 2.5mm}
 table{width:100%;border-collapse:collapse;font-size:9.5pt}
 th{font-size:7.5pt;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#545454;text-align:left;padding:2mm 1mm 2mm 0;border-bottom:.75pt solid #000}
@@ -9744,12 +9749,12 @@ function pbBlocks(p,d){
         <p class="pb-small">Days are working days, five a week: SLATE’s days + the client’s review days. In each bar the darker part is SLATE’s work and the lighter part the client’s review${T.rows.some(x=>x.par)?'; marketing materials are prepared alongside the other stages':''}. The programme starts ${T.start?'with the work order on '+fmtLong(T.start):'from the work order (signed agreement and advance)'}, with ${T.setup} setup day${T.setup===1?'':'s'} before stage 1. Time taken by RAJUK and other authorities, and delays in the client’s decisions or payments, are extra.</p>`); } }
   const sc=d.sched.filter(x=>x.label||+x.pct);
   if(sc.length) add(`<h2>Payment schedule</h2><table><thead><tr><th style="width:8mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${+x.pct||0}%</td><td class="n">${Math.round(f.total*(+x.pct||0)/100).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((a,x)=>a+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table><p class="pb-small">Each stage is invoiced when it is reached and paid within 7 days of the invoice.</p>`);
-  const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',(+d.vFree||0)+' visits']:null,+d.vLead?[d.plan?'Extra site visit with the Principal':'Extra site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?[d.plan?'Extra site visit by a POD architect (within Dhaka)':'Extra site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
-    d.asBuilt!==''&&d.asBuilt!=null?['As-built drawings',+d.asBuilt?pbTk(d.asBuilt)+' (fixed)':'Included']:null,+d.extra3d?['Additional 3D view',pbTk(d.extra3d)+' per image']:null,
+  const ex=[d.vFree!==''&&d.vFree!=null?['Site visits included',+d.vFree?(+d.vFree)+' visits':'None (site supervision is optional)']:null,+d.vLead?[d.plan?'Extra site visit with the Principal':'Site visit, lead architect or engineer',pbTk(d.vLead)+' per visit']:null,+d.vSenior?[d.plan?'Extra site visit by a POD architect (within Dhaka)':'Site visit, senior architect or engineer',pbTk(d.vSenior)+' per visit']:null,
+    d.asBuilt!==''&&d.asBuilt!=null?['As-built drawings',d.asBuilt==='x'?'Excluded (additional service)':+d.asBuilt?pbTk(d.asBuilt)+' (fixed)':'Included']:null,+d.extra3d?['Additional 3D view',pbTk(d.extra3d)+' per image']:null,
     pbRevFee(d)?[d.revMode==='stage'?'Design revision round beyond those included':'Design revision beyond the '+(+d.revFree||0)+' included',pbTk(pbRevFee(d))+' per '+(d.revMode==='stage'?'round':'revision')+' ('+pbTk(d.revRate)+' per katha'+(+d.revCap>0?', up to '+pbTk(d.revCap):'')+')']:null].filter(Boolean);
   if(ex.length) add(`<h2>Site visits and additional services</h2><table>${ex.map(([k,v])=>`<tr><td>${pbEsc(k)}</td><td class="n">${pbEsc(v)}</td></tr>`).join('')}</table>`);
   const gen=[];
-  if(d.revMode==='stage') gen.push('The fee includes 3 rounds of design revision at schematic stage and 2 at each later stage. '+(pbRevFee(d)?`Each further round is charged at ${pbTk(d.revRate)} per katha of land`+(+d.revCap>0?`, up to ${pbTk(d.revCap)} a round`:'')+`: ${pbTk(pbRevFee(d))} for this project.`:'Further rounds are charged separately.')+(d.plan==='ess'||d.plan==='essb'?'':' Site visits are booked 3 working days ahead, last up to 2 hours and come with a written report.'));
+  if(d.revMode==='stage') gen.push('The fee includes 3 rounds of design revision at schematic stage and 2 at each later stage. '+(pbRevFee(d)?`Each further round is charged at ${pbTk(d.revRate)} per katha of land`+(+d.revCap>0?`, up to ${pbTk(d.revCap)} a round`:'')+`: ${pbTk(pbRevFee(d))} for this project.`:'Further rounds are charged separately.')+(d.plan==='ess'||d.plan==='essb'?'':' Site visits are booked 3 working days ahead and last up to 2 hours.'));
   else if(d.revFree!==''&&d.revFree!=null) gen.push(`The fee includes up to ${+d.revFree||0} round${+d.revFree===1?'':'s'} of design revision for the project. `+(pbRevFee(d)?`Each further revision is charged at ${pbTk(d.revRate)} per katha of land, ${pbTk(pbRevFee(d))} for this project.`:'Further revisions are charged separately.'));
   if(+d.validDays>0) gen.push(`This offer is valid for ${+d.validDays} days, until ${fmtLong(addDays(d.date||today(),+d.validDays))}. After that the fee and terms may be revised.`);
   list('Terms and conditions',[...pbLines(d.terms),...gen]);
