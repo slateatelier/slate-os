@@ -7186,6 +7186,7 @@ function tlSection(p){
     flags.length?h('div',{class:'tl-flags'},flags):null,
     h('div',{class:'bar',style:'justify-content:space-between'},h('span',{class:'f-hint',style:'margin:0',text:`Started ${fmtD(t.start)} · working days, Sunday to Thursday`}),
       h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ S.sheet.tlLog=!open; renderSheet(); },text:open?'Hide project log':'Project log'}),
+        can||amApprover()?h('button',{class:'btn btn-sm',type:'button',title:'SLATE days + 30%, marked tentative, to share with the client',onclick:()=>ctlOpen(p.id),text:'Client timeline'}):null,
         can?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openTl(p.id),text:'Days'}):null)),
     canAdjTl(p)?h('div',{class:'callout',style:'display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap'},
       h('span',{style:'font-size:13.5px',text:`Started before SLATE OS? Set where this project really stands: close finished phases, give the days left and when work resumes. Open until ${fmtD(amApprover()?adjUntil():leadUntil())}; scores count from ${fmtD(scoreFrom())}.`}),
@@ -10049,6 +10050,48 @@ async function pbPdfRetry(p,d,plain){
   for(let i=0;;i++){ try{ return await pbPdf(p,d,plain); }
     catch(e){ if(i>=3||!e.busy) throw e; toast('The PDF printer is busy. Trying again in '+(20*(i+1))+' seconds…'); await new Promise(r=>setTimeout(r,20000*(i+1))); } } }
 /* plain: true = print copy, false = share copy, 'both' = both copies from one print job ({share, print}) */
+/* Client timeline (Principal, 2 Nov 2026): the timeline shared with the client — SLATE's days + 30%, client review days as
+   they are, phases already approved shown with their real dates. Marked tentative: it shows how SLATE works, for representation
+   only. Make it again at any time for an updated copy. */
+function ctlData(p){ const t=tlOf(p); if(!t) return null; let L; try{ L=tlCompute(p,t.start,true,PROP_BUF); }catch(e){ return null; }
+  const ks=tlPhases(p), td=today();
+  const rows=ks.map(k=>{ const f=L[k]||{}, done=stdState(p,k).done||!!f.deem, two=stepsOf(p.std.type,k).some(x=>x[0]==='sub');
+    return {k,name:phName(k,p),del:PB_TL_DEL[k]||'',sd:f.sd||'',cd:f.cd||'',s:f.none?'':f.s,sub:f.none?'':(two?f.sub:''),fin:f.none?'':(done?(f.finA||f.deem||f.fin):f.fin),done,none:!!f.none,auth:!!f.auth,now:!done&&!f.none&&f.s&&f.s<=td}; });
+  const dated=rows.filter(r=>r.fin), end=maxD(...dated.map(r=>r.fin)), start=t.start;
+  return {rows,start,end,undated:rows.some(r=>r.none)}; }
+function ctlHTML(p){ const D=ctlData(p); if(!D) return ''; const E=pbEsc, td=today(), span=Math.max(1,wdBetween(D.start,D.end||D.start)), pc=d=>Math.max(0,Math.min(100,Math.round(wdBetween(D.start,d)/span*1000)/10));
+  const st=r=>r.done?'<b style="color:#1F9D4B">✓ Approved</b>':r.none?(r.auth?'After approval':'After the set before'):r.now?'<b>In progress</b>':'Planned';
+  const rowH=D.rows.map((r,i)=>`<tr><td><b>${E(PH[r.k]?PH[r.k].no:'')}. ${E(r.name)}</b>${r.del?`<span class="pb-del">${E(r.del)}</span>`:''}</td><td class="n">${r.none?'—':r.sub?fmtD(r.sub):'—'}</td><td class="n">${r.none?'—':fmtD(r.fin)}</td><td style="white-space:nowrap">${st(r)}</td><td>${r.none||!r.s?'':`<div class="pb-bar"><span style="left:${pc(r.s)}%;width:${Math.max(1.5,pc(r.fin)-pc(r.s))}%"><i style="width:100%;${r.done?'background:#1F9D4B':''}"></i></span></div>`}</td></tr>`);
+  const chunks=[rowH.slice(0,4)]; for(let i=4;i<rowH.length;i+=6) chunks.push(rowH.slice(i,i+6));
+  const thead='<thead><tr><th>Stage and what you receive</th><th class="n">Submission</th><th class="n">Client approval</th><th>Status</th><th style="width:20%"></th></tr></thead>', N=chunks.length;
+  const foot=i=>`<div class="docref"><span class="dm">${E('Updated '+fmtTs(new Date().toISOString())+' · '+nameOf(S.uid))}</span><span>${E(ref+' · page '+(i+1)+' of '+N)}</span></div>`;
+  const ref=(p.code||'')+' · timeline';
+  const pg=(i,body)=>`<div class="page">${pbLetterhead()}<div class="pb-blk pb-first">${body}</div>${foot(i)}</div>`;
+  return pbHead((p.name||'Project')+' · client timeline')+'<body>'+chunks.map((c,i)=>pg(i,(i===0?`<div class="ref"><span class="dt"><b>Date:</b> ${E(fmtLong(td).toUpperCase())}</span><span class="dt"><b>Ref:</b> ${E(p.code||'')}</span></div>
+<h1>Project timeline <span style="color:#C41E29">(tentative)</span></h1>
+<table class="pb-ov" style="margin:3mm 0 1mm"><tbody>
+<tr><td class="pb-k">Client</td><td><b>${E(p.client||'')}</b>${p.contact?' · '+E(p.contact):''}</td></tr>
+<tr><td class="pb-k">Project</td><td><b>${E(p.name||'')}</b>${siteAddr(p)?' · '+E(siteAddr(p)):''}</td></tr>
+<tr><td class="pb-k">Work started</td><td>${fmtLong(D.start)}</td></tr>
+<tr><td class="pb-k">Expected completion</td><td><b>${D.end?fmtLong(D.end):'—'}</b>${D.undated?' (stages after the authority approval are dated once it is received)':''}</td></tr></tbody></table>
+<p class="pb-gw" style="margin:2mm 0 4mm">Tentative: this timeline shows how SLATE works on the project and is for representation only. The dates move with the client’s decisions and approvals, consultants and authorities, and are updated as the project progresses.</p>
+<h2>Stages</h2>`:'<h2>Stages (continued)</h2>')+`<table class="pb-tl">${thead}<tbody>${c.join('')}</tbody></table>`+(i===N-1?'<p class="pb-small">Dates are working days, Sunday to Thursday. Each stage includes SLATE’s work and the client’s review. Approved stages show the actual approval date.</p>':''))).join('')+'</body></html>'; }
+async function ctlPdf(p){ const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
+  if(!tok) throw new Error('Your sign-in has expired. Reload SLATE OS and try again.');
+  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'},body:ctlHTML(p)}); }catch(_){ throw new Error('Couldn’t reach the PDF printer. Check your connection and try again.'); }
+  if(!r.ok){ let m=''; try{ m=(await r.json()).error; }catch(_){} throw new Error(m||'Couldn’t make the PDF. Try again in a moment.'); }
+  return new File([await r.blob()],('SLATE timeline '+(p.name||'')+' '+today()).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf',{type:'application/pdf'}); }
+function ctlOpen(pid){ const p0=S.projects[pid]; if(!p0) return; const p={...p0,id:pid}, html=ctlHTML(p); if(!html) return toast('Set the project timeline first.');
+  const ov=document.createElement('div'); ov.className='pv-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-label','Client timeline');
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',esc); }, esc=e=>{ if(e.key==='Escape') close(); };
+  ov.innerHTML='<div class="pv-bar"><b></b><span class="pv-note">For the client · SLATE days + 30% · tentative</span><button type="button" class="btn btn-sm btn-primary" data-a="pdf">Download PDF</button><button type="button" class="btn btn-sm" data-a="x">Close</button></div>';
+  ov.querySelector('b').textContent=(p.name||'Project')+' · client timeline';
+  const fr=document.createElement('iframe'); fr.className='pv-frame'; fr.title='Client timeline'; fr.srcdoc=html; ov.append(fr);
+  ov.querySelector('[data-a=x]').onclick=close;
+  const b=ov.querySelector('[data-a=pdf]'); b.onclick=async()=>{ b.disabled=true; b.textContent='Making…'; try{ const f=await ctlPdf(p); dlFile(f);
+      try{ const list=Array.isArray(p0.ctlSent)?p0.ctlSent:[]; await S.db.doc('projects/'+pid).update({ctlSent:[...list,{at:new Date().toISOString(),by:S.uid,end:(ctlData(p)||{}).end||''}].slice(-30)}); }catch(_){}
+      b.textContent='Download PDF'; }catch(e){ toast(e.message||String(e)); b.textContent='Download PDF'; } b.disabled=false; };
+  document.addEventListener('keydown',esc); document.body.append(ov); }
 async function pbPdf(p,d,plain){
   const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
   if(!tok) throw new Error('Your sign-in has expired. Reload SLATE OS and try again.');
