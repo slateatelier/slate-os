@@ -1211,6 +1211,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .db-ro{cursor:default}
 .db-pods .seg button{white-space:nowrap;padding-inline:14px}
 .db-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;border-top:1px solid var(--line);padding-top:8px}.db-mini>div{display:grid}
+.pq-fb .seg button{white-space:nowrap;padding-inline:8px}
 .pq-svc{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 .pq-svc-h{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:28px}
 .pq-svc-sum{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pq-svc-go{font-size:13.5px;font-weight:600;text-decoration:underline}
@@ -9038,12 +9039,12 @@ function openPropQuick(d0,id,convert){ const d={...d0}; d.type=d.type||'dev'; d.
 const pqArea=k=>+k>0?String(Math.round(+k*5000/100)*100):'';
 function pqDoc(sh){ const d=sh.d, p={name:(d.name||'').trim().toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||''}};
   const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan=d.plan; doc.tier=d.tier; doc.adj=sh.adj||spAdjDef(p); doc.cmp=!!sh.cmp; spApply(doc,p);
-  const P=SP_PLANS[doc.plan], card=+doc.lump||0, own=sh.own&&sh.own.plan===doc.plan&&+sh.own.v>0?+sh.own.v:0;
+  const P=SP_PLANS[doc.plan], card=+doc.lump||0, fm=sh.fm||'card', fv=+sh.fv||0, area=+doc.area||0, own=fm==='sft'&&fv>0&&area?Math.round(fv*area/1000)*1000:fm==='lump'&&fv>0?Math.round(fv):0;
   if(sh.svc&&sh.svc.plan===doc.plan) doc.parts=JSON.parse(JSON.stringify(sh.svc.parts.filter(x=>x.label)));
   const extra=Math.round(doc.parts.reduce((a,x)=>a+(x.add?(+x.rate||0):0),0)*(+doc.area||0)/1000)*1000;
-  let fee=own?(P.fixed?Math.round(own):Math.round(own*(+doc.area||0)/1000)*1000):card; if(own&&!P.fixed) doc.ownRate=String(own);
+  let fee=own||card; if(own&&fm==='sft') doc.ownRate=String(fv);
   if(fee>0&&(own||extra)){ fee+=extra; doc.lump=String(fee); doc.sched=spSched(doc,p,fee)||doc.sched; }
-  return {p,doc,card,own,extra}; }
+  return {p,doc,card,own,extra,fm,fv}; }
 function sheetPropQuick(){
   const sh=S.sheet, d=sh.d; if(!sh.adj) sh.adj=spAdjDef({type:d.type,location:d.location});
   const kv=(l,v,top)=>h('div',{class:'qs-kv'+(top?' qs-top':'')},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
@@ -9062,12 +9063,12 @@ function sheetPropQuick(){
         f.state==='err'?h('button',{class:'btn btn-primary',type:'button',onclick:()=>pqPdf(sh.done),text:'Try again'}):null,
         h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropDoc(sh.done),text:'Edit details'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
-  const {p,doc,card:cardFee,own,extra}=pqDoc(sh), F=spFee(doc)||{}, P=SP_PLANS[d.plan], fee=+doc.lump||0, area=+doc.area||0, eff=P&&!P.fixed&&area&&cardFee?Math.round(cardFee/area*100)/100:0;
+  const {p,doc,card:cardFee,own,extra,fm,fv}=pqDoc(sh), F=spFee(doc)||{}, P=SP_PLANS[d.plan], fee=+doc.lump||0, area=+doc.area||0, eff=P&&!P.fixed&&area&&cardFee?Math.round(cardFee/area*100)/100:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
   const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; if(d.plan!=='sig') d.tier=d.type==='private'?'p':(d.tier==='p'?'s':d.tier); renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const card=k=>{ const Q=SP_PLANS[k], fe=spFee({...doc,plan:k}), on=d.plan===k;
     return h('button',{type:'button',class:'pq-plan'+(on?' on':''),'aria-pressed':String(on),onclick:()=>{ d.plan=k; renderSheet(); }},
-      h('span',{class:'pq-n'},Q.n,Q.rec?h('i',{text:'recommended'}):null),h('span',{class:'pq-s',text:Q.short}),h('span',{class:'pq-f',text:fe&&fe.fee?pbTk(fe.fee):'—'})); };
+      h('span',{class:'pq-n'},Q.n,Q.rec?h('i',{text:'recommended'}):null),h('span',{class:'pq-s',text:Q.short}),h('span',{class:'pq-f',text:on&&(own||extra)&&fee?pbTk(fee):fe&&fe.fee?pbTk(fe.fee):'—'})); };
   const chk=(k,l)=>h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',style:'width:18px;height:18px',checked:!!sh.adj[k],onchange:e=>{ sh.adj[k]=e.target.checked; renderSheet(); }}),h('span',{text:l}));
   const adjOn=[sh.adj.dev?'developer +10%':'',sh.adj.jol?'Jolshiri/Cantonment +10% on authority stage':'',sh.adj.ctg?'Chittagong 85%':''].filter(Boolean);
   return [head('Only you and the COO see this',sh.convert?'Make a proposal':'New proposal'),
@@ -9080,7 +9081,10 @@ function sheetPropQuick(){
       kv('Type',ty),
       kv('Land',h('div',{class:'pq-unit'},inp2('katha',{type:'number',min:0,step:'any',inputmode:'decimal',re:reArea,onchange:()=>renderSheet()}),h('span',{text:'katha'}))),
       kv('Built area',h('div',{style:'display:grid;gap:4px'},h('div',{class:'pq-unit'},h('input',{id:'pq-area',class:'tl-num qs-in',type:'number',min:0,step:100,inputmode:'numeric',value:d.area||'',oninput:e=>{ d.area=e.target.value; sh.areaSet=!!e.target.value; },onchange:()=>renderSheet()}),h('span',{text:'sft'})),
-        h('span',{class:'f-hint',style:'margin:0'},sh.areaSet?'Gross, with basement and parking. Check it on the ':'Estimated at 5,000 sft per katha. Put the real figure from the ',h('button',{type:'button',class:'linkish',style:'font-size:inherit;padding:0',onclick:()=>farPop({name:d.name,katha:d.katha,onUse:a=>{ d.area=String(a); sh.areaSet=true; renderSheet(); toast('Built area from the FAR calculator: '+a.toLocaleString('en-IN')+' sft'); }}),text:'FAR calculator'}),'.')),true)),
+        h('span',{class:'f-hint',style:'margin:0'},sh.areaSet?'Gross, with basement and parking. Check it on the ':'Estimated at 5,000 sft per katha. Put the real figure from the ',h('button',{type:'button',class:'linkish',style:'font-size:inherit;padding:0',onclick:()=>farPop({name:d.name,katha:d.katha,onUse:a=>{ d.area=String(a); sh.areaSet=true; renderSheet(); toast('Built area from the FAR calculator: '+a.toLocaleString('en-IN')+' sft'); }}),text:'FAR calculator'}),'.')),true),
+      kv('Fee',h('div',{class:'pq-fb'},seg('Fee basis',[['card','Rate card'],['sft','Per sft'],['lump','Lump sum']],fm,v=>{ sh.fm=v; sh.fv=''; renderSheet(); }))),
+      fm!=='card'?kv(fm==='sft'?'Rate':'Lump sum',h('div',{style:'display:grid;gap:4px'},h('div',{class:'pq-unit'},h('input',{id:'pq-fv',class:'tl-num qs-in',type:'number',min:0,step:fm==='sft'?0.5:1000,inputmode:'decimal',placeholder:fm==='sft'?String(eff||''):String(cardFee||''),value:sh.fv||'',onchange:e=>{ sh.fv=e.target.value; renderSheet(); }}),h('span',{text:fm==='sft'?'Tk/sft':'Tk'})),
+        h('span',{class:'f-hint',style:'margin:0',text:own?(fm==='sft'?`${pbTk(own)} on ${area.toLocaleString('en-IN')} sft`:pbTk(own)+(area?` · about Tk ${Math.round(own/area*10)/10}/sft`:'')):`Rate card: ${cardFee?pbTk(cardFee):'—'}${eff?` (Tk ${eff}/sft)`:''}`})),true):null),
     h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Plan'}),
     h('div',{class:'pq-plans'},SP_MAIN.map(card)),
     P&&!P.fixed&&!P.tier?seg('Fee tier',Object.entries(SP_TIERS),d.tier,v=>{ d.tier=v; renderSheet(); }):null,
@@ -9102,10 +9106,8 @@ function sheetPropQuick(){
           h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ sh.svc.parts.push({label:'',rate:'',add:true}); renderSheet(); },text:'+ Add a service'}),
           h('div',{class:'f-hint',style:'margin:0',text:'Tick or untick what each service includes, or edit the words. An added service can carry an extra fee per sft; leave it empty if it is part of the plan fee.'})):null); })(),
     h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:fee?pbTk(fee):'—'})),
-      h('span',{class:'f-hint',style:'margin:0',text:F.noArea?'Give the built area to work out the fee.':own||extra?[own?`Your ${P.fixed?'fee':'rate'}`:'',`rate card ${pbTk(cardFee)}${eff?` (Tk ${eff}/sft)`:''}`,extra?`added services +${pbTk(extra)}`:'','plus VAT and AIT'].filter(Boolean).join(' · '):[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(eff?` · Tk ${eff}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')}),
-      P&&(P.fixed||area)?h('div',{class:'pq-own'},h('span',{class:'qs-k',text:P.fixed?'Your fee':'Your rate'}),
-        h('div',{class:'pq-unit'},h('input',{id:'pq-own',class:'tl-num qs-in',type:'number',min:0,step:P.fixed?1000:0.5,inputmode:'decimal',placeholder:P.fixed?String(cardFee):String(eff||''),value:sh.own&&sh.own.plan===d.plan?sh.own.v:'',onchange:e=>{ sh.own=e.target.value?{plan:d.plan,v:e.target.value}:null; renderSheet(); }}),h('span',{text:P.fixed?'Tk':'Tk/sft'})),
-        own?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ sh.own=null; renderSheet(); },text:'Reset'}):h('span',{class:'f-hint',style:'margin:0',text:'Optional'})):null),
+      h('span',{class:'f-hint',style:'margin:0',text:F.noArea&&!own?'Give the built area to work out the fee.':own||extra?[own?(fm==='sft'?`Your rate Tk ${fv}/sft`:`Lump sum`+(area?` (about Tk ${Math.round(own/area*10)/10}/sft)`:'')):'',`rate card ${pbTk(cardFee)}${eff?` (Tk ${eff}/sft)`:''}`,extra?`added services +${pbTk(extra)}`:'','plus VAT and AIT'].filter(Boolean).join(' · '):[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(eff?` · Tk ${eff}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')}),
+),
     d.type==='private'&&P&&!P.fixed&&spTier(doc)!=='p'?h('div',{class:'f-hint',style:'margin:0;color:var(--overdue)',text:'Private client: the rate card says Premium.'}):null,
     h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{ sh.more=!sh.more; renderSheet(); },text:sh.more?'Hide more options ‹':'More options ›'}),
     sh.more?h('div',{class:'card',style:'gap:8px'},h('div',{class:'lbl',text:'Adjustments · seen only while preparing, not by the client'}),
