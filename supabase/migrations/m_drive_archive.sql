@@ -48,10 +48,11 @@ alter table private.drive_folders enable row level security;
 alter table private.drive_files enable row level security;
 alter table private.drive_runs enable row level security;
 
--- review logins never write (same guard as every other table)
+-- review logins never write (same guard as every other table; m_reviewers.sql adds it later if not run yet)
 do $$
 declare t text;
 begin
+  if to_regprocedure('private.reviewer_guard()') is null then return; end if;
   foreach t in array array['drive_cfg', 'drive_folders', 'drive_files', 'drive_runs'] loop
     execute format('drop trigger if exists zz_reviewer_guard on private.%I', t);
     execute format('create trigger zz_reviewer_guard before insert or update or delete on private.%I for each row execute function private.reviewer_guard()', t);
