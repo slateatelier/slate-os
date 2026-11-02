@@ -1236,6 +1236,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-svc-rate{display:grid;grid-template-columns:72px minmax(0,1fr) 100px;gap:8px;align-items:center}.pq-svc-rate .qs-in{padding-right:64px}
 .panel-wide .pq-one .pq-chk{grid-template-columns:1fr}
 .cl-tbl td{vertical-align:top}
+.q-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px}.q-acts{min-width:0}.q-acts select{flex:1 1 160px;min-width:0;width:100%;max-width:280px;background:#fff;font-size:13.5px;padding:6px 8px;border-radius:8px}
 .pq-fee-l{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .pq-fee{display:grid;gap:4px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}.pq-fee>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.pq-fee b{font-size:22px;font-variant-numeric:tabular-nums}
 .qs-box{display:grid;gap:0;background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
@@ -3141,6 +3142,7 @@ function quickItems(){
       fn:async()=>{ const [pa,e]=approvalOf(t,''); await taskUpdate(t.id,pa,e); }}); });
   ts.filter(t=>t.assignReq).forEach(t=>{ const r=t.assignReq, c=loadOf(r.to,t.id);
     out.push({id:'as:'+t.id,def:true,at:r.at,kind:'Support',title:`${nameOf(r.to)} for “${t.title}”`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:supWhy(t)||'No reason given',
+      alt:people().filter(id=>teamOf(id)===teamOf(r.to)&&id!==r.to&&(S.members[id]||{}).active!==false),altGo:id=>approveAssign(t,id),decline:()=>declineAssign(t),
       fn:()=>taskUpdate(t.id,{assignee:r.to,assignReq:null},[{type:'assignApproved',from:r.to,to:r.to,note:''}])}); });
   vfGroups().forEach(t=>{ const v=t.verify, tm=vfTiming(t), ms=t._mates;
     out.push({id:'vf:'+t.id,def:true,at:v.ts,kind:ms?'Completed · joint':'Completed',title:t.title,meta:ms?`${projLabel(S.projects[t.projectId])} · ${ms.map(m=>nameOf(m.assignee)).join(', ')} · all done`:`${projLabel(S.projects[t.projectId])} · ${nameOf(v.by)} · done ${fmtD(v.at)}`+(tm?' · '+tm:''),quote:ms?'':v.note,warn:ms?ms.some(m=>m.target&&(m.verify||{}).at>m.target):!!(t.target&&v.at>t.target),
@@ -3155,6 +3157,9 @@ function quickItems(){
     fn:()=>S.db.doc(`podjoin/${S.uid}/items/${x.pid}`).set({team:x.d.pod,status:'approved',reqAt:x.d.at,reqBy:x.author,from:teamOf(x.pid),at:now(),by:S.uid})}));
   memberReqs().forEach(x=>{ const c=loadOf(x.uid);
     out.push({id:`mr:${x.pid}:${x.uid}`,def:false,at:x.m.at,kind:'Project team',title:`${nameOf(x.uid)} → ${projLabel(x.p)}`,meta:`${x.m.temp?(x.m.until?'temporary, until '+fmtD(x.m.until):'temporary'):'project member'} · asked by ${nameOf(x.m.by)} · ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:(x.m.note||'').trim()||'No reason given',
+      alt:memberCandidates(x.p).filter(id=>id!==x.uid&&!podsOfProject(x.p).includes(teamOf(id))&&!memberOf(x.p,id)),
+      altGo:id=>run(async()=>{ const now=new Date().toISOString(), cross=/^pod\b/i.test(teamOf(id)); await S.db.doc('projects/'+x.pid).update({members:{[x.uid]:null,[id]:{...x.m,temp:cross,until:cross?(x.m.until||addDays(today(),14)):'',team:teamOf(id),status:'approved',approvedBy:S.uid,approvedAt:now,swapFrom:x.uid}}}); },`${nameOf(id)} added instead`).then(()=>render(true)),
+      decline:()=>run(()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,null)),'Request declined').then(()=>render(true)),
       fn:()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,{...x.m,status:'approved',approvedBy:S.uid,approvedAt:now()}))}); });
   return out.sort((a,b)=>(a.at||'').localeCompare(b.at||''));
 }
@@ -3184,7 +3189,10 @@ function quickSec(items){
         h('div',{class:'q-k'},h('span',{class:'tag',text:it.kind}),h('span',{class:'f-hint',text:'waiting '+ageTxt(ageOf(it.at))})),
         h('div',{class:'row-title',style:'font-weight:500',text:it.title}),
         h('div',{class:'row-meta',style:it.warn?'color:var(--late)':'',text:it.meta}),
-        it.quote?h('p',{class:'quote',style:'margin:2px 0 0',text:it.quote}):null,
+        it.quote?h('p',{class:'quote',style:'margin:2px 0 0'+(it.quote==='No reason given'?';color:var(--overdue)':''),text:it.quote}):null,
+        it.decline||it.alt?h('div',{class:'q-acts',onclick:e=>{ e.preventDefault(); e.stopPropagation(); }},
+          it.alt&&it.alt.length?(()=>{ const el=h('select',{'aria-label':'Give to someone else',disabled:S.busy,onchange:e=>{ const v=e.target.value; if(v) it.altGo(v); }},h('option',{value:'',text:'Someone else…'}),it.alt.map(id=>{ const c=loadOf(id); return h('option',{value:id,text:`${nameOf(id)} · ${teamLabel(id)} · ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`}); })); return el; })():null,
+          it.decline?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>it.decline(),text:'Decline'}):null):null,
         fail[it.id]?h('div',{class:'err',role:'alert',text:fail[it.id]}):null)))),
     h('div',{class:'actions',style:'padding:0 4px'},h('button',{class:'btn '+(S.qConfirm?'btn-accent':'btn-primary'),type:'button',disabled:S.busy||!sel.length,
       onclick:()=>{ if(sel.length>1&&!S.qConfirm){ S.qConfirm=true; render(true); setTimeout(()=>{ if(S.qConfirm){ S.qConfirm=false; render(true); } },5000); return; } approveSelected(sel); },
