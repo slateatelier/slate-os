@@ -1192,6 +1192,12 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-s{font-size:12.5px;color:var(--muted);line-height:1.35}
 .pq-f{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:6px}
 .pq-fee>.pq-own{display:grid;justify-content:stretch;grid-template-columns:120px minmax(0,1fr) 64px;gap:12px;white-space:nowrap;align-items:center;border-top:1px solid var(--line);padding-top:10px;margin-top:4px}.pq-own .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 64px 0 10px;font-size:15px}.pq-own>:last-child{text-align:right}
+.pq-svc{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.pq-svc-h{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:28px}
+.pq-svc-sum{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pq-svc-go{font-size:13.5px;font-weight:600;text-decoration:underline}
+.pq-svc-row{display:grid;gap:8px;padding:10px;border-radius:10px;background:var(--group)}
+.pq-svc-top{display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:6px;align-items:center}.pq-svc-row .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 10px;font-size:15px}
+.pq-svc-rate{display:grid;grid-template-columns:72px minmax(0,1fr) 100px;gap:8px;align-items:center}.pq-svc-rate .qs-in{padding-right:64px}
 .pq-fee{display:grid;gap:4px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}.pq-fee>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.pq-fee b{font-size:22px;font-variant-numeric:tabular-nums}
 .qs-box{display:grid;gap:0;background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .qs-kv{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:12px;min-height:52px;padding:6px 14px;border-bottom:1px solid var(--line)}
@@ -8858,8 +8864,11 @@ const pqArea=k=>+k>0?String(Math.round(+k*5000/100)*100):'';
 function pqDoc(sh){ const d=sh.d, p={name:(d.name||'').trim().toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||''}};
   const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan=d.plan; doc.tier=d.tier; doc.adj=sh.adj||spAdjDef(p); doc.cmp=!!sh.cmp; spApply(doc,p);
   const P=SP_PLANS[doc.plan], card=+doc.lump||0, own=sh.own&&sh.own.plan===doc.plan&&+sh.own.v>0?+sh.own.v:0;
-  if(own){ const fee=P.fixed?Math.round(own):Math.round(own*(+doc.area||0)/1000)*1000; if(fee>0){ doc.lump=String(fee); doc.sched=spSched(doc,p,fee)||doc.sched; doc.ownRate=P.fixed?'':String(own); } }
-  return {p,doc,card,own}; }
+  if(sh.svc&&sh.svc.plan===doc.plan) doc.parts=JSON.parse(JSON.stringify(sh.svc.parts.filter(x=>x.label)));
+  const extra=Math.round(doc.parts.reduce((a,x)=>a+(x.add?(+x.rate||0):0),0)*(+doc.area||0)/1000)*1000;
+  let fee=own?(P.fixed?Math.round(own):Math.round(own*(+doc.area||0)/1000)*1000):card; if(own&&!P.fixed) doc.ownRate=String(own);
+  if(fee>0&&(own||extra)){ fee+=extra; doc.lump=String(fee); doc.sched=spSched(doc,p,fee)||doc.sched; }
+  return {p,doc,card,own,extra}; }
 function sheetPropQuick(){
   const sh=S.sheet, d=sh.d; if(!sh.adj) sh.adj=spAdjDef({type:d.type,location:d.location});
   const kv=(l,v,top)=>h('div',{class:'qs-kv'+(top?' qs-top':'')},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
@@ -8878,7 +8887,7 @@ function sheetPropQuick(){
         f.state==='err'?h('button',{class:'btn btn-primary',type:'button',onclick:()=>pqPdf(sh.done),text:'Try again'}):null,
         h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropDoc(sh.done),text:'Edit details'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
-  const {p,doc,card:cardFee,own}=pqDoc(sh), F=spFee(doc)||{}, P=SP_PLANS[d.plan], fee=+doc.lump||0, area=+doc.area||0, eff=P&&!P.fixed&&area&&cardFee?Math.round(cardFee/area*100)/100:0;
+  const {p,doc,card:cardFee,own,extra}=pqDoc(sh), F=spFee(doc)||{}, P=SP_PLANS[d.plan], fee=+doc.lump||0, area=+doc.area||0, eff=P&&!P.fixed&&area&&cardFee?Math.round(cardFee/area*100)/100:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
   const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; if(d.plan!=='sig') d.tier=d.type==='private'?'p':(d.tier==='p'?'s':d.tier); renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const card=k=>{ const Q=SP_PLANS[k], fe=spFee({...doc,plan:k}), on=d.plan===k;
@@ -8900,8 +8909,25 @@ function sheetPropQuick(){
     h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Plan'}),
     h('div',{class:'pq-plans'},SP_MAIN.map(card)),
     P&&!P.fixed&&!P.tier?seg('Fee tier',Object.entries(SP_TIERS),d.tier,v=>{ d.tier=v; renderSheet(); }):null,
+    (()=>{ const parts=sh.svc&&sh.svc.plan===d.plan?sh.svc.parts:doc.parts, edit=()=>{ if(!(sh.svc&&sh.svc.plan===d.plan)) sh.svc={plan:d.plan,parts:JSON.parse(JSON.stringify(doc.parts))}; return sh.svc.parts; };
+      const open=!!sh.svcOpen, n=parts.filter(x=>x.label).length;
+      return h('div',{class:'pq-svc'},
+        h('button',{type:'button',class:'pq-svc-h',onclick:()=>{ sh.svcOpen=!open; if(!open) edit(); renderSheet(); }},h('span',{class:'qs-k',text:'Services'}),h('span',{class:'pq-svc-sum',text:`${n} service${n===1?'':'s'}`+(parts.some(x=>x.add&&x.label)?` · ${parts.filter(x=>x.add&&x.label).length} added`:'')}),h('span',{class:'pq-svc-go',text:open?'Done ‹':'Edit ›'})),
+        open?h('div',{style:'display:grid;gap:8px'},
+          sh.svc.parts.map((x,i)=>{ const known=PB_SERVICES.some(([l])=>l===x.label)||!!pbSvcInfo(x.label);
+            const pick=h('select',{class:'tl-num qs-in','aria-label':'Service',onchange:e=>{ const v=e.target.value; if(v==='__other'){ x.other=true; x.label=''; x.desc=''; x.check=[]; } else { x.other=false; x.label=v; pbSvcFill(x); const def=(PB_SERVICES.find(([l])=>l===v)||[])[1]; x.rate=x.add&&def?String(def):x.rate; } renderSheet(); }},
+              h('option',{value:'',text:'Choose a service…'}),...(known&&!PB_SERVICES.some(([l])=>l===x.label)?[h('option',{value:x.label,text:x.label})]:[]),PB_SERVICES.map(([l])=>h('option',{value:l,text:l})),h('option',{value:'__other',text:'Other: type it…'}));
+            pick.value=x.other||(!known&&x.label)?'__other':(x.label||'');
+            return h('div',{class:'pq-svc-row'},
+              h('div',{class:'pq-svc-top'},pick,h('button',{type:'button',class:'icon-btn','aria-label':'Remove service',onclick:()=>{ sh.svc.parts.splice(i,1); renderSheet(); },text:'×'})),
+              x.other||(!known&&x.label)?h('input',{class:'tl-num qs-in',placeholder:'Name the service',value:x.label||'',oninput:e=>{ x.label=e.target.value; },onchange:()=>renderSheet()}):null,
+              x.add?h('div',{class:'pq-svc-rate'},h('span',{class:'f-hint',style:'margin:0',text:'Extra fee'}),h('div',{class:'pq-unit'},h('input',{class:'tl-num qs-in',type:'number',min:0,step:0.5,inputmode:'decimal',placeholder:'0 = included',value:x.rate||'',onchange:e=>{ x.rate=e.target.value; renderSheet(); }}),h('span',{text:'Tk/sft'})),
+                h('span',{class:'f-hint',style:'margin:0;text-align:right',text:+x.rate&&+d.area?'+'+pbTk(+x.rate*+d.area):'included'})):null,
+              x.label?pbSvcEditor(x,100+i):null); }),
+          h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>{ sh.svc.parts.push({label:'',rate:'',add:true}); renderSheet(); },text:'+ Add a service'}),
+          h('div',{class:'f-hint',style:'margin:0',text:'Tick or untick what each service includes, or edit the words. An added service can carry an extra fee per sft; leave it empty if it is part of the plan fee.'})):null); })(),
     h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:fee?pbTk(fee):'—'})),
-      h('span',{class:'f-hint',style:'margin:0',text:F.noArea?'Give the built area to work out the fee.':own?`Your ${P.fixed?'fee':'rate'} · rate card ${pbTk(cardFee)}${eff?` (Tk ${eff}/sft)`:''} · plus VAT and AIT`:[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(eff?` · Tk ${eff}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')}),
+      h('span',{class:'f-hint',style:'margin:0',text:F.noArea?'Give the built area to work out the fee.':own||extra?[own?`Your ${P.fixed?'fee':'rate'}`:'',`rate card ${pbTk(cardFee)}${eff?` (Tk ${eff}/sft)`:''}`,extra?`added services +${pbTk(extra)}`:'','plus VAT and AIT'].filter(Boolean).join(' · '):[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(eff?` · Tk ${eff}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')}),
       P&&(P.fixed||area)?h('div',{class:'pq-own'},h('span',{class:'qs-k',text:P.fixed?'Your fee':'Your rate'}),
         h('div',{class:'pq-unit'},h('input',{id:'pq-own',class:'tl-num qs-in',type:'number',min:0,step:P.fixed?1000:0.5,inputmode:'decimal',placeholder:P.fixed?String(cardFee):String(eff||''),value:sh.own&&sh.own.plan===d.plan?sh.own.v:'',onchange:e=>{ sh.own=e.target.value?{plan:d.plan,v:e.target.value}:null; renderSheet(); }}),h('span',{text:P.fixed?'Tk':'Tk/sft'})),
         own?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ sh.own=null; renderSheet(); },text:'Reset'}):h('span',{class:'f-hint',style:'margin:0',text:'Optional'})):null),
