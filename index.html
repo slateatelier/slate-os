@@ -1217,11 +1217,11 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-ok{font-size:13px;color:var(--ontime);padding-bottom:4px}
 .pq-chk{display:grid;border-top:1px solid var(--line)}
 .pq-grp{display:grid;gap:4px;padding-top:6px}.pq-grp-h{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:4px 0}.pq-grp-h b{font-size:13px;text-transform:uppercase;letter-spacing:.04em}
-.pq-ck{display:grid;grid-template-columns:22px minmax(0,1fr) 0;gap:12px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
+.pq-ck{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
 .pq-ck:last-child{border-bottom:0}.pq-ck input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--ink)}
 .pq-ck-l{color:var(--muted)}.pq-ck.on .pq-ck-l{color:var(--ink);font-weight:500}
 .pq-ck-r{font-size:12.5px;color:var(--muted)}
-.pq-ck-x{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}.pq-ck-x input{width:56px;height:32px;box-sizing:border-box;border:1.5px solid var(--faint);border-radius:8px;padding:0 6px;text-align:right;font:inherit;font-size:14px;color:var(--ink);background:#fff}.pq-ck-x i{font-style:normal}
+.pq-ck-x{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}.pq-ck-x input{width:56px;height:32px;box-sizing:border-box;border:1.5px solid var(--faint);border-radius:8px;padding:0 6px;text-align:right;font:inherit;font-size:14px;color:var(--ink);background:#fff}.pq-ck-x i{font-style:normal;display:inline-block;width:30px}
 .pq-cols{display:grid;gap:12px}.pq-c{display:grid;gap:12px;align-content:start;min-width:0}
 @media (min-width:1000px){.panel.panel-wide{width:min(1180px,94vw)}.panel-wide .pq-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}.panel-wide .pq-chk{grid-template-columns:1fr 1fr;column-gap:20px}.panel-wide .pq-ck:nth-last-child(2):nth-child(odd){border-bottom:0}}
 .pq-to{font-size:14px;line-height:1.45;padding:2px 0 2px 8.5px;border-left:3px solid var(--line)}
@@ -1234,6 +1234,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-svc-row{display:grid;gap:8px;padding:10px;border-radius:10px;background:var(--group)}
 .pq-svc-top{display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:6px;align-items:center}.pq-svc-row .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 10px;font-size:15px}
 .pq-svc-rate{display:grid;grid-template-columns:72px minmax(0,1fr) 100px;gap:8px;align-items:center}.pq-svc-rate .qs-in{padding-right:64px}
+.panel-wide .pq-one .pq-chk{grid-template-columns:1fr}
+.pq-fee-l{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .pq-fee{display:grid;gap:4px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}.pq-fee>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.pq-fee b{font-size:22px;font-variant-numeric:tabular-nums}
 .qs-box{display:grid;gap:0;background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .qs-kv{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:12px;min-height:52px;padding:6px 14px;border-bottom:1px solid var(--line)}
@@ -9077,9 +9079,15 @@ function pqCheck(plan,on,fm){ const P=SP_PLANS[plan]||{}, req=pqReq(plan), ticke
   if(on['Interior design']||on['Construction management (interior)']) out.push({lvl:'warn',t:'Interior design and interior construction management are MODO interior services: they usually go in a separate interior proposal.'});
   return out; }
 /* services in three groups (Principal, 2 Nov 2026): the regular set almost every building needs, add-ons, and MODO interior */
-const PQ_GROUPS=[['Regular services',['Architectural design','Structural design','MEP design','Design coordination','Site supervision'],'almost every project'],
-  ['Add-ons',['Landscape design','Common area interior design','3D visualization','Marketing materials (3D, animation, brochure)','Real estate solutions (plans, area, specifications)','BOQ and cost estimate','Feasibility study'],'when the client asks'],
+/* service matrix filled in on 2 Nov 2026 (SLATE Service matrix page): regular and optional services are covered by the main fee;
+   add-ons are charged on top at their own fee (changeable on each proposal). Interior stays with MODO. */
+const PQ_GROUPS=[['Regular services',['Architectural design','Design coordination','Common area interior design','Landscape design','3D visualization','Feasibility study'],'in most proposals · in the main fee'],
+  ['Optional',['Structural design','MEP design','Site supervision'],'when the project needs it · in the main fee'],
+  ['Add-ons',['Marketing materials (3D, animation, brochure)','Real estate solutions (plans, area, specifications)','BOQ and cost estimate'],'only on request · charged on top'],
   ['Interior (MODO)',['Interior design','Construction management (interior)'],'usually a separate proposal']];
+const PQ_ADDON={'Marketing materials (3D, animation, brochure)':{t:'lump',v:250000},'Real estate solutions (plans, area, specifications)':{t:'sft',v:10},'BOQ and cost estimate':{t:'sft',v:''}};
+const pqIsAdd=l=>!!PQ_ADDON[l];
+function pqAddFee(sh,l,area){ const a=PQ_ADDON[l], x=((sh.sel||{}).fee||{})[l]||{}, t=x.t||a.t, v=x.v!=null&&x.v!==''?+x.v:(a.v===''?0:+a.v); return {t,v,amt:Math.round((t==='sft'?v*(+area||0):v)/1000)*1000}; }
 function pqSel(sh){ return sh.sel||(sh.sel={on:{}}); }
 /* No service plans on new proposals (Principal, 2 Nov 2026): tick the services, give the fee (per sft or lump sum).
    Payment stages, revisions, terms and the timeline use SLATE's full-service set, worked out on the fee; all can be changed
@@ -9095,9 +9103,11 @@ function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).t
   const guide=+doc.lump||0, fm=sh.fm||'sft', fv=+sh.fv||0, area=+doc.area||0, fee=fm==='sft'?(fv>0&&area?Math.round(fv*area/1000)*1000:0):(fv>0?Math.round(fv):0);
   const on=Object.keys(pqSel(sh).on).filter(l=>sh.sel.on[l]), ord=[...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0])]; on.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
   doc.parts=on.map(l=>doc.parts.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })());
-  doc.vFree=on.includes('Site supervision')?String(SP_PLANS.comp.visits):'0'; doc.lump=fee?String(fee):''; doc.sched=spSched(doc,p,fee||guide)||doc.sched;
+  const addons=on.filter(pqIsAdd).map(l=>({label:l,...pqAddFee(sh,l,area)})), addSum=addons.reduce((a,x)=>a+x.amt,0), total=fee?fee+addSum:0;
+  doc.addons=addons.map(x=>({label:x.label,amount:x.amt,basis:x.t==='sft'?`Tk ${x.v}/sft`:'lump sum'})); doc.mainFee=fee||'';
+  doc.vFree=on.includes('Site supervision')?String(SP_PLANS.comp.visits):'0'; doc.lump=total?String(total):''; doc.sched=spSched(doc,p,total||guide)||doc.sched;
   if(fm==='sft'&&fv) doc.ownRate=String(fv); doc.plan=''; doc.cmp=false;
-  return {p,doc,guide,fee,fm,fv}; }
+  return {p,doc,guide,fee,fm,fv,addons,addSum,total}; }
 function pqCheck(on){ const out=[];
   if(on['Interior design']||on['Construction management (interior)']) out.push({lvl:'warn',t:'Interior design and interior construction management are MODO interior services: they usually go in a separate interior proposal.'});
   return out; }
@@ -9119,7 +9129,7 @@ function sheetPropQuick(){
         f.state==='err'?h('button',{class:'btn btn-primary',type:'button',onclick:()=>pqPdf(sh.done),text:'Try again'}):null,
         h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropDoc(sh.done),text:'Edit details'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
-  const {doc,guide,fee,fm,fv}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
+  const {doc,guide,fee,fm,fv,addons,addSum,total}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
   const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const sel=pqSel(sh), all=[...new Set([...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0]),...Object.keys(sel.on).filter(l=>sel.on[l])])].filter(l=>!PQ_PKG.includes(l)), n=all.filter(l=>sel.on[l]).length, ck=pqCheck(sel.on);
@@ -9153,11 +9163,15 @@ function sheetPropQuick(){
         h('div',{class:'pq-svc-h'},h('span',{class:'qs-k',text:'Services'}),h('span',{class:'pq-svc-sum',style:n?'':'color:var(--overdue)',text:n?`${n} selected`:'Tick the services to include'}),h('span')),
         ck.length?h('div',{class:'pq-warn'},ck.map(c=>h('div',{text:c.t}))):null,
         ...PQ_GROUPS.map(([g,ls,note])=>{ const xs=[...ls,...(g==='Add-ons'?all.filter(l=>!PQ_GROUPS.some(G=>G[1].includes(l))):[])], k=xs.filter(l=>sel.on[l]).length, allOn=k===xs.length;
-          return h('div',{class:'pq-grp'},
+          return h('div',{class:'pq-grp'+(g==='Add-ons'?' pq-one':'')},
             h('div',{class:'pq-grp-h'},h('b',{text:g}),h('span',{class:'f-hint',style:'margin:0',text:note}),h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ xs.forEach(l=>{ sel.on[l]=!allOn; }); renderSheet(); },text:allOn?'Untick all':'Tick all'})),
             h('div',{class:'pq-chk'},xs.map(l=>{ const on=!!sel.on[l];
-              return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l',text:l}),h('span')); }))); })),
-      h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:fee?pbTk(fee):'—'})),
+              const af=pqIsAdd(l)&&on?pqAddFee(sh,l,area):null, fx=(sel.fee=sel.fee||{});
+              return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l',text:l}),
+                af?h('span',{class:'pq-ck-x',onclick:e=>e.preventDefault()},'+',h('input',{type:'number',min:0,step:af.t==='sft'?0.5:1000,inputmode:'decimal',value:af.v||'',placeholder:'fee',style:af.t==='lump'?'width:96px':'','aria-label':'Add-on fee for '+l,onclick:e=>e.stopPropagation(),onchange:e=>{ fx[l]={t:af.t,v:e.target.value}; renderSheet(); }}),h('i',{text:af.t==='sft'?'/sft':'Tk'})):h('span')); }))); })),
+      h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:total?pbTk(total):'—'})),
+        addons.length&&fee?h('div',{class:'pq-fee-l'},h('span',{text:'Main fee'}),h('span',{text:pbTk(fee)})):null,
+        ...(fee?addons.map(x=>h('div',{class:'pq-fee-l'},h('span',{text:'+ '+x.label+(x.t==='sft'?` (Tk ${x.v}/sft)`:'')}),h('span',{style:x.amt?'':'color:var(--overdue)',text:x.amt?pbTk(x.amt):'give the fee'}))):[]),
         h('span',{class:'f-hint',style:'margin:0',text:fee?[fm==='sft'?`Tk ${fv}/sft on ${area.toLocaleString('en-IN')} sft`:'Lump sum'+(area?` · about Tk ${Math.round(fee/area*10)/10}/sft`:''),guide?`rate card guide ${pbTk(guide)}`:'','plus VAT and AIT'].filter(Boolean).join(' · '):fm==='sft'?'Give the rate per sft and the built area.':'Give the lump sum.'})))),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions sticky-acts'},
@@ -9166,7 +9180,7 @@ function sheetPropQuick(){
       h('button',{class:'btn',type:'button',onclick:()=>sh.id?openPropView(sh.id):closeSheet(),text:'Cancel'}))];
 }
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
-  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
+  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&pqDoc(sh).addons.some(x=>!x.amt)) return fail('Give the fee for each add-on.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc);
   const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),sector:pqT(d.sSec)},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
@@ -9252,8 +9266,8 @@ const PB_SVC_INFO={
    ['Electrical: lighting, power, DB and cable layouts, load calculation','Substation, generator and LT panel sizing','Plumbing: water supply, sanitary and storm water drainage','Fire detection, fire fighting and fire safety drawings','HVAC and ventilation provisions','Lift and pump specifications','Fire service and DPDC/DESCO submission support']],
  'Marketing materials (3D, animation, brochure)':['Sales and marketing material for the developer, made from the approved design.',
    ['10–15 rendered 3D views: exterior (day and night) and interiors of the common areas and a typical apartment','Walk-through or fly-through animation','Brochure layout with plans and specifications','Social media images in the needed sizes']],
- '3D visualization':['Photo-realistic 3D images of the design.',
-   ['8–10 rendered 3D views, exterior and interior','One round of changes per view','High-resolution files, print-ready']],
+ '3D visualization':['Basic 3D views of the design, so the project is easy to understand at each stage.',
+   ['Basic 3D views of the exterior and key spaces','Updated as the design develops','Detailed renders and animation are the Marketing materials add-on']],
  'Real estate solutions (plans, area, specifications)':['Material the sales team needs to sell the apartments.',
    ['Sale floor plans for each apartment type','Apartment area statement (net and gross)','Specification list for the brochure and sale agreement','Parking allocation plan']],
  'BOQ and cost estimate':['Quantities and cost estimate of the works, for budgeting and tender.',
@@ -9690,7 +9704,7 @@ function pbBlocks(p,d){
       ${d.parts.filter(x=>x.label||+x.rate).map((x,i)=>`<tr><td>${d.scopeAuto?(i+1)+'. ':''}${pbEsc(x.label)}</td>${+x.rate?`<td class="n">${(+x.rate).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate)*(+d.area||0)).toLocaleString('en-IN')}</td>`:'<td class="n">—</td><td class="n">Included</td>'}</tr>`).join('')}
       ${f.disc?`<tr class="sub"><td>Subtotal (${(+d.area||0).toLocaleString('en-IN')} sft × Tk ${(f.rawRate||0).toLocaleString('en-IN')})</td><td></td><td class="n">${Math.round(f.sub).toLocaleString('en-IN')}</td></tr><tr class="sub"><td>Less special discount${d.discMode==='sft'?` (Tk ${(+d.disc||0).toLocaleString('en-IN')}/sft)`:''}</td><td></td><td class="n">−${Math.round(f.disc).toLocaleString('en-IN')}</td></tr>`:''}
       <tr class="tot"><td>Total fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`;
-  } else fee=`<div class="amtbox"><span>Total fee${d.plan&&SP_PLANS[d.plan]?' ('+SP_PLANS[d.plan].n+' plan)':''}${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${d.scopeAuto&&d.parts.some(x=>x.label)?`<p class="pb-small">The fee covers services 1 to ${d.parts.filter(x=>x.label).length} in the scope of work.</p>`:''}`;
+  } else fee=`${(d.addons||[]).length&&+d.mainFee?`<table><tbody><tr><td>Design fee for services in the scope of work</td><td class="n">${pbTk(d.mainFee)}</td></tr>${d.addons.map(x=>`<tr><td>Add-on: ${pbEsc(x.label)} (${pbEsc(x.basis)})</td><td class="n">${pbTk(x.amount)}</td></tr>`).join('')}</tbody></table>`:''}<div class="amtbox"><span>Total fee${d.plan&&SP_PLANS[d.plan]?' ('+SP_PLANS[d.plan].n+' plan)':''}${f.area?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${d.scopeAuto&&d.parts.some(x=>x.label)?`<p class="pb-small">The fee covers services 1 to ${d.parts.filter(x=>x.label).length} in the scope of work.</p>`:''}`;
   add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${d.tax==='incl'?'The fee includes VAT and AIT.':'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
   if(d.plan&&SP_PLANS[d.plan]&&d.cmp) add(spCompare(d));
   if(d.iab&&f.area){ const I=pbIab(d,f);
