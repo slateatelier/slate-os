@@ -1213,7 +1213,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .db-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;border-top:1px solid var(--line);padding-top:8px}.db-mini>div{display:grid}
 .pq-fb .seg button{white-space:nowrap;padding-inline:8px}
 .pq-chk{display:grid;border-top:1px solid var(--line)}
-.pq-ck{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
+.pq-ck{display:grid;grid-template-columns:22px minmax(0,1fr) 0;gap:12px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
 .pq-ck:last-child{border-bottom:0}.pq-ck input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--ink)}
 .pq-ck-l{color:var(--muted)}.pq-ck.on .pq-ck-l{color:var(--ink);font-weight:500}
 .pq-ck-r{font-size:12.5px;color:var(--muted)}
@@ -9048,13 +9048,13 @@ function openPropQuick(d0,id,convert){ const d={...d0}; d.type=d.type||'dev'; d.
 const pqArea=k=>+k>0?String(Math.round(+k*5000/100)*100):'';
 /* services on the quick proposal: one tick per service. The plan's own are ticked and included in the fee; another service
    ticked is added at its usual rate per sft (changeable). Descriptions come from SLATE's defaults (Edit details to change). */
-function pqSel(sh,plan,base){ if(!sh.sel||sh.sel.plan!==plan) sh.sel={plan,on:Object.fromEntries(base.map(l=>[l,true])),rate:{}}; return sh.sel; }
+function pqSel(sh){ return sh.sel||(sh.sel={on:{}}); }
 function pqDoc(sh){ const d=sh.d, p={name:(d.name||'').trim().toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||''}};
   const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan=d.plan; doc.tier=d.tier; doc.adj=sh.adj||spAdjDef(p); doc.cmp=!!sh.cmp; spApply(doc,p);
   const P=SP_PLANS[doc.plan], card=+doc.lump||0, fm=sh.fm||'card', fv=+sh.fv||0, area=+doc.area||0, own=fm==='sft'&&fv>0&&area?Math.round(fv*area/1000)*1000:fm==='lump'&&fv>0?Math.round(fv):0;
-  if(sh.sel&&sh.sel.plan===doc.plan){ const base=doc.parts, sel=sh.sel, keep=base.filter(x=>sel.on[x.label]);
-    const add=Object.keys(sel.on).filter(l=>sel.on[l]&&!base.some(x=>x.label===l)).map(l=>{ const x={label:l,rate:String(sel.rate[l]??''),add:true}; pbSvcFill(x); return x; });
-    doc.parts=[...keep,...add]; }
+  if(sh.sel){ const base=doc.parts, on=Object.keys(sh.sel.on).filter(l=>sh.sel.on[l]);
+    if(on.length){ const ord=[...base.map(x=>x.label),...PB_SERVICES.map(x=>x[0])]; on.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
+      doc.parts=on.map(l=>base.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })()); } }
   const extra=Math.round(doc.parts.reduce((a,x)=>a+(x.add?(+x.rate||0):0),0)*(+doc.area||0)/1000)*1000;
   let fee=own||card; if(own&&fm==='sft') doc.ownRate=String(fv);
   if(fee>0&&(own||extra)){ fee+=extra; doc.lump=String(fee); doc.sched=spSched(doc,p,fee)||doc.sched; }
@@ -9103,14 +9103,12 @@ function sheetPropQuick(){
     h('div',{class:'pq-c'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Plan'}),
     h('div',{class:'pq-plans'},SP_MAIN.map(card)),
     P&&!P.fixed&&!P.tier?seg('Fee tier',Object.entries(SP_TIERS),d.tier,v=>{ d.tier=v; renderSheet(); }):null,
-    (()=>{ const base=[...((SP_PLANS[d.plan]||{}).svc||[])], sel=pqSel(sh,d.plan,base), all=[...new Set([...base,...PB_SERVICES.map(x=>x[0])])].filter(l=>!/^Interior design$|Construction management/i.test(l)||sel.on[l]);
-      const n=all.filter(l=>sel.on[l]).length, open=!!sh.svcOpen, def=l=>(PB_SERVICES.find(x=>x[0]===l)||[])[1]||'';
+    (()=>{ const base=[...((SP_PLANS[d.plan]||{}).svc||[])], sel=pqSel(sh), all=[...new Set([...base,...PB_SERVICES.map(x=>x[0])])];
+      const n=all.filter(l=>sel.on[l]).length;
       return h('div',{class:'pq-svc'},
-        h('button',{type:'button',class:'pq-svc-h',onclick:()=>{ sh.svcOpen=!open; renderSheet(); }},h('span',{class:'qs-k',text:'Services'}),h('span',{class:'pq-svc-sum',text:`${n} selected`+(extra?` · +${pbTk(extra)}`:'')}),h('span',{class:'pq-svc-go',text:open?'Done ‹':'Change ›'})),
-        open?h('div',{class:'pq-chk'},all.map(l=>{ const on=!!sel.on[l], inPlan=base.includes(l);
-          return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; if(e.target.checked&&!inPlan&&sel.rate[l]==null) sel.rate[l]=String(def(l)); renderSheet(); }}),
-            h('span',{class:'pq-ck-l',text:l}),
-            !on?h('span'):inPlan?h('span',{class:'pq-ck-r',text:'in plan'}):h('span',{class:'pq-ck-x',onclick:e=>e.preventDefault()},'+',h('input',{type:'number',min:0,step:0.5,inputmode:'decimal',value:sel.rate[l]??'',placeholder:'0','aria-label':'Extra Tk per sft for '+l,onclick:e=>e.stopPropagation(),onchange:e=>{ sel.rate[l]=e.target.value; renderSheet(); }}),h('i',{text:'/sft'}))); })):null); })(),
+        h('div',{class:'pq-svc-h'},h('span',{class:'qs-k',text:'Services'}),h('span',{class:'pq-svc-sum',style:n?'':'color:var(--overdue)',text:n?`${n} selected`:'Tick the services to include'}),h('span')),
+        h('div',{class:'pq-chk'},all.map(l=>{ const on=!!sel.on[l];
+          return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l',text:l}),h('span')); }))); })(),
     h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:fee?pbTk(fee):'—'})),
       h('span',{class:'f-hint',style:'margin:0',text:F.noArea&&!own?'Give the built area to work out the fee.':own||extra?[own?(fm==='sft'?`Your rate Tk ${fv}/sft`:`Lump sum`+(area?` (about Tk ${Math.round(own/area*10)/10}/sft)`:'')):'',`rate card ${pbTk(cardFee)}${eff?` (Tk ${eff}/sft)`:''}`,extra?`added services +${pbTk(extra)}`:'','plus VAT and AIT'].filter(Boolean).join(' · '):[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(eff?` · Tk ${eff}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')}),
 ),
@@ -9128,7 +9126,7 @@ function sheetPropQuick(){
       h('button',{class:'btn',type:'button',onclick:()=>sh.id?openPropView(sh.id):closeSheet(),text:'Cancel'}))];
 }
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
-  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project a name.'); if(!draft&&!SP_PLANS[doc.plan].fixed&&!(+doc.area>0)) return fail('Give the built area (sft) to work out the fee.');
+  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project a name.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&!SP_PLANS[doc.plan].fixed&&!(+doc.area>0)) return fail('Give the built area (sft) to work out the fee.');
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc);
   const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
