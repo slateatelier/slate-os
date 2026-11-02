@@ -145,6 +145,7 @@ button.hb-can .nm::after{content:' ▾';color:var(--muted);font-size:11px}button
 .hb-sub{display:grid;gap:2px;margin:-4px 0 6px;padding:8px 10px;border-radius:10px;background:var(--fill, #f2f2f7)}
 .hb-sub-t{font-size:12px;font-weight:600;color:var(--muted);padding:2px 2px 6px}
 .hb-sub button{appearance:none;background:none;border:0;border-top:1px solid var(--line, rgba(60,60,67,.12));font:inherit;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 2px;font-size:13px}
+.hb-pj{appearance:none;background:none;border:0;border-top:1px solid var(--line, rgba(60,60,67,.12));font:inherit;color:inherit;text-align:left;display:grid;gap:3px;padding:8px 2px;font-size:13px;width:100%}button.hb-pj{cursor:pointer}.hb-sub .hb-pj:first-of-type{border-top:0}.hb-pj .m{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}.hb-pj .m .v-fut{color:#D7263D;font-weight:600}
 .hb-fut-l{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 2px;font-size:13px;border-top:1px solid var(--line, rgba(60,60,67,.12))}.hb-fut-l .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hb-sub .a.v-fut{color:#D7263D}
 .hb-sub button:first-of-type{border-top:0}.hb-sub .a{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}
 .hb .v{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;min-width:64px}
@@ -1963,15 +1964,20 @@ function futureFees() {
   const list = memo('pjall', () => SB.projectReport(P(), curFY().from, today())), out = {}, det = {}, keyOf = {}, byClient = {};
   Object.keys(S.ledgers).forEach(l => { if (groupOf(l) !== 'inc') return; const pj = (S.ledgers[l] || {}).project; if (!pj) return;
     keyOf[pj] = feeRowName(l); const cl = ((S.projects[pj] || {}).client || '').trim().toUpperCase(); if (cl && devOf(l)) byClient[cl] = devOf(l); });
+  const info = {};
   list.forEach(x => {
-    if (!x.id || x.overhead) return; const f = S.projects[x.id] || {}; if (f.feeTba || f.free) return;
-    const due = STOPPED(x.status) ? (+f.earned || 0) - x.revenueToDate : x.toCollect;
-    if (!(due > 0.5)) return;
+    if (!x.id || x.overhead) return; const f = S.projects[x.id] || {};
+    const stop = STOPPED(x.status), tba = !!(f.feeTba || f.free);
+    const due = tba ? 0 : stop ? (+f.earned || 0) - x.revenueToDate : (x.toCollect || 0);
     const label = [x.code, x.name].filter(Boolean).join(' · ');
+    info[x.id] = { id: x.id, label, fee: tba ? null : stop ? (+f.earned || 0) : (x.contract || 0), rec: x.revenueToDate || 0, due: due > 0.5 ? due : 0,
+      tba: f.feeTba ? 'Fee to be agreed' : f.free ? 'Pro bono' : stop ? x.status + ' · earned only' : '' };
+    if (!(due > 0.5)) return;
     const n = keyOf[x.id] || byClient[(f.client || '').trim().toUpperCase()] || label;
-    out[n] = (out[n] || 0) + due; (det[n] = det[n] || []).push([label, due]);
+    out[n] = (out[n] || 0) + due; (det[n] = det[n] || []).push(x.id);
   });
   Object.defineProperty(out, 'det', { value: det, enumerable: false });
+  Object.defineProperty(out, 'info', { value: info, enumerable: false });
   return out;
 }
 function hbars(map, color, key, det, pr, fut) {
@@ -1984,12 +1990,30 @@ function hbars(map, color, key, det, pr, fut) {
   const top = open ? rows.slice() : rows.slice(0, 7); if (!open && rest > 0) top.push(['Everything else', rest, restRows.length]);
   const max = Math.max(...top.map(r => r[1] + (r[2] ? 0 : fut[r[0]] || 0)));
   const dOpen = S.hbDet || {}, dk = n => key + ':' + n;
-  const fdet = n => ((fut.det || {})[n] || []).slice().sort((a, b) => b[1] - a[1]);
-  const sub = n => { const ls = ((det || {})[n] || []).filter(x => x[1] > 0.5).sort((a, b) => b[1] - a[1]), fs = fdet(n); if (!ls.length && !fs.length) return null;
+  const fdet = n => (fut.det || {})[n] || [];
+  /* a fee row opens to one line per project: received this period, the agreed fee, received to date and still to come */
+  const projSub = (n, ls) => {
+    const info = fut.info || {}, yr = {}, ledOf = {}, ids = [];
+    ls.forEach(([l, a]) => { const pj = (S.ledgers[l] || {}).project; if (pj) { yr[pj] = (yr[pj] || 0) + a; ledOf[pj] = l; } });
+    Object.keys(S.ledgers).forEach(l => { const pj = (S.ledgers[l] || {}).project; if (pj && groupOf(l) === 'inc' && !ledOf[pj]) ledOf[pj] = l; });
+    ls.forEach(([l]) => { const pj = (S.ledgers[l] || {}).project; if (pj && !ids.includes(pj)) ids.push(pj); });
+    fdet(n).forEach(id => { if (!ids.includes(id)) ids.push(id); });
+    ids.sort((a, b) => ((info[b] || {}).due || 0) + (yr[b] || 0) - ((info[a] || {}).due || 0) - (yr[a] || 0));
+    const free = ls.filter(([l]) => !(S.ledgers[l] || {}).project);
     return h('div', { class: 'hb-sub' }, h('div', { class: 'hb-sub-t', text: n }),
-      ls.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' }))),
-      fs.length ? h('div', { class: 'hb-sub-t', text: 'Still to come' }) : null,
-      fs.map(([lab, a]) => h('div', { class: 'hb-fut-l' }, h('span', { class: 'n', text: lab }), h('span', { class: 'a v-fut', text: '+' + fmt(a) })))); };
+      ids.map(id => { const x = info[id] || { label: projLabel(id), rec: 0, due: 0 }, l = ledOf[id];
+        const meta = [yr[id] > 0.5 ? h('span', { text: 'This period ' + fmt(yr[id]) }) : null,
+          x.fee ? h('span', { text: 'Fee ' + fmt(x.fee) }) : x.tba ? h('span', { text: x.tba }) : null,
+          h('span', { text: 'Received to date ' + fmt(x.rec) }),
+          x.due > 0.5 ? h('span', { class: 'v-fut', text: 'To come ' + fmt(x.due) }) : null].filter(Boolean);
+        return h(l ? 'button' : 'div', { class: 'hb-pj', type: l ? 'button' : null, onclick: l ? () => openLedger(l, '2000-01-01', today()) : null, title: l ? 'See every entry' : null },
+          h('span', { class: 'n', text: x.label + (l ? ' ›' : '') }), h('span', { class: 'm' }, meta)); }),
+      free.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' }))));
+  };
+  const sub = n => { const ls = ((det || {})[n] || []).filter(x => x[1] > 0.5).sort((a, b) => b[1] - a[1]); if (!ls.length && !fdet(n).length) return null;
+    if (fut.info && (fdet(n).length || ls.some(([l]) => groupOf(l) === 'inc'))) return projSub(n, ls);
+    return h('div', { class: 'hb-sub' }, h('div', { class: 'hb-sub-t', text: n }),
+      ls.map(([l, a]) => h('button', { type: 'button', onclick: () => openLedger(l, pr && pr.from, pr && pr.to), title: 'See every entry' }, h('span', { class: 'n', text: L(l) }), h('span', { class: 'a', text: fmt(a) + ' ›' })))); };
   const bar = ([n, v, cnt]) => { const can = !cnt && ((det && (det[n] || []).length) || fdet(n).length > 0), op = can && dOpen[dk(n)];
     return [h(cnt && key || can ? 'button' : 'div', { class: 'hb' + (cnt && key ? ' hb-more' : '') + (can ? ' hb-can' : '') + (op ? ' is-open' : ''), type: cnt && key || can ? 'button' : null, 'aria-expanded': can ? String(!!op) : null,
       onclick: cnt && key ? tog : can ? () => { S.hbDet = Object.assign({}, dOpen, { [dk(n)]: !op }); render(true); } : null },
