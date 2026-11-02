@@ -122,7 +122,11 @@ main.wrap.wrap-desk{max-width:1480px}
   body.side-on #view>.seg-row{justify-content:space-between}
   body.side-on #view>.seg-row>.seg:first-child{flex:0 0 auto}
   /* Report an issue sits in the content area, clear of the profile at the foot of the menu */
-  body.side-on #slate-report{left:256px}
+  body.side-on #slate-report{left:14px;bottom:86px}
+  body.side-on #side{padding-bottom:12px}
+  body.side-on #side .sb-nav{padding-bottom:64px}
+  body.side-on .dash-bar{flex-wrap:nowrap}
+  body.side-on .dash-bar select{flex:0 1 170px!important;min-width:120px}
   /* the task beside the list */
   body.sheet-dock #sheet{left:auto;width:520px;top:var(--chrome-h,68px);border-left:1px solid var(--border);z-index:4}
   body.sheet-dock #sheet .panel{width:100%}
@@ -4425,14 +4429,18 @@ function viewDash(){
   const inPod=t=>!notTeamPerf(t.assignee)&&!isChalkTask(t)&&(!D.pod||(/^pod\b/i.test(D.pod)?podsOf(t).includes(D.pod):teamOf(t.assignee)===D.pod))&&(!D.person||t.assignee===D.person||(t.assignReq&&t.assignReq.to===D.person&&false));
   const items=inPeriod(r,'approved').filter(inPod), c=count(items,'approved'), rt=rate(c), tg=target();
   const podSel=h('select',{id:'d-pod','aria-label':'Pod',style:'flex:0 1 160px',onchange:e=>{D.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),h('optgroup',{label:'Pods'},pods().map(p=>h('option',{value:p,text:podLabel(p)}))),h('optgroup',{label:'Support teams'},teams().filter(t=>!/^pod\b/i.test(t)).map(p=>h('option',{value:p,text:p})))); podSel.value=D.pod||'';
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:r.label}),h('h1',{class:'h1',text:'Dashboard'})),
-    h('div',{class:'bar'},seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall'],...(amApprover()?[['tl','Timelines']]:[]),...(canClients()?[['clients','Clients']]:[])],D.scope,v=>{D.scope=v;render(true)}),cv||tv?null:seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),fullView()&&!ov&&!cv&&!tv?podSel:null,ov||cv||tv?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&!isChalkP(id)&&(!isPriv(id)||seePriv())).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
+  /* the view switch sits at the top-left, where every screen keeps its switch; period and filters stay beside the title */
+  const out=[seg('View',[['detail',fullView()?'Detailed':(mp?podLabel(mp):'My dashboard')],['overall','Overall'],...(amApprover()?[['tl','Timelines']]:[]),...(canClients()?[['clients','Clients']]:[])],D.scope,v=>{D.scope=v;render(true)}),
+    h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:r.label}),h('h1',{class:'h1',text:'Dashboard'})),
+    h('div',{class:'bar dash-bar'},fullView()&&!ov&&!cv&&!tv?podSel:null,ov||cv||tv?null:(()=>{ const hd=myHeadTeam(); const opts=fullView()?[['','Everyone'],...people().filter(id=>!isCOO(id)&&!isChalkP(id)&&(!isPriv(id)||seePriv())).map(id=>[id,nameOf(id)])]:[[S.uid,'My dashboard'],...(mp?[['',podLabel(mp)+' (whole pod)']]:[]),...(hd?[['@team',hd+' (whole team)']]:[]),...(amPodLead()||hd?visiblePeople().filter(id=>id!==S.uid&&!isCOO(id)).map(id=>[id,nameOf(id)]):[])];
         const el=h('select',{id:'d-person','aria-label':'Person',style:'flex:0 1 170px',onchange:e=>{ const v=e.target.value; if(hd){ D.pod=v==='@team'?hd:''; D.person=v==='@team'?'':v; } else D.person=v; render(true)}},opts.map(([v,l])=>h('option',{value:v,text:l}))); el.value=hd&&!D.person&&D.pod===hd?'@team':(D.person||''); return el; })(),
-      cv||tv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous period',onclick:()=>{D.offset--;render(true)},text:'‹'}),
+      /* period switch and arrows always at the right end, so they stay put whichever filters show */
       !cv&&!tv&&D.offset!==0&&h('button',{class:'btn btn-sm',type:'button',onclick:()=>{D.offset=0;render(true)},text:'Today'}),
+      cv||tv?null:seg('Period',[['week','Week'],['month','Month'],['quarter','Quarter']],D.kind,v=>{D.kind=v;D.offset=0;render(true)}),
+      cv||tv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous period',onclick:()=>{D.offset--;render(true)},text:'‹'}),
       cv||tv?null:h('button',{class:'btn btn-sm',type:'button','aria-label':'Next period',onclick:()=>{D.offset++;render(true)},text:'›'})))];
-  if(cv){ out[0].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(clientsDash()); }
-  if(tv){ out[0].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(tlDash()); }
+  if(cv){ out[1].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(clientsDash()); }
+  if(tv){ out[1].querySelector('.eyebrow').textContent='Principal and COO only'; return out.concat(tlDash()); }
   if(ov) return out.concat(overallDash(r));
 
   const sc=canSeeScoring();
