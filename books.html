@@ -2678,7 +2678,7 @@ function saveReq() {
   if (d.type === 'petty' && !(d.files || []).length && !S.sheet.confirmNoFile) { S.sheet.confirmNoFile = true; return fail('No bill attached. Attach a photo if you have one, or press Submit again to send without it.'); }
   const id = S.sheet.editKey ? S.sheet.editKey.split('~')[1] : 'r' + uidShort();
   if (d.type === 'petty' && (amHolder() || ['Principal', 'Office staff'].includes(myRole())) && !d.purpose) return fail('Choose the purpose.');
-  const body = { type: d.type, purpose: d.type === 'petty' ? (d.purpose || '') : '', date: d.date || today(), title: d.title.trim(), amount: r2(amt), cat: d.cat || '', project: d.project || '', payTo: (d.payTo || '').trim(), method: d.method || 'Cash', note: (d.note || '').trim(), files: d.files || [], at: new Date().toISOString(), by: S.uid, byName: nameOf(S.uid) };
+  const body = { type: d.type, purpose: d.type === 'petty' ? (d.purpose || '') : '', from: d.type === 'petty' && amFloat() ? 'float' : '', date: d.date || today(), title: d.title.trim(), amount: r2(amt), cat: d.cat || '', project: d.project || '', payTo: (d.payTo || '').trim(), method: d.method || 'Cash', note: (d.note || '').trim(), files: d.files || [], at: new Date().toISOString(), by: S.uid, byName: nameOf(S.uid) };
   if (!S.sheet.editKey) body.createdAt = body.at;
   let auto = '';
   run(async () => { await Store.put(`requests/${S.uid}/items`, id, body); auto = await holderAutoApprove(S.uid + '~' + id, body); },
@@ -2693,7 +2693,7 @@ function sheetRequest() {
   const out = [head(`${REQ_TYPES[r.type] || 'Request'} · R-${r.id.slice(-5).toUpperCase()}`, r.title || REQ_TYPES[r.type])];
   out.push(h('div', { class: 'sh-status' }, pill(st === 'pending' ? 'pending' : st), dec.voucherNo ? h('span', { class: 'tag', text: 'Voucher ' + dec.voucherNo }) : null));
   out.push(h('div', { class: 'big-amt', text: tk(r.amount) }));
-  out.push(h('div', { class: 'facts' }, fact('Asked by', r.byName || nameOf(r.owner, r.createdAt || r.at), fmtTs(r.createdAt || r.at)), fact('Date', fmtD(r.date, true)), fact('Category', cat || '—'), fact('Project', pj || '—'), fact(r.type === 'petty' ? 'Paid to' : 'Pay to', r.payTo || '—'), fact('How', r.type === 'petty' ? 'From petty cash' + (r.purpose ? ' · ' + purposeName(r.purpose) : '') : r.method || '—')));
+  out.push(h('div', { class: 'facts' }, fact('Asked by', r.byName || nameOf(r.owner, r.createdAt || r.at), fmtTs(r.createdAt || r.at)), fact('Date', fmtD(r.date, true)), fact('Category', cat || '—'), fact('Project', pj || '—'), fact(r.type === 'petty' ? 'Paid to' : 'Pay to', r.payTo || '—'), fact('How', r.type === 'petty' ? (r.from === 'float' ? 'From the cash with ' + (r.byName || nameOf(r.owner)) : 'From petty cash') + (r.purpose ? ' · ' + purposeName(r.purpose) : '') : r.method || '—')));
   if (r.note) out.push(h('div', { class: 'card' }, h('div', { class: 'lbl', text: r.type === 'topup' ? 'Statement since the last refill' : 'Details' }), h('div', { text: r.note, style: 'overflow-wrap:anywhere;white-space:pre-line' })));
   if ((r.files || []).length) out.push(h('div', { class: 'sec' }, secH('Bills', String(r.files.length)), h('div', { class: 'files' }, r.files.map((f, i) => fileTile(f, () => openSheet({ type: 'doc', id: 'r:' + r.key + ':' + i }))))));
   const decide = (status, act, note, extra) => run(() => Store.put('reqdec', r.key, Object.assign({}, dec, { status, trail: trailAdd(dec.trail, act, note), at: new Date().toISOString() }, extra || {})), { checked: 'Checked', approved: 'Approved', returned: 'Sent back', rejected: 'Rejected' }[status] || 'Saved');
@@ -2723,7 +2723,7 @@ function sheetRequest() {
   return out;
 }
 function payRequest(r) {
-  const petty = pettyLedger(), isPetty = r.type === 'petty', isTop = r.type === 'topup';
+  const petty = r.type === 'petty' && r.from === 'float' && S.ledgers[floatL()] ? floatL() : pettyLedger(), isPetty = r.type === 'petty', isTop = r.type === 'topup';
   const cat = S.ledgers[r.cat] ? r.cat : '';
   const narr = `${REQ_TYPES[r.type]} R-${r.id.slice(-5).toUpperCase()} from ${r.byName || nameOf(r.owner, r.createdAt || r.at)}: ${r.title}${r.note ? ' · ' + r.note : ''}`;
   const trailExtra = [{ at: r.createdAt || r.at, by: r.owner, name: r.byName || nameOf(r.owner, r.createdAt || r.at), act: 'submitted', note: 'Request R-' + r.id.slice(-5).toUpperCase() }].concat((S.reqdec[r.key] || {}).trail || []).filter(e => ['submitted', 'checked', 'approved'].includes(e.act));
@@ -3696,7 +3696,7 @@ function moreSettings() {
     fact('Invoice numbers', (st.prefixes || {}).Invoice ? `${st.prefixes.Invoice}/${curFY().short}/001` : `INV/${curFY().short}/001`), fact('Checks on cash', st.flagCash ? 'On' : 'Off', 'Flags salary, rent and payments over Tk 50,000 made in cash'), fact('Number style', st.grouping === 'intl' ? '1,234,567' : '12,34,567')));
   return out;
 }
-function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', vatPct: String(st.vatPct || 15) }; }
+function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', vatPct: String(st.vatPct || 15) }; }
 function sheetSettings() {
   const cashL = [['', 'Ask each time']].concat(Object.keys(S.ledgers).filter(k => isCashL(k)).map(k => [k, L(k)]));
   const fields = [field('Company name on documents', inp('company')), field('Address', inp('address', { placeholder: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212' })),
@@ -3704,6 +3704,7 @@ function sheetSettings() {
     h('div', { class: 'form-row' }, field('Financial year', sel('fyRule', FY_RULES), 'Voucher and invoice numbers restart each financial year.'), field('Books closed up to', inp('lockDate', { type: 'date' }), 'No one can add or change entries on or before this date.')),
     h('div', { class: 'form-row' }, field('Petty cash box', sel('pettyLedger', [['', 'Choose…']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'cash').map(k => [k, L(k)])))), field('Usual cash account', sel('defaultCash', cashL))),
     h('div', { class: 'form-row' }, field('Petty cash held by', sel('pettyHolder', [['', 'Choose…']].concat((window.BooksHost && BooksHost.peopleIds ? BooksHost.peopleIds() : []).map(id => [id, nameOf(id)]).sort((a, b) => a[1].localeCompare(b[1]))))), field('Refill limit a month (Tk)', inp('pettyCap', { inputmode: 'decimal' }), 'The holder’s refills within this go straight to Accounts.')),
+    h('div', { class: 'form-row' }, field('Office staff float held by', sel('floatHolder', [['', 'No float']].concat((window.BooksHost && BooksHost.peopleIds ? BooksHost.peopleIds() : []).map(id => [id, nameOf(id)]).sort((a, b) => a[1].localeCompare(b[1]))))), field('Float kept in', sel('floatLedger', [['', 'Choose…']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'cash').map(k => [k, L(k)])))), field('Float amount (Tk)', inp('floatAmount', { inputmode: 'decimal' }))),
     field('Tax withheld (TDS) account', sel('tdsVendor', [['', 'Find automatically']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'stat').map(k => [k, L(k)])))),
     h('div', { class: 'form-row' }, field('Payment prefix', inp('pPayment')), field('Receipt prefix', inp('pReceipt')), field('Transfer prefix', inp('pContra')), field('Journal prefix', inp('pJournal')), field('Invoice prefix', inp('pInvoice'))),
     h('div', { class: 'form-row' }, field('Usual VAT %', inp('vatPct', { inputmode: 'decimal' })), field('Number style', sel('grouping', [['lakh', '12,34,567 (lakh)'], ['intl', '1,234,567']])))
@@ -3711,7 +3712,7 @@ function sheetSettings() {
   return [head('Settings', 'Edit settings'), form(null, fields, 'Save', () => {
     const d = D();
     const prefixes = Object.assign({}, S.settings.prefixes || {}, { Payment: d.pPayment.trim() || 'PV', Receipt: d.pReceipt.trim() || 'CV', Contra: d.pContra.trim() || 'CT', Journal: d.pJournal.trim() || 'JV', Invoice: d.pInvoice.trim() || 'INV' });
-    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), vatPct: +d.vatPct || 15 }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
+    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), vatPct: +d.vatPct || 15 }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
   })];
 }
 
@@ -3744,7 +3745,7 @@ function exportAll() {
 function moreHelp() {
   const sect = (t, steps) => h('div', { class: 'card' }, h('b', { text: t }), h('ol', { class: 'steps' }, steps.map((s, i) => step(i + 1, s[0], s[1]))));
   return [pageH('How SLATE Books works', 'Every taka in and out, with the bill attached and a digital sign-off. No paper vouchers.'),
-    sect('Office staff: other petty cash bills', [['Spend and keep the bill', 'Pay from the cash the COO gives you. Keep the bill or take a photo.'], ['Record it', 'In Shopping, tap + Petty cash bill. Enter the amount, the purpose and what it was for, and attach the photo.'], ['Watch the status', 'The COO approves it, then Accounts posts it. If it’s sent back, fix it and send again.']]),
+    sect('Office staff: other petty cash bills', [['Spend and keep the bill', 'Pay from the cash you keep for office expenses (your float). Keep the bill or take a photo.'], ['Record it', 'In Shopping, tap + Petty cash bill. Enter the amount, the purpose and what it was for, and attach the photo.'], ['Watch the status', 'The COO approves it, then Accounts posts it. If it’s sent back, fix it and send again.'], ['Get topped up', 'The COO gives you back the amount of your approved bills, so you always have your float. Count your cash with the COO every week.']]),
     sect('Office staff: monthly shopping', [['Count', 'From the 25th, open Shopping and start next month’s list. Enter what is left of each item; To buy fills in. Change any quantity, or add an item.'], ['Send to the COO', 'Press Send to the COO. If it comes back, fix it and send again.'], ['Order', 'Once approved, send the order to the vendor on WhatsApp and press Mark it ordered.'], ['Check what arrived', 'Enter what came and the price on the bill, photograph the bill, and press Confirm what arrived. The COO then pays from petty cash.']]),
     sect('COO: petty cash', [['Spend', 'For site visits, lunches, client and office entertainment, tap + Petty cash bill, choose the purpose and attach the bill. It goes to Accounts to post.'], ['Pay the shopping', 'When office staff confirm the arrival, open Petty cash › Office shopping and release the cash.'], ['Refill', 'When the box runs low, ask for a refill. Up to the monthly limit it goes straight to Accounts; the Principal sees the statement and can stop it until Accounts pays.']]),
     sect('Accountant: entering money', [['Money in', 'When a client pays, tap + Money in. Pick the client, the project and the invoice it pays.'], ['Money out', 'For every payment, tap + Money out. Attach the bill. Add tax withheld if any.'], ['Transfers', 'Cash to bank, vault to office cash: use Transfer.'], ['Post approved requests', 'In Requests, open each approved bill or request and record the payment. It becomes a voucher with the sign-offs attached.'], ['Count cash', 'Every week, count the vault, office cash and petty cash with a second person, in More › Count cash.']]),
@@ -4495,7 +4496,8 @@ function viewShop() {
   if (myRole() === 'Office staff') {
     const mine = allRequests().filter(r => r.owner === S.uid && r.type === 'petty'), open = mine.filter(r => !['paid', 'rejected'].includes(reqStatus(r)));
     out.push(h('div', { class: 'card' }, h('div', { class: 'sec-h', style: 'padding:0' }, h('h2', { style: 'font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink)', text: 'Other expenses from petty cash' }), can.request() ? h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => openReq('petty'), text: '+ Petty cash bill' }) : null),
-      h('p', { class: 'muted', style: 'margin:0', text: 'Courier, a repair, printing, conveyance on office work: anything paid from the cash the COO gives you. Record it with a photo of the bill; the COO approves it and Accounts posts it.' }),
+      amFloat() ? (() => { const f = floatState(); return h('div', { class: 'kpis' }, kpi('Cash with you', tkShort(f.inHand), 'should be in your hand now', 'dark'), kpi('Your float', tkShort(floatAmt()), 'topped back up by the COO'), kpi('Bills not yet posted', tkShort(r2(f.wT + f.aT)), f.waiting.length ? f.waiting.length + ' waiting for the COO' : 'all approved')); })() : null,
+      h('p', { class: 'muted', style: 'margin:0', text: amFloat() ? 'Pay courier, printing, repairs or conveyance on office work from the cash you keep. Record each bill here with a photo; the COO approves it and tops your cash back up.' : 'Courier, a repair, printing, conveyance on office work: anything paid from the cash the COO gives you. Record it with a photo of the bill; the COO approves it and Accounts posts it.' }),
       mine.length ? h('div', { class: 'list' }, mine.slice(0, 6).map(r => reqRow(r))) : null,
       open.length ? h('div', { class: 'f-hint', text: open.length + ' waiting for the COO or Accounts' }) : null));
   }
@@ -4841,6 +4843,24 @@ function pettyHolder() {
   return ids.find(id => BooksHost.isCOO(id)) || '';
 }
 const amHolder = () => !!S.uid && S.uid === pettyHolder();
+/* the office staff float: a fixed amount of petty cash kept with office staff, topped back up by their approved bills */
+const floatL = () => S.settings.floatLedger || '';
+const floatHolder = () => S.settings.floatHolder || '';
+const amFloat = () => !!S.uid && !!floatL() && S.uid === floatHolder();
+const floatAmt = () => +S.settings.floatAmount || 0;
+function floatState() {
+  const l = floatL(), holder = floatHolder();
+  const book = S.admin && S.ledgers[l] ? r2((SB.balances(P(), null, today())[l] || {}).close || 0) : (S.catalog.float ? +S.catalog.float.bal || 0 : 0);
+  const bills = allRequests().filter(r => r.type === 'petty' && r.from === 'float' && r.owner === holder);
+  const waiting = bills.filter(r => ['pending', 'checked', 'returned'].includes(reqStatus(r))), approved = bills.filter(r => reqStatus(r) === 'approved');
+  const wT = r2(waiting.reduce((x, r) => x + (+r.amount || 0), 0)), aT = r2(approved.reduce((x, r) => x + (+r.amount || 0), 0));
+  return { l, holder, book, waiting, approved, wT, aT, inHand: r2(book - wT - aT), refill: Math.max(0, r2(floatAmt() - book + aT)) };
+}
+function giveFloat() {
+  const f = floatState();
+  if (!f.l || !S.ledgers[f.l]) return toast('Set the office staff float in Books › More › Settings first.');
+  openMoney('tr', { amount: String(f.refill || floatAmt() || ''), acc: pettyLedger(), to: f.l, narr: `Cash to ${nameOf(f.holder)} for office expenses (float)` });
+}
 const pettyCap = () => +S.settings.pettyCap || 100000;
 const reqPaid = r => ['paid', 'posted'].includes(reqStatus(r));
 function refillsIn(month) { return allRequests().filter(r => r.type === 'topup' && (r.date || '').slice(0, 7) === month && ['approved', 'paid', 'posted'].includes(reqStatus(r))); }
@@ -4861,7 +4881,7 @@ function viewPettyAdmin() {
   if (S.sub === 'shop') return viewShop();
   const pl = pettyLedger(), holder = pettyHolder(), m = S.pcMonth || today().slice(0, 7), cur = today().slice(0, 7);
   const bal = pl ? r2((SB.balances(P(), null, today())[pl] || {}).close || 0) : 0;
-  const unposted = allRequests().filter(r => r.type === 'petty' && reqStatus(r) === 'approved'), unT = r2(unposted.reduce((s, r) => s + (+r.amount || 0), 0));
+  const unposted = allRequests().filter(r => r.type === 'petty' && reqStatus(r) === 'approved'), unT = r2(unposted.filter(r => r.from !== 'float').reduce((s, r) => s + (+r.amount || 0), 0));
   const waiting = allRequests().filter(r => ['petty', 'topup'].includes(r.type) && ['pending', 'checked'].includes(reqStatus(r)));
   const since = spentSinceRefill(), used = r2(pettyCap() - refillLeft(cur));
   const out = [pageH('Petty cash', `Held by ${holder ? nameOf(holder) : 'no one yet'}. Refilled by Accounts up to ${tk(pettyCap())} a month; the Principal sees each refill and can stop it until it is paid.`,
@@ -4878,6 +4898,12 @@ function viewPettyAdmin() {
     h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm', type: 'button', onclick: () => openSheet({ type: 'request', id: r.key }), text: 'Open' }),
       myRole() === 'Principal' ? h('button', { class: 'btn btn-sm btn-danger', type: 'button', onclick: () => openSheet({ type: 'request', id: r.key, mode: 'reject' }), text: 'Stop this refill' }) : null,
       can.pay() && myRole() !== 'Principal' ? h('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: () => payRequest(r), text: 'Pay the refill' }) : null))));
+  if (floatL() && S.ledgers[floatL()]) { const f = floatState();
+    out.push(h('div', { class: 'card' }, h('div', { class: 'sec-h', style: 'padding:0' }, h('h2', { style: 'font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink)', text: `Cash with ${nameOf(f.holder)} (float)` }), h('span', { class: 'cnt', text: 'Float ' + tk(floatAmt()) })),
+      h('div', { class: 'kpis' }, kpi('Should be with him', tkShort(f.inHand), `books ${tkShort(f.book)} less ${tkShort(r2(f.wT + f.aT))} in bills`, 'dark'), kpi('Bills waiting for you', String(f.waiting.length), f.waiting.length ? tkShort(f.wT) : 'none'), kpi('To top up', tkShort(f.refill), f.refill ? 'his approved bills' : 'float is full')),
+      h('div', { class: 'actions' }, can.enter() ? h('button', { class: 'btn' + (f.refill ? ' btn-primary' : ''), type: 'button', onclick: giveFloat, text: f.book ? 'Top up his cash' : 'Give the float' }) : null, can.enter() ? h('button', { class: 'btn', type: 'button', onclick: () => openCount(f.l), text: 'Count his cash' }) : null,
+        f.waiting.length ? h('button', { class: 'btn', type: 'button', onclick: () => go('requests'), text: 'Approve his bills' }) : null),
+      h('p', { class: 'f-hint', style: 'margin:0', text: 'The float comes out of petty cash. Approved bills are posted against his cash; topping up moves the same amount from petty cash back to him. Count it with him every week.' }))); }
   const ol = openList(), due = shopDue();
   out.push(h('div', { class: 'card' }, h('div', { class: 'sec-h', style: 'padding:0' }, h('h2', { style: 'font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink)', text: 'Office shopping' }), ol ? shopPill(ol.status) : null),
     h('div', { class: 'muted', text: ol ? monthName(ol.month) + ' list · ' + (due.n ? due.t : (SHOP_ST[ol.status] || [''])[0]) : 'No list open. Office staff start next month’s list from the ' + shopTargets().countFrom + 'th.' }),
@@ -4952,7 +4978,8 @@ function buildCatalog() {
   const cats = Object.keys(S.ledgers).filter(k => ['pc', 'occ', 'adm', 'fin'].includes(groupOf(k)) && activeL(k)).map(k => ({ id: k, name: L(k), group: SB.friendly(P(), k) })).sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
   const projects = Object.entries(S.projects).filter(([, p]) => p.status !== 'Closed').map(([id, p]) => ({ id, code: p.code || '', name: p.name })).sort((a, b) => (a.code || a.name).localeCompare(b.code || b.name));
   const pl = pettyLedger(), petty = pl ? { bal: r2((SB.balances(P(), null, today())[pl] || {}).close || 0) } : null;
-  return { cats, projects, petty };
+  const fl = floatL(), float = fl && S.ledgers[fl] ? { bal: r2((SB.balances(P(), null, today())[fl] || {}).close || 0) } : null;
+  return { cats, projects, petty, float };
 }
 /* key order is not kept by the store, so compare a sorted form */
 function canon(v) { return Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v); }
@@ -4960,7 +4987,7 @@ function scheduleCatalog() {
   clearTimeout(catTimer);
   if (!S.admin || S.readonly || !can.enter() || S.state !== 'ready' || !loaded.catalog) return;
   catTimer = setTimeout(async () => {
-    const next = buildCatalog(), cur = { cats: S.catalog.cats || [], projects: S.catalog.projects || [], petty: S.catalog.petty || null };
+    const next = buildCatalog(), cur = { cats: S.catalog.cats || [], projects: S.catalog.projects || [], petty: S.catalog.petty || null, float: S.catalog.float || null };
     if (canon(next) === canon(cur)) return;
     try { await Store.put('catalog', 'main', Object.assign(next, { at: new Date().toISOString() })); } catch (e) { console.warn('catalog', e); }
   }, 2500);
