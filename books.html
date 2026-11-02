@@ -1807,7 +1807,7 @@ function ava(id) {
 function fabItems() {
   if (S.readonly) return [];
   const it = [];
-  if (staffMode()) { if (can.request()) { if (amHolder()) it.push(['Petty cash bill', () => openReq('petty')], ['Ask for a refill', () => openRefill()]); it.push(['Payment request', () => openReq('payment')]); } return it; }
+  if (staffMode()) { if (can.request()) { if (amHolder() || myRole() === 'Office staff') it.push(['Petty cash bill', () => openReq('petty')]); if (amHolder()) it.push(['Ask for a refill', () => openRefill()]); it.push(['Payment request', () => openReq('payment')]); } return it; }
   if (can.enter()) it.push(['Money in', () => openMoney('in')], ['Money out', () => openMoney('out')], ['Transfer', () => openMoney('tr')], ['Settle an advance', () => openSettle()], ...(jvProjects().length ? [['Joint-venture cost', () => openJvCost()]] : []), ['Journal entry', () => openJournal()]);
   if (can.request()) it.push(['Payment request', () => openReq('payment')]);
   if (can.request() && amHolder()) it.push(['Petty cash bill', () => openReq('petty')], ['Ask for a petty cash refill', () => openRefill()]);
@@ -2655,8 +2655,8 @@ function sheetReqForm() {
   const lab = { petty: 'Petty cash bill', payment: 'Payment request', advance: 'Advance request', topup: 'Petty cash top-up' }[t];
   const lead = { petty: 'Money you have already spent from petty cash. Attach the bill.', payment: 'Ask for money to be paid to someone. Attach the bill or quote.', advance: 'Ask for an advance against your salary or for work expenses.', topup: 'Ask for more cash in the petty cash box.' }[t];
   const fields = [];
-  const pettyOk = amHolder() || myRole() === 'Principal';
-  if (!S.sheet.editKey) fields.push(field('Type', sel('type', Object.entries(REQ_TYPES).filter(([k]) => pettyOk || !['petty', 'topup'].includes(k)).map(([k, l]) => [k, l]))));
+  const pettyOk = amHolder() || ['Principal', 'Office staff'].includes(myRole()), refillOk = amHolder() || myRole() === 'Principal';
+  if (!S.sheet.editKey) fields.push(field('Type', sel('type', Object.entries(REQ_TYPES).filter(([k]) => (k !== 'petty' || pettyOk) && (k !== 'topup' || refillOk)).map(([k, l]) => [k, l]))));
   if (t === 'topup') { const left = refillLeft((d.date || today()).slice(0, 7), S.sheet.editKey), sp = spentSinceRefill().total;
     fields.push(h('div', { class: 'callout' + (parseAmt(d.amount) > left ? ' bad' : ' ok') }, h('b', { text: `${tk(left)} of the ${tk(pettyCap())} monthly refill limit is left this month.` }), h('div', { class: 'muted', text: `Spent from petty cash since the last refill: ${tk(sp)}. ` + (amHolder() && myRole() === 'COO' ? 'Within the limit it goes straight to Accounts; the Principal sees it and can stop it until it is paid. Above the limit it waits for the Principal.' : 'The Principal approves it.') }))); }
   if (t === 'petty' && pettyOk) fields.push(field('Purpose', sel('purpose', [['', 'Choose…']].concat(PETTY_PURPOSES.map(p => [p[0], p[1]])), { onpick: k => { const pp = PETTY_PURPOSES.find(x => x[0] === k); const pool = (S.catalog.cats || []).length ? S.catalog.cats : Object.keys(S.ledgers).filter(id => ['pc', 'occ', 'adm', 'fin'].includes(groupOf(id)) && activeL(id)).map(id => ({ id, name: L(id) })); const c = pp && pool.find(x => pp[2].test(x.name)); if (c) D().cat = c.id; } })));
@@ -2677,7 +2677,7 @@ function saveReq() {
   if (!(d.title || '').trim()) return fail(d.type === 'topup' ? 'Write a short reason.' : 'Say what it is for.');
   if (d.type === 'petty' && !(d.files || []).length && !S.sheet.confirmNoFile) { S.sheet.confirmNoFile = true; return fail('No bill attached. Attach a photo if you have one, or press Submit again to send without it.'); }
   const id = S.sheet.editKey ? S.sheet.editKey.split('~')[1] : 'r' + uidShort();
-  if (d.type === 'petty' && (amHolder() || myRole() === 'Principal') && !d.purpose) return fail('Choose the purpose.');
+  if (d.type === 'petty' && (amHolder() || ['Principal', 'Office staff'].includes(myRole())) && !d.purpose) return fail('Choose the purpose.');
   const body = { type: d.type, purpose: d.type === 'petty' ? (d.purpose || '') : '', date: d.date || today(), title: d.title.trim(), amount: r2(amt), cat: d.cat || '', project: d.project || '', payTo: (d.payTo || '').trim(), method: d.method || 'Cash', note: (d.note || '').trim(), files: d.files || [], at: new Date().toISOString(), by: S.uid, byName: nameOf(S.uid) };
   if (!S.sheet.editKey) body.createdAt = body.at;
   let auto = '';
@@ -3660,7 +3660,7 @@ function sheetHolders() {
     ['Close or reassign everything ' + cur.name + ' has pending.', 'Count the petty cash with a witness and save the count.', 'Change the password of the account, sign out all its sessions, and move its recovery phone to the new person.'].map(x => h('li', { text: x })))));
   return out;
 }
-const ROLE_HELP = { Principal: 'Sees everything, approves payments, sets roles and rules.', COO: 'Checks every entry and request, sees the books, can approve up to a limit.', Accountant: 'Enters money in and out, raises invoices, posts approved bills, runs reports.', 'Office staff': 'Prepares the monthly office shopping list, orders from the vendor and confirms what arrived. Doesn’t see the books.', Viewer: 'Sees everything in Books, including salaries, but changes nothing.', None: 'No access to Books. Sees nothing there.' };
+const ROLE_HELP = { Principal: 'Sees everything, approves payments, sets roles and rules.', COO: 'Checks every entry and request, sees the books, can approve up to a limit.', Accountant: 'Enters money in and out, raises invoices, posts approved bills, runs reports.', 'Office staff': 'Prepares the monthly office shopping list, orders and confirms arrivals, and records petty cash bills with photos. Doesn’t see the books.', Viewer: 'Sees everything in Books, including salaries, but changes nothing.', None: 'No access to Books. Sees nothing there.' };
 function setRole(id, role) {
   if (role === 'Viewer' && !confirm('A Viewer sees everything in Books, including every salary. Give ' + nameOf(id) + ' this role?')) { render(); return; }
   const team = Object.assign({}, S.settings.team || {}); team[id] = Object.assign({}, team[id] || {});
@@ -3744,6 +3744,7 @@ function exportAll() {
 function moreHelp() {
   const sect = (t, steps) => h('div', { class: 'card' }, h('b', { text: t }), h('ol', { class: 'steps' }, steps.map((s, i) => step(i + 1, s[0], s[1]))));
   return [pageH('How SLATE Books works', 'Every taka in and out, with the bill attached and a digital sign-off. No paper vouchers.'),
+    sect('Office staff: other petty cash bills', [['Spend and keep the bill', 'Pay from the cash the COO gives you. Keep the bill or take a photo.'], ['Record it', 'In Shopping, tap + Petty cash bill. Enter the amount, the purpose and what it was for, and attach the photo.'], ['Watch the status', 'The COO approves it, then Accounts posts it. If it’s sent back, fix it and send again.']]),
     sect('Office staff: monthly shopping', [['Count', 'From the 25th, open Shopping and start next month’s list. Enter what is left of each item; To buy fills in. Change any quantity, or add an item.'], ['Send to the COO', 'Press Send to the COO. If it comes back, fix it and send again.'], ['Order', 'Once approved, send the order to the vendor on WhatsApp and press Mark it ordered.'], ['Check what arrived', 'Enter what came and the price on the bill, photograph the bill, and press Confirm what arrived. The COO then pays from petty cash.']]),
     sect('COO: petty cash', [['Spend', 'For site visits, lunches, client and office entertainment, tap + Petty cash bill, choose the purpose and attach the bill. It goes to Accounts to post.'], ['Pay the shopping', 'When office staff confirm the arrival, open Petty cash › Office shopping and release the cash.'], ['Refill', 'When the box runs low, ask for a refill. Up to the monthly limit it goes straight to Accounts; the Principal sees the statement and can stop it until Accounts pays.']]),
     sect('Accountant: entering money', [['Money in', 'When a client pays, tap + Money in. Pick the client, the project and the invoice it pays.'], ['Money out', 'For every payment, tap + Money out. Attach the bill. Add tax withheld if any.'], ['Transfers', 'Cash to bank, vault to office cash: use Transfer.'], ['Post approved requests', 'In Requests, open each approved bill or request and record the payment. It becomes a voucher with the sign-offs attached.'], ['Count cash', 'Every week, count the vault, office cash and petty cash with a second person, in More › Count cash.']]),
@@ -4491,6 +4492,13 @@ function viewShop() {
       t.free.length && shopCan.prepare() ? h('div', { class: 'actions' }, t.free.map(m => h('button', { class: m === t.pick ? 'btn btn-primary' : 'btn', type: 'button', onclick: () => startShopList(m), text: 'Start the ' + monthName(m) + ' list' }))) : null));
   }
   if (due.n && !ol) out.push(h('div', { class: 'banner warn' }, h('span', { text: due.t })));
+  if (myRole() === 'Office staff') {
+    const mine = allRequests().filter(r => r.owner === S.uid && r.type === 'petty'), open = mine.filter(r => !['paid', 'rejected'].includes(reqStatus(r)));
+    out.push(h('div', { class: 'card' }, h('div', { class: 'sec-h', style: 'padding:0' }, h('h2', { style: 'font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink)', text: 'Other expenses from petty cash' }), can.request() ? h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => openReq('petty'), text: '+ Petty cash bill' }) : null),
+      h('p', { class: 'muted', style: 'margin:0', text: 'Courier, a repair, printing, conveyance on office work: anything paid from the cash the COO gives you. Record it with a photo of the bill; the COO approves it and Accounts posts it.' }),
+      mine.length ? h('div', { class: 'list' }, mine.slice(0, 6).map(r => reqRow(r))) : null,
+      open.length ? h('div', { class: 'f-hint', text: open.length + ' waiting for the COO or Accounts' }) : null));
+  }
   out.push(h('div', { class: 'card' }, h('ol', { class: 'steps' },
     step(1, 'Count and ask (office staff)', `From the ${t.countFrom}th, count what is left of each item. The list works out what to buy against each item’s monthly quantity. Change any quantity, set it to 0 if not needed, or add a new item.`),
     step(2, 'Approve (COO)', 'The COO checks the quantities, changes any, and approves or sends it back.'),
@@ -4824,7 +4832,8 @@ Object.assign(SHEETS, { shoplist: sheetShopList, shopnew: sheetShopNew, shopitem
 
 /* ---------- Petty cash: held by the COO, refilled by Accounts up to the monthly limit ---------- */
 const PETTY_PURPOSES = [['site', 'Site visit conveyance', /travel|convey/i], ['sitelunch', 'Lunch on a site visit', /^entertainment$/i], ['client', 'Client entertainment', /entertainment.*(sell|dist|client)|client/i],
-  ['office', 'Office entertainment', /^entertainment$/i], ['shopping', 'Office shopping', /office supplies|stationery/i], ['other', 'Other office expense', /misc/i]];
+  ['office', 'Office entertainment', /^entertainment$/i], ['shopping', 'Office shopping', /office supplies|stationery/i], ['courier', 'Courier and carrying', /carrying|courier|postage/i],
+  ['printing', 'Printing and photocopy', /printing\s*&\s*stationery/i], ['repair', 'Small repairs and upkeep', /repair|maintenance/i], ['cleaning', 'Cleaning', /cleaning|sanitation/i], ['other', 'Other office expense', /misc/i]];
 const purposeName = k => (PETTY_PURPOSES.find(p => p[0] === k) || [, ''])[1];
 function pettyHolder() {
   const s = S.settings.pettyHolder; if (s) return s;
