@@ -1722,12 +1722,13 @@ async function createTask(d){
   if(d.assignee&&!(d.chalk?canChalkAssign():canAssignTo(d.assignee))&&!S.spawning) throw new Error('Only the Principal and the COO can assign tasks to the Principal’s Office.');
   const now=new Date().toISOString(); const ref=isPriv(d.assignee)?S.db.collection(`lead/${d.assignee}/tasks`).doc():S.db.collection('tasks').doc();
   const tg=d.target||null, pr=d.proposed||null;
-  const ask=d.support?(!!d.assignee&&!amApprover()&&!coverOk(d.assignee,d.projectId)):d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
+  const gReq=d.guideTo&&d.guideTo!==d.assignee&&!amApprover()&&!coverOk(d.guideTo,d.projectId)?{to:d.guideTo,by:S.uid,at:now,guide:true,...(d.support||{})}:null, gSet=d.guideTo&&d.guideTo!==d.assignee&&!gReq;
+  const ask=d.guideTo?false:d.support?(!!d.assignee&&!amApprover()&&!coverOk(d.assignee,d.projectId)):d.assignee&&!d.fromMsg&&d.assignee!==S.uid&&needsAssignApproval(d.assignee,d.projectId);
   const lg=d.legacy?{legacy:true,legacyOk:amApprover(),doneAt:d.doneAt,target:String(d.doneAt||'').slice(0,10)||null,originalTarget:String(d.doneAt||'').slice(0,10)||null,doneBy:S.uid,stage:'done',...(d.legacyNoDate?{legacyNoDate:true}:{})}:null;
   const dReq=d.kind==='Deliverable'&&!d.gate&&!d.legacy&&!canSetDeliv();
-  const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(dReq) hist.push({at:now,by:S.uid,type:'delivRequested'}); if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr});
+  const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(dReq) hist.push({at:now,by:S.uid,type:'delivRequested'}); if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr}); if(gReq) hist.push({at:now,by:S.uid,type:'guideRequested',to:d.guideTo}); if(gSet) hist.push({at:now,by:S.uid,type:'guideSet',to:d.guideTo});
   fxMark('task:'+ref.id,'in');
-  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:dReq?'Task':(d.kind||'Task'),...(dReq?{delivReq:{by:S.uid,at:now}}:{}),assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:null,support:d.support?{...d.support,by:S.uid,at:now}:null,
+  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:dReq?'Task':(d.kind||'Task'),...(dReq?{delivReq:{by:S.uid,at:now}}:{}),assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:gReq,...(gSet?{checker:d.guideTo,checkerGuide:true}:{}),support:d.support?{...d.support,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
     repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),...(d.clRef?{clRef:d.clRef}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
@@ -1783,19 +1784,27 @@ function assignCard(t,inSheet){
   const selEl=h('select',{id:'asp-'+t.id,'aria-label':'Assign to',style:'background:#fff',onchange:e=>{S.assignPick[t.id]=e.target.value;inSheet?renderSheet():render(true)}},ppl.map(id=>{const c=loadOf(id,t.id);return h('option',{value:id,text:`${nameOf(id)} — ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`})})); selEl.value=pick;
   return h('div',{class:inSheet?'callout':'card',style:inSheet?'':'border-radius:0;border-bottom:1px solid var(--line)'},
     h('div',{class:inSheet?'lbl':'row-title'},inSheet?(isCrossPod(r.to,t.projectId)?`Support requested from ${teamLabel(r.to)}`:'Support assignment requested'):h('button',{class:'linkish',type:'button',onclick:()=>openTask(t.id),text:t.title})),
-    h('div',{class:'row-meta'},h('span',{text:projLabel(p)}),h('span',{text:'·'}),h('span',{text:podLabel(podOf(t))}),h('span',{text:'·'}),h('span',{text:r.any?`${nameOf(r.by)} asks ${r.team||teamLabel(r.to)} for support`+(t.phase?` · ${t.phase}`:''):`${nameOf(r.by)} asks for ${nameOf(r.to)}`+(isCrossPod(r.to,t.projectId)?` (${teamLabel(r.to)})`:'')}),r.start?h('span',{text:`· ${fmtD(r.start)} → ${fmtD(r.end)}`}):null,r.days?h('span',{text:`· ${r.days} working day${+r.days===1?'':'s'}`}):null,t.target||t.request?h('span',{text:'· '+fmtD(t.target||(t.request&&t.request.date))}):null),
+    h('div',{class:'row-meta'},h('span',{text:projLabel(p)}),h('span',{text:'·'}),h('span',{text:podLabel(podOf(t))}),h('span',{text:'·'}),h('span',{text:r.guide?`${nameOf(r.by)} asks for ${nameOf(r.to)} to guide and check only · ${nameOf(guideWorker(t))} does the work`:r.any?`${nameOf(r.by)} asks ${r.team||teamLabel(r.to)} for support`+(t.phase?` · ${t.phase}`:''):`${nameOf(r.by)} asks for ${nameOf(r.to)}`+(isCrossPod(r.to,t.projectId)?` (${teamLabel(r.to)})`:'')}),r.start?h('span',{text:`· ${fmtD(r.start)} → ${fmtD(r.end)}`}):null,r.days?h('span',{text:`· ${r.days} working day${+r.days===1?'':'s'}`}):null,t.target||t.request?h('span',{text:'· '+fmtD(t.target||(t.request&&t.request.date))}):null),
     amApprover()&&S.canWrite?[loadPanel(pick,t.id),h('div',{class:'bar'},ppl.length>1?selEl:null,
-      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>approveAssign(t,pick),text:pick===r.to&&!r.any?'Approve':'Assign to '+nameOf(pick)}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>approveAssign(t,pick),text:r.guide?(pick===r.to?'Approve':nameOf(pick)+' guides instead'):pick===r.to&&!r.any?'Approve':'Assign to '+nameOf(pick)}),
+      !r.guide&&guideWorker(t)&&guideWorker(t)!==pick?h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',title:`${nameOf(guideWorker(t))} keeps the work; ${nameOf(pick)} guides and checks it`,onclick:()=>approveGuide(t,pick),text:`Guide and check only · ${shortName(guideWorker(t))} keeps the work`}):null,
       h('input',{id:'adn-'+t.id,placeholder:'Note (optional)',value:S.declineNote[key]||'',style:'background:#fff',oninput:e=>{S.declineNote[key]=e.target.value}}),
       h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,style:'background:#fff',onclick:()=>declineAssign(t),text:'Decline'}))]
     :h('div',{class:'f-hint',text:'Waiting for the COO to approve this assignment.'}));
 }
-function approveAssign(t,to){ const key='as:'+t.id, note=(S.declineNote[key]||'').trim();
+/* guide and check only: the work stays with the person doing it; the guide checks it before it is done */
+const arq=t=>t&&t.assignReq&&!t.assignReq.guide?t.assignReq:null;
+const guideWorker=t=>t.assignee||(t.assignReq&&t.assignReq.by)||'';
+function approveGuide(t,to){ const key='as:'+t.id, note=(S.declineNote[key]||'').trim(), r=t.assignReq, g=to||r.to, w=guideWorker(t);
+  if(!w||w===g) return toast('Choose someone else to guide: they are the one doing the work.');
+  const dt=t.support&&t.request&&t.request.initial&&!t.target?t.request.date:'';
+  return run(()=>taskUpdate(t.id,{assignee:w,checker:g,checkerGuide:true,assignReq:null,...(dt?{target:dt,originalTarget:dt,request:null}:{})},[{type:'guideApproved',to:g,from:w,note},...(dt?[{type:'dateApproved',to:dt,note:'With the support request'}]:[])]),`${shortName(g)} guides and checks; ${shortName(w)} does the work`).then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
+function approveAssign(t,to){ if(t.assignReq&&t.assignReq.guide) return approveGuide(t,to); const key='as:'+t.id, note=(S.declineNote[key]||'').trim();
   /* a support request carries its needed-by date: approving the person approves the date too */
   const dt=t.support&&t.request&&t.request.initial&&!t.target?t.request.date:'';
   return run(()=>taskUpdate(t.id,{assignee:to,assignReq:null,...(dt?{target:dt,originalTarget:dt,request:null}:{})},[{type:'assignApproved',from:t.assignReq.to,to,note},...(dt?[{type:'dateApproved',to:dt,note:'With the support request'}]:[])]),'Assignment approved').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
 function declineAssign(t){ const key='as:'+t.id, note=(S.declineNote[key]||'').trim();
-  return run(()=>taskUpdate(t.id,{assignReq:null},[{type:'assignDeclined',to:t.assignReq.to,note}]),'Assignment declined').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
+  return run(()=>taskUpdate(t.id,{assignReq:null},[{type:t.assignReq.guide?'guideDeclined':'assignDeclined',to:t.assignReq.to,note}]),'Declined').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
 const REPEATS={'':'Does not repeat',weekly:'Repeats weekly',monthly:'Repeats monthly'};
 function nextDate(d,rep){
   if(!d) return null;
@@ -3014,7 +3023,7 @@ function vfJointCard(t){ const p=S.projects[t.projectId], ms=t._mates.slice().so
 const rootOf=t=>t.parentId&&S.tasks[t.parentId]?{...S.tasks[t.parentId],id:t.parentId}:t;
 const revsOf=id=>Object.entries(S.tasks).map(([k,x])=>({...x,id:k})).filter(x=>x.parentId===id&&!x.archived).sort((a,b)=>(a.revNo||0)-(b.revNo||0));
 const canQuickDone=t=>S.canWrite&&!t.archived&&!t.doneAt&&!t.verify&&!needsCheckin(t)&&(t.assignee===S.uid||leadsProj(t.projectId)||(isChalkTask(t)&&canChalkEdit()));
-const needsCheck=t=>r4on()&&!!t&&!!t.checker&&t.checker!==S.uid&&t.assignee===S.uid&&!t.doneAt&&!t.verify;
+const needsCheck=t=>!!t&&(r4on()||!!t.checkerGuide)&&!!t.checker&&t.checker!==S.uid&&t.assignee===S.uid&&!t.doneAt&&!t.verify;
 function sendToCheck(t){ if(!t) return; { const gb=gateBlock(t); if(gb) return toast(gb); }
   const from=stageOf(t);
   return run(()=>taskUpdate(t.id,{stage:'review',sentCheck:{at:today(),by:S.uid}},[{type:'stage',from,to:'review',note:`Sent to ${nameOf(t.checker)} to check`}]),`Sent to ${nameOf(t.checker).split(' ')[0]} to check`); }
@@ -3042,7 +3051,7 @@ function row(t,o={}){
   if(o.project!==false&&p) meta.push(p.code?h('span',{class:'mono',text:p.code}):h('span',{text:p.name}));
   if(noTech(p)) meta.push(h('span',{class:'tech-mark',title:TECH_TIP+(p.techNote?': '+p.techNote:''),'aria-label':TECH_TIP,text:'⚠ No client tech'}));
   if(t.phase) meta.push(h('span',{text:t.phase}));
-  if(o.person!==false){ const pid=t.assignReq?t.assignReq.to:t.assignee; meta.push(h('span',{class:'who'},pid?avaEl(pid,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (awaiting approval)`:nameOf(t.assignee))); }
+  if(o.person!==false){ const pid=arq(t)?t.assignReq.to:t.assignee; meta.push(h('span',{class:'who'},pid?avaEl(pid,false,'sm'):null,arq(t)?`${nameOf(t.assignReq.to)} (awaiting approval)`:nameOf(t.assignee))); }
   const metaEls=meta.flatMap((x,i)=>i?[h('span',{'aria-hidden':'true',text:'·'}),x]:[x]);
   const can=canQuickDone(t);
   return h('div',fxA('task:'+t.id,['in','move'],{class:'row',role:'button',tabindex:'0',onclick:()=>openTask(t.id),onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); openTask(t.id); } }}),
@@ -3050,7 +3059,8 @@ function row(t,o={}){
     h('div',{class:'row-main'},
       h('div',{class:'row-title'},h('span',{text:t.title}),
         t.gate?h('span',{class:'tag',text:'Gate'}):t.kind==='Deliverable'&&h('span',{class:'tag',text:'Deliverable'}),
-        t.assignReq&&h('span',{class:'tag tag-req',text:'Assignment pending'}),
+        t.assignReq&&h('span',{class:'tag tag-req',text:t.assignReq.guide?`Guide pending: ${shortName(t.assignReq.to)}`:'Assignment pending'}),
+        t.checkerGuide&&t.checker&&!t.doneAt?h('span',{class:'tag',text:'Guided by '+shortName(t.checker)}):null,
         t.delivReq&&h('span',{class:'tag tag-req',text:'Deliverable · awaiting COO'}),
         t.repeat&&h('span',{class:'tag',text:'↻ '+(t.repeat==='weekly'?'Weekly':'Monthly')}),
         t.request&&h('span',{class:'tag tag-req',text:'Date request'}),
@@ -3143,9 +3153,10 @@ function quickItems(){
     out.push({id:'rv:'+t.id,def:false,at:r.at,kind:'Revised date',title:t.title,meta:`${projLabel(S.projects[t.projectId])} · ${nameOf(r.by)} · ${fmtD(t.target)} → ${fmtD(r.date)} (${sh>0?'+':''}${sh}d) · becomes Date ${(t.revisions||0)+2}`,quote:r.reason,
       fn:async()=>{ const [pa,e]=approvalOf(t,''); await taskUpdate(t.id,pa,e); }}); });
   ts.filter(t=>t.assignReq).forEach(t=>{ const r=t.assignReq, c=loadOf(r.to,t.id);
-    out.push({id:'as:'+t.id,def:true,at:r.at,kind:'Support',title:`${nameOf(r.to)} for “${t.title}”`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:supWhy(t)||'No reason given',
+    out.push({id:'as:'+t.id,def:true,at:r.at,kind:r.guide?'Guide':'Support',title:r.guide?`${nameOf(r.to)} to guide and check “${t.title}” · ${nameOf(guideWorker(t))} does the work`:`${nameOf(r.to)} for “${t.title}”`,
+      guide:!r.guide&&guideWorker(t)&&guideWorker(t)!==r.to?()=>approveGuide(t,r.to):null,guideTxt:`Guide and check only · ${shortName(guideWorker(t))} keeps the work`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:supWhy(t)||'No reason given',
       alt:people().filter(id=>teamOf(id)===teamOf(r.to)&&id!==r.to&&(S.members[id]||{}).active!==false),altGo:id=>approveAssign(t,id),decline:()=>declineAssign(t),
-      fn:()=>taskUpdate(t.id,{assignee:r.to,assignReq:null},[{type:'assignApproved',from:r.to,to:r.to,note:''}])}); });
+      fn:()=>r.guide?taskUpdate(t.id,{assignee:guideWorker(t),checker:r.to,checkerGuide:true,assignReq:null},[{type:'guideApproved',to:r.to,from:guideWorker(t),note:''}]):taskUpdate(t.id,{assignee:r.to,assignReq:null},[{type:'assignApproved',from:r.to,to:r.to,note:''}])}); });
   vfGroups().forEach(t=>{ const v=t.verify, tm=vfTiming(t), ms=t._mates;
     out.push({id:'vf:'+t.id,def:true,at:v.ts,kind:ms?'Completed · joint':'Completed',title:t.title,meta:ms?`${projLabel(S.projects[t.projectId])} · ${ms.map(m=>nameOf(m.assignee)).join(', ')} · all done`:`${projLabel(S.projects[t.projectId])} · ${nameOf(v.by)} · done ${fmtD(v.at)}`+(tm?' · '+tm:''),quote:ms?'':v.note,warn:ms?ms.some(m=>m.target&&(m.verify||{}).at>m.target):!!(t.target&&v.at>t.target),
       fn:async()=>{ if(ms) return verifyJointNow(ms); const cur=S.tasks[t.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(t.id,vfPatch({...cur,id:t.id}),[{type:'verified',to:cur.verify.at,note:''}]); }}); });
@@ -3192,8 +3203,9 @@ function quickSec(items){
         h('div',{class:'row-title',style:'font-weight:500',text:it.title}),
         h('div',{class:'row-meta',style:it.warn?'color:var(--late)':'',text:it.meta}),
         it.quote?h('p',{class:'quote',style:'margin:2px 0 0'+(it.quote==='No reason given'?';color:var(--overdue)':''),text:it.quote}):null,
-        it.decline||it.alt?h('div',{class:'q-acts',onclick:e=>{ e.preventDefault(); e.stopPropagation(); }},
+        it.decline||it.alt||it.guide?h('div',{class:'q-acts',onclick:e=>{ e.preventDefault(); e.stopPropagation(); }},
           it.alt&&it.alt.length?(()=>{ const el=h('select',{'aria-label':'Give to someone else',disabled:S.busy,onchange:e=>{ const v=e.target.value; if(v) it.altGo(v); }},h('option',{value:'',text:'Someone else…'}),it.alt.map(id=>{ const c=loadOf(id); return h('option',{value:id,text:`${nameOf(id)} · ${teamLabel(id)} · ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`}); })); return el; })():null,
+          it.guide?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,title:'The work stays with the person doing it; this person guides and checks it',onclick:()=>it.guide(),text:it.guideTxt||'Guide and check only'}):null,
           it.decline?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>it.decline(),text:'Decline'}):null):null,
         fail[it.id]?h('div',{class:'err',role:'alert',text:fail[it.id]}):null)))),
     h('div',{class:'actions',style:'padding:0 4px'},h('button',{class:'btn '+(S.qConfirm?'btn-accent':'btn-primary'),type:'button',disabled:S.busy||!sel.length,
@@ -3434,8 +3446,17 @@ function podGlance(td){
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My POD'}),h('span',{class:'cnt',text:`${rows.length} project${rows.length===1?'':'s'}`+(bad?` · ${bad} need${bad===1?'s':''} you`:'')})),
     h('div',{class:'h-list'},hMore('pod',rows,5,r=>r.row))); }
 /* the POD leader's checks: work the POD sent to be checked (or moved to In review), and everyday tasks waiting for verification */
+function guideSec(){ if(!S.canWrite) return null;
+  const xs=activeTasks().filter(t=>t.checkerGuide&&t.checker===S.uid&&t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.verify&&!t.archived).sort((a,b)=>((b.stage==='review')-(a.stage==='review'))||byTarget(a,b));
+  if(!xs.length) return null; const nr=xs.filter(t=>t.stage==='review').length;
+  const back=t=>run(()=>taskUpdate(t.id,{stage:'doing',sentCheck:null},[{type:'stage',from:'review',to:'doing',note:'Sent back by '+nameOf(S.uid)}]),'Sent back');
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'You guide and check'}),h('span',{class:'cnt',text:nr?`${nr} to check`:String(xs.length)})),
+    h('div',{class:'f-hint',style:'margin:0 4px',text:'The work stays with the person doing it. Guide them while they work; when they send it to you, check it.'}),
+    h('div',{class:'list'},hMore('gd',xs,4,t=>h('div',{},row(t,{person:true}),t.stage==='review'?h('div',{class:'actions',style:'padding:0 12px 10px;margin:0'},
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>checkDone(t),text:t.gate||t.kind==='Deliverable'?'✓ Checked · send on':'✓ Checked · done'}),
+      h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>back(t),text:'Send back'})):null)))); }
 function podReview(){ const mp=myPod(); if(!mp||!S.canWrite) return null;
-  const xs=activeTasks().filter(t=>t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.verify&&!t.archived&&t.stage==='review'&&(t.checker===S.uid||teamOf(t.assignee)===mp)).sort(byTarget);
+  const xs=activeTasks().filter(t=>t.assignee&&t.assignee!==S.uid&&!t.doneAt&&!t.verify&&!t.archived&&t.stage==='review'&&!(t.checkerGuide&&t.checker===S.uid)&&(t.checker===S.uid||teamOf(t.assignee)===mp)).sort(byTarget);
   const vs=activeTasks().filter(t=>t.verify&&!t.doneAt&&!t.archived&&podVerifies(t)&&!jointOf(t)).sort((a,b)=>(a.verify.ts||'').localeCompare(b.verify.ts||''));
   if(!xs.length&&!vs.length) return null;
   const back=t=>run(()=>taskUpdate(t.id,{stage:'doing',sentCheck:null},[{type:'stage',from:'review',to:'doing',note:'Sent back by '+nameOf(S.uid)}]),'Sent back');
@@ -3616,7 +3637,7 @@ function viewMineBody(){
   /* 4a · POD leader: the POD's projects at a glance, and work the team has put in review */
   if(amPodLead()&&!ap){ SL.pod=podGlance(td); SL.review=podReview(); }
   /* 4b · Drafting queue (Design Associate Lead) */
-  SL.draft=draftQueueSec(); SL.dboard=dbHomeSec();
+  SL.draft=draftQueueSec(); SL.dboard=dbHomeSec(); SL.guide=guideSec();
   const w0=out.length;
   /* 5 · My work */
   if(mine.length){
@@ -3650,7 +3671,7 @@ function viewMineBody(){
     SL.cl=el; }
   /* the order that gets work done: what is waiting on you, an unread notice, your work and what your team put in review,
      your own plan, meetings, then the week and month at a glance, your checklist and the POD overview */
-  [SL.risk,SL.glance,SL.noticeNew?SL.notice:null,SL.meetNow?SL.meet:null,...(SL.work||[]),SL.review,SL.draft,SL.todo,SL.meetNow?null:SL.meet,SL.cl,SL.dboard,SL.pod,SL.noticeNew?null:SL.notice].forEach(x=>{ if(x) out.push(x); });
+  [SL.risk,SL.glance,SL.noticeNew?SL.notice:null,SL.meetNow?SL.meet:null,...(SL.work||[]),SL.review,SL.guide,SL.draft,SL.todo,SL.meetNow?null:SL.meet,SL.cl,SL.dboard,SL.pod,SL.noticeNew?null:SL.notice].forEach(x=>{ if(x) out.push(x); });
   if(!mine.length&&!mcl.length&&!tg&&!homeMeetRows(td,ap).length) out.push(onboarding());
   if(window.innerWidth>=1100&&pref&&pref.fullHome) out.splice(1,0,h('div',{class:'desk-foot',style:'justify-content:flex-start'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',0); render(true); window.scrollTo(0,0); },text:'← Back to the one-screen Home'})));
   return out;
@@ -4270,7 +4291,7 @@ function viewBoard(){
       h('div',{class:'kt',text:t.title}),
       h('div',{class:'km'},p&&h('span',{class:'mono',text:p.code||p.name}),t.phase&&h('span',{text:'· '+t.phase})),
       p&&p.code&&h('div',{class:'pn',style:'margin-top:-4px',text:p.name}),
-      h('div',{class:'kf'},h('span',{class:'f-hint who'},(t.assignReq?t.assignReq.to:t.assignee)?avaEl(t.assignReq?t.assignReq.to:t.assignee,false,'sm'):null,t.assignReq?`${nameOf(t.assignReq.to)} (pending)`:nameOf(t.assignee)),pill(t)),
+      h('div',{class:'kf'},h('span',{class:'f-hint who'},(arq(t)?t.assignReq.to:t.assignee)?avaEl(arq(t)?t.assignReq.to:t.assignee,false,'sm'):null,arq(t)?`${nameOf(t.assignReq.to)} (pending)`:nameOf(t.assignee)),pill(t)),
       (t.kind==='Deliverable'||t.request||t.assignReq)&&h('div',{class:'km'},t.kind==='Deliverable'&&h('span',{class:'tag',text:'Deliverable'}),t.request&&h('span',{class:'tag tag-req',text:'Date request'}),t.assignReq&&h('span',{class:'tag tag-req',text:'Assignment pending'})),
       mv&&!t.doneAt?(()=>{ const i=STAGES.findIndex(x=>x[0]===stageOf(t)), pv=STAGES[i-1], nx=STAGES[i+1];
         return h('div',{class:'kmove'},pv&&h('button',{class:'btn btn-sm',type:'button',onclick:e=>{e.stopPropagation();moveStage(t.id,pv[0])},text:'← '+pv[1]}),nx&&h('button',{class:'btn btn-sm '+(nx[0]==='done'?'btn-primary':''),type:'button',onclick:e=>{e.stopPropagation();moveStage(t.id,nx[0])},text:nx[1]+' →'})); })():null);
@@ -5443,6 +5464,11 @@ const histText=e=>{
     case 'assignRequested': return `${by} requested ${nameOf(e.to)}${e.cross?' from '+podLabel(e.cross):''} for this task`;
     case 'assignApproved': return e.to===e.from?`${by} approved assigning it to ${nameOf(e.to)}`:`${by} assigned it to ${nameOf(e.to)} instead of ${nameOf(e.from)}`;
     case 'assignDeclined': return `${by} declined assigning it to ${nameOf(e.to)}`;
+    case 'guideRequested': return `${by} asked for ${nameOf(e.to)} to guide and check this`;
+    case 'guideSet': return `${by} set ${nameOf(e.to)} to guide and check this`;
+    case 'guideApproved': return `${by} approved ${nameOf(e.to)} to guide and check; ${nameOf(e.from)} does the work`;
+    case 'guideDeclined': return `${by} declined ${nameOf(e.to)} as guide`;
+    case 'guideRemoved': return `${by} removed ${nameOf(e.from)} as guide`;
     case 'created': if(!e.assignee) return e.to?`${by} created this with a target of ${fmtD(e.to)}`:`${by} created this`; return e.to?`${by} assigned this to ${nameOf(e.assignee)} with a target of ${fmtD(e.to)}`:`${by} assigned this to ${nameOf(e.assignee)}`;
     case 'proposed': return `${by} proposed ${fmtD(e.to)} as the target date`;
     case 'scheduled': return `${by} set the target date to ${fmtD(e.to)}`;
@@ -5863,6 +5889,7 @@ function sheetTask(){
     titleField(d),
     h('div',{class:'form-row'},field('Type',sel('kind',[['Task','Task'],['Deliverable','Deliverable']])),field('Project',(()=>{ const el=sel('projectId',ck?chalkProjOpts(t.projectId):projectOpts(t.projectId)); el.addEventListener('change',()=>renderSheet()); return el; })())),
     field('Assigned to',ck?(()=>{ const el=sel('assignee',chalkAssignOpts(t.assignee)); if(!canChalkAssign()) el.disabled=true; return el; })():sel('assignee',memberOpts(t.assignee))),
+    ck?null:field('Guided and checked by (optional)',(()=>{ if(d.guide===undefined) d.guide=t.checkerGuide?t.checker||'':''; return sel('guide',[['','No one'],...memberOpts(d.guide).slice(1)]); })(),'They guide the person doing the work and check it before it is done; the work stays with the person assigned. Someone from another POD needs the COO’s approval.'),
     h('div',{class:'form-row'},field('Start date (optional)',inp('start',{type:'date'}),'Used for the Timeline bar.'),field('Repeat',sel('repeat',Object.entries(REPEATS)))),
     field('Time (optional)',timeSel('sh-time',D().time,v=>{D().time=v},true))],'Save changes',()=>{
       const title=(d.title||'').trim(); if(!title) return fail('The title can’t be empty.');
@@ -5880,8 +5907,14 @@ function sheetTask(){
       if(d.assignee!==t.assignee&&needsAssignApproval(d.assignee,d.projectId)){patch.assignReq={to:d.assignee,by:S.uid,at:new Date().toISOString()};ev.push({type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''})}
       else if(d.assignee!==t.assignee){patch.assignee=d.assignee;patch.assignReq=null;ev.push({type:'reassigned',from:t.assignee,to:d.assignee});
         if(t.gate&&amPodLead()&&!amApprover()) patch.checker=d.assignee===S.uid?null:S.uid; }
+      if(!ck&&d.guide!==undefined&&(d.guide||'')!==(t.checkerGuide?t.checker||'':'')){ const g=d.guide||'', w=patch.assignee||t.assignee;
+        if(g&&g===w) return fail('The guide can’t be the person doing the work.');
+        if(g&&patch.assignReq) return fail('Change the person or the guide first, then the other.');
+        if(!g){ patch.checker=null; patch.checkerGuide=false; ev.push({type:'guideRemoved',from:t.checker}); }
+        else if(needsAssignApproval(g,d.projectId)&&!amApprover()){ patch.assignReq={to:g,by:S.uid,at:new Date().toISOString(),guide:true}; ev.push({type:'guideRequested',to:g}); }
+        else { patch.checker=g; patch.checkerGuide=true; ev.push({type:'guideSet',to:g}); } }
       if(!ev.length) return setMode(null);
-      run(()=>taskUpdate(t.id,patch,ev),'Changes saved').then(ok=>ok&&setMode(null));
+      run(()=>taskUpdate(t.id,patch,ev),patch.assignReq&&patch.assignReq.guide?'Sent to the COO: the guide waits for approval':'Changes saved').then(ok=>ok&&setMode(null));
     }));
   if(m==='revision'){ const root=rootOf(t), n=revsOf(root.id).length+1, ap=amApprover();
     out.push(form(`Client revision ${n}`,[
@@ -6343,10 +6376,13 @@ function supportSection(p){
     const items=f.k?clItems(f.k).filter(it=>{ const x=clOf(p,f.k,it.id); return !x.done&&!x.na; }):[];
     const it=items.find(x=>x.id===f.item), wd=f.start&&f.end&&f.end>=f.start?wdBetween(addDays(f.start,-1),f.end):0;
     const dir=ap||(lead&&!!coverOf(p)&&/^pod\b/i.test(f.team||''));
+    const wkr=people().filter(id=>!isLeft(id)&&(own.includes(teamOf(id))||(projMembers(p)||[]).some(([u,m])=>u===id&&m.status==='approved')));
     const sel=(id,lbl,opts,v,on)=>{ const e=h('select',{id,'aria-label':lbl,style:'background:#fff',onchange:ev=>on(ev.target.value)},opts.map(([a,b])=>h('option',{value:a,text:b}))); e.value=v; return e; };
     form=h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Request support for this project'}),
       h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'From *'}),sel('sp-team','Team',[['','Choose a POD or team…'],...tms.map(t=>[t,podLabel(t)])],f.team,v=>{ f.team=v; f.who=''; renderSheet(); })),
         h('label',{class:'field'},h('span',{class:'lbl',text:'Person'}),sel('sp-who','Person',[['',dir?'Choose a person…':'Anyone (the COO chooses)'],...ppl.map(id=>{ const c=loadOf(id); return [id,`${nameOf(id)} — ${c.open} open`]; })],f.who,v=>{ f.who=v; }))),
+      h('div',{class:'field'},h('span',{class:'lbl',text:'They will'}),seg('Their role',[['work','Do the work'],['guide','Guide and check only']],f.role||'work',v=>{ f.role=v; if(v==='guide'&&!f.worker) f.worker=wkr.includes(S.uid)?S.uid:''; renderSheet(); })),
+      f.role==='guide'?h('label',{class:'field'},h('span',{class:'lbl',text:'Who does the work *'}),sel('sp-worker','Who does the work',[['','Choose from the project team…'],...wkr.map(id=>[id,nameOf(id)+' · '+teamLabel(id)])],f.worker||'',v=>{ f.worker=v; })):null,
       h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'Phase'}),sel('sp-ph','Phase',[['','General (no phase)'],...phs.map(k=>[k,phLabel(k,p)])],f.k||'',v=>{ f.k=v; f.item=''; renderSheet(); })),
         h('label',{class:'field'},h('span',{class:'lbl',text:'Task *'}),sel('sp-item','Task',[['',f.k?(items.length?'Choose from the phase checklist…':'No open checklist items'):'Choose a phase, or type below'],...items.map(x=>[x.id,x.t.length>70?x.t.slice(0,68)+'…':x.t]),...(f.k?[['__other','Something else (type it)']]:[])],f.item||'',v=>{ f.item=v; if(v&&v!=='__other') f.title=''; renderSheet(); }))),
       !f.k||f.item==='__other'||!items.length?h('label',{class:'field'},h('span',{class:'lbl',text:'What do you need? *'}),h('input',{id:'sp-title',maxlength:120,placeholder:'e.g. 3D views of the lobby and two typical units',value:f.title,style:'background:#fff',oninput:e=>{ f.title=e.target.value; }})):null,
@@ -6359,12 +6395,13 @@ function supportSection(p){
           if(!f.team) return toast('Choose the POD or team.'); if(!title) return toast(f.k?'Choose the task, or type what you need.':'Write what you need.');
           if(!f.start||!f.end) return toast('Choose the start and finish dates.'); if(f.start<td) return toast('The start can’t be in the past.'); if(f.end<f.start) return toast('The finish can’t be before the start.');
           if(!dir&&!(f.note||'').trim()) return toast('Say why support is needed: the COO sees it when approving.'); if(dir&&!f.who) return toast('Choose the person.'); if(!ppl.length) return toast('No one is in that team yet.');
-          const to=f.who||ppl.slice().sort((a,b)=>loadOf(a).open-loadOf(b).open)[0];
-          run(()=>createTask({projectId:p.id,title,kind:'Task',assignee:to,phase:f.k?phLabel(f.k,p):'Support',start:f.start,target:dir?f.end:'',proposed:dir?'':f.end,...(it?{clRef:{k:f.k,id:it.id}}:{}),
+          const to=f.who||ppl.slice().sort((a,b)=>loadOf(a).open-loadOf(b).open)[0], gd=f.role==='guide';
+          if(gd&&!f.worker) return toast('Choose who does the work.'); if(gd&&f.worker===to) return toast('The guide can’t be the person doing the work.');
+          run(()=>createTask({projectId:p.id,title,kind:'Task',assignee:gd?f.worker:to,...(gd?{guideTo:to}:{}),phase:f.k?phLabel(f.k,p):'Support',start:f.start,target:dir?f.end:'',proposed:dir?'':f.end,...(it?{clRef:{k:f.k,id:it.id}}:{}),
             note:[`Support ${fmtD(f.start)} to ${fmtD(f.end)}, ${wd} working day${wd===1?'':'s'}.`,(f.note||'').trim()].filter(Boolean).join(' '),
-            support:{team:f.team,any:!f.who,start:f.start,end:f.end,days:wd,why:(f.note||'').trim()}}),dir?`Given to ${nameOf(to)}`:'Sent to the COO').then(ok=>{ if(ok){ sh.supAdd=null; renderSheet(); } }); },text:dir?'Assign':'Send request'}),
+            support:{team:f.team,any:!f.who,start:f.start,end:f.end,days:wd,why:(f.note||'').trim(),...(gd?{guide:true}:{})}}),gd?(dir?`${nameOf(to)} guides and checks; ${nameOf(f.worker)} does the work`:'Sent to the COO'):dir?`Given to ${nameOf(to)}`:'Sent to the COO').then(ok=>{ if(ok){ sh.supAdd=null; renderSheet(); } }); },text:dir?'Assign':'Send request'}),
         h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.supAdd=null; renderSheet(); },text:'Cancel'})),
-      h('div',{class:'f-hint',text:dir?'It becomes their task on this project right away.':'The COO confirms the person (or picks one if you chose Anyone) and the date. Then it becomes their task on this project.'}));
+      h('div',{class:'f-hint',text:f.role==='guide'?(dir?'The task goes to the person doing the work right away; the guide checks it before it is done.':'The task goes to the person doing the work; the COO approves the guide, who then checks it before it is done.'):dir?'It becomes their task on this project right away.':'The COO confirms the person (or picks one if you chose Anyone) and the date. Then it becomes their task on this project.'}));
   }
   const cv=coverOf(p), cvD=cv&&S.settings.cover[cv], boss=S.isOwner||isCOO(S.uid);
   const cvBox=cv?h('div',{class:'callout',style:'display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap'},h('span',{style:'font-size:13.5px',text:`Cover on for ${podLabel(cv)}${cvD.note?': '+cvD.note:''}. Its POD leader assigns people from other PODs directly; they earn the POD-support bonus.`}),
