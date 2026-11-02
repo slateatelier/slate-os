@@ -3143,7 +3143,7 @@ function queueGroups(){
     ['nicks','Pod names',nickProposals().length,mn(nickProposals().map(x=>x.d.at)),nickCards],
     ['lib','Standard tasks',libReqs().length,mn(libReqs().map(([k,x])=>x.requestedAt)),libReqCards],
     ['extra','Extra rounds',extraReqs().length,mn(extraReqs().map(x=>x.m.extra.at)),extraReqCards],
-    ['delete','Deletions',dels.length,mn(dels.map(p=>p.delReq.at)),delReqCards],
+    ['delete','Deletions',dels.length+clientDelReqs().length,mn([...dels.map(p=>p.delReq.at),...clientDelReqs().map(([i,c])=>c.delReq.at)]),()=>h('div',{style:'display:grid;gap:16px'},delReqCards(),clientDelCards())],
     ['chalk','Chalk Create dates',cr.length,mn(cr.map(t=>t.request.at)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Chalk Create dates to approve'}),h('span',{class:'cnt',text:String(cr.length)})),S.canWrite?approvalCards(cr):h('div',{class:'list'},cr.map(t=>row(t))))],
     ['roles','Designations',rp.length,mn(rp.map(x=>x.d.at)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Designation changes'}),h('span',{class:'cnt',text:String(rp.length)})),h('div',{class:'list'},rp.map(x=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>goView('setup')},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:`${nameOf(x.pid)}: proposed by ${nameOf(x.author)}`}),h('div',{class:'row-meta',text:'Decide in Settings › People'})),h('span',{class:'mi-a',text:'›'})))))]];
   return G.filter(g=>g[2]>0).map(([key,label,n,oldest,build])=>({key,label,n,oldest,build}));
@@ -9206,14 +9206,15 @@ async function clientUpsert(v){ if(v&&v.phone) v={...v,phone:phoneNorm(v.phone)}
   const ref=S.db.collection('clients').doc(); const rec={name}; CLIENT_F.forEach(f=>{ rec[f]=String(v[f]||'').trim(); });
   await ref.set({...rec,createdAt:now,createdBy:S.uid}); (S.clients=S.clients||{})[ref.id]=rec; return ref.id; }
 function clientDir(){ const M={}, AL={}; Object.values(S.clients||{}).forEach(c=>{ if(c&&!c.deleted&&c.name) (c.aka||[]).forEach(x=>{ if(cNorm(x)) AL[cNorm(x)]=cNorm(c.name); }); });
-  const norm=x=>{ const k=cNorm(x); return AL[k]||k; };
-  const add=(name,o,at)=>{ const k=norm(name); if(!k) return; const c=M[k]||(M[k]={name:String(name).trim(),projects:0,live:0,props:0,at:'',last:''}); if((at||'')>c.last) c.last=at||'';
+  const norm=x=>{ const k=cNorm(x); return AL[k]||k; }, HID={}; Object.values(S.clients||{}).forEach(c=>{ if(c&&c.deleted&&c.name){ const k=norm(c.name); HID[k]=maxD(HID[k]||'',c.deletedAt||c.updatedAt||'9999'); } });
+  Object.values(S.clients||{}).forEach(c=>{ if(c&&!c.deleted&&c.name) delete HID[norm(c.name)]; });
+  const add=(name,o,at)=>{ const k=norm(name); if(!k) return; if(HID[k]&&(at||'')<=HID[k]) return; const c=M[k]||(M[k]={name:String(name).trim(),projects:0,live:0,props:0,at:'',last:''}); if((at||'')>c.last) c.last=at||'';
     if((at||'')>=c.at){ for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]) c[f]=o[f]; c.at=at||c.at; c.name=String(name).trim(); } else for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]&&!c[f]) c[f]=o[f]; };
-  Object.values(S.projects||{}).forEach(x=>{ if(!x||!x.client||isInternalP(x)||x.pod==='Studio') return; add(x.client,{contact:x.contact,phone:x.phone,type:x.type},x.createdAt||''); M[norm(x.client)].projects++; if(!x.closed) M[norm(x.client)].live++; });
-  Object.values(S.props||{}).forEach(x=>{ if(!x||!x.client) return; const dd=x.doc||{}; add(x.client,{contact:x.contact||dd.toName,phone:x.phone,email:x.email,title:dd.toTitle,address:dd.toAddress,type:x.type,src:x.src},x.createdAt||''); M[norm(x.client)].props++; });
+  Object.values(S.projects||{}).forEach(x=>{ if(!x||!x.client||isInternalP(x)||x.pod==='Studio') return; add(x.client,{contact:x.contact,phone:x.phone,type:x.type},x.createdAt||''); const m=M[norm(x.client)]; if(!m) return; m.projects++; if(!x.closed) m.live++; });
+  Object.values(S.props||{}).forEach(x=>{ if(!x||!x.client) return; const dd=x.doc||{}; add(x.client,{contact:x.contact||dd.toName,phone:x.phone,email:x.email,title:dd.toTitle,address:dd.toAddress,type:x.type,src:x.src},x.createdAt||''); const m=M[norm(x.client)]; if(m) m.props++; });
   /* saved client records win: their details are the ones to use */
   Object.entries(S.clients||{}).forEach(([id,c])=>{ if(!c||c.deleted||!c.name) return; const k=norm(c.name); const x=M[k]||(M[k]={name:c.name,projects:0,live:0,props:0,at:'',last:c.updatedAt||c.createdAt||''});
-    x.id=id; x.name=c.name; CLIENT_F.forEach(f=>{ if(c[f]) x[f]=c[f]; }); if(c.title) x.title=c.title; if(c.address) x.address=c.address; });
+    x.id=id; x.name=c.name; x.delReq=c.delReq||null; CLIENT_F.forEach(f=>{ if(c[f]) x[f]=c[f]; }); if(c.title) x.title=c.title; if(c.address) x.address=c.address; });
   /* running work first, then most recent: a client with only closed or one-off placeholder projects drops down */
   return Object.values(M).sort((a,b)=>(b.live+b.props)-(a.live+a.props)||(b.last||'').localeCompare(a.last||'')||a.name.localeCompare(b.name)); }
 /* the client box: type to search known clients, tap one to fill the details */
@@ -11457,7 +11458,7 @@ function viewClients(){
       h('td',{},h('div',{text:c.contact||'—'}),c.title?h('div',{class:'sub2',text:c.title}):null),
       h('td',{class:'mono',text:c.phone||'—'}),h('td',{text:c.email||'—'}),
       h('td',{class:'n',text:c.projects?`${c.projects}${c.live?' ('+c.live+' live)':''}`:'—'}),h('td',{class:'n',text:c.props?String(c.props):'—'}),
-      h('td',{},c.id?null:h('span',{class:'pill s-open',text:'not saved'}))))))));
+      h('td',{},c.delReq&&!c.delReq.ok?h('span',{class:'pill s-overdue',text:'deletion asked'}):c.id?null:h('span',{class:'pill s-open',text:'not saved'}))))))));
   return out; }
 function openClient(id,seed){ const c=id?{...(S.clients||{})[id]}:{...(seed||{})}; const d={name:c.name||'',aka:(c.aka||[]).join(', ')}; CLIENT_F.forEach(f=>{ d[f]=c[f]||''; });
   S.sheet={type:'client',id,d,err:''}; renderSheet(); }
@@ -11466,7 +11467,8 @@ function sheetClient(){ const sh=S.sheet, d=sh.d, id=sh.id, k=cNorm(d.name);
   const save=()=>{ const name=d.name.trim(); if(!name) return fail('Give the client’s name.'); const dup=clientRec(name); if(dup&&dup.id!==id) return fail('A client with this name is already saved. Open it from the list.');
     const now=new Date().toISOString(), v={name,aka:d.aka.split(',').map(x=>x.trim()).filter(Boolean)}; CLIENT_F.forEach(f=>{ v[f]=String(d[f]||'').trim(); });
     run(()=>id?S.db.doc('clients/'+id).update({...v,updatedAt:now,updatedBy:S.uid}):S.db.collection('clients').doc().set({...v,createdAt:now,createdBy:S.uid}),id?'Client updated':'Client saved').then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
-  const del=()=>{ if(!id) return; if(!sh.delAsk){ sh.delAsk=true; renderSheet(); return; } run(()=>S.db.doc('clients/'+id).update({deleted:true,updatedAt:new Date().toISOString(),updatedBy:S.uid}),'Client removed from the database').then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
+  const rec=id?(S.clients||{})[id]:null, pend=rec&&rec.delReq;
+  const del=()=>{ if(!sh.delAsk){ sh.delAsk={why:'',props:false}; renderSheet(); return; } };
   const tx=(k2,o)=>h('input',{id:'cl-'+k2,class:'tl-num qs-in',value:d[k2]||'',...(o||{}),oninput:e=>{ d[k2]=e.target.value; }});
   const kv=(l,v,top)=>h('div',{class:'qs-kv'+(top?' qs-top':'')},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
   return [head('Business › Clients',id?d.name||'Client':'New client'),
@@ -11483,10 +11485,32 @@ function sheetClient(){ const sh=S.sheet, d=sh.d, id=sh.id, k=cNorm(d.name);
     projs.length||props.length?h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',text:'Work with this client'}),
       ...projs.map(p=>h('button',{class:'linkish',type:'button',style:'justify-self:start;text-decoration:none',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); },text:`${projLabel(p)}${p.closed?' · closed':''}`})),
       ...props.map(p=>h('div',{class:'f-hint',style:'margin:0',text:`Proposal · ${p.name||'—'}${p.status&&p.status!=='open'?' · '+p.status:''}`}))):null,
+    pend?clientDelBox(id,rec,props):null,
+    sh.delAsk?(()=>{ const a=sh.delAsk;
+      return h('div',{class:'callout',style:'display:grid;gap:8px;border-color:var(--overdue)'},h('b',{text:S.isOwner?'Delete this client?':'Ask the Principal to delete this client'}),
+        h('div',{class:'f-hint',style:'margin:0',text:'It disappears from the client list and from the suggestions on new projects and proposals.'+(projs.length?` Its ${projs.length} project${projs.length===1?'':'s'} stay; delete those from the project if they were tests too.`:'')}),
+        props.length?h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',checked:!!a.props,onchange:e=>{ a.props=e.target.checked; }}),h('span',{text:`Also delete its ${props.length} proposal${props.length===1?'':'s'} (test entries)`})):null,
+        h('input',{id:'cl-delwhy',maxlength:160,placeholder:'Why? e.g. test entry while trying the proposal form',value:a.why,style:'background:#fff',oninput:e=>{ a.why=e.target.value; }}),
+        h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm',type:'button',style:'background:var(--overdue);color:#fff',disabled:S.busy,onclick:()=>{ const why=(a.why||'').trim(); if(!why) return toast('Say why it should be deleted.');
+            run(async()=>{ const now=new Date().toISOString(); let cid=id; if(!cid){ const ref=S.db.collection('clients').doc(); cid=ref.id; await ref.set({name:d.name.trim(),createdAt:now,createdBy:S.uid}); }
+              const req={by:S.uid,at:now,why,props:!!a.props};
+              if(S.isOwner) await clientDelDo(cid,{name:d.name.trim(),delReq:req}); else await S.db.doc('clients/'+cid).update({delReq:req}); },S.isOwner?'Client deleted':'Sent to the Principal for approval').then(ok=>{ if(ok){ closeSheet(); render(true); } }); },text:S.isOwner?'Delete':'Send to the Principal'}),
+          h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.delAsk=null; renderSheet(); },text:'Cancel'}))); })():null,
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!S.canWrite,onclick:save,text:id?'Save changes':'Save client'}),
-      id?h('button',{class:'btn',type:'button',style:sh.delAsk?'color:var(--overdue)':'',disabled:S.busy,onclick:del,text:sh.delAsk?'Tap again to remove':'Remove'}):null,
+      (id||d.name)&&S.canWrite&&!sh.delAsk&&!pend?h('button',{class:'btn',type:'button',style:'color:var(--overdue)',disabled:S.busy,onclick:del,text:S.isOwner?'Delete client':'Ask to delete'}):null,
       h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))]; }
+/* delete a client (Principal, 2 Nov 2026): the Principal deletes; the COO or anyone else asks with a reason and the Principal approves.
+   Optionally its proposals go too (test entries). Its projects stay; they are deleted from the project, with their own approval. */
+async function clientDelDo(cid,c){ const now=new Date().toISOString(), r=c.delReq||{};
+  if(r.props){ const k=cNorm(c.name); for(const [pid,p] of Object.entries(S.props||{})) if(p&&cNorm(p.client)===k) await S.db.doc('proposals/'+pid).delete(); }
+  await S.db.doc('clients/'+cid).update({deleted:true,deletedAt:now,deletedBy:S.uid,delReq:{...r,ok:S.uid,okAt:now}}); }
+function clientDelBox(cid,c,props){ const r=c.delReq;
+  return h('div',{class:'callout',style:'display:grid;gap:8px;border-color:var(--overdue)'},h('b',{text:`${nameOf(r.by)} asks to delete this client`}),
+    h('div',{class:'f-hint',style:'margin:0',text:`${r.why||'No reason given'} · ${fmtTs(r.at)}`+(r.props&&props.length?` · its ${props.length} proposal${props.length===1?'':'s'} go too`:'')}),
+    S.isOwner?h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm',type:'button',style:'background:var(--overdue);color:#fff',disabled:S.busy,onclick:()=>run(()=>clientDelDo(cid,c),'Client deleted').then(ok=>{ if(ok){ closeSheet(); render(true); } }),text:'Approve and delete'}),
+      h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>run(()=>S.db.doc('clients/'+cid).update({delReq:null}),'Kept').then(ok=>ok&&renderSheet()),text:'Keep the client'})):h('div',{class:'f-hint',style:'margin:0',text:'Waiting for the Principal.'})); }
+const clientDelReqs=()=>S.isOwner?Object.entries(S.clients||{}).filter(([id,c])=>c&&!c.deleted&&c.delReq&&!c.delReq.ok):[];
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
   S.biz=S.biz||{tab:'over',q:'',st:'active'};
@@ -12175,6 +12199,11 @@ function deleteZone(p){
   return box(h('div',{class:'f-hint',text:`The Principal approves every deletion. If approved, the project and its ${what} are removed for everyone.`}),reasonIn('Why should it be deleted? *'),
     h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>askDelete(p.id),text:'Send to the Principal'}),
       h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.del=null; renderSheet(); },text:'Cancel'})));
+}
+function clientDelCards(){ const xs=clientDelReqs(); if(!xs.length) return null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Client deletions to approve'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('div',{class:'list'},xs.map(([id,c])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openClient(id)},
+      h('div',{style:'min-width:0'},h('div',{class:'row-title',text:c.name}),h('div',{class:'row-meta',text:`${nameOf(c.delReq.by)} · ${c.delReq.why||'No reason given'}`+(c.delReq.props?' · with its proposals':'')})),h('span',{class:'mi-a',text:'›'})))));
 }
 function delReqCards(){
   if(!S.isOwner) return null; const xs=Object.entries(S.projects).filter(([k,p])=>p&&p.delReq&&p.delReq.by!==S.uid); if(!xs.length) return null;
