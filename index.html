@@ -1182,6 +1182,16 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .now-sum{display:flex;gap:14px;flex-wrap:wrap;margin:-4px 2px 0}
 .now-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 2px}
 .now-legend .now-chip{min-width:20px;height:20px;font-size:11px;animation:none}
+.qs-box{display:grid;gap:0;background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.qs-kv{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:12px;min-height:52px;padding:6px 14px;border-bottom:1px solid var(--line)}
+.qs-kv:last-child{border-bottom:0}
+.qs-k{font-size:13.5px;color:var(--muted);font-weight:600}
+.qs-v{min-width:0;font-size:15px}
+.qs-t{display:block;padding-left:11.5px}
+.qs-v .qs-in{width:220px;max-width:100%;height:42px;padding:0 10px;font-size:15px;font-weight:500;text-align:left;box-sizing:border-box}
+.qs-tbl td,.qs-tbl th{padding-block:9px}
+.qs-tbl .n{width:110px}
+.qs-last td{font-weight:700;border-top:1.5px solid var(--faint)}
 .tl-num{background:#fff!important;border:1.5px solid var(--faint)!important;border-radius:8px;font-weight:600;font-size:15px}
 .tl-num:focus{border-color:var(--early)!important;outline:none}
 .tl-num:disabled{border-style:dashed!important;color:var(--muted);font-weight:500}
@@ -3045,6 +3055,7 @@ function queueGroups(){
     ['minutes','Meeting minutes',ma.length,mn(ma.map(([d,m])=>m.submittedAt)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Meeting minutes to approve'}),h('span',{class:'cnt',text:String(ma.length)})),h('div',{class:'list'},ma.map(([d,m])=>h('div',{class:'mt-row',role:'button',tabindex:'0',onclick:()=>openMeeting(d)},h('div',{style:'min-width:0'},h('div',{class:'row-title',text:`Meeting of ${wd(d)} ${fmtD(d)}`}),h('div',{class:'row-meta who'},avaEl(organiserFor(d),false,'sm'),`Submitted by ${nameOf(m.submittedBy||organiserFor(d))}`)),h('span',{class:'mi-a',text:'›'})))))],
     ['projects','New projects',projectReqs().filter(p=>p.status==='pending').length,mn(projectReqs().filter(p=>p.status==='pending').map(p=>p.requestedAt)),projReqCards],
     ['timeline','Timelines',tlReqs().length,mn(tlReqs().map(p=>p.std.tlReq.at)),tlReqCards],
+    ['phedit','Phase changes',phEditReqs().length,mn(phEditReqs().map(p=>p.std.phReq.at)),phEditCards],
     ['phases','Phase dates',phaseReqs().length,mn(phaseReqs().map(r=>r.x.req.at)),phaseReqCards],
     ['closing','Close requests',closeReqs().length,mn(closeReqs().map(p=>p.closeReq.at)),closeReqCards],
     ['members','Project team',memberReqs().length,mn(memberReqs().map(x=>x.m.at)),memberReqCards],
@@ -6446,8 +6457,8 @@ function stdDots(p){ const ks=stdPhases(p); if(!ks.length) return null; const ac
 function stdSection(p){
   const tp=p.type&&T()[p.type], det=canViewProjectDetail(p), own=canSeeProjectDetail(p);
   if(!p.std){ if(!tp||!tp.std||p.pod==='Studio') return null;
-    return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'})),h('div',{class:'card'},h('div',{text:`This ${tp.name.toLowerCase()} project runs on the SLATE standard phases. Set them up to create the gate deliverables and checklists.`}),
-      own&&amMgr()&&S.canWrite&&!p.closed?h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Set up phases'})):h('div',{class:'f-hint',text:'The pod lead sets the phases up.'}))); }
+    return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'})),h('div',{class:'card'},h('div',{text:`Not started yet. Give the start date and the phases, gate deliverables, checklists and dates are made in one go.`}),
+      own&&amMgr()&&S.canWrite&&!p.closed?h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Start the project'})):h('div',{class:'f-hint',text:'The POD leader starts the project.'}))); }
   const ks=stdPhases(p), act=activePhases(p), cur=act[0]||null, manage=own&&canManageCl(p), open=S.sheet&&S.sheet.openPh!==undefined?S.sheet.openPh:cur, fbEdit=S.canWrite&&(amApprover()||isProjLead(p));
   const closed=ks.filter(k=>stdState(p,k).done).length;
   const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub=t.legacyOk?'before SLATE OS':'before SLATE OS · COO to approve'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
@@ -7025,39 +7036,65 @@ function openStdPlan(pid,type,pod){
   if(!p.pod&&!isInternalP(p)) return toast('Choose the POD first: its POD leader gets the gate deliverables.');
   const plan=p.phasePlan&&Array.isArray(p.phasePlan.sel)&&p.phasePlan.sel.length?p.phasePlan:null;
   const m={sel:plan?phaseOrder(type,plan.sel):spPhaseSel(type,p.plan,p.intExec),ed:JSON.parse(JSON.stringify((plan&&plan.ed)||{})),open:null};
-  S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pre:{},running:p.entry==='running',pace:paceOf(p),lead:personFor('lead',pod||p.pod)||'',m};
+  S.sheet={type:'stdPlan',projectId:pid,tpl:type,pod:pod||p.pod,err:'',pre:{},running:p.entry==='running',pace:paceOf(p),lead:personFor('lead',pod||p.pod)||'',m,start:p.agDate||today(),more:p.entry==='running'};
   renderSheet();
 }
+/* Start the project (Principal, 2 Nov 2026): one screen, one tap. The start date is the only thing to give;
+   phases come from the type or service plan, the POD leader from the POD, and the gate dates from the SLATE standard.
+   Phases and their tasks are changed later from Edit phases (a POD leader's change goes to the COO). */
+function qsPlan(sh,p){ const ks=phaseOrder(sh.tpl,sh.m.sel), ed=edFull((p.phasePlan&&p.phasePlan.ed)||{},sh.m.ed,sh.tpl);
+  const np={...p,id:sh.projectId,type:sh.tpl,std:{v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed,grace:{},tl:{take:TAKE_IN}}};
+  if(!sh.start||!ks.length) return {ks,ed,np,plan:{},grace:{}};
+  let grace={}, plan={}; try{ const gr=graceFor(np,tlCompute(np,sh.start,false)); Object.keys(gr).forEach(k=>{ grace[k]=GRACE; }); np.std.grace=grace; plan=tlCompute(np,sh.start,false); }catch(e){ console.warn('qsPlan',e); }
+  return {ks,ed,np,plan,grace}; }
 function sheetStdPlan(){
   const sh=S.sheet, p=S.projects[sh.projectId], tp=T()[sh.tpl];
   if(!p||!tp) return [head('Phases','Not found')];
-  const ld=h('select',{id:'sp-lead','aria-label':'Pod lead',onchange:e=>{sh.lead=e.target.value}},memberOpts(sh.lead).map(([v,l])=>h('option',{value:v,text:l}))); ld.value=sh.lead||'';
-  const n=sh.m.sel.length;
+  const ld=h('select',{id:'sp-lead','aria-label':'POD leader',class:'tl-num qs-in',onchange:e=>{sh.lead=e.target.value}},memberOpts(sh.lead).map(([v,l])=>h('option',{value:v,text:l}))); ld.value=sh.lead||'';
+  const n=sh.m.sel.length, preAny=Object.keys(sh.pre).length>0, ap=amApprover()||leadFree(sh.projectId), q=qsPlan(sh,{...p,id:sh.projectId});
+  const rows=q.ks.map(k=>({k,f:q.plan[k]||{}})), last=maxD(...rows.map(r=>r.f.fin).filter(Boolean));
   const pre=(k,on)=>on&&(sh.running||sh.pre[k])?(()=>{ const pr=sh.pre[k];
     return h('div',{style:'display:grid;gap:6px;padding-left:30px'},h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'pre-'+k,checked:!!pr,onchange:e=>{ if(e.target.checked) sh.pre[k]={}; else delete sh.pre[k]; renderSheet(); }}),'Finished before SLATE OS'),
       pr?h('div',{class:'form-row'},stepsOf(sh.tpl,k).map(([st])=>h('label',{class:'field'},h('span',{class:'lbl',text:(st==='sub'?'Submitted on':st==='final'?'Final on':'Done on')+' (optional)'}),h('input',{id:`pre-${k}-${st}`,type:'date',max:preLive(),value:pr[st]||'',oninput:e=>{pr[st]=e.target.value}})))):null,
       pr?h('div',{class:'f-hint',text:'Recorded as history: the gate shows as closed with these dates and the checklist is closed. It never counts in scores.'}):null); })():null;
-  return [head(projLabel(p),tp.name+' · phases'),
-    h('p',{class:'lead',style:'margin:0',text:tp.note+'. Each phase gets its gate deliverables (assigned to the pod lead) and its checklist. Next, the pod lead proposes the gate dates and the COO approves them.'}),
-    field('Pod lead (owns the gate deliverables)',ld),
-    field('Pace',h('div',{style:'display:grid;gap:6px'},seg('Pace',Object.keys(PACE).filter(k=>k!=='fast'||canPace()||sh.pace==='fast').map(k=>[k,paceName({type:sh.tpl},k)]),sh.pace,v=>{ if(sh.tpl==='proposal'&&(v==='fast')!==(sh.pace==='fast')){ sh.m.sel=sh.m.sel.filter(x=>x!=='0'); if(v!=='fast') sh.m.sel=phaseOrder(sh.tpl,['0',...sh.m.sel]); } sh.pace=v; renderSheet(); }),
-      h('div',{class:'f-hint',text:(sh.pace==='fast'&&sh.tpl==='proposal'?PACE_NOTE.sprint:PACE_NOTE[sh.pace])+(canPace()?'':' Fast track is set by the Principal or the COO.')}))),
-    phaseEditor(sh.m,{type:sh.tpl,idp:'sp',extra:pre}),
-    sh.running?h('p',{class:'f-hint',style:'margin:0',text:`This project was already running. Tick each phase finished before SLATE OS went live (${fmtD(goLive())}); set up the rest normally.`}):null,
+  const kv=(l,v)=>h('div',{class:'qs-kv'},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
+  return [head(projLabel(p),'Start the project'),
+    h('p',{class:'lead',style:'margin:0',text:'Give the start date. Phases, gate deliverables, checklists and dates are made from the SLATE standard in one go.'}),
+    h('div',{class:'qs-box'},
+      kv('Start date',h('input',{id:'qs-start',type:'date',value:sh.start,class:'tl-num qs-in',oninput:e=>{ sh.start=e.target.value; },onchange:()=>renderSheet()})),
+      kv('POD leader',ld),
+      kv('Type',h('span',{class:'qs-t',text:tp.name+(sh.pace&&sh.pace!=='std'?' · '+paceName({type:sh.tpl},sh.pace):'')})),
+      kv('Phases',h('span',{class:'qs-t',text:`${n} phase${n===1?'':'s'}`}))),
+    sh.start&&n&&!preAny?h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{class:'qs-tbl'},
+      h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
+      h('tbody',{},rows.map(({k,f})=>h('tr',{},h('td',{text:`${phNo(k)} ${phName(k,q.np)}`}),h('td',{class:'n',text:f.none?'—':f.sub?fmtD(f.sub):'—'}),f.none?h('td',{class:'n muted',style:'font-family:inherit;font-size:13px',text:f.auth?'after authority':'after WD-1'}):h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):'—'}))),
+        last?h('tr',{class:'qs-last'},h('td',{text:rows.some(r=>r.f.none)?'Last dated gate':'Last gate'}),h('td'),h('td',{class:'n',text:fmtD(last)})):null))):null,
+    preAny?h('div',{class:'callout',style:'font-size:13.5px',text:'Some phases were finished before SLATE OS. After set-up the timeline opens so the start date and days can be checked.'}):null,
+    h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{ sh.more=!sh.more; renderSheet(); },text:sh.more?'Hide phases and pace ‹':'Change phases or pace ›'}),
+    sh.more?h('div',{style:'display:grid;gap:12px'},
+      field('Pace',h('div',{style:'display:grid;gap:6px'},seg('Pace',Object.keys(PACE).filter(k=>k!=='fast'||canPace()||sh.pace==='fast').map(k=>[k,paceName({type:sh.tpl},k)]),sh.pace,v=>{ if(sh.tpl==='proposal'&&(v==='fast')!==(sh.pace==='fast')){ sh.m.sel=sh.m.sel.filter(x=>x!=='0'); if(v!=='fast') sh.m.sel=phaseOrder(sh.tpl,['0',...sh.m.sel]); } sh.pace=v; renderSheet(); }),
+        h('div',{class:'f-hint',text:(sh.pace==='fast'&&sh.tpl==='proposal'?PACE_NOTE.sprint:PACE_NOTE[sh.pace])+(canPace()?'':' Fast track is set by the Principal or the COO.')}))),
+      phaseEditor(sh.m,{type:sh.tpl,idp:'sp',extra:pre}),
+      sh.running?h('p',{class:'f-hint',style:'margin:0',text:`This project was already running. Tick each phase finished before SLATE OS went live (${fmtD(goLive())}).`}):null):null,
+    h('div',{class:'f-hint',style:'margin:0',text:(ap?'The dates become the gate dates and the original plan (R4).':'The dates go to the COO as proposed gate dates.')+' Phases and their tasks can be changed later from Edit phases; a POD leader’s change is approved by the COO.'}),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
-      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!n,onclick:createStdPlan,text:n?`Set up ${n} phase${n===1?'':'s'}`:'Choose at least one phase'}),
-      h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))];
+      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!n||!sh.start,onclick:createStdPlan,text:!n?'Choose at least one phase':!sh.start?'Give the start date':'Start the project'}),
+      h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Later'}))];
 }
 function createStdPlan(){
-  const sh=S.sheet, pid=sh.projectId, p=S.projects[pid]||{}, ks=phaseOrder(sh.tpl,sh.m.sel);
-  if(!sh.lead){ sh.err='Choose the pod lead who owns the gate deliverables.'; renderSheet(); return; }
-  if(!ks.length){ sh.err='Choose at least one phase.'; renderSheet(); return; }
-  const ed=edFull((p.phasePlan&&p.phasePlan.ed)||{},sh.m.ed,sh.tpl), np={...p,id:pid,std:{type:sh.tpl,ed}};
+  const sh=S.sheet, pid=sh.projectId, p=S.projects[pid]||{};
+  if(!sh.lead){ sh.err='Choose the POD leader who owns the gate deliverables.'; renderSheet(); return; }
+  if(!sh.m.sel.length){ sh.err='Choose at least one phase.'; renderSheet(); return; }
+  if(!sh.start){ sh.err='Give the start date.'; renderSheet(); return; }
+  const preAny=Object.keys(sh.pre).length>0, ap=amApprover()||leadFree(pid), q=qsPlan(sh,{...p,id:pid}), ks=q.ks;
+  const timed=!preAny&&!isInternalP(p)&&p.pod!=='Studio';
   run(async()=>{
-    const cl=await createGates(np,sh.tpl,ks,{lead:sh.lead,pod:sh.pod,pace:sh.pace,pre:sh.pre});
-    await S.db.doc('projects/'+pid).update({type:sh.tpl,std:{v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed},cl});
-  },`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(ok) openTimeline(pid); });
+    const cl=await createGates(q.np,sh.tpl,ks,{lead:sh.lead,pod:sh.pod,pace:sh.pace,pre:sh.pre,...(timed?{dates:q.plan,ap}:{})});
+    const std={v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed:q.ed};
+    if(timed){ std.grace=q.grace; std.tl={start:sh.start,at:new Date().toISOString(),by:S.uid,take:TAKE_IN,base:tlPlanSnap(q.np,sh.start)}; }
+    await S.db.doc('projects/'+pid).update({type:sh.tpl,std,cl});
+  },timed?(ap?'Project started: phases and dates set':'Project started: dates sent to the COO'):`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(!ok) return; if(preAny) openTl(pid); else { S.sheet={type:'projView',id:pid}; renderSheet(); } });
 }
 /* gate deliverables and checklist for the phases being added to a project */
 async function createGates(np,type,ks,o){
@@ -7065,7 +7102,7 @@ async function createGates(np,type,ks,o){
   for(const k of ks){
     for(const [step,txt] of stepsFor(np,type,k)){ const pr=pre[k];
       if(pr){ const dt=pr[step]||(step==='sub'?pr.final:pr.sub)||''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},legacy:true,doneAt:dt||preLive(),legacyNoDate:!dt,target:dt||preLive()}); }
-      else await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step}}); }
+      else { const f=o.dates&&o.dates[k], dt=f&&!f.none?(step==='sub'?f.sub:f.fin)||'':''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},...(dt?(o.ap?{target:dt}:{proposed:dt}):{})}); } }
     const m={}, pr=pre[k]; clItems(k).forEach(it=>{ if((it.only&&it.only!==type)||(it.not&&it.not.includes(type))){ m[it.id]={na:true}; return; } if(pr){ m[it.id]={done:pr.final||pr.sub||preLive(),legacy:true}; return; } if(o.pace==='fast'&&type==='proposal'&&SPRINT_NA.includes(it.id)){ m[it.id]={na:true,sp:true}; return; } const r0=(it.r||'')[0], who=r0==='L'?o.lead:r0==='J'?jr:''; if(who&&!isPriv(who)&&!isCOO(who)) m[it.id]={who}; });
     cl[k]=m; }
   return cl;
@@ -7182,18 +7219,34 @@ function sheetPhEdit(){
   const sh=S.sheet, p=S.projects[sh.projectId]; if(!p||!p.std) return [head('Phases','Not found')];
   const df=phaseDiff({...p,id:sh.projectId},sh.m), what=[df.add.length?`add ${df.add.length}`:'',df.rem.length?`remove ${df.rem.length}`:'',df.ren?(df.cxCh?'edit':'rename'):''].filter(Boolean), dirty=what.length>0||df.moved;
   return [head(projLabel(p),'Edit phases'),
-    h('p',{class:'lead',style:'margin:0',text:'Add, remove or rename the phases on this project, or add a custom phase of its own. Added phases get their gate deliverables (assigned to the pod lead) and checklist straight away. The SLATE standard process itself doesn’t change.'}),
+    h('p',{class:'lead',style:'margin:0',text:'Add, remove or rename the phases on this project, or add a custom phase of its own. Added phases get their gate deliverables (assigned to the POD leader) and checklist. The SLATE standard process itself doesn’t change.'+(amApprover()?'':' Your change goes to the COO; it applies once approved.')}),
+    !amApprover()&&p.std.phReq?h('div',{class:'callout',text:`A change sent on ${fmtD(String(p.std.phReq.at).slice(0,10))} is waiting for the COO. Sending again replaces it.`}):null,
     phaseEditor(sh.m,{type:df.type,p:{...p,id:sh.projectId},idp:'pe'}),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
-      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!dirty,onclick:savePhEdit,text:dirty?'Save: '+(what.join(', ')||'reorder'):'No changes yet'}),
+      h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!dirty,onclick:savePhEdit,text:dirty?(amApprover()?'Save: ':'Send to the COO: ')+(what.join(', ')||'reorder'):'No changes yet'}),
       h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))];
 }
 function savePhEdit(){
   const sh=S.sheet, pid=sh.projectId, p=S.projects[pid]; if(!p||!p.std) return;
   const df=phaseDiff({...p,id:pid},sh.m); if(!df.keep.length) return fail('Keep at least one phase.');
   const noName=df.keep.find(k=>sh.m.cx&&sh.m.cx[k]&&!String(sh.m.cx[k].n||'').trim()); if(noName){ sh.m.open=noName; renderSheet(); return fail('Give the custom phase a name.'); }
-  run(()=>applyPhaseChanges(pid,sh.m),'Phases updated').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } });
+  if(!amApprover()){ const m=JSON.parse(JSON.stringify({sel:sh.m.sel,ed:sh.m.ed,cx:sh.m.cx||{}}));
+    return run(async()=>{ await S.db.doc('projects/'+pid).update({std:{phReq:null}}); await S.db.doc('projects/'+pid).update({std:{phReq:{m,by:S.uid,at:new Date().toISOString()}}}); },'Sent to the COO for approval').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } }); }
+  run(async()=>{ await applyPhaseChanges(pid,sh.m); if(p.std.phReq) await S.db.doc('projects/'+pid).update({std:{phReq:null}}); },'Phases updated').then(ok=>{ if(ok){ S.sheet={type:'projView',id:pid}; renderSheet(); } });
+}
+function phEditReqs(){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>p.std&&p.std.phReq&&p.std.phReq.m&&!p.closed).sort((a,b)=>(a.std.phReq.at||'').localeCompare(b.std.phReq.at||'')); }
+function phEditTxt(p,m){ const df=phaseDiff(p,{...m,sel:m.sel||[],ed:m.ed||{}}), nm=k=>`${phNo(k)} ${phName(k,{...p,std:{...p.std,ed:m.ed||{}}})}`;
+  return [df.add.length?'Add '+df.add.map(nm).join(', '):'',df.rem.length?'Remove '+df.rem.map(k=>`${phNo(k)} ${phName(k,p)}`).join(', '):'',df.ren?'Rename or edit phases':'',!df.add.length&&!df.rem.length&&!df.ren&&df.moved?'Change the order':''].filter(Boolean).join(' · ')||'No change left'; }
+function phEditCards(){ const xs=phEditReqs();
+  return h('section',{class:'sec','data-q':'phedit'},h('div',{class:'sec-h'},h('h2',{text:'Phase changes to approve'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('div',{class:'list'},xs.map(p=>{ const r=p.std.phReq;
+      return h('div',{class:'card',style:'display:grid;gap:8px'},
+        h('div',{style:'display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap'},h('b',{text:projLabel(p)}),h('span',{class:'f-hint',style:'margin:0',text:`${nameOf(r.by)} · ${ageTxt(ageOf(r.at))}`})),
+        h('div',{class:'sub2',text:phEditTxt(p,r.m)}),
+        S.canWrite?h('div',{class:'actions',style:'margin:0'},
+          h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>run(async()=>{ await applyPhaseChanges(p.id,{sel:r.m.sel||[],ed:r.m.ed||{},...(r.m.cx&&Object.keys(r.m.cx).length?{cx:r.m.cx}:{})}); await S.db.doc('projects/'+p.id).update({std:{phReq:null}}); },'Phase change approved').then(()=>render(true)),text:'Approve'}),
+          h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!confirm('Decline this phase change?')) return; run(()=>S.db.doc('projects/'+p.id).update({std:{phReq:null}}),'Declined').then(()=>render(true)); },text:'Decline'})):null); })));
 }
 /* the date a phase's checklist is needed by: its first open gate deliverable (submission before sign-off) */
 function phDueMap(){ const m={};
