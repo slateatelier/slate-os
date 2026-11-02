@@ -9197,7 +9197,11 @@ function openProp(id,convert){ if(window.SlatePin&&SlatePin.required()&&!SlatePi
 const cNorm=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
 const CLIENT_F=['contact','title','phone','email','address','type','note'];
 function clientRec(name){ const k=cNorm(name); if(!k) return null; for(const [id,c] of Object.entries(S.clients||{})) if(c&&!c.deleted&&(cNorm(c.name)===k||(c.aka||[]).some(a=>cNorm(a)===k))) return {...c,id}; return null; }
-async function clientUpsert(v){ const name=String(v.name||'').trim(); if(!name||!S.db||!canProps()) return null; const ex=clientRec(name), now=new Date().toISOString();
+/* phone numbers (Principal, 2 Nov 2026): copied from a PC, Android or iPhone they bring spaces, dashes, brackets and invisible
+   direction marks. Kept as digits with one leading + only, whatever is typed or pasted into a phone box. */
+const phoneNorm=v=>{ const t=String(v==null?'':v).replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g,'').trim(); const plus=/^\s*(\+|00)/.test(t)&&t.replace(/\D/g,'').length>0; let d=t.replace(/\D/g,''); if(/^\s*00/.test(t)) d=d.replace(/^00/,''); return d?(plus?'+':'')+d:''; };
+document.addEventListener('input',e=>{ const el=e.target; if(!(el instanceof HTMLInputElement)) return; if(el.type!=='tel'&&!/phone/i.test(el.id||el.name||'')) return; const v=phoneNorm(el.value); if(v!==el.value&&!(el.value.trim()==='+')){ el.value=v; } },true);
+async function clientUpsert(v){ if(v&&v.phone) v={...v,phone:phoneNorm(v.phone)}; const name=String(v.name||'').trim(); if(!name||!S.db||!canProps()) return null; const ex=clientRec(name), now=new Date().toISOString();
   if(ex){ const fill={}; CLIENT_F.forEach(f=>{ if(v[f]&&!ex[f]) fill[f]=String(v[f]).trim(); }); if(Object.keys(fill).length) await S.db.doc('clients/'+ex.id).update({...fill,updatedAt:now,updatedBy:S.uid}); return ex.id; }
   const ref=S.db.collection('clients').doc(); const rec={name}; CLIENT_F.forEach(f=>{ rec[f]=String(v[f]||'').trim(); });
   await ref.set({...rec,createdAt:now,createdBy:S.uid}); (S.clients=S.clients||{})[ref.id]=rec; return ref.id; }
@@ -9428,7 +9432,7 @@ function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('O
   const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft){ const bad=Object.keys(PQ_SUB).find(l=>(sh.sel.on||{})[l]&&PQ_SUB[l].every(([k])=>!pqSubOn(sh,l,k))); if(bad) return fail(`Tick at least one item under ${bad.split(' (')[0]}, or untick it.`); } if(!draft&&pqDoc(sh).addons.some(x=>!x.amt&&!x.inc)) return fail('Give the fee for each add-on, or tick Included.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc), editing=!!(sh.id&&old.doc&&!sh.convert);
   if(old.doc&&old.doc.ref) doc.ref=old.doc.ref;
-  const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),[(pqKind(d)||'none').toLowerCase()]:pqKind(d)?pqT(d.sSec):''},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
+  const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:phoneNorm(d.phone),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),[(pqKind(d)||'none').toLowerCase()]:pqKind(d)?pqT(d.sSec):''},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:sh.vat?'VAT and AIT included':'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
     ...(sh.id?{}:{createdAt:now,createdBy:S.uid}),proposedAt:now,...(sh.convert?{lead:false}:{}),doc:{...doc,total:Math.round(F.total),savedAt:now},...(draft?{draft:true}:{}),
     quick:{d:{...JSON.parse(JSON.stringify(d)),_picked:p.client},on:{...((sh.sel||{}).on||{})},fee:{...((sh.sel||{}).fee||{})},sub:JSON.parse(JSON.stringify((sh.sel||{}).sub||{})),inc:{...((sh.sel||{}).inc||{})},vat:!!sh.vat,fm:sh.fm||'sft',fv:sh.fv||'',areaSet:!!sh.areaSet},
@@ -9447,7 +9451,7 @@ function sheetProp(){
     if(d.katha!==''&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     if(d.fee!==''&&!(+d.fee>0)) return fail('Fee should be a number, or leave it empty.');
     const now=new Date().toISOString(), pid=id||S.db.collection('proposals').doc().id, old=id?(S.props||{})[id]||{}:{};
-    const v={...old,name,client,...(d._title||d._addr?{_title:'',_addr:''}:{}),contact:(d.contact||'').trim(),phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
+    const v={...old,name,client,...(d._title||d._addr?{_title:'',_addr:''}:{}),contact:(d.contact||'').trim(),phone:phoneNorm(d.phone),email:(d.email||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha),type:d.type||'',
       scope:[...d.scope],feeBasis:d.feeBasis||'lump',fee:d.fee===''?'':String(+d.fee),feeNote:(d.feeNote||'').trim(),sentOn:d.sentOn||'',stage:d.stage||'prep',next:d.next||'',note:(d.note||'').trim(),
       src:d.src||'',status:old.status||'open',log:old.log||[],...(id?{}:{createdAt:now,createdBy:S.uid,proposedAt:now}),...(S.sheet.convert?{lead:false,proposedAt:now}:{})};
     if(!id&&!S.sheet.convert&&!v.next) v.next=addWorkDays(today(),3); delete v._title; delete v._addr; delete v._picked;
@@ -10461,7 +10465,7 @@ function openLead(id){ if(window.SlatePin&&SlatePin.required()&&!SlatePin.unlock
 function sheetLead(){
   const d=S.sheet.d, id=S.sheet.id;
   const submit=e=>{ e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds leads.');
-    const client=(d.client||'').trim(), phone=(d.phone||'').trim();
+    const client=(d.client||'').trim(), phone=phoneNorm(d.phone);
     if(!client) return fail('Who is the lead? Give a name or company.'); if(!phone) return fail('Add a phone number.'); if(!d.src) return fail('Where did this lead come from?');
     if(d.src==='referral'&&!(d.refBy||'').trim()) return fail('Who referred them?'); if(!(d.contact||'').trim()) return fail('Add the contact person.'); if(!(d._title||'').trim()) return fail('Add the contact person’s designation (e.g. Chairman, MD, Owner).');
     if(d.katha!==''&&d.katha!=null&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
