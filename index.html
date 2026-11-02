@@ -1212,6 +1212,9 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .db-pods .seg button{white-space:nowrap;padding-inline:14px}
 .db-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;border-top:1px solid var(--line);padding-top:8px}.db-mini>div{display:grid}
 .pq-fb .seg button{white-space:nowrap;padding-inline:8px}
+.pq-tag{font-style:normal;font-size:11px;font-weight:600;color:var(--ontime);margin-left:6px;white-space:nowrap}
+.pq-warn{display:grid;gap:6px;font-size:13px;line-height:1.4;color:#8a5a00;background:#FFF7E6;border-radius:10px;padding:10px 12px;margin-bottom:4px}.pq-warn .bad{color:var(--overdue);font-weight:500}
+.pq-ok{font-size:13px;color:var(--ontime);padding-bottom:4px}
 .pq-chk{display:grid;border-top:1px solid var(--line)}
 .pq-ck{display:grid;grid-template-columns:22px minmax(0,1fr) 0;gap:12px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
 .pq-ck:last-child{border-bottom:0}.pq-ck input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--ink)}
@@ -9048,6 +9051,22 @@ function openPropQuick(d0,id,convert){ const d={...d0}; d.type=d.type||'dev'; d.
 const pqArea=k=>+k>0?String(Math.round(+k*5000/100)*100):'';
 /* services on the quick proposal: one tick per service. The plan's own are ticked and included in the fee; another service
    ticked is added at its usual rate per sft (changeable). Descriptions come from SLATE's defaults (Edit details to change). */
+/* plan ↔ services check (Principal, 2 Nov 2026): the plan sets the fee, payment stages, timeline and site visits; the ticks set
+   the scope written in the letter. They must agree: the plan's own services ticked, nothing ticked twice, and anything the
+   plan's rate-card fee does not cover either priced in the Fee line or left out. */
+const PQ_PART={'Architecture, common area interior, landscape and coordination':['Architectural design','Common area interior design','Landscape design','Design coordination'],
+  'Approval design package':['Architectural design'],'Lean construction set':['Architectural design'],'Launch design package':['Architectural design','3D visualization','Real estate solutions (plans, area, specifications)']};
+const PQ_INPLAN={sig:['Landscape design','Common area interior design','3D visualization'],launch:['3D visualization','Real estate solutions (plans, area, specifications)']};
+function pqCheck(plan,on,fm){ const P=SP_PLANS[plan]||{}, req=P.svc||[], ticked=Object.keys(on).filter(l=>on[l]), out=[];
+  const miss=req.filter(l=>!on[l]); if(miss.length) out.push({lvl:'err',t:`${P.n} includes ${miss.join(', ')}: tick ${miss.length===1?'it':'them'} or choose another plan.`,fix:miss});
+  Object.entries(PQ_PART).forEach(([pk,parts])=>{ if(!on[pk]) return; const dup=parts.filter(l=>on[l]); if(dup.length) out.push({lvl:'warn',t:`“${pk}” already covers ${dup.join(', ')}: untick one so the letter doesn’t list it twice.`}); });
+  const inPlan=(PQ_INPLAN[plan]||[]).filter(l=>on[l]); if(inPlan.length) out.push({lvl:'warn',t:`${P.n} already includes ${inPlan.join(', ').toLowerCase()}; ticking ${inPlan.length===1?'it':'them'} lists ${inPlan.length===1?'it':'them'} twice.`});
+  if(plan==='feas'){ const big=ticked.filter(l=>l!=='Feasibility study'); if(big.length) out.push({lvl:'err',t:`Feasibility is a fixed fee for the FAR and massing check only. ${big.join(', ')} ${big.length===1?'is':'are'} not part of it: choose a bigger plan or untick ${big.length===1?'it':'them'}.`}); }
+  else { const own=new Set([...req,...(PQ_INPLAN[plan]||[]),...req.flatMap(l=>PQ_PART[l]||[])]), extra=ticked.filter(l=>!own.has(l)&&!((PQ_PART[l]||[]).length&&PQ_PART[l].every(x=>own.has(x))));
+    if(extra.length&&(fm||'card')==='card') out.push({lvl:'warn',t:`Not in the ${P.n} rate-card fee: ${extra.join(', ')}. Put the full fee in the Fee line (per sft or lump sum), or untick ${extra.length===1?'it':'them'}.`});
+    if(!P.build&&on['Site supervision']) out.push({lvl:'warn',t:`${P.n} has no construction stage, so site supervision has no site visits in its terms.`}); }
+  if(on['Interior design']||on['Construction management (interior)']) out.push({lvl:'warn',t:'Interior design and interior construction management are MODO interior services: they usually go in a separate interior proposal.'});
+  return out; }
 function pqSel(sh){ return sh.sel||(sh.sel={on:{}}); }
 function pqDoc(sh){ const d=sh.d, p={name:(d.name||'').trim().toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:(d.location||'').trim(),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||''}};
   const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan=d.plan; doc.tier=d.tier; doc.adj=sh.adj||spAdjDef(p); doc.cmp=!!sh.cmp; spApply(doc,p);
@@ -9107,8 +9126,10 @@ function sheetPropQuick(){
       const n=all.filter(l=>sel.on[l]).length;
       return h('div',{class:'pq-svc'},
         h('div',{class:'pq-svc-h'},h('span',{class:'qs-k',text:'Services'}),h('span',{class:'pq-svc-sum',style:n?'':'color:var(--overdue)',text:n?`${n} selected`:'Tick the services to include'}),h('span')),
+        (()=>{ const ck=pqCheck(d.plan,sel.on,fm); if(!ck.length) return n?h('div',{class:'pq-ok',text:'✓ Services match the '+(SP_PLANS[d.plan]||{}).n+' plan.'}):null;
+          return h('div',{class:'pq-warn'},ck.map(c=>h('div',{class:c.lvl==='err'?'bad':''},h('span',{text:c.t}),c.fix?h('button',{class:'linkish',type:'button',style:'font-size:13px;margin-left:6px',onclick:()=>{ c.fix.forEach(l=>{ sel.on[l]=true; }); renderSheet(); },text:'Tick '+(c.fix.length===1?'it':'them')}):null))); })(),
         h('div',{class:'pq-chk'},all.map(l=>{ const on=!!sel.on[l];
-          return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l',text:l}),h('span')); }))); })(),
+          return h('label',{class:'pq-ck'+(on?' on':'')},h('input',{type:'checkbox',checked:on,onchange:e=>{ sel.on[l]=e.target.checked; renderSheet(); }}),h('span',{class:'pq-ck-l'},l,base.includes(l)?h('i',{class:'pq-tag',text:'in '+(SP_PLANS[d.plan]||{}).n}):null),h('span')); }))); })(),
     h('div',{class:'pq-fee'},h('div',{},h('span',{class:'qs-k',text:'Fee'}),h('b',{text:fee?pbTk(fee):'—'})),
       h('span',{class:'f-hint',style:'margin:0',text:F.noArea&&!own?'Give the built area to work out the fee.':own||extra?[own?(fm==='sft'?`Your rate Tk ${fv}/sft`:`Lump sum`+(area?` (about Tk ${Math.round(own/area*10)/10}/sft)`:'')):'',`rate card ${pbTk(cardFee)}${eff?` (Tk ${eff}/sft)`:''}`,extra?`added services +${pbTk(extra)}`:'','plus VAT and AIT'].filter(Boolean).join(' · '):[P&&P.fixed?'Fixed fee':`${P.n} · ${SP_TIERS[spTier(doc)]}`+(eff?` · Tk ${eff}/sft`:''),adjOn.length?'includes '+adjOn.join(', '):'','plus VAT and AIT'].filter(Boolean).join(' · ')}),
 ),
@@ -9126,7 +9147,7 @@ function sheetPropQuick(){
       h('button',{class:'btn',type:'button',onclick:()=>sh.id?openPropView(sh.id):closeSheet(),text:'Cancel'}))];
 }
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
-  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project a name.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&!SP_PLANS[doc.plan].fixed&&!(+doc.area>0)) return fail('Give the built area (sft) to work out the fee.');
+  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project a name.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft){ const bad=pqCheck(d.plan,(sh.sel||{}).on||{},sh.fm).find(c=>c.lvl==='err'); if(bad) return fail(bad.t); } if(!draft&&!SP_PLANS[doc.plan].fixed&&!(+doc.area>0)) return fail('Give the built area (sft) to work out the fee.');
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc);
   const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
