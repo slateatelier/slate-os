@@ -1201,6 +1201,16 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 @media (max-width:560px){#far-pop{padding:0}#far-pop .fp-card{height:100%;border-radius:0}}
 .pr-dot{border:1.5px dashed var(--faint)!important;background:#fff!important}.pr-dot.bad{border-color:var(--overdue)!important}
 .pr-round{gap:6px}.pr-notes{margin:0;padding-left:20px;font-size:14px;display:grid;gap:3px}
+.db-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+.db-p{display:grid;gap:8px;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:var(--r);padding:12px;cursor:pointer;font:inherit;color:inherit}
+.db-p.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.db-pn{display:flex;gap:8px;align-items:center;font-size:15px}
+.db-pk{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.db-pk>span{display:grid;font-size:11.5px;color:var(--muted)}.db-pk b{font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums}
+.db-st{display:grid;justify-items:end;gap:2px;font-size:12.5px;white-space:nowrap}.db-st span{color:var(--muted)}
+.db-row{display:flex;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}.db-row:last-child{border-bottom:0}.db-row .row-title{font-size:15px}.db-row>.h-dot{flex:none}.db-row>.row-main{flex:1;min-width:0}.db-row>.db-st{flex:none;min-width:84px}
+.db-ro{cursor:default}
+.db-pods .seg button{white-space:nowrap;padding-inline:14px}
+.db-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;border-top:1px solid var(--line);padding-top:8px}.db-mini>div{display:grid}
 .pq-svc{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 .pq-svc-h{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:28px}
 .pq-svc-sum{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pq-svc-go{font-size:13.5px;font-weight:600;text-decoration:underline}
@@ -2651,7 +2661,7 @@ function render(force){
   if(!force&&isTyping(view)){ S.pendingRender=true; return; }
   const k=keepFocus(view);
   renderHeader();
-  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','all','projects','team','cal','risk'].includes(S.view)?' wide':'');
+  view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','all','projects','team','cal','risk','drafting'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView())); secInfo(view);
   view.classList.toggle('wrap-desk',S.view==='mine'&&!!view.querySelector('.desk'));
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
@@ -2702,7 +2712,7 @@ function renderHeader(){
   const spaces=!cmem&&canProps()&&S.canWrite, inBiz=spaces&&S.view==='biz';
   if(spaces){ const i=list.findIndex(x=>x[0]==='biz'); if(i>=0) list.splice(i,1); }
   if(!inBiz&&S.view!=='biz') S.lastStudio=S.view;
-  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk'];
+  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk','drafting'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view));
@@ -2742,7 +2752,7 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ out.push(seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); })); }
   if(NAV_SUB.includes(S.view)) out.push(amChalkMember()?navBack('Home',()=>{ S.view='mine'; render(true); }):navBack('More',()=>{ S.view='more'; render(true); }));
   return out.concat(v());
@@ -2893,7 +2903,7 @@ function viewMore(){
   return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'More'}))),
     ...grp('Daily',item('notice','Notice board',nUnseenCount()?`${nUnseenCount()} new · company-wide announcements`:'Company-wide announcements: policies, holidays, events',nUnseenCount()),amApprover()&&S.canWrite?item('people','People','Message the team and see replies; logins, passwords, adding someone, someone leaving'):null),
     ...grp('Reference',item('std','SLATE standard process',amApprover()?'Phases, gate deliverables and checklists · you can edit them':'Phases, gate deliverables and checklists for every project'),item('help','How to use','Your routine, the phases and how scoring works, in pictures')),
-    ...grp('Tools',item('conv','Expense claims',convApprover()&&convWaiting().length?`${convWaiting().length} to approve · transport, meals and client costs`:'Claim transport and meals for site visits, meetings and errands',convApprover()?convWaiting().length:0),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
+    ...grp('Tools',canDBoard()?item('drafting','Drafting board',(()=>{ const r=dbRows(); const late=r.filter(x=>x.st==='late').length; return r.length?`${r.filter(x=>x.st!=='done').length} open with the drafting team${late?` · ${late} late`:''}`:'What the drafting team is doing for every POD'; })(),dbRows().filter(x=>x.st==='late').length):null,item('conv','Expense claims',convApprover()&&convWaiting().length?`${convWaiting().length} to approve · transport, meals and client costs`:'Claim transport and meals for site visits, meetings and errands',convApprover()?convWaiting().length:0),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
       S.booksRole&&!(S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||''))?h('a',{class:'more-i',href:'/books?solo=1',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Books'}),h('div',{class:'mi-d',text:S.booksRole==='Office staff'?'Petty cash: submit the bills you paid':S.booksRole==='Accountant'?'SLATE’s accounts':'SLATE’s accounts · view only'})),h('span',{class:'mi-a',text:'›'})):null,
       FIN_UI&&window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
     ...grp('Records',item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
@@ -3515,11 +3525,12 @@ function viewDesk(){
   const W=subsIn('week'), M=subsIn('month');
   const tiles=(W.xs.length||M.xs.length)?h('div',{class:'gl-grid'},[['week',W],['month',M]].map(([k,X])=>h('button',{type:'button',class:'gl-tile',onclick:()=>{ S.sheet={type:'subsView',k}; renderSheet(); }},
     h('span',{class:'gl-l',text:X.P.lbl}),h('b',{class:'gl-n',text:String(X.xs.length)}),h('span',{class:'gl-m'},h('i',{style:'background:var(--ontime)'}),`${X.done.length} done`,X.over.length?[h('i',{style:'background:var(--overdue);margin-left:8px'}),`${X.over.length} late`]:null)))):null;
+  let dbsum=null; if(lead&&!ap){ const rows=dbRows(), stt=dbStats(rows); dbsum=deskSub('Drafting team',dbDrafters().map(id=>{ const g=stt[id]||{open:0,late:0}; return hRow({dot:g.late?'var(--overdue)':'var(--faint)',strong:shortName(id),title:`${g.open} open`+(g.late?` · ${g.late} late`:''),onclick:()=>{ S.dbF={pod:'',who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); }}); }),dbDrafters().length); }
   let clsum=null; if(ap||lead){ const by={}; projects().filter(p=>p.std&&!p.closed&&(ap?false:inMyPodProject(p))).forEach(p=>activePhases(p).forEach(k=>{ const c=clCount(p,k), n=c.tot-c.na-c.done; if(n>0) (by[p.id+'|'+k]={p,k,n}); }));
     const xs=Object.values(by).sort((a,b)=>b.n-a.n); if(xs.length) clsum=deskSub('Checklists to finish',xs.slice(0,10).map(x=>hRow({dot:'var(--faint)',strong:x.p.name,title:`Phase ${phNo(x.k)} · ${x.n} open`,onclick:()=>{ S.sheet={type:'projView',id:x.p.id,openPh:x.k}; renderSheet(); }})),xs.length); }
   const later=meetAll.filter(r=>!meetToday.includes(r)).slice(0,3);
   const nt=nAll().filter(n=>nLive(n)&&!nSeen(n)).sort((a,b)=>(b.important-a.important)||b.created_at.localeCompare(a.created_at))[0];
-  const right=deskCol('Plan',null,[nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
+  const right=deskCol('Plan',null,[nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,dbsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
   return [top,h('div',{class:'desk'},left,mid,right),
     h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
 }
@@ -3574,7 +3585,7 @@ function viewMineBody(){
   /* 4a · POD leader: the POD's projects at a glance, and work the team has put in review */
   if(amPodLead()&&!ap){ SL.pod=podGlance(td); SL.review=podReview(); }
   /* 4b · Drafting queue (Design Associate Lead) */
-  SL.draft=draftQueueSec();
+  SL.draft=draftQueueSec(); SL.dboard=dbHomeSec();
   const w0=out.length;
   /* 5 · My work */
   if(mine.length){
@@ -3608,7 +3619,7 @@ function viewMineBody(){
     SL.cl=el; }
   /* the order that gets work done: what is waiting on you, an unread notice, your work and what your team put in review,
      your own plan, meetings, then the week and month at a glance, your checklist and the POD overview */
-  [SL.risk,SL.glance,SL.noticeNew?SL.notice:null,SL.meetNow?SL.meet:null,...(SL.work||[]),SL.review,SL.draft,SL.todo,SL.meetNow?null:SL.meet,SL.cl,SL.pod,SL.noticeNew?null:SL.notice].forEach(x=>{ if(x) out.push(x); });
+  [SL.risk,SL.glance,SL.noticeNew?SL.notice:null,SL.meetNow?SL.meet:null,...(SL.work||[]),SL.review,SL.draft,SL.todo,SL.meetNow?null:SL.meet,SL.cl,SL.dboard,SL.pod,SL.noticeNew?null:SL.notice].forEach(x=>{ if(x) out.push(x); });
   if(!mine.length&&!mcl.length&&!tg&&!homeMeetRows(td,ap).length) out.push(onboarding());
   if(window.innerWidth>=1100&&pref&&pref.fullHome) out.splice(1,0,h('div',{class:'desk-foot',style:'justify-content:flex-start'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',0); render(true); window.scrollTo(0,0); },text:'← Back to the one-screen Home'})));
   return out;
@@ -7362,6 +7373,69 @@ function myChecklist(){ const out=[], due=phDueMap(), ct=clTasks();
 /* drafting queue (Design Associate Lead): every open drafting-pool and authority-drafter item in a live phase,
    not yet with someone outside the drafting team. Assigning one makes it a dated task for that person. */
 const isDraftItem=it=>/[DA]/.test(it.r||'');
+/* ---------- Drafting board (Principal, 2 Nov 2026) ----------
+   Every POD leader sees the status of all drafting-team tasks on every POD's projects (read-only, from the drafting_board
+   function: title, project, POD, phase, dates; no fees). Their own POD also shows the drafting items still waiting in the
+   Design Associate Lead's queue. Only the Design Associate Lead gives drafting work out. */
+const canDBoard=()=>!!S.uid&&(fullView()||amApprover()||!!myHeadTeam()||isDraftMember(S.uid)||(!!myPod()&&isPodLead(S.uid,myPod())));
+const isDraftMember=id=>/draft/i.test(teamOf(id)||'');
+function loadDBoard(force){ const B=S.dboard||(S.dboard={at:0,rows:[],busy:false});
+  if(B.busy||(!force&&Date.now()-B.at<60000)||!window.slateSupabase||!canDBoard()) return;
+  B.busy=true; window.slateSupabase.rpc('drafting_board').then(({data,error})=>{ B.busy=false; B.at=Date.now(); if(error){ B.err=error.message; return; } B.err=''; B.rows=data||[]; if(['drafting','mine'].includes(S.view)) render(true); }).catch(()=>{ B.busy=false; B.at=Date.now(); }); }
+function dbRows(){ loadDBoard(); const td=today(), wk=addDays(td,7), B=S.dboard||{rows:[]};
+  /* tasks this person can already see are taken from the live data (fresher), the rest from the board */
+  const seen=new Set(), out=[];
+  const add=t=>{ const who=t.assignee||t.req_to||''; if(!who||seen.has(t.id)) return; seen.add(t.id);
+    const st=t.done_at?'done':!t.assignee?'ask':t.verify?'review':t.target&&t.target<td?'late':t.target&&t.target<=wk?'week':'later';
+    out.push({...t,who,st}); };
+  activeTasks().filter(t=>isDraftMember(t.assignee||(t.assignReq&&t.assignReq.to))&&(!t.doneAt||String(t.doneAt).slice(0,10)>=addDays(td,-14))).forEach(t=>{ const p=S.projects[t.projectId]||{};
+    add({id:t.id,assignee:t.assignee||null,req_to:t.assignReq&&t.assignReq.to||null,title:t.title,project_id:t.projectId,code:p.code||'',name:p.name||'',pod:p.pod||'',phase:t.phase||'',target:t.target||'',done_at:t.doneAt||'',verify:!!t.verify}); });
+  (B.rows||[]).forEach(add);
+  return out; }
+const DB_ST={late:['Late','var(--overdue)'],week:['Due this week','var(--late)'],review:['In review','var(--early)'],later:['Later','var(--faint)'],ask:['COO to approve','var(--muted)'],done:['Done','var(--ontime)']};
+/* my POD's drafting items not yet given out (checklist items still in the queue) */
+function dbMyQueue(){ const mp=myPod(); if(!mp) return []; const due=phDueMap(), ct=clTasks(), out=[];
+  for(const p of projects()){ if(!p.std||!workable(p)||p.closed||!podsOfProject(p).includes(mp)) continue;
+    for(const k of activePhases(p)) clItems(k).forEach(it=>{ if(!isDraftItem(it)) return; const x=clOf(p,k,it.id); if(x.done||x.na) return; const t=ct[`${p.id}|${k}|${it.id}`]; if(t&&!t.doneAt) return; if(x.who&&!isDraftMember(x.who)) return; out.push({p,k,it,due:due(p,k)}); }); }
+  return out.sort(byDue); }
+function dbDrafters(){ return people().filter(id=>isDraftMember(id)&&(S.members[id]||{}).active!==false); }
+function dbStats(rows){ const td=today(), m={}; dbDrafters().forEach(id=>{ m[id]={open:0,late:0,week:0,done:0}; });
+  rows.forEach(r=>{ const g=m[r.who]||(m[r.who]={open:0,late:0,week:0,done:0}); if(r.st==='done') g.done++; else { g.open++; if(r.st==='late') g.late++; if(r.st==='week') g.week++; } }); return m; }
+function dbRow(r){ const [l,c]=DB_ST[r.st], mine=r.project_id&&S.projects[r.project_id];
+  return h('div',{class:'db-row'+(mine?'':' db-ro'),role:mine?'button':null,tabindex:mine?'0':null,onclick:mine?()=>openTask(r.id):null},
+    h('span',{class:'h-dot',style:`background:${c}`,'aria-hidden':'true'}),
+    h('div',{class:'row-main'},h('div',{class:'row-title',text:r.title||'Task'}),
+      h('div',{class:'row-meta'},h('span',{class:'mono',text:r.code||r.name||'—'}),h('span',{text:'·'}),h('span',{text:r.pod?podLabel(r.pod):'No POD'}),r.phase?h('span',{text:'· '+r.phase}):null)),
+    h('div',{class:'db-st'},h('b',{style:`color:${r.st==='later'?'var(--muted)':c}`,text:l}),h('span',{text:r.st==='done'?fmtD(String(r.done_at).slice(0,10)):r.target?(r.st==='late'?diff(r.target,today())+'d late':fmtD(r.target)):'no date'}))); }
+function viewDrafting(){
+  if(!canDBoard()) return [h('p',{text:'Only POD leaders, the drafting team, the COO and the Principal see this.'})];
+  const F=S.dbF||(S.dbF={pod:'',who:''}), rows=dbRows(), st=dbStats(rows), ord={late:0,week:1,review:2,ask:3,later:4,done:5};
+  const podsHere=[...new Set(rows.map(r=>r.pod||''))].sort((a,b)=>podNum(a)-podNum(b));
+  const xs=rows.filter(r=>(!F.pod||r.pod===F.pod)&&(!F.who||r.who===F.who)).sort((a,b)=>ord[a.st]-ord[b.st]||String(a.target||'9').localeCompare(String(b.target||'9')));
+  const q=dbMyQueue(), B=S.dboard||{};
+  const card=id=>{ const g=st[id]||{open:0,late:0,week:0,done:0}, on=F.who===id;
+    return h('button',{type:'button',class:'db-p'+(on?' on':''),'aria-pressed':String(on),onclick:()=>{ F.who=on?'':id; render(true); }},
+      h('span',{class:'db-pn'},avaEl(id,false,'sm'),h('b',{text:shortName(id)})),
+      h('span',{class:'db-pk'},h('span',{},h('b',{text:String(g.open)}),'open'),h('span',{},h('b',{style:g.late?'color:var(--overdue)':'',text:String(g.late)}),'late'),h('span',{},h('b',{text:String(g.week)}),'this week'),h('span',{},h('b',{style:'color:var(--ontime)',text:String(g.done)}),'done 14d'))); };
+  const groups=F.who?[[F.who,xs]]:dbDrafters().map(id=>[id,xs.filter(r=>r.who===id)]).concat([['',xs.filter(r=>!dbDrafters().includes(r.who))]]).filter(([,l])=>l.length);
+  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Tools'}),h('h1',{class:'h1',text:'Drafting board'}),h('p',{class:'lead',text:'What the drafting team is doing for every POD: open work, late items and what was finished in the last 14 days. Read-only: the Design Associate Lead gives drafting work out.'}))),
+    h('div',{class:'db-grid'},dbDrafters().map(card)),
+    h('div',{class:'bar db-pods'},seg('POD',[['','All'],...podsHere.filter(Boolean).map(pd=>[pd,podLabel(pd).split(' · ')[0]])],F.pod,v=>{ F.pod=v; render(true); })),
+    B.err?h('div',{class:'err',text:'Couldn’t load the other PODs’ drafting work: '+B.err}):null,
+    ...groups.map(([id,l])=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:id?shortName(id):'Others'}),h('span',{class:'cnt',text:`${l.filter(r=>r.st!=='done').length} open`})),h('div',{class:'list'},hMore('db-'+(id||'x'),l,8,dbRow)))),
+    !xs.length?h('div',{class:'empty'},h('h3',{text:'Nothing here'}),h('p',{class:'muted',style:'margin:0',text:B.at?'No drafting work matches.':'Loading…'})):null,
+    myPod()&&!fullView()?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'My POD · waiting to be given out'}),h('span',{class:'cnt',text:String(q.length)})),
+      h('p',{class:'f-hint',style:'margin:-4px 4px 0',text:'Drafting items in your POD’s running phases that are still in the Design Associate Lead’s queue.'}),
+      q.length?h('div',{class:'list'},hMore('dbq',q,6,x=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ S.sheet={type:'projView',id:x.p.id,openPh:x.k}; renderSheet(); }},h('span',{class:'h-dot',style:`background:${x.due&&x.due<today()?'var(--overdue)':'var(--faint)'}`}),
+        h('div',{class:'row-main'},h('div',{class:'row-title',text:x.it.t}),h('div',{class:'row-meta'},h('span',{class:'mono',text:x.p.code||x.p.name}),h('span',{text:'· Phase '+phLabel(x.k,x.p)}),x.due?h('span',{text:'·'}):null,dueTxt(x.due))),h('span'),h('span')))):h('div',{class:'f-hint',text:'Nothing waiting.'})):null].filter(Boolean);
+}
+/* Home: one card for POD leaders */
+function dbHomeSec(){ if(!myPod()||!isPodLead(S.uid,myPod())||fullView()) return null; const rows=dbRows(), st=dbStats(rows), q=dbMyQueue(), mp=myPod();
+  const mine=rows.filter(r=>r.pod===mp&&r.st!=='done'), late=mine.filter(r=>r.st==='late').length;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Drafting team'}),h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ S.view='drafting'; render(true); window.scrollTo(0,0); },text:'Open the board ›'})),
+    h('div',{class:'card',style:'gap:10px'},
+      h('div',{class:'h-stats'},h('div',{class:'h-stat'},h('b',{text:String(q.length)}),h('span',{text:'my POD: waiting'})),h('div',{class:'h-stat'},h('b',{text:String(mine.length)}),h('span',{text:'with drafters'})),h('div',{class:'h-stat'},h('b',{style:late?'color:var(--overdue)':'',text:String(late)}),h('span',{text:'late'}))),
+      h('div',{class:'db-mini'},dbDrafters().map(id=>{ const g=st[id]||{open:0,late:0}; return h('div',{},h('span',{text:shortName(id)}),h('span',{class:'f-hint',style:'margin:0',text:`${g.open} open`+(g.late?` · ${g.late} late`:'')})); })))); }
 function draftQueue(){ const hd=myHeadTeam(); if(!hd) return [];
   const due=phDueMap(), ct=clTasks(), out=[];
   for(const p of projects()){ if(!p.std||!workable(p)||isChalkProj(p)||p.pod==='Studio') continue; for(const k of activePhases(p)) clItems(k).forEach(it=>{
@@ -11805,7 +11879,7 @@ function sheetChalkProj(){
    Back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
    back and the buttons never disagree. */
 const NAV={i:0,stack:[],snap:[],ready:false,applying:false,pending:0,pendT:0,hintAt:0};
-const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','tlstatus','holidays','risk'];   /* pages reached from More */
+const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','tlstatus','holidays','risk','drafting'];   /* pages reached from More */
 const NAV_TASKV=['all','board','gantt'];                                                      /* one tab, three layouts */
 const NAV_VIEWER=['task','projView','notif','profile','myprofile','meeting','pmeet','timeline','chalkProj','rota'];  /* sheets that open other sheets */
 const NAV_OV='.slate-sheet:not(#slate-auth),#share-card';                                     /* popups laid over everything */
