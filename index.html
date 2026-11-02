@@ -9087,10 +9087,11 @@ function pqSel(sh){ return sh.sel||(sh.sel={on:{}}); }
 /* site in four parts (Principal, 2 Nov 2026). Address: "Plot 00, Road 00, Sector 00, PURBACHAL".
    With no project name, the name is "PURBACHAL P 00, R 00, S 00". */
 const pqT=x=>String(x||'').trim();
+const PQ_USE=['Residential','Commercial','Mixed-use','Institutional','Industrial'];
 function pqAddr(d){ const a=pqT(d.sArea).toUpperCase(), parts=[pqT(d.sPlot)&&'Plot '+pqT(d.sPlot),pqT(d.sRoad)&&'Road '+pqT(d.sRoad),pqT(d.sSec)&&'Sector '+pqT(d.sSec),a].filter(Boolean); return parts.length?parts.join(', '):pqT(d.location); }
 function pqAutoName(d){ const a=pqT(d.sArea).toUpperCase(); if(!a) return ''; const xs=[pqT(d.sPlot)&&'P '+pqT(d.sPlot),pqT(d.sRoad)&&'R '+pqT(d.sRoad),pqT(d.sSec)&&'S '+pqT(d.sSec)].filter(Boolean); return (a+(xs.length?' '+xs.join(', '):'')).toUpperCase(); }
-function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:pqAddr(d),_known:!!(d._picked&&d._picked===d.client),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||'',known:!!(d._picked&&d._picked===d.client)}};
-  const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan='comp'; doc.dear=d.dear||'Dear Sir,'; doc.tier=d.type==='private'?'p':'s'; doc.adj=sh.adj||spAdjDef(p); spApply(doc,p);
+function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).toUpperCase(),client:(d.client||'').trim(),contact:(d.contact||'').trim(),location:pqAddr(d),_known:!!(d._picked&&d._picked===d.client),katha:d.katha===''?'':String(+d.katha||''),type:d.type||'',_hint:{title:d._title||'',address:d._addr||'',use:d.use||'',known:!!(d._picked&&d._picked===d.client)}};
+  const doc=pbDefaults(p,'dev'); doc.area=String(+d.area||''); doc.plan='comp'; doc.dear=d.dear||'Dear Sir,'; doc.use=d.use||'Residential'; doc.tier=d.type==='private'?'p':'s'; doc.adj=sh.adj||spAdjDef(p); spApply(doc,p);
   const guide=+doc.lump||0, fm=sh.fm||'sft', fv=+sh.fv||0, area=+doc.area||0, fee=fm==='sft'?(fv>0&&area?Math.round(fv*area/1000)*1000:0):(fv>0?Math.round(fv):0);
   const on=Object.keys(pqSel(sh).on).filter(l=>sh.sel.on[l]), ord=[...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0])]; on.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
   doc.parts=on.map(l=>doc.parts.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })());
@@ -9138,7 +9139,9 @@ function sheetPropQuick(){
         h('span',{class:'f-hint',style:'margin:0',text:pqAddr(d)||'Address: Plot, Road, Sector, Area'})),true),
       kv('Project',h('div',{style:'display:grid;gap:4px'},inp2('name',{maxlength:120,placeholder:pqAutoName(d)||'e.g. PURBACHAL P 00, R 00, S 00',style:'text-transform:uppercase',autocapitalize:'characters',onchange:()=>renderSheet()}),
         !(d.name||'').trim()&&pqAutoName(d)?h('span',{class:'f-hint',style:'margin:0',text:'No name given: it will be '+pqAutoName(d)}):null),!(d.name||'').trim()&&!!pqAutoName(d)),
-      kv('Type',ty),
+      kv('Project type',h('div',{style:'display:grid;gap:4px'},(()=>{ const el=h('select',{id:'pq-use',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.use=e.target.value; renderSheet(); }},h('option',{value:'',text:'Choose the project type…'}),PQ_USE.map(u=>h('option',{value:u,text:u+' building'}))); el.value=d.use||''; return el; })(),
+        d.use?null:h('span',{class:'f-hint',style:'margin:0;color:var(--overdue)',text:'Choose the project type: it names the building in the letter.'})),true),
+      kv('Client type',ty),
       kv('Land',h('div',{class:'pq-unit'},inp2('katha',{type:'number',min:0,step:'any',inputmode:'decimal',re:reArea,onchange:()=>renderSheet()}),h('span',{text:'katha'}))),
       kv('Built area',h('div',{style:'display:grid;gap:4px'},h('div',{class:'pq-unit'},h('input',{id:'pq-area',class:'tl-num qs-in',type:'number',min:0,step:100,inputmode:'numeric',value:d.area||'',oninput:e=>{ d.area=e.target.value; sh.areaSet=!!e.target.value; },onchange:()=>renderSheet()}),h('span',{text:'sft'})),
         h('span',{class:'f-hint',style:'margin:0'},sh.areaSet?'Gross, with basement and parking. Check it on the ':'Estimated at 5,000 sft per katha. Put the real figure from the ',h('button',{type:'button',class:'linkish',style:'font-size:inherit;padding:0',onclick:()=>farPop({name:d.name,katha:d.katha,onUse:a=>{ d.area=String(a); sh.areaSet=true; renderSheet(); toast('Built area from the FAR calculator: '+a.toLocaleString('en-IN')+' sft'); }}),text:'FAR calculator'}),'.')),true),
@@ -9163,7 +9166,7 @@ function sheetPropQuick(){
       h('button',{class:'btn',type:'button',onclick:()=>sh.id?openPropView(sh.id):closeSheet(),text:'Cancel'}))];
 }
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
-  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
+  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc);
   const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:(d.phone||'').trim(),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),sector:pqT(d.sSec)},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
@@ -9299,7 +9302,7 @@ function pbDefaults(p,kind){
   const hn=p._hint||{};
   return {kind:k,date:today(),ref:pbNewRef(),toName:p.contact||'',toTitle:hn.title||'',toCompany:p.client||'',toAddress:hn.address||'',
     subject:'Expression of Interest & Financial Proposal for Architectural Design Consultancy Services',dear:'Dear Sir,',
-    intro:`We are honored by the trust you ${hn.known?'continue to ':''}place in SLATE, and we are delighted to submit our detailed proposal for the design consultancy services of your upcoming project at ${p.name?p.name.trim():'your site'} residential building project. Below is a comprehensive outline of our scope of services, financial offer, deliverables, and payment terms.`,
+    intro:`We are honored by the trust you ${hn.known?'continue to ':''}place in SLATE, and we are delighted to submit our detailed proposal for the design consultancy services of your upcoming project at ${p.name?p.name.trim():'your site'} ${(hn.use||'residential').toLowerCase()} building project. Below is a comprehensive outline of our scope of services, financial offer, deliverables, and payment terms.`,
     site:p.location||'',katha:p.katha||'',area:area===''?'':String(area),storeys:'',use:'Residential',
     scopeAuto:true,scopeExtra:'',scope:PB_SCOPE[k].join('\n'),deliv:PB_DELIV.join('\n'),
     feeMode:k==='det'?'parts':'lump',parts:PB_PARTS[k].map(([label,rate])=>({label,rate:String(rate)})),disc:'',discMode:'amt',
@@ -9662,7 +9665,7 @@ const pbHead=t=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><met
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Didact+Gothic&family=Jost:wght@400;500;600&display=swap"><style>${PB_CSS}</style></head>`;
 function pbBlocks(p,d){
-  const f=pbFee(d), B=[], add=(html,keep)=>B.push({html,keep:!!keep}), list=(title,items)=>{ items.forEach((x,i)=>add((i===0?`<h2>${pbEsc(title)}</h2>`:'')+`<ul class="pb-ul"><li>${pbEsc(x)}</li></ul>`,i===0)); };
+  const f=pbFee(d), B=[], add=(html,keep,brk)=>B.push({html,keep:!!keep,brk:!!brk}), list=(title,items,brk)=>{ items.forEach((x,i)=>add((i===0?`<h2>${pbEsc(title)}</h2>`:'')+`<ul class="pb-ul"><li>${pbEsc(x)}</li></ul>`,i===0,brk&&i===0)); };
   /* addressed as SLATE's letters (Principal, 2 Nov 2026): Date, then To, / name / designation / company in bold / address */
   add(`<div class="ref"><span class="dt"><b>Date:</b> ${pbEsc(fmtLong(d.date).toUpperCase())}</span><span>Ref <b>${pbEsc(d.ref)}</b></span></div>
     ${(()=>{ const co=String(d.toCompany||'').trim(), nm=String(d.toName||'').trim(), sameCo=!co||co.toLowerCase()===nm.toLowerCase();
@@ -9674,9 +9677,10 @@ function pbBlocks(p,d){
   pbLines(d.intro).forEach(x=>add(`<p class="pb-p pb-just">${boldIn(x)}</p>`));
   const pr=[['Project Name',p.name],['Address',d.site],['Plot Size',d.katha?d.katha+' Katha':''],['Approx. Construction Area',d.area?(+d.area).toLocaleString('en-IN')+' sq ft':''],['Storeys',d.storeys],['Use',d.use]].filter(x=>x[1]);
   if(pr.length) add(`<h2>Project overview</h2><table class="pb-ov">${pr.map(([k,v])=>`<tr><td class="pb-k">${k==='Project Name'?'<b>'+pbEsc(k)+':</b>':pbEsc(k)+':'}</td><td>${k==='Project Name'?'<b>'+pbEsc(v)+'</b>':k==='Approx. Construction Area'?'<b>'+pbEsc(v)+'</b> (Approx.) <b>Building</b> (The total area may vary)':pbEsc(v)}</td></tr>`).join('')}</table>`);
-  if(!d.scopeAuto) list('Scope of work',pbLines(d.scope));
+  /* the scope of work always starts on page 2 (Principal, 2 Nov 2026) */
+  if(!d.scopeAuto) list('Scope of work',pbLines(d.scope),true);
   const A=pbScopeAuto(d), sv=A.svc.filter(x=>d.scopeAuto||x.desc||x.items.length), num=d.scopeAuto;
-  sv.forEach((x,i)=>add((i===0?`<h2>${num?'Scope of work':'Services in detail'}</h2>`:'')+`<div class="pb-svc"><b>${num?x.n+'. ':''}${pbEsc(x.label)}</b>${x.desc?`<p class="pb-small" style="margin:0.5mm 0 1mm">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="pb-ul pb-chk">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}</div>`));
+  sv.forEach((x,i)=>add((i===0?`<h2>${num?'Scope of work':'Services in detail'}</h2>`:'')+`<div class="pb-svc"><b>${num?x.n+'. ':''}${pbEsc(x.label)}</b>${x.desc?`<p class="pb-small" style="margin:0.5mm 0 1mm">${pbEsc(x.desc)}</p>`:''}${x.items.length?`<ul class="pb-ul pb-chk">${x.items.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul>`:''}</div>`,false,i===0&&num));
   if(num&&A.more.length) add(`<div class="pb-svc"><b>Also included</b><ul class="pb-ul">${A.more.map(t=>`<li>${pbEsc(t)}</li>`).join('')}</ul></div>`);
   const dl=pbLines(d.deliv); if(dl.length) list('Deliverables',dl);
 
@@ -9731,7 +9735,7 @@ async function pbPages(p,d){
     const mm=96/25.4, avail=(263-PB_TOP)*mm /* text may run over the DESIGN WITH PURPOSE watermark */, hs=[...doc.querySelectorAll('.pb-blk')].map(el=>{ const r=el.getBoundingClientRect(), cs=ifr.contentWindow.getComputedStyle(el.firstElementChild||el); return r.height+(parseFloat(cs.marginTop)||0); });
     const pages=[[]]; let used=0;
     B.forEach((b,i)=>{ const need=hs[i]+(b.keep&&i+1<B.length?hs[i+1]:0);
-      if(used>0&&used+need>avail){ pages.push([]); used=0; } pages[pages.length-1].push(b.html); used+=hs[i]; });
+      if(used>0&&(b.brk||used+need>avail)){ pages.push([]); used=0; } pages[pages.length-1].push(b.html); used+=hs[i]; });
     return pages;
   } finally { ifr.remove(); } }
 const fmtLong=s=>{ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return `${d} ${['January','February','March','April','May','June','July','August','September','October','November','December'][m-1]} ${y}`; };
