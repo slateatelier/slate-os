@@ -1235,6 +1235,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .pq-svc-top{display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:6px;align-items:center}.pq-svc-row .qs-in{width:100%;height:42px;box-sizing:border-box;padding:0 10px;font-size:15px}
 .pq-svc-rate{display:grid;grid-template-columns:72px minmax(0,1fr) 100px;gap:8px;align-items:center}.pq-svc-rate .qs-in{padding-right:64px}
 .panel-wide .pq-one .pq-chk{grid-template-columns:1fr}
+.cl-tbl td{vertical-align:top}
 .pq-fee-l{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .pq-fee{display:grid;gap:4px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}.pq-fee>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.pq-fee b{font-size:22px;font-variant-numeric:tabular-nums}
 .qs-box{display:grid;gap:0;background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
@@ -2529,6 +2530,7 @@ async function boot(){
   db.collection('projects').onSnapshot(q=>{ S.projects={}; q.docs.forEach(d=>{S.projects[d.id]=d.data()}); cxSync(); schedule(); },onSubErr);
   db.doc(`data/users/${S.uid}/notif`).onSnapshot(snap=>{ S.nst=snap.exists?snap.data():{}; schedule(); },()=>{ S.nst={}; });
   db.collection('proposals').onSnapshot(q=>{ S.props={}; q.docs.forEach(d=>{S.props[d.id]=d.data()}); schedule(); },()=>{ S.props={}; });
+  db.collection('clients').onSnapshot(q=>{ S.clients={}; q.docs.forEach(d=>{S.clients[d.id]=d.data()}); schedule(); },()=>{ S.clients={}; });
   db.doc(`data/users/${S.uid}/todo`).onSnapshot(snap=>{ S.todo=(snap.exists&&snap.data().items)||[]; schedule(); },()=>{ S.todo=[]; });
   db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
   db.collection('tasks').onSnapshot(q=>{ S.shared={}; q.docs.forEach(d=>{S.shared[d.id]=d.data()}); mergeTasks(); },onSubErr);
@@ -2753,7 +2755,7 @@ function renderHeader(){
   { const slot=$('#space-slot'); if(slot) slot.replaceChildren(...(sw?[sw]:[])); if(!spaces) S.books=false; document.body.classList.toggle('space-biz',!!inBiz&&!S.books); document.body.classList.toggle('space-books',!!S.books); document.body.classList.toggle('has-spaces',!!spaces); if(S.books) placeBooks(); }
   const dock=null;
   if(inBiz){ S.biz=S.biz||{tab:'over',q:'',st:'active'}; const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
-    const bt=[['over','Overview'],['money','Money'],['leads','Leads',nl],['proposed','Proposals',np],['fees','Fees'],['hr','HR & salaries'],['admin','Running costs'],...(S.uid===ownerId()?[['value','People value']]:[])];
+    const bt=[['over','Overview'],['money','Money'],['leads','Leads',nl],['proposed','Proposals',np],['clients','Clients'],['fees','Fees'],['hr','HR & salaries'],['admin','Running costs'],...(S.uid===ownerId()?[['value','People value']]:[])];
     tabs.replaceChildren(...bt.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':'biz-'+k,'aria-current':S.biz.tab===k?'page':null,onclick:()=>{ S.biz.tab=k; render(true); window.scrollTo(0,0); }},svgEl('svg',{viewBox:'0 0 24 24',class:'tab-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[BIZ_ICO[k]]||HX_ICO.circle})),l,n?h('span',{class:'badge',text:String(n)}):null)),
       ...(FIN_UI&&window.slateFinanceRole?[h('a',{class:'tab',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none'},'Finance ↗')]:[]));
   } else
@@ -5707,7 +5709,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(S.sheet.type==='propQuick'&&!S.sheet.done?' panel-wide':'')+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   el.replaceChildren(h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl}),panel);
@@ -6186,7 +6188,7 @@ function sheetProject(){
           field(parseFloat(d.katha)>30?'Second pod *':'Second pod (optional)',sel('pod2',[['','None'],...pods().filter(x=>x!==d.pod).map(x=>[x,podLabel(x)])]))),
         d.type==='proposal'?null:farFormSection(d,sec)]),
         sec('Client and site'),
-        h('div',{class:'form-row'},field('Client *',inp('client',{maxlength:80,placeholder:'Company or owner',style:'text-transform:uppercase',autocapitalize:'characters'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
+        h('div',{class:'form-row'},field('Client *',clientPick(d,{ph:'Company or owner'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Area / locality *',inp('location',{maxlength:120,placeholder:'e.g. Bashundhara R/A, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row',style:'grid-template-columns:repeat(3,minmax(0,1fr))'},
           field(siteReq(id,d)&&!['interior','proposal'].includes(d.type)?'Plot no. *':'Plot no.',inp('plotNo',{maxlength:20,placeholder:'e.g. 24A',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
@@ -8209,7 +8211,7 @@ function hxIco(k,cls){ return svgEl('svg',{viewBox:'0 0 24 24',class:'hx-ico'+(c
 /* the Finance screens (/finance) are hidden until Books replaces them (January 2027); invoices are manual until then. The data underneath stays. */
 const FIN_UI=false;
 /* Business tabs */
-const BIZ_ICO={over:'dial',money:'wallet',leads:'target',proposed:'sign',fees:'note',hr:'idcard',admin:'repeat',value:'trend'};
+const BIZ_ICO={over:'dial',money:'wallet',leads:'target',proposed:'sign',clients:'users',fees:'note',hr:'idcard',admin:'repeat',value:'trend'};
 const TAB_ICO={biz:'brief',meet:'meet',queue:'check',mine:'home',all:'list',projects:'layers',cal:'cal',team:'users',dash:'chart',chalk:'pen',people:'chat',more:'dots',acct:'key'};
 function tabIco(k){ const i=TAB_ICO[k]; if(!i) return null; return svgEl('svg',{viewBox:'0 0 24 24',class:'tab-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[i]})); }
 /* a look-alike of the real control, so people recognise it on screen */
@@ -9030,11 +9032,26 @@ function openProp(id,convert){ if(window.SlatePin&&SlatePin.required()&&!SlatePi
   S.sheet={type:'prop',id:id||null,d,err:'',convert:!!convert}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('sh-name'); el&&el.focus(); },30); }
 /* clients SLATE already knows: from client projects and proposals, newest details first. Picking one fills the contact
    details, so a repeat client (often a developer with many projects) is never typed again. */
-function clientDir(){ const M={}, norm=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
+/* ---------- Client database (Principal, 2 Nov 2026): Business › Clients ----------
+   One record per client (clients/<id>): name, contact person, designation, phone, email, address, client type, note.
+   Every project and proposal form suggests from it and fills the details; anything changed there can be saved back.
+   Clients only found on projects and proposals (before the database) are listed too and saved with one tap. */
+const cNorm=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
+const CLIENT_F=['contact','title','phone','email','address','type','note'];
+function clientRec(name){ const k=cNorm(name); if(!k) return null; for(const [id,c] of Object.entries(S.clients||{})) if(c&&!c.deleted&&(cNorm(c.name)===k||(c.aka||[]).some(a=>cNorm(a)===k))) return {...c,id}; return null; }
+async function clientUpsert(v){ const name=String(v.name||'').trim(); if(!name||!S.db||!canProps()) return null; const ex=clientRec(name), now=new Date().toISOString();
+  if(ex){ const fill={}; CLIENT_F.forEach(f=>{ if(v[f]&&!ex[f]) fill[f]=String(v[f]).trim(); }); if(Object.keys(fill).length) await S.db.doc('clients/'+ex.id).update({...fill,updatedAt:now,updatedBy:S.uid}); return ex.id; }
+  const ref=S.db.collection('clients').doc(); const rec={name}; CLIENT_F.forEach(f=>{ rec[f]=String(v[f]||'').trim(); });
+  await ref.set({...rec,createdAt:now,createdBy:S.uid}); (S.clients=S.clients||{})[ref.id]=rec; return ref.id; }
+function clientDir(){ const M={}, AL={}; Object.values(S.clients||{}).forEach(c=>{ if(c&&!c.deleted&&c.name) (c.aka||[]).forEach(x=>{ if(cNorm(x)) AL[cNorm(x)]=cNorm(c.name); }); });
+  const norm=x=>{ const k=cNorm(x); return AL[k]||k; };
   const add=(name,o,at)=>{ const k=norm(name); if(!k) return; const c=M[k]||(M[k]={name:String(name).trim(),projects:0,live:0,props:0,at:'',last:''}); if((at||'')>c.last) c.last=at||'';
     if((at||'')>=c.at){ for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]) c[f]=o[f]; c.at=at||c.at; c.name=String(name).trim(); } else for(const f of ['contact','phone','email','title','address','type','src']) if(o[f]&&!c[f]) c[f]=o[f]; };
   Object.values(S.projects||{}).forEach(x=>{ if(!x||!x.client||isInternalP(x)||x.pod==='Studio') return; add(x.client,{contact:x.contact,phone:x.phone,type:x.type},x.createdAt||''); M[norm(x.client)].projects++; if(!x.closed) M[norm(x.client)].live++; });
   Object.values(S.props||{}).forEach(x=>{ if(!x||!x.client) return; const dd=x.doc||{}; add(x.client,{contact:x.contact||dd.toName,phone:x.phone,email:x.email,title:dd.toTitle,address:dd.toAddress,type:x.type,src:x.src},x.createdAt||''); M[norm(x.client)].props++; });
+  /* saved client records win: their details are the ones to use */
+  Object.entries(S.clients||{}).forEach(([id,c])=>{ if(!c||c.deleted||!c.name) return; const k=norm(c.name); const x=M[k]||(M[k]={name:c.name,projects:0,live:0,props:0,at:'',last:c.updatedAt||c.createdAt||''});
+    x.id=id; x.name=c.name; CLIENT_F.forEach(f=>{ if(c[f]) x[f]=c[f]; }); if(c.title) x.title=c.title; if(c.address) x.address=c.address; });
   /* running work first, then most recent: a client with only closed or one-off placeholder projects drops down */
   return Object.values(M).sort((a,b)=>(b.live+b.props)-(a.live+a.props)||(b.last||'').localeCompare(a.last||'')||a.name.localeCompare(b.name)); }
 /* the client box: type to search known clients, tap one to fill the details */
@@ -9042,9 +9059,9 @@ function clientPick(d,opt){ const box=h('div',{style:'display:grid;gap:6px'}), l
   const show=()=>{ list.textContent=''; const q=String(d.client||'').trim().toLowerCase(); if(d._picked&&d._picked===d.client) return;
     const xs=clientDir().filter(c=>!q||c.name.toLowerCase().includes(q)).slice(0,q?6:4); if(!xs.length) return;
     xs.forEach(c=>list.append(h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:8px 12px;text-align:left;justify-content:flex-start;border-radius:10px',onclick:()=>{
-      d.client=c.name; d._picked=c.name; ['contact','phone','email'].forEach(f=>{ if(c[f]) d[f]=c[f]; }); if(c.title) d._title=c.title; if(c.address) d._addr=c.address;
+      d.client=c.name; d._picked=c.name; ['contact','phone','email'].forEach(f=>{ if(c[f]) d[f]=c[f]; }); if(c.title) d._title=c.title; if(c.address) d._addr=c.address; if(c.type&&d.clientType==null) d.clientType=c.type;
       if(c.type&&!d.type) d.type=c.type; if(!d.src) d.src=c.projects?'client':(c.src||''); renderSheet(); }},
-      h('span',{},h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?(c.live?c.live+' running':'')+(c.live&&c.projects>c.live?', ':'')+(c.projects>c.live?(c.projects-c.live)+' closed':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact].filter(Boolean).join(' · ')})))));
+      h('span',{},h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?(c.live?c.live+' running':'')+(c.live&&c.projects>c.live?', ':'')+(c.projects>c.live?(c.projects-c.live)+' closed':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact,c.phone].filter(Boolean).join(' · ')}),c.id?null:h('span',{class:'muted',style:'font-size:11.5px',text:' · not in Clients yet'})))));
     list.prepend(h('div',{class:'f-hint',style:'margin:0',text:q?'Existing clients · tap to fill their details':'Your main clients · tap one, or type a new name'})); };
   const inpEl=h('input',{id:'sh-client',maxlength:120,placeholder:opt&&opt.ph||'Company or person',value:d.client||'',autocomplete:'off',oninput:e=>{ d.client=e.target.value; d._picked=''; show(); }});
   box.append(inpEl,list); show();
@@ -9186,7 +9203,7 @@ function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('O
     feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
     ...(sh.id?{}:{createdAt:now,createdBy:S.uid}),proposedAt:now,...(sh.convert?{lead:false}:{}),doc:{...doc,total:Math.round(F.total),savedAt:now},...(draft?{draft:true}:{})};
   delete v._hint; if(!draft) delete v.draft;
-  run(()=>propWrite(pid,v),draft?'Draft saved. Continue any time from Business › Proposals':'Proposal saved').then(ok=>{ if(!ok) return; (S.props=S.props||{})[pid]={...(S.props[pid]||{}),...v}; if(draft) return openPropView(pid); sh.id=pid; sh.done=pid; pqPdf(pid); }); }
+  run(async()=>{ await propWrite(pid,v); try{ await clientUpsert({name:p.client,contact:p.contact,title:d._title,phone:d.phone,email:d.email,address:d._addr,type:d.type}); }catch(_){} },draft?'Draft saved. Continue any time from Business › Proposals':'Proposal saved').then(ok=>{ if(!ok) return; (S.props=S.props||{})[pid]={...(S.props[pid]||{}),...v}; if(draft) return openPropView(pid); sh.id=pid; sh.done=pid; pqPdf(pid); }); }
 async function pqPdf(pid){ const sh=S.sheet; if(!sh||sh.type!=='propQuick') return; const p=(S.props||{})[pid]; sh.pdf={state:'making'}; renderSheet();
   try{ const r=await pbPdfRetry(p,p.doc,'both'); if(S.sheet===sh){ sh.pdf={state:'ok',file:r.share,print:r.print}; renderSheet(); } }
   catch(e){ if(S.sheet===sh){ sh.pdf={state:'err',err:e.message||String(e)}; renderSheet(); } } }
@@ -10643,8 +10660,8 @@ function feeStats(fr){ const F=S.feeFin, tba=!!fr&&fr.feeBasis==='tba', fee=tba?
   return {fee,billed,col,due:Math.max(0,billed-col),unb:Math.max(0,fee-billed)}; }
 const msLocked=(fr,m)=>!!fr&&!!S.feeFin&&S.feeFin.inv.some(i=>i.projectId===fr.id&&i.milestoneId===m.id&&i.status!=='void');
 function bizHead(lead,action){ const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl, ph=window.innerWidth<=640, d=n=>n?' · '+n+(ph?'':' due'):'';
-  const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:'Business · '+(S.biz.tab==='value'?'only you':'only you and the COO')}),h('h1',{class:'h1',text:({over:'Overview',money:'Money',leads:'Leads',proposed:'Proposals',fees:'Fees',hr:'HR & salaries',admin:'Running costs',value:'People value'})[S.biz.tab]||'Business'})),action?h('div',{class:'biz-act'},action):null),
-    S.canWrite?null:h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['money','Money'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['fees','Fees'],['hr','HR'],['admin','Admin'],...(S.uid===ownerId()?[['value',ph?'Value':'People value']]:[])],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
+  const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:'Business · '+(S.biz.tab==='value'?'only you':'only you and the COO')}),h('h1',{class:'h1',text:({over:'Overview',money:'Money',leads:'Leads',proposed:'Proposals',clients:'Clients',fees:'Fees',hr:'HR & salaries',admin:'Running costs',value:'People value'})[S.biz.tab]||'Business'})),action?h('div',{class:'biz-act'},action):null),
+    S.canWrite?null:h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['money','Money'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['clients','Clients'],['fees','Fees'],['hr','HR'],['admin','Admin'],...(S.uid===ownerId()?[['value',ph?'Value':'People value']]:[])],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
   out.splice(0,out.length,...out.filter(Boolean));
   if(lead) out.push(h('p',{class:'f-hint biz-lead',text:lead}));
   return out; }
@@ -11119,6 +11136,52 @@ function viewMoney(){
         own.length?h('div',{class:'mn-li',style:'margin-top:8px'},h('b',{text:'Owner and partners'}),h('b',{class:'mono',text:taka(tl(own))})):null,list(own))),
     h('p',{class:'f-hint',style:'margin:6px 4px 0',text:'Fees clients still owe are not in Books until they are invoiced; see “Fees still to come” above. Balances are to be confirmed with Accounts.'})));
   return out; }
+function viewClients(){
+  const F=S.cf||(S.cf={q:''}), q=cNorm(F.q), all=clientDir(), xs=all.filter(c=>!q||[c.name,c.contact,c.phone,c.email,c.address].some(v=>cNorm(v).includes(q)));
+  const saved=all.filter(c=>c.id).length, unsaved=all.filter(c=>!c.id);
+  const out=[...bizHead('Every client in one place. New projects and proposals suggest from this list and fill in the details.',S.canWrite?h('div',{class:'actions'},
+      unsaved.length?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>{ run(async()=>{ for(const c of unsaved) await clientUpsert({name:c.name,contact:c.contact,title:c.title,phone:c.phone,email:c.email,address:c.address,type:c.type}); },`${unsaved.length} client${unsaved.length===1?'':'s'} saved`).then(()=>render(true)); },text:`Save ${unsaved.length} from projects`}):null,
+      h('button',{class:'btn btn-primary',type:'button',onclick:()=>openClient(null),text:'+ New client'})):null)];
+  out.push(h('div',{class:'kpis kpis4'},kpi('Clients',all.length),kpi('In the database',saved),kpi('With live projects',all.filter(c=>c.live).length,'early'),kpi('With open proposals',all.filter(c=>c.props).length,'late')));
+  out.push(h('div',{class:'bar'},h('input',{id:'cl-q',type:'search',placeholder:'Search name, contact, phone or email',value:F.q,oninput:e=>{ F.q=e.target.value; render(true); setTimeout(()=>{ const el=document.getElementById('cl-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } },0); }})));
+  if(!xs.length){ out.push(h('div',{class:'empty'},h('h3',{text:all.length?'No client matches':'No clients yet'}),h('p',{class:'muted',style:'margin:0',text:all.length?'Try another name or number.':'Add the first one with + New client.'}))); return out; }
+  out.push(h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'cl-tbl'},
+    h('thead',{},h('tr',{},h('th',{text:'Client'}),h('th',{text:'Contact'}),h('th',{text:'Phone'}),h('th',{text:'Email'}),h('th',{class:'n',text:'Projects'}),h('th',{class:'n',text:'Proposals'}),h('th',{text:''}))),
+    h('tbody',{},xs.map(c=>h('tr',{style:'cursor:pointer',onclick:()=>openClient(c.id||null,c)},
+      h('td',{},h('b',{text:c.name}),c.address?h('div',{class:'sub2',text:c.address.split('\n')[0]}):null),
+      h('td',{},h('div',{text:c.contact||'—'}),c.title?h('div',{class:'sub2',text:c.title}):null),
+      h('td',{class:'mono',text:c.phone||'—'}),h('td',{text:c.email||'—'}),
+      h('td',{class:'n',text:c.projects?`${c.projects}${c.live?' ('+c.live+' live)':''}`:'—'}),h('td',{class:'n',text:c.props?String(c.props):'—'}),
+      h('td',{},c.id?null:h('span',{class:'pill s-open',text:'not saved'}))))))));
+  return out; }
+function openClient(id,seed){ const c=id?{...(S.clients||{})[id]}:{...(seed||{})}; const d={name:c.name||'',aka:(c.aka||[]).join(', ')}; CLIENT_F.forEach(f=>{ d[f]=c[f]||''; });
+  S.sheet={type:'client',id,d,err:''}; renderSheet(); }
+function sheetClient(){ const sh=S.sheet, d=sh.d, id=sh.id, k=cNorm(d.name);
+  const projs=projects().filter(p=>cNorm(p.client)===k||((d.aka||'').split(',').some(a=>cNorm(a)&&cNorm(a)===cNorm(p.client)))), props=propList().filter(p=>cNorm(p.client)===k);
+  const save=()=>{ const name=d.name.trim(); if(!name) return fail('Give the client’s name.'); const dup=clientRec(name); if(dup&&dup.id!==id) return fail('A client with this name is already saved. Open it from the list.');
+    const now=new Date().toISOString(), v={name,aka:d.aka.split(',').map(x=>x.trim()).filter(Boolean)}; CLIENT_F.forEach(f=>{ v[f]=String(d[f]||'').trim(); });
+    run(()=>id?S.db.doc('clients/'+id).update({...v,updatedAt:now,updatedBy:S.uid}):S.db.collection('clients').doc().set({...v,createdAt:now,createdBy:S.uid}),id?'Client updated':'Client saved').then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
+  const del=()=>{ if(!id) return; if(!sh.delAsk){ sh.delAsk=true; renderSheet(); return; } run(()=>S.db.doc('clients/'+id).update({deleted:true,updatedAt:new Date().toISOString(),updatedBy:S.uid}),'Client removed from the database').then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
+  const tx=(k2,o)=>h('input',{id:'cl-'+k2,class:'tl-num qs-in',value:d[k2]||'',...(o||{}),oninput:e=>{ d[k2]=e.target.value; }});
+  const kv=(l,v,top)=>h('div',{class:'qs-kv'+(top?' qs-top':'')},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
+  return [head('Business › Clients',id?d.name||'Client':'New client'),
+    h('div',{class:'qs-box qs-wide'},
+      kv('Client',tx('name',{maxlength:120,placeholder:'Company or person'})),
+      kv('Contact person',tx('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin'})),
+      kv('Designation',tx('title',{maxlength:80,placeholder:'e.g. Chairman'})),
+      kv('Phone',tx('phone',{type:'tel',maxlength:40})),
+      kv('Email',tx('email',{type:'email',maxlength:120})),
+      kv('Address',h('textarea',{id:'cl-address',class:'tl-num qs-in pq-ta',rows:3,maxlength:240,value:d.address||'',oninput:e=>{ d.address=e.target.value; }}),true),
+      kv('Client type',(()=>{ const el=h('select',{id:'cl-type',class:'tl-num qs-in',onchange:e=>{ d.type=e.target.value; }},h('option',{value:'',text:'Not set'}),Object.entries(STD_DEF).filter(([x])=>x!=='proposal'&&x!=='interior').map(([x,t])=>h('option',{value:x,text:t.name}))); el.value=d.type||''; return el; })()),
+      kv('Other names',tx('aka',{maxlength:200,placeholder:'e.g. FORTRESS, Fortress RE (comma separated)'})),
+      kv('Note',h('textarea',{id:'cl-note',class:'tl-num qs-in pq-ta',rows:2,maxlength:400,value:d.note||'',oninput:e=>{ d.note=e.target.value; }}),true)),
+    projs.length||props.length?h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',text:'Work with this client'}),
+      ...projs.map(p=>h('button',{class:'linkish',type:'button',style:'justify-self:start;text-decoration:none',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); },text:`${projLabel(p)}${p.closed?' · closed':''}`})),
+      ...props.map(p=>h('div',{class:'f-hint',style:'margin:0',text:`Proposal · ${p.name||'—'}${p.status&&p.status!=='open'?' · '+p.status:''}`}))):null,
+    sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
+    h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!S.canWrite,onclick:save,text:id?'Save changes':'Save client'}),
+      id?h('button',{class:'btn',type:'button',style:sh.delAsk?'color:var(--overdue)':'',disabled:S.busy,onclick:del,text:sh.delAsk?'Tap again to remove':'Remove'}):null,
+      h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'}))]; }
 function viewBiz(){
   if(!canProps()){ S.view='projects'; return viewProjects(); }
   S.biz=S.biz||{tab:'over',q:'',st:'active'};
@@ -11129,6 +11192,7 @@ function viewBiz(){
   if(S.biz.tab==='hr') return viewHR();
   if(S.biz.tab==='admin') return viewAdmin();
   if(S.biz.tab==='proposed') return viewProposals(S.pf2||(S.pf2={q:'',ps:'open'}));
+  if(S.biz.tab==='clients') return viewClients();
   return viewFees(); }
 function viewFees(){
   const B=S.biz, out=[...bizHead('Fees, cost budgets and site visit terms for every project, set here. Books will bill against these numbers; edit them here.',FIN_UI?h('div',{class:'actions'},h('a',{class:'btn',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none',text:'Open Finance ↗'})):null)];
