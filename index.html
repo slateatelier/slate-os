@@ -97,6 +97,8 @@ main.wrap.wrap-desk{max-width:1480px}
   #side .tab:hover{background:var(--group);color:var(--ink)}
   #side .tab[aria-current="page"]{background:var(--group);color:var(--ink);font-weight:600}
   #side .tab .badge{margin-left:auto}
+  body.space-books #side .tab[aria-current="page"]{background:#E7F1EA;color:#2F6446}
+  body.space-books #side .tab:hover{background:#EEF5F0}
   #side .sb-sep{height:1px;background:var(--border);margin:10px 8px}
   #side .sb-me{appearance:none;border:0;background:none;cursor:pointer;margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 8px 4px;border-top:1px solid var(--border);text-align:left;width:100%}
   #side .sb-me .ava{width:32px;height:32px;flex:none}
@@ -2635,13 +2637,14 @@ function openBooks(){
   let pane=document.getElementById('books-pane');
   if(!pane){ pane=h('div',{id:'books-pane'},h('div',{class:'bk-wait',text:'Opening Books…'})); const f=document.createElement('iframe'); f.title='SLATE Books'; f.src='/books?embed=1';
     f.addEventListener('load',()=>{ const w=pane.querySelector('.bk-wait'); if(w) w.remove();
+      { let n=0; const tick=()=>{ if(booksTabs()&&booksTabs().children.length){ booksSide(); if(S.books&&window._sbArgs) try{ sideBuild(..._sbArgs); }catch(e){} } else if(n++<40) setTimeout(tick,250); }; tick(); }
       try{ ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>f.contentWindow.addEventListener(ev,()=>{ if(window.slatePinActivity) window.slatePinActivity(); },{passive:true})); }catch(e){} }); pane.append(f); document.body.append(pane);
     /* if Books cannot show here (blocked or offline), say so and offer it on its own page instead of a blank screen */
     setTimeout(()=>{ let ok=false; try{ const d=f.contentDocument; ok=!!(d&&d.getElementById('view')); }catch(e){}
       if(!ok&&!pane.querySelector('.bk-wait')) pane.append(h('div',{class:'bk-wait'},h('div',{style:'text-align:center;padding:24px'},h('div',{text:'Books didn’t open here.'}),h('a',{href:'/books?solo=1',style:'color:var(--ink);text-decoration:underline',text:'Open Books on its own page'})))); },8000); }
   S.books=true; render(true); placeBooks();
 }
-addEventListener('resize',()=>{ if(S.books) placeBooks(); });
+addEventListener('resize',()=>{ if(S.books){ placeBooks(); booksSide(); } });
 /* Business and Books PIN: ask when they are open and locked; keep them open while in use; reload what they show */
 { const ml=document.querySelector('.mini-logo'), lg=document.querySelector('.top-in .logo'); if(ml&&lg) ml.style.backgroundImage='url("'+lg.src+'")'; }
 function pinGate(){
@@ -3774,7 +3777,14 @@ function viewDesk(){
 }
 /* ---------- PC menu (Option A, 3 Nov 2026): the tab row becomes a sidebar on screens 1100px and wider.
    It mirrors the tab row (same items, same counts, same actions), so phones keep the tabs exactly as before. ---------- */
+/* Books on a PC (3 Nov 2026): the left menu lists Books' own sections, and Books' tab row at the top is hidden.
+   Books runs in its own page inside the Books space (same site), so the menu reads its tabs and clicks them. */
+function booksTabs(){ try{ const f=document.querySelector('#books-pane iframe'), d=f&&f.contentDocument; return d&&d.getElementById('tabs')||null; }catch(e){ return null; } }
+function booksSide(){ try{ const f=document.querySelector('#books-pane iframe'), d=f&&f.contentDocument; if(!d) return;
+    d.documentElement.classList.toggle('side',sideOn());
+    const t=d.getElementById('tabs'); if(t&&!t._sideObs){ t._sideObs=new MutationObserver(()=>{ if(S.books&&window._sbArgs) try{ sideBuild(..._sbArgs); }catch(e){} }); t._sideObs.observe(t,{childList:true,subtree:true,attributes:true,attributeFilter:['aria-current']}); } }catch(e){} }
 function sideBuild(tabs,inBiz){
+  window._sbArgs=[tabs,inBiz];
   let sb=document.getElementById('side');
   if(S.state!=='ready'){ if(sb) sb.remove(); document.body.classList.remove('side-on'); return; }
   if(!sb){ sb=h('aside',{id:'side','aria-label':'Menu'}); document.body.append(sb); }
@@ -3782,6 +3792,14 @@ function sideBuild(tabs,inBiz){
   const logo=document.querySelector('.chrome .top-in .logo'), prod=document.querySelector('.chrome .top-in .product');
   const head=h('button',{class:'sb-logo',type:'button','aria-label':'Home',onclick:()=>{ if(S.books) S.books=false; if(document.body.classList.contains('sheet-dock')) closeSheet(); goView(inBiz?'biz':'mine'); }},
     logo?logo.cloneNode(true):null,logo?h('span',{class:'divider','aria-hidden':'true'}):null,prod?prod.cloneNode(true):null);
+  const bt=S.books?booksTabs():null; booksSide();
+  if(bt&&bt.children.length){ const bi=[...bt.children].filter(b=>b.matches('.tab'));
+    head.onclick=()=>{ if(bi[0]) bi[0].click(); };
+    const bnav=h('nav',{class:'sb-nav','aria-label':'Books sections'},bi.flatMap(b=>{ const c=document.importNode(b,true);   /* Books' tabs live in its own page: bring a copy into this one */ c.onclick=e=>{ e.preventDefault(); b.click(); };
+      return /^\s*More/.test(b.textContent||'')?[h('div',{class:'sb-sep','aria-hidden':'true'}),c]:[c]; }));
+    const me2=h('button',{class:'sb-me',type:'button',onclick:openProfile,title:'My profile'},avaEl(S.uid,true),
+      h('span',{class:'sb-me-t'},h('b',{text:nameOf(S.uid)}),h('span',{text:roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'')})));
+    sb.replaceChildren(head,bnav,me2); return; }
   const items=[...tabs.children].filter(b=>b.matches('.tab'));
   const nav=h('nav',{class:'sb-nav','aria-label':'Sections'},items.flatMap(b=>{ const k=b.dataset.k||'', c=b.cloneNode(true);
     if(k==='cal'&&!amChalkMember()){ [...c.childNodes].filter(n=>n.nodeType===3).forEach(n=>n.remove()); c.insertBefore(document.createTextNode('Calendar & meetings'),c.querySelector('.badge')); }
