@@ -203,6 +203,11 @@ td input,td select{min-width:110px;background:#fff;padding:7px 9px;font-size:14p
 .state{padding:60px 0;color:var(--muted);display:grid;gap:6px;text-align:center}
 .state strong{color:var(--ink);font-weight:600;font-size:18px}
 .card{background:var(--group);border-radius:var(--r);padding:14px 16px;display:grid;gap:10px;min-width:0}
+.fd-box{background:var(--group);border-radius:var(--r);padding:10px 12px;display:grid;gap:8px;box-shadow:inset 3px 0 0 var(--early)}
+.fd-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.fd-t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fd-acts{display:flex;gap:6px}
+.sh-head + .fd-box{margin-bottom:4px}
 .callout{background:var(--group);border-radius:var(--r);padding:14px 16px;display:grid;gap:10px;box-shadow:inset 3px 0 0 var(--late)}
 .callout.ok{box-shadow:inset 3px 0 0 var(--ontime)}
 .callout.bad{box-shadow:inset 3px 0 0 var(--overdue)}
@@ -1298,8 +1303,8 @@ const Store = {
 };
 function clean(o) { return JSON.parse(JSON.stringify(o, (k, v) => v === undefined ? null : v)); }
 async function run(fn, okMsg) {
-  if (S.busy) return false; S.busy = true;
-  try { await fn(); if (okMsg) toast(okMsg); return true; }
+  if (S.busy) return false; S.busy = true; const fdSh = S.sheet;
+  try { await fn(); if (okMsg) toast(okMsg); fdAfterRun(fdSh); return true; }
   catch (e) {
     console.error(e);
     const c = e && e.code;
@@ -2115,7 +2120,10 @@ function buildView() {
   else if (!S.admin && myRole() === 'Viewer') out.push(h('div', { class: 'banner warn' }, h('span', { text: 'The Principal hasn’t given you a role yet. Ask for the Office staff role to record petty cash bills.' })));
   else if (S.admin && myRole() === 'Viewer' && !S.isOwner) out.push(h('div', { class: 'banner warn' }, h('span', { text: 'The Principal hasn’t given you a role yet, so you can view but not enter anything. Ask for COO, Accountant or Office staff.' })));
   const v = { home: viewHome, money: viewMoney, requests: viewRequests, shop: viewShop, petty: staffMode() ? viewPetty : viewPettyAdmin, invoices: viewInvoices, docs: viewDocs, reports: viewReports, more: viewMore }[S.view] || viewHome;
-  return out.concat(v());
+  const body = [].concat(v());
+  /* saved drafts sit under the page heading on Home, Requests and Petty cash */
+  if (['home', 'requests', 'petty'].includes(S.view) || !S.view) { const fd = fdSec(); if (fd) body.splice(Math.min(1, body.length), 0, fd); }
+  return out.concat(body);
 }
 function pageH(title, lead, actions) {
   return h('div', { class: 'page-h' }, h('div', {}, h('h1', { class: 'h1', text: title }), lead ? h('p', { class: 'lead', text: lead }) : null), actions && actions.length ? h('div', { class: 'actions' }, actions) : null);
@@ -2541,6 +2549,7 @@ function renderSheet(fromData) {
   const prev = el.querySelector('.panel'), top = prev ? prev.scrollTop : 0, k = keepFocus(el);
   const fn = SHEETS[S.sheet.type]; const body = fn ? fn() : [head('', 'Not found')];
   const panel = h('div', { class: 'panel' + (S.sheet.wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Details' }, body);
+  fdDecorate(panel);
   el.replaceChildren(h('div', { class: 'backdrop', onclick: closeSheet }), panel);
   el.hidden = false; document.body.classList.add('locked'); panel.scrollTop = top; restoreFocus(k);
 }
@@ -2593,6 +2602,74 @@ async function addFiles(listKey, files) {
   try { for (const f of list) { if (f.size > 20 * 1024 * 1024) { toast(f.name + ' is over 20 MB'); continue; } if ((f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')) && f.size > PDF_MAX) { toast(`${f.name} is over 2 MB. Take a photo of the bill instead, or save the PDF smaller.`); continue; } const a = await uploadFile(f); if (S.sheet === sh) { sh.d[listKey] = (sh.d[listKey] || []).concat([a]); } } }
   catch (e) { console.error(e); toast((e && e.userMsg) || (e && e.code === 'not_granted' ? 'Allow file uploads for SLATE Books to attach files.' : 'Couldn’t upload. Try again.')); }
   finally { if (S.sheet === sh) { sh.uploading = false; renderSheet(); } }
+}
+
+/* ---------- Saved drafts for entry forms ----------
+   Money in, money out, transfers, journals, requests and petty cash bills, cash counts and document uploads
+   have Save draft. A draft keeps the form as it was, in the person's own SLATE OS data (not in the books),
+   so only they see it, on any device. It is removed once the entry is saved. Invoices have their own drafts. */
+const FD_KINDS = {
+  money: { n: sh => ({ in: 'Money in', out: 'Money out', tr: 'Transfer' })[sh.d.kind] || 'Entry', rec: sh => sh.editId, t: d => [d.vendor || d.party || d.narr || (d.cat ? L(d.cat) : ''), +parseAmt(d.amount) ? 'Tk ' + fmt(parseAmt(d.amount)) : ''].filter(Boolean).join(' · ') },
+  journal: { n: () => 'Journal', rec: sh => sh.editId, t: d => d.narr || d.party },
+  reqform: { n: sh => ({ petty: 'Petty cash bill', payment: 'Payment request', advance: 'Advance request', topup: 'Petty cash top-up' })[sh.d.type] || 'Request', rec: sh => sh.editKey, t: d => [d.title || d.payTo, +parseAmt(d.amount) ? 'Tk ' + fmt(parseAmt(d.amount)) : ''].filter(Boolean).join(' · ') },
+  count: { n: () => 'Cash count', t: d => d.ledger ? L(d.ledger) : '' },
+  upload: { n: () => 'Document upload', t: d => d.name || (d.files && d.files[0] && d.files[0].name) || '' }
+};
+const FD = { items: {}, loaded: false, saving: false, first: new WeakMap() };
+const FD_SKIP = ['err', 'uploading', 'busy', 'back', 'arm'];
+const fdOn = () => !!(window.BooksHost && BooksHost.sb && S.uid && !S.readonly);
+const fdPath = () => `data/users/${S.uid}/booksDrafts`;
+const fdKind = sh => sh && FD_KINDS[sh.type];
+const fdRec = sh => { const k = fdKind(sh); return (k && k.rec && k.rec(sh)) || ''; };
+const fdSnap = sh => JSON.stringify(sh, (k, v) => FD_SKIP.includes(k) || typeof v === 'function' ? undefined : v);
+const fdList = () => Object.entries(FD.items).map(([id, x]) => Object.assign({ id }, x)).filter(x => x && x.sh && FD_KINDS[x.type]).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+const fdName = x => { const n = FD_KINDS[x.type].n(x.sh); return x.rec ? 'Changes to ' + n.toLowerCase() : n; };
+const fdTitle = x => String(FD_KINDS[x.type].t(x.sh.d || {}) || '').trim();
+const fdFor = sh => { const r = fdRec(sh); return fdList().filter(x => x.type === sh.type && (x.rec || '') === r && x.id !== sh.fdId); };
+async function fdLoad() {
+  if (!fdOn()) return;
+  try { const { data } = await BooksHost.sb.from('docs').select('data').eq('path', fdPath()).maybeSingle(); FD.items = (data && data.data && data.data.items) || {}; FD.loaded = true; render(true); if (S.sheet) renderSheet(); } catch (e) { console.error(e); }
+}
+async function fdWrite(items) {
+  const { error } = await BooksHost.sb.rpc('doc_write', { p_path: fdPath(), p_data: { items }, p_mode: 'set' });
+  if (error) throw Object.assign(new Error(error.message), { userMsg: 'Couldn’t save the draft. Check your connection and try again.' });
+  FD.items = items;
+}
+function fdSave() {
+  const sh = S.sheet; if (!fdKind(sh) || !fdOn()) return;
+  if (sh.uploading) return toast('Wait for the files to finish uploading.');
+  const snap = fdSnap(sh); if (!sh.fdId && FD.first.get(sh) === snap) return toast('Nothing to save yet. Fill in something first.');
+  const id = sh.fdId || 'f' + Date.now().toString(36), items = Object.assign({}, FD.items);
+  items[id] = { type: sh.type, rec: fdRec(sh), at: new Date().toISOString(), sh: JSON.parse(snap) };
+  sh.fdId = id; FD.saving = true;
+  return run(() => fdWrite(items), 'Draft saved. Continue it from Home or from this form.').finally(() => { FD.saving = false; });
+}
+function fdDrop(id) { if (!id || !FD.items[id]) return Promise.resolve(); const items = Object.assign({}, FD.items); delete items[id]; return fdWrite(items).catch(() => {}); }
+function fdOpen(id) { const x = FD.items[id]; if (!x || !FD_KINDS[x.type]) return; openSheet(Object.assign(JSON.parse(JSON.stringify(x.sh)), { err: '', fdId: id })); }
+/* a save that went through: the form closed or moved on, so its draft is no longer needed */
+function fdAfterRun(sh) { if (FD.saving || !sh || !sh.fdId) return; const id = sh.fdId; setTimeout(() => { if (S.sheet !== sh) fdDrop(id).then(() => render(true)); }, 0); }
+function fdRow(x, onOpen) {
+  const t = fdTitle(x);
+  return h('div', { class: 'fd-row' }, h('div', { style: 'min-width:0' }, h('div', { class: 'fd-t', text: t || fdName(x) }), h('div', { class: 'f-hint', style: 'margin:0', text: [t ? fdName(x) : '', 'saved ' + fmtTs(x.at)].filter(Boolean).join(' · ') })),
+    h('div', { class: 'fd-acts' }, h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: onOpen, text: 'Continue' }),
+      h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Delete draft', onclick: () => { if (confirm('Delete this draft?')) run(() => fdDrop(x.id), 'Draft deleted').then(() => { render(true); if (S.sheet) renderSheet(); }); }, text: 'Delete' })));
+}
+/* added to every entry form: Save draft beside the main button, and any saved drafts at the top */
+function fdDecorate(panel) {
+  const sh = S.sheet; if (!fdKind(sh) || !fdOn()) return;
+  if (!FD.first.has(sh)) FD.first.set(sh, fdSnap(sh));
+  const acts = [...panel.querySelectorAll('.actions')].find(a => a.querySelector('button[type=submit]'));
+  if (acts) acts.querySelector('button[type=submit]').after(h('button', { class: 'btn', type: 'button', disabled: S.busy || sh.uploading, onclick: () => fdSave(), text: sh.fdId ? 'Update draft' : 'Save draft' }));
+  const xs = fdFor(sh); if (!xs.length) return;
+  const box = h('div', { class: 'fd-box' }, h('div', { class: 'lbl', text: sh.fdId ? 'Other saved drafts' : xs.length > 1 ? `You have ${xs.length} saved drafts` : 'You have a saved draft' }),
+    xs.slice(0, 4).map(x => fdRow(x, () => { if (FD.first.get(sh) !== fdSnap(sh) && !confirm('Open the saved draft? What you typed here and haven’t saved will be lost.')) return; fdOpen(x.id); })));
+  const hd = panel.querySelector('.sh-head'); if (hd) hd.after(box); else panel.prepend(box);
+}
+/* Home and Requests: every saved draft, newest first */
+function fdSec() {
+  const xs = fdList(); if (!xs.length) return null;
+  return h('div', { class: 'sec' }, secH('Your drafts', String(xs.length)), h('div', { class: 'fd-box' }, xs.slice(0, 8).map(x => fdRow(x, () => fdOpen(x.id)))),
+    h('p', { class: 'f-hint', style: 'margin:0', text: 'Only you see your drafts. A draft goes once the entry is saved.' }));
 }
 
 /* ---------- choice lists ---------- */
@@ -3139,7 +3216,9 @@ function sheetInvForm() {
     canSign() ? (mySign() ? chk('signIt', `Sign this invoice as ${mySign().name}, ${mySign().desig}`) : h('p', { class: 'f-hint', style: 'margin:0' }, 'To sign invoices digitally, add your signature in ', h('button', { class: 'linkish', type: 'button', onclick: () => openMySign(), text: 'More › My signature' }), '.'))
       : h('p', { class: 'f-hint', style: 'margin:0', text: 'The Principal or the COO signs the invoice from its page once it is saved.' }),
     attachBlock('files')];
-  return [head(S.sheet.editId ? 'Edit invoice' : 'New invoice', S.sheet.editId ? S.invoices[S.sheet.editId].no : 'Invoice'), form(null, fields, S.sheet.editId ? 'Save' : 'Save and issue', () => saveInvoice('issued'), [S.sheet.editId ? null : h('button', { class: 'btn', type: 'button', onclick: () => saveInvoice('draft'), text: 'Save as draft' }), downloadsCap ? h('button', { class: 'btn', type: 'button', onclick: () => previewInvoice(), text: 'Preview (PDF)' }) : null])];
+  /* a new invoice or a draft can be kept as a draft; editing a draft no longer issues it unless asked */
+  const ed = S.sheet.editId, wasDraft = !!(ed && S.invoices[ed] && S.invoices[ed].status === 'draft');
+  return [head(ed ? (wasDraft ? 'Edit draft invoice' : 'Edit invoice') : 'New invoice', ed ? S.invoices[ed].no : 'Invoice'), form(null, fields, ed && !wasDraft ? 'Save' : 'Save and issue', () => saveInvoice('issued'), [ed && !wasDraft ? null : h('button', { class: 'btn', type: 'button', disabled: S.busy || S.sheet.uploading, onclick: () => saveInvoice('draft'), text: wasDraft ? 'Save draft' : 'Save as draft' }), downloadsCap ? h('button', { class: 'btn', type: 'button', onclick: () => previewInvoice(), text: 'Preview (PDF)' }) : null])];
 }
 function previewInvoice() {
   const d = D(); if (!d.client) return fail('Choose the client.');
@@ -3156,11 +3235,11 @@ function saveInvoice(status) {
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const id = S.sheet.editId || 'i' + uidShort(), old = S.invoices[id];
   const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'add' ? 'add' : 'in', split: !!d.split, terms: d.split ? 'split' : TAX_TERMS[d.terms] ? d.terms : termsOf(d), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), files: d.files || [], sign: null,
-    status: old ? (old.status === 'draft' && status === 'issued' ? 'issued' : old.status) : status, trail: old ? trailAdd(old.trail, 'edited') : trailAdd([], status === 'issued' ? 'issued' : 'created'), at: new Date().toISOString(), by: old ? old.by : S.uid };
+    status: old ? (old.status === 'draft' && status === 'issued' ? 'issued' : old.status) : status, trail: old ? trailAdd(old.trail, old.status === 'draft' && status === 'issued' ? 'issued' : 'edited') : trailAdd([], status === 'issued' ? 'issued' : 'created'), at: new Date().toISOString(), by: old ? old.by : S.uid };
   /* the signature: signed now by the signer, or kept only if what the client sees is unchanged */
   const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '', i.tax || '']), x.vatMode, +x.vatPct || 0, +x.aitPct || 0, x.aitMode || 'in', !!x.vds, x.terms || '', !!x.split, x.note || '']);
   doc.sign = d.signIt && mySign() ? signStamp() : old && old.sign && what(old) === what(doc) && !(old.sign.uid === S.uid && !d.signIt) ? old.sign : null;
-  run(() => Store.put('invoices', id, doc), old ? 'Saved' : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
+  run(() => Store.put('invoices', id, doc), old ? (old.status === 'draft' && status === 'issued' ? 'Invoice ' + doc.no + ' issued' : status === 'draft' ? 'Draft saved' : 'Saved') : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
 }
 /* the terms agreed for the project, shown fixed on the invoice form; only the Principal or the COO changes them for one invoice */
 function invTermsFixed(d) {
@@ -5654,6 +5733,7 @@ async function boot() {
   S.me = me; S.uid = me && me.id; S.isOwner = !!(me && me.isOwner); S.admin = !!(me && me.canEdit) || S.isOwner;
   const dw = user ? await user.can('data.write') : null;
   S.readonly = S.admin ? dw === false : false;
+  fdLoad();
   /* everyone with access says they were here, so the Principal can give them a role */
   if (S.uid) {
     try { await Store.db.doc('members/' + S.uid).set({ seen: new Date().toISOString() }); }

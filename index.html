@@ -441,6 +441,10 @@ td input,td select{min-width:130px;background:#fff}
 .facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;background:var(--group);border-radius:var(--r);padding:14px 16px}
 .facts .v{font-weight:500;font-size:16px;overflow-wrap:anywhere;margin-top:2px}
 .facts .s{font-size:12px;color:var(--muted)}
+.fd-box{background:var(--group);border-radius:var(--r);padding:10px 12px;display:grid;gap:8px;box-shadow:inset 3px 0 0 var(--early)}
+.fd-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.fd-t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fd-acts{display:flex;gap:6px}
 .callout{background:var(--group);border-radius:var(--r);padding:14px 16px;display:grid;gap:10px;box-shadow:inset 3px 0 0 var(--late)}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 .form{display:grid;gap:12px;background:var(--group);border-radius:var(--r);padding:16px}
@@ -1889,9 +1893,9 @@ function errMsg(e){
    (the connection gives up), so the app is never left locked. */
 async function run(fn,ok){
   if(S.busy){ toast('Still saving the last change…'); return false; }
-  S.busy=true; if(S.sheet) renderSheet();
+  S.busy=true; const fdSh=S.sheet; if(S.sheet) renderSheet();
   const slow=setTimeout(()=>{ if(S.busy) toast('Saving…'); },1500);
-  try{ await fn(); if(ok) toast(typeof ok==='function'?ok():ok); return true; }
+  try{ await fn(); if(ok) toast(typeof ok==='function'?ok():ok); fdAfterRun(fdSh); return true; }
   catch(e){ sfx('error'); toast(errMsg(e)); return false; }
   finally{ clearTimeout(slow); S.busy=false; render(true); if(S.sheet) renderSheet(); }
 }
@@ -2735,6 +2739,7 @@ async function boot(){
   db.collection('clients').onSnapshot(q=>{ S.clients={}; q.docs.forEach(d=>{S.clients[d.id]=d.data()}); schedule(); },()=>{ S.clients={}; });
   db.doc(`data/users/${S.uid}/todo`).onSnapshot(snap=>{ S.todo=(snap.exists&&snap.data().items)||[]; schedule(); },()=>{ S.todo=[]; });
   db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
+  db.doc(`data/users/${S.uid}/formDrafts`).onSnapshot(snap=>{ S.fdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.fdrafts={}; });
   db.collection('tasks').onSnapshot(q=>{ S.shared={}; q.docs.forEach(d=>{S.shared[d.id]=d.data()}); mergeTasks(); },onSubErr);
 
   try{ const m=db.doc('members/'+S.uid); const g=await m.get(); if(!g.exists) await m.set({joinedAt:new Date().toISOString()}); }catch(e){}
@@ -2985,7 +2990,10 @@ function buildView(){
   /* Calendar and Meetings are one place in the menu; this switches between them */
   if(['cal','meet'].includes(S.view)&&!amChalkMember()) out.push(seg('Calendar and meetings',[['cal','Calendar'],['meet','Meetings']],S.view,x=>{ S.view=x; render(true); window.scrollTo(0,0); }));
   if(NAV_SUB.includes(S.view)) out.push(amChalkMember()?navBack('Home',()=>{ S.view='mine'; render(true); }):navBack('More',()=>{ S.view='more'; render(true); }));
-  return out.concat(v());
+  const body=[].concat(v());
+  /* Home: saved drafts sit just under the greeting */
+  if(S.view==='mine'||(S.view==='queue'&&!amApprover())){ const fd=fdHomeSec(); if(fd) body.splice(Math.min(1,body.length),0,fd); }
+  return out.concat(body);
 }
 
 /* ---------- Expense claims: transport, meals (per person per day) and client costs (Principal and COO only) ----------
@@ -6342,6 +6350,68 @@ const SCOPE_VENDOR={'Structural design':'Consultant','MEP design':'Consultant','
 const scopeLabel=(p,x)=>{ const q=SCOPE_QTY[x], n=q&&p&&p.scopeQty&&+p.scopeQty[x], vn=SCOPE_VENDOR[x]&&p&&p.scopeVendor&&p.scopeVendor[x]; return [x,n?`${n} ${q.short}`:'',vn||''].filter(Boolean).join(' · '); };
 const SCOPES=['Real estate solutions','Feasibility study','Master planning','Architectural design','Structural design','MEP design','Structural and MEP coordination','Interior design','Common area interior design','Landscape design','3D visualization','Professional 3D visualization','Animation','Authority (RAJUK) drawings','Working drawings','Site supervision'];
 const AGS=[['','Select…'],['none','Not signed yet'],['loi','Letter of intent'],['signed','Signed agreement'],['internal','Internal (no agreement)']];
+/* ---------- Saved drafts for entry forms ----------
+   Every entry form (leads, clients, fees, running costs, staff pay, Chalk projects, tasks, site visits,
+   expense claims, notices, and changes to an existing project or proposal) has Save draft. A draft keeps the form exactly as it was, in the person's own data,
+   so only they see it, on any device. It is removed when the entry is saved. New projects, proposals,
+   agreements and meeting minutes keep their own drafts. */
+const FD_KINDS={
+  lead:{n:'Lead',rec:sh=>sh.id,t:d=>d.client||d.name},
+  client:{n:'Client',rec:sh=>sh.id,t:d=>d.name},
+  fee:{n:'Fee',rec:sh=>sh.pid,t:(d,sh)=>{ const p=S.projects[sh.pid]; return p?projLabel(p):''; }},
+  rec:{n:'Running cost',rec:sh=>sh.id,t:d=>d.name},
+  sal:{n:'Staff pay',rec:sh=>sh.sid,t:(d,sh)=>d.name||(sh.d&&sh.d.uid?nameOf(sh.d.uid):'')},
+  chalkProject:{n:'Chalk project',rec:sh=>sh.id,t:d=>d.name||d.client},
+  chalkTask:{n:'Chalk task',t:d=>d.title},
+  newTask:{n:'Task',t:d=>d.title},
+  msgTask:{n:'Task from a message',t:d=>d.title},
+  siteVisit:{n:'Site visit',t:d=>d.purpose||d.address},
+  conv:{n:'Expense claim',rec:sh=>sh.d&&sh.d.id,t:d=>d.purpose||d.note||d.desc},
+  noticeEdit:{n:'Notice',rec:sh=>sh.id,t:d=>d.title},
+  /* new projects and new proposals already save drafts of their own; these cover changes to existing ones */
+  project:{n:'Project',when:sh=>!!sh.id,rec:sh=>sh.id,t:d=>d.name||d.client},
+  prop:{n:'Proposal',when:sh=>!!sh.id,rec:sh=>sh.id,t:d=>d.name||d.client}
+};
+const FD_SKIP=['err','busy','arm','clearArm','delArm','done','_locBusy'];
+const fdFirst=new WeakMap();
+let fdSaving=false;
+const fdKind=sh=>{ const k=sh&&FD_KINDS[sh.type]; return k&&(!k.when||k.when(sh))?k:null; };
+const fdRec=sh=>{ const k=fdKind(sh); return (k&&k.rec&&k.rec(sh))||''; };
+const fdSnap=sh=>JSON.stringify(sh,(k,v)=>FD_SKIP.includes(k)||typeof v==='function'?undefined:v);
+const fdList=()=>Object.entries(S.fdrafts||{}).map(([id,x])=>({id,...x})).filter(x=>x&&x.sh&&FD_KINDS[x.type]).sort((a,b)=>(b.at||'').localeCompare(a.at||''));
+const fdWrite=items=>S.db.doc(`data/users/${S.uid}/formDrafts`).set({items});
+const fdTitle=x=>{ const k=FD_KINDS[x.type], d=(x.sh&&x.sh.d)||{}; return String((k.t&&k.t(d,x.sh))||d.title||d.name||d.client||'').trim(); };
+const fdName=x=>{ const k=FD_KINDS[x.type]; return (x.rec?'Changes to '+k.n.toLowerCase():'New '+k.n.toLowerCase()); };
+/* the drafts that belong to the form now open: new entries of the same kind, or this record's own changes */
+const fdFor=sh=>{ const r=fdRec(sh); return fdList().filter(x=>x.type===sh.type&&(x.rec||'')===r&&x.id!==sh.fdId); };
+function fdSave(){ const sh=S.sheet; if(!fdKind(sh)) return;
+  const snap=fdSnap(sh); if(!sh.fdId&&fdFirst.get(sh)===snap){ toast('Nothing to save yet. Fill in something first.'); return; }
+  const id=sh.fdId||('f'+Date.now().toString(36)), items={...(S.fdrafts||{})};
+  items[id]={type:sh.type,rec:fdRec(sh),at:new Date().toISOString(),sh:JSON.parse(snap)};
+  sh.fdId=id; fdSaving=true; return run(()=>fdWrite(items),'Draft saved. Continue it from Home or from this form.').finally(()=>{ fdSaving=false; }); }
+function fdDrop(id){ if(!id||!(S.fdrafts||{})[id]) return Promise.resolve(); const items={...(S.fdrafts||{})}; delete items[id]; S.fdrafts=items; return fdWrite(items).catch(()=>{}); }
+function fdOpen(id){ const x=(S.fdrafts||{})[id]; if(!x||!FD_KINDS[x.type]) return; S.sheet={...JSON.parse(JSON.stringify(x.sh)),err:'',fdId:id}; renderSheet(); }
+/* a save that went through: the form closed or moved on, so its draft is no longer needed */
+function fdAfterRun(sh){ if(fdSaving||!sh||!sh.fdId) return; const id=sh.fdId, mode=sh.mode; setTimeout(()=>{ if(S.sheet!==sh||sh.mode!==mode) fdDrop(id); },0); }
+function fdRow(x,onOpen){ const t=fdTitle(x);
+  return h('div',{class:'fd-row'},h('div',{style:'min-width:0'},h('div',{class:'fd-t',text:t||fdName(x)}),h('div',{class:'f-hint',style:'margin:0',text:[t?fdName(x):'','saved '+fmtTs(x.at)].filter(Boolean).join(' · ')})),
+    h('div',{class:'fd-acts'},h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:onOpen,text:'Continue'}),
+      h('button',{class:'btn btn-sm',type:'button','aria-label':'Delete draft',onclick:()=>{ if(confirm('Delete this draft?')) run(()=>fdDrop(x.id),'Draft deleted'); },text:'Delete'}))); }
+/* added to every entry form: Save draft beside the main button, and any saved drafts at the top */
+function fdDecorate(panel){ const sh=S.sheet; if(!fdKind(sh)||!S.canWrite) return;
+  if(!fdFirst.has(sh)) fdFirst.set(sh,fdSnap(sh));
+  const acts=[...panel.querySelectorAll('.actions')].find(a=>a.querySelector('button[type=submit],button.btn-primary'));
+  if(acts){ const main=acts.querySelector('button[type=submit]')||acts.querySelector('button.btn-primary');
+    main.after(h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>fdSave(),text:sh.fdId?'Update draft':'Save draft'})); }
+  const xs=fdFor(sh); if(!xs.length) return;
+  const box=h('div',{class:'fd-box'},h('div',{class:'lbl',text:sh.fdId?'Other saved drafts':xs.length>1?`You have ${xs.length} saved drafts`:'You have a saved draft'}),
+    xs.slice(0,4).map(x=>fdRow(x,()=>{ if(fdFirst.get(sh)!==fdSnap(sh)&&!confirm('Open the saved draft? What you typed here and haven’t saved will be lost.')) return; fdOpen(x.id); })));
+  const hd=panel.querySelector('.sh-head'); if(hd) hd.after(box); else panel.prepend(box); }
+/* Home: every saved draft, newest first */
+function fdHomeSec(){ const xs=fdList(); if(!xs.length||!S.canWrite) return null;
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Your drafts'}),h('span',{class:'cnt',text:String(xs.length)})),
+    h('div',{class:'fd-box fd-home'},xs.slice(0,8).map(x=>fdRow(x,()=>fdOpen(x.id)))),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:'Only you see your drafts. A draft goes once the entry is saved.'})); }
 /* new-project drafts: saved in the person's own data, so only they see them, on any device */
 const pdList=()=>Object.entries(S.pdrafts||{}).map(([id,x])=>({id,...x})).filter(x=>x&&x.d).sort((a,b)=>(b.at||'').localeCompare(a.at||''));
 const pdWrite=items=>S.db.doc(`data/users/${S.uid}/projDrafts`).set({items});
@@ -6381,7 +6451,7 @@ function renderSheet(fromData){
   const dock=dockable(); document.body.classList.toggle('sheet-dock',dock);
   el.replaceChildren(...(dock?[]:[h('div',{class:'backdrop'+(enter?' sh-in':''),onclick:closeSheet,...dl})]),panel);
   if(dock) panel.setAttribute('aria-modal','false');
-  secInfo(panel); el.hidden=false; document.body.classList.toggle('locked',!dock); panel.scrollTop=top; restoreFocus(k);
+  fdDecorate(panel); secInfo(panel); el.hidden=false; document.body.classList.toggle('locked',!dock); panel.scrollTop=top; restoreFocus(k);
 }
 const D=()=>S.sheet.d;
 /* times are picked in 15-minute steps (7:00 am to 10:45 pm); a time saved before that stays selectable */
