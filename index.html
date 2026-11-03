@@ -12078,13 +12078,15 @@ function viewFees(){
 function feeFromProp(pid){ const pr=Object.values(S.props||{}).find(x=>x&&x.projectId===pid&&x.doc); if(!pr) return null; const d=pr.doc, f=pbFee(d), area=+d.area||0;
   return {basis:d.feeMode==='parts'&&area?'sft':'lump',area:area?String(area):'',rate:area?String(Math.round(f.total/area*100)/100):'',fee:String(Math.round(f.total)),
     note:[ptaxShort(d),d.ref?'as proposal '+d.ref:''].filter(Boolean).join(', '),
-    ms:(d.sched||[]).filter(x=>x.label||+x.pct).map(x=>({id:Math.random().toString(36).slice(2,9),label:x.label,pct:+x.pct||0})),vFree:d.vFree==null?'':String(d.vFree),vFee:+d.vLead?String(d.vLead):''}; }
+    ms:(d.sched||[]).filter(x=>x.label||+x.pct).map(x=>({id:Math.random().toString(36).slice(2,9),label:x.label,pct:+x.pct||0})),vFree:d.vFree==null?'':String(d.vFree),vFee:+d.vLead?String(d.vLead):'',
+    taxTerms:PTAX[d.taxTerms]?d.taxTerms:d.tax==='incl'?'allin':'both',splitBoth:d.taxTerms==='split'&&+d.splitBoth?String(d.splitBoth):'',splitAit:d.taxTerms==='split'&&+d.splitAit?String(d.splitAit):''}; }
 function openFee(pid){ const p=S.projects[pid]; if(!p) return; const fr=feeRecOf({...p,id:pid});
   const area=fr&&+fr.areaSft?String(fr.areaSft):String(+p.constManual||(p.farCalc&&p.farCalc.construction)||'');
   const d={est:fr&&+fr.estFee?String(fr.estFee):'',basis:p.proBono==='yes'?'pb':fr?(fr.feeBasis||(+fr.rate&&+fr.areaSft?'sft':'lump')):'sft',area:area==='0'?'':area,rate:fr&&+fr.rate?String(fr.rate):'',fee:fr&&+fr.fee?String(fr.fee):'',note:fr&&fr.feeNote||'',
     ms:(fr&&fr.milestones&&fr.milestones.length?fr.milestones:FEE_DEF_MS.map(([label,pct])=>({id:Math.random().toString(36).slice(2,9),label,pct}))).map(m=>({...m})),
-    costs:((fr&&fr.costs)||[]).map(c=>({...c,budget:c.budget?String(c.budget):'',deal:c.deal?String(c.deal):''})),vFree:fr&&fr.visits&&fr.visits.free!=null?String(fr.visits.free):'',vFee:fr&&fr.visits&&+fr.visits.fee?String(fr.visits.fee):''};
-  if(!fr&&p.proBono!=='yes'){ const fp=feeFromProp(pid); if(fp){ Object.assign(d,{basis:fp.basis,area:fp.area||d.area,rate:fp.rate,fee:fp.fee,note:fp.note,vFree:fp.vFree,vFee:fp.vFee}); if(fp.ms.length) d.ms=fp.ms; d.fromProp=true; } }
+    costs:((fr&&fr.costs)||[]).map(c=>({...c,budget:c.budget?String(c.budget):'',deal:c.deal?String(c.deal):''})),vFree:fr&&fr.visits&&fr.visits.free!=null?String(fr.visits.free):'',vFee:fr&&fr.visits&&+fr.visits.fee?String(fr.visits.fee):'',
+    taxTerms:fr&&PTAX[fr.taxTerms]?fr.taxTerms:'both',splitBoth:fr&&+fr.splitBoth?String(fr.splitBoth):'',splitAit:fr&&+fr.splitAit?String(fr.splitAit):''};
+  if(!fr&&p.proBono!=='yes'){ const fp=feeFromProp(pid); if(fp){ Object.assign(d,{basis:fp.basis,area:fp.area||d.area,rate:fp.rate,fee:fp.fee,note:fp.note,vFree:fp.vFree,vFee:fp.vFee,taxTerms:fp.taxTerms,splitBoth:fp.splitBoth,splitAit:fp.splitAit}); if(fp.ms.length) d.ms=fp.ms; d.fromProp=true; } }
   S.sheet={type:'fee',pid,d,err:''}; renderSheet(); }
 /* cost budget (consultants, incentive and other costs) and site visit terms, inside the fee sheet */
 function costSection(d,fr,p,feeNow){
@@ -12119,17 +12121,18 @@ function sheetFee(){
   const d=S.sheet.d, fr=feeRecOf(p), s=feeStats(fr), sft=d.basis==='sft', pb=d.basis==='pb', tba=d.basis==='tba';
   const calc=()=>sft&&+d.area&&+d.rate?Math.round(+d.area*+d.rate):null, feeNow=pb||tba?0:sft?(calc()||0):+d.fee||0, msSum=d.ms.reduce((a,m)=>a+(+m.pct||0),0);
   const num=(k,attrs)=>h('input',{type:'number',min:0,step:'any',inputmode:'decimal',value:d[k],...attrs,oninput:e=>{ d[k]=e.target.value; const t=document.getElementById('fee-live'); if(t) t.textContent=liveTxt(); }});
-  const liveTxt=()=>{ const f=d.basis==='pb'?0:d.basis==='sft'?(+d.area&&+d.rate?Math.round(+d.area*+d.rate):0):+d.fee||0; return f?`Total fee ${taka(f)} (${bdt(f)})`+' excl. VAT':'Total fee not set'; };
+  const liveTxt=()=>{ const f=d.basis==='pb'?0:d.basis==='sft'?(+d.area&&+d.rate?Math.round(+d.area*+d.rate):0):+d.fee||0; return f?`Total fee ${taka(f)} (${bdt(f)})`+' · '+((PTAX[d.taxTerms]||PTAX.both)[2]):'Total fee not set'; };
   const save=async e=>{ e.preventDefault(); if(!canBiz()) return fail('Only the Principal or the COO sets fees.');
     if(sft&&!(+d.area>0&&+d.rate>0)) return fail('Enter the construction area and the rate per sft.');
     if(d.basis==='lump'&&!(+d.fee>0)) return fail('Enter the total fee, or choose Pro bono.');
+    if(d.taxTerms==='split'&&(+d.splitBoth||0)+(+d.splitAit||0)>feeNow) return fail('The split parts can’t add up to more than the fee.');
     const ms=d.ms.filter(m=>(m.label||'').trim()).map(m=>({...m,label:m.label.trim(),pct:+m.pct||0}));
     if(!pb&&!tba&&Math.round(ms.reduce((a,m)=>a+m.pct,0))!==100) return fail('Payment milestones need to add up to 100%.');
     if(fr) for(const m of (fr.milestones||[])) if(msLocked(fr,m)&&!ms.some(x=>x.id===m.id)) return fail(`“${m.label}” has been invoiced, so it can’t be removed.`);
     const costs=d.costs.filter(c=>(c.label||'').trim()||+c.budget||+c.deal).map(c=>({id:c.id,type:c.type||'other',label:(c.label||'').trim()||costTypeL(c.type),budget:+c.budget||0,deal:+c.deal||0,vendor:(c.vendor||'').trim(),note:(c.note||'').trim()}));
     if(costs.some(c=>c.budget<0||c.deal<0)) return fail('Budget amounts can’t be negative.');
     if(fr) for(const c of (fr.costs||[])) if(costWO(fr,c).n&&!costs.some(x=>x.id===c.id)) return fail(`“${c.label}” has a work order in Finance, so it can’t be removed.`);
-    const terms={costs,visits:{free:d.vFree===''?null:Math.max(0,Math.round(+d.vFree||0)),fee:+d.vFee||0},feeBasis:pb?'lump':d.basis,areaSft:sft?+d.area:(+d.area||0),rate:sft?+d.rate:0,fee:pb||tba?0:sft?Math.round(+d.area*+d.rate):Math.round(+d.fee||0),estFee:tba?Math.round(+d.est||0):0,feeNote:(d.note||'').trim(),milestones:pb||tba?(fr&&fr.milestones&&fr.milestones.length?fr.milestones:ms):ms,feeSetAt:new Date().toISOString(),feeSetBy:S.uid};
+    const terms={costs,visits:{free:d.vFree===''?null:Math.max(0,Math.round(+d.vFree||0)),fee:+d.vFee||0},feeBasis:pb?'lump':d.basis,areaSft:sft?+d.area:(+d.area||0),rate:sft?+d.rate:0,fee:pb||tba?0:sft?Math.round(+d.area*+d.rate):Math.round(+d.fee||0),estFee:tba?Math.round(+d.est||0):0,taxTerms:PTAX[d.taxTerms]?d.taxTerms:'both',splitBoth:d.taxTerms==='split'?Math.round(+d.splitBoth||0):0,splitAit:d.taxTerms==='split'?Math.round(+d.splitAit||0):0,vatPct:15,aitPct:7.5,feeNote:(d.note||'').trim(),milestones:pb||tba?(fr&&fr.milestones&&fr.milestones.length?fr.milestones:ms):ms,feeSetAt:new Date().toISOString(),feeSetBy:S.uid};
     const sb=window.slateSupabase;
     const ok=await run(async()=>{
       if(fr){ const {id,...rest}=fr; const {data:o,error}=await sb.from('fin_docs').update({data:{...rest,...terms,osId:p.id}}).eq('path','projects/'+fr.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Finance is limited to the Principal and the COO.'); }
@@ -12155,6 +12158,8 @@ function sheetFee(){
         h('div',{class:'form-row',style:'align-items:start'},field('Construction area (sft)'+(sft?' *':''),num('area',{step:'1'}),p.farCalc&&p.farCalc.construction&&!fr?'From the project’s FAR calculation':null),
           sft?field('Rate (Tk per sft) *',num('rate')):field('Total fee (Tk) *',num('fee',{step:'1'}))),
         h('div',{id:'fee-live',style:'font-weight:600;font-size:15px',text:liveTxt()}),
+        field('VAT and AIT',(()=>{ const el=h('select',{onchange:e=>{ d.taxTerms=e.target.value; renderSheet(); }},Object.entries(PTAX).map(([k,v])=>h('option',{value:k,text:v[0]}))); el.value=d.taxTerms||'both'; return el; })(),'Books invoices for this project follow these terms.'),
+        d.taxTerms==='split'?h('div',{class:'form-row'},field('Part with VAT and AIT (Tk)',h('input',{type:'number',min:0,step:'any',inputmode:'decimal',value:d.splitBoth,oninput:e=>{d.splitBoth=e.target.value}})),field('Part with AIT only (Tk)',h('input',{type:'number',min:0,step:'any',inputmode:'decimal',value:d.splitAit,oninput:e=>{d.splitAit=e.target.value}}),'The rest of the fee carries neither.')):null,
         field('Fee note',h('input',{value:d.note,maxlength:200,placeholder:'e.g. 3D and interior quoted separately',oninput:e=>{d.note=e.target.value}})),
         h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:6px',text:'Payment milestones'}),
         h('div',{style:'display:grid;gap:6px'},d.ms.map(msRow)),

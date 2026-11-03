@@ -1920,8 +1920,10 @@ function invoicePDF(id, plain, unsaved) {
   y += 15; const iw = doc.text(M, y, 'INVOICE', { size: 15, bold: true, spacing: 1.2 });
   if (draft) { const dw = doc.width('DRAFT · NOT ISSUED', 8, true, null, 0.5) + 12; doc.frame(M + iw + 10, y - 11, dw, 14, { color: RED, w: 0.8 }); doc.text(M + iw + 16, y - 1, 'DRAFT · NOT ISSUED', { size: 8, bold: true, color: RED, spacing: 0.5 }); }
   y += 18;
+  const regIds = [inv.vatMode !== 'none' && S.settings.bin ? ['BIN', S.settings.bin] : null, S.settings.tin ? ['TIN', S.settings.tin] : null, S.settings.tradeLic ? ['Trade licence', S.settings.tradeLic] : null].filter(Boolean);
   const refs = [['Invoice no.', inv.no || 'given when issued'], ['Date', fmtD(inv.date, true)]].concat(inv.due ? [['Due by', fmtD(inv.due, true)]] : []);
   let rx = M; refs.forEach(([l, v]) => { const lw = doc.text(rx, y, l + ' ', { size: 9, color: GREY }); const vw = doc.text(rx + lw, y, v, { size: 9, bold: true }); rx += lw + vw + 22; });
+  if (regIds.length) { y += 14; rx = M; regIds.forEach(([l, v]) => { const lw = doc.text(rx, y, l + ' ', { size: 9, color: GREY }); const vw = doc.text(rx + lw, y, String(v), { size: 9, bold: true }); rx += lw + vw + 22; }); }
 
   /* bill to */
   y += 26; doc.text(M, y, 'BILL TO', { size: 7.5, bold: true, color: GREY, spacing: 0.9 });
@@ -3058,6 +3060,7 @@ function openInvoice(id, pre) {
   if (!x) applyTerms(d, TAX_TERMS[S.settings.invTerms] ? S.settings.invTerms : 'both');
   if (x) d.signIt = !!(x.sign && x.sign.uid === S.uid && mySign());
   if (!x && pre && pre.project) invPickProject(d, pre.project);
+  if (x && x.project && S.projects[x.project] && S.projects[x.project].taxTerms === termsOf(x)) { d.termsFrom = 'project'; d.termsOpen = false; }
   openSheet({ type: 'invform', d, editId: id || null });
 }
 /* picking a project fills the client account (the project's fee account), the formal client name and the VAT terms */
@@ -3066,15 +3069,32 @@ function invPickProject(d, pid) {
   const acct = Object.entries(S.ledgers).find(([, l]) => l.group === 'inc' && l.project === pid && l.active !== false);
   if (acct) d.client = acct[0];
   if (!d.clientName && p.client) d.clientName = String(p.client).toUpperCase();
+  projTerms(d, p);
   const ids = (p.stages || []).map(x => x.id);
   d.items = d.items.filter(i => i.stage ? ids.includes(i.stage) : (i.desc || '').trim() || parseAmt(i.amount));
   if (!d.items.length) d.items.push({ desc: '', amount: '' });
+}
+/* the VAT and AIT terms agreed for a project (proposal or Business › Fees) become the invoice's terms */
+function projTerms(d, p) {
+  const T = p && p.taxTerms; if (!T || (T !== 'split' && !TAX_TERMS[T])) { d.termsFrom = ''; return; }
+  if (+p.vatPct > 0) d.vatPct = String(p.vatPct); if (+p.aitPct > 0) d.aitPct = String(p.aitPct);
+  if (T === 'split') { d.split = true; d.terms = 'split'; d.vatMode = 'add'; d.aitMode = 'add'; d.vds = true; if (!(parseAmt(d.aitPct) > 0)) d.aitPct = String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct); d.items.forEach(x => { if (!LINE_TAX[x.tax]) x.tax = 'both'; }); }
+  else { d.split = false; applyTerms(d, T); }
+  d.termsFrom = 'project'; d.termsOpen = false;
+}
+/* a stage on a split project is billed in the agreed parts: with VAT and AIT, with AIT only, and the rest with neither */
+function stageLines(r, d) {
+  const p = S.projects[d.project] || {}, fee = +p.contract || 0;
+  if (!d.split || p.taxTerms !== 'split' || !(fee > 0)) return [Object.assign(stageLine(r), d.split ? { tax: 'both' } : {})];
+  const fb = Math.min(1, Math.max(0, (+p.splitBoth || 0) / fee)), fa = Math.min(1 - fb, Math.max(0, (+p.splitAit || 0) / fee));
+  const b = Math.round(r.amount * fb), a = Math.round(r.amount * fa), n = r2(r.amount - b - a), base = stageLine(r);
+  return [[b, 'both'], [a, 'ait'], [n, 'none']].filter(([v]) => v > 0).map(([v, t]) => ({ desc: base.desc, amount: String(v), stage: r.id, tax: t }));
 }
 function stageLine(r) { return { desc: `Stage ${r.n}: ${r.label} (${r.pct}% of the fee)`, amount: String(r.amount), stage: r.id }; }
 function invStagePicker(d) {
   const sb = d.project ? stageBook(d.project, { _id: S.sheet.editId, items: [] }) : null; if (!sb) return null;
   const on = id => d.items.some(i => i.stage === id);
-  const toggle = r => { if (on(r.id)) d.items = d.items.filter(i => i.stage !== r.id); else { d.items = d.items.filter(i => i.stage || (i.desc || '').trim() || parseAmt(i.amount)); d.items.push(stageLine(r)); d.items.sort((a, b) => ((sb.rows.find(x => x.id === a.stage) || { n: 99 }).n) - ((sb.rows.find(x => x.id === b.stage) || { n: 99 }).n)); } if (!d.items.length) d.items.push({ desc: '', amount: '' }); renderSheet(); };
+  const toggle = r => { if (on(r.id)) d.items = d.items.filter(i => i.stage !== r.id); else { d.items = d.items.filter(i => i.stage || (i.desc || '').trim() || parseAmt(i.amount)); d.items.push(...stageLines(r, d)); d.items.sort((a, b) => ((sb.rows.find(x => x.id === a.stage) || { n: 99 }).n) - ((sb.rows.find(x => x.id === b.stage) || { n: 99 }).n)); } if (!d.items.length) d.items.push({ desc: '', amount: '' }); renderSheet(); };
   return h('div', { class: 'stg-pick' }, h('div', { class: 'ln-h', text: 'Fee stages · tick the stages this invoice bills' }),
     sb.rows.map(r => { const free = r.st === 'next' || on(r.id);
       return h('label', { class: 'stg-row' + (free ? '' : ' is-done') }, h('input', { type: 'checkbox', checked: on(r.id), disabled: !free, onchange: () => toggle(r) }),
@@ -3096,10 +3116,12 @@ function sheetInvForm() {
     invStagePicker(d),
     h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Due by', inp('due', { type: 'date' }))),
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
+    ...(d.termsFrom === 'project' && !d.termsOpen ? [invTermsFixed(d)] : [
     h('label', { class: 'chk-l' }, h('input', { type: 'checkbox', checked: !!d.split, onchange: e => { d.split = e.target.checked; if (d.split) { d.vatMode = 'add'; d.aitMode = 'add'; d.vds = true; if (!(parseAmt(d.aitPct) > 0)) d.aitPct = String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct); d.items.forEach(x => { if (!LINE_TAX[x.tax]) x.tax = 'both'; }); } else applyTerms(d, TAX_TERMS[d.terms] ? d.terms : 'both'); renderSheet(); } }), h('span', { text: 'Split the amount: some lines with VAT and AIT, some with AIT only, some with neither' })),
     d.split ? h('p', { class: 'f-hint', style: 'margin:0', text: 'Pick the tax on each line above. Every line is net to SLATE; the client’s AIT and VAT are added on top.' }) : field('Tax terms', sel('terms', Object.entries(TAX_TERMS).map(([k, T]) => [k, T.label]), { onpick: k => applyTerms(D(), k) }), TAX_TERMS[d.terms] ? TAX_TERMS[d.terms].note : ''),
     (d.split || d.vatMode !== 'none' || TAX_TERMS[d.terms].ait) ? h('div', { class: 'form-row' }, d.split || d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null, d.split || TAX_TERMS[d.terms].ait ? field('AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal', placeholder: '0' }), '7.5% for a firm, 15% for an individual.') : null) : null,
-    d.vatMode !== 'none' ? chk('vds', 'The client withholds the VAT at source') : null,
+    d.vatMode !== 'none' ? chk('vds', 'The client withholds the VAT at source') : null
+    ]),
     invNetHint(d),
     field('Note on the invoice', ta('note', { rows: 2, placeholder: S.settings.invNote || 'Payment terms, bank details' })),
     canSign() ? (mySign() ? chk('signIt', `Sign this invoice as ${mySign().name}, ${mySign().desig}`) : h('p', { class: 'f-hint', style: 'margin:0' }, 'To sign invoices digitally, add your signature in ', h('button', { class: 'linkish', type: 'button', onclick: () => openMySign(), text: 'More › My signature' }), '.'))
@@ -3127,6 +3149,14 @@ function saveInvoice(status) {
   const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '', i.tax || '']), x.vatMode, +x.vatPct || 0, +x.aitPct || 0, x.aitMode || 'in', !!x.vds, x.terms || '', !!x.split, x.note || '']);
   doc.sign = d.signIt && mySign() ? signStamp() : old && old.sign && what(old) === what(doc) && !(old.sign.uid === S.uid && !d.signIt) ? old.sign : null;
   run(() => Store.put('invoices', id, doc), old ? 'Saved' : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
+}
+/* the terms agreed for the project, shown fixed on the invoice form; only the Principal or the COO changes them for one invoice */
+function invTermsFixed(d) {
+  const lab = d.split ? 'Split: part with VAT and AIT, part with AIT only, the rest without' : (TAX_TERMS[d.terms] || {}).label || '';
+  const rates = [d.vatMode !== 'none' ? `VAT ${d.vatPct}%` : '', (d.split || (TAX_TERMS[d.terms] || {}).ait) ? `AIT ${d.aitPct}%` : ''].filter(Boolean).join(' · ');
+  return h('div', { class: 'field' }, h('span', { class: 'lbl', text: 'Tax terms' }),
+    h('p', { style: 'margin:0', text: lab + (rates ? ' · ' + rates : '') }),
+    h('p', { class: 'f-hint', style: 'margin:0' }, 'From the project’s agreement. ', canSign() ? h('button', { class: 'linkish', type: 'button', onclick: () => { d.termsOpen = true; renderSheet(); }, text: 'Change for this invoice' }) : 'Only the Principal or the COO can change them.'));
 }
 /* AIT and VAT the client keeps back on a payment of `amt` against invoice x, in proportion to the invoice */
 function invWithheld(x, amt) {
@@ -4081,7 +4111,7 @@ function moreSettings() {
     fact('Invoice numbers', (st.prefixes || {}).Invoice ? `${st.prefixes.Invoice}/${curFY().short}/001` : `INV/${curFY().short}/001`), fact('Checks on cash', st.flagCash ? 'On' : 'Off', 'Flags salary, rent and payments over Tk 50,000 made in cash'), fact('Number style', st.grouping === 'intl' ? '1,234,567' : '12,34,567')));
   return out;
 }
-function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', vatPct: String(st.vatPct || 15), aitPct: String(st.aitPct == null ? 7.5 : st.aitPct), invTerms: TAX_TERMS[st.invTerms] ? st.invTerms : 'both' }; }
+function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', bin: st.bin || '', tin: st.tin || '', tradeLic: st.tradeLic || '', vatPct: String(st.vatPct || 15), aitPct: String(st.aitPct == null ? 7.5 : st.aitPct), invTerms: TAX_TERMS[st.invTerms] ? st.invTerms : 'both' }; }
 function sheetSettings() {
   const cashL = [['', 'Ask each time']].concat(Object.keys(S.ledgers).filter(k => isCashL(k)).map(k => [k, L(k)]));
   const fields = [field('Company name on documents', inp('company')), field('Address', inp('address', { placeholder: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212' })),
@@ -4094,11 +4124,13 @@ function sheetSettings() {
     h('div', { class: 'form-row' }, field('Payment prefix', inp('pPayment')), field('Receipt prefix', inp('pReceipt')), field('Transfer prefix', inp('pContra')), field('Journal prefix', inp('pJournal')), field('Invoice prefix', inp('pInvoice'))),
     h('div', { class: 'form-row' }, field('Tax terms on new invoices', sel('invTerms', Object.entries(TAX_TERMS).map(([k, T]) => [k, T.label]))), field('Usual AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal' }), '7.5% for a firm or company, 15% for an individual.')),
     h('div', { class: 'form-row' }, field('Usual VAT %', inp('vatPct', { inputmode: 'decimal' })), field('Number style', sel('grouping', [['lakh', '12,34,567 (lakh)'], ['intl', '1,234,567']])))
+    , h('div', { class: 'form-row' }, field('BIN (VAT registration)', inp('bin', { placeholder: 'Printed on invoices with VAT' })), field('TIN', inp('tin', { placeholder: 'For the client’s AIT certificate' })))
+    , field('Trade licence number', inp('tradeLic', { placeholder: 'Printed on invoices if given' }))
     , field('Note printed on invoices', ta('invNote', { rows: 2, placeholder: 'Bank details and payment terms' })), chk('flagCash', 'Check cash payments (salary, rent and payments over Tk 50,000 in cash)')];
   return [head('Settings', 'Edit settings'), form(null, fields, 'Save', () => {
     const d = D();
     const prefixes = Object.assign({}, S.settings.prefixes || {}, { Payment: d.pPayment.trim() || 'PV', Receipt: d.pReceipt.trim() || 'CV', Contra: d.pContra.trim() || 'CT', Journal: d.pJournal.trim() || 'JV', Invoice: d.pInvoice.trim() || 'INV' });
-    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), vatPct: +d.vatPct || 15, aitPct: Math.max(0, parseAmt(d.aitPct) || 0), invTerms: TAX_TERMS[d.invTerms] ? d.invTerms : 'both' }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
+    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), bin: (d.bin || '').trim(), tin: (d.tin || '').trim(), tradeLic: (d.tradeLic || '').trim(), vatPct: +d.vatPct || 15, aitPct: Math.max(0, parseAmt(d.aitPct) || 0), invTerms: TAX_TERMS[d.invTerms] ? d.invTerms : 'both' }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
   })];
 }
 
