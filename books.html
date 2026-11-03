@@ -1791,21 +1791,22 @@ function voucherPDF(id) {
   return doc.output();
 }
 /* the invoice on the SLATE letterhead pad. plain = the print copy for the printed pad (no pad drawn) */
-function invoicePDF(id, plain) {
-  if (!S.invoices[id]) return null;
-  const inv = Object.assign({ _id: id }, S.invoices[id]);
+function invoicePDF(id, plain, unsaved) {
+  if (!unsaved && !S.invoices[id]) return null;
+  const inv = Object.assign({ _id: id }, unsaved || S.invoices[id]), draft = !!unsaved || inv.status === 'draft';
   const doc = PDFDoc(), M = PAD.l, R = doc.W - PAD.r, t = invTotals(inv), RED = '#C41E29', GREY = '#545454';
   doc.plain = !!plain;
-  const ref = `${inv.no || ''}  ·  ${cliN(inv)}`;
+  const ref = `${inv.no || 'Draft'}  ·  ${cliN(inv)}`;
   const newPage = () => { padFoot(doc, ref); doc.page(); return letterhead(doc); };
   let y = letterhead(doc);
   const need = hh => { if (y + hh > PAD.b) y = newPage(); };
   const th = (x, yy, txt, al) => doc.text(x, yy, txt.toUpperCase(), { size: 7.5, bold: true, color: GREY, spacing: 0.9, align: al });
 
   /* title and reference row */
-  y += 15; doc.text(M, y, 'INVOICE', { size: 15, bold: true, spacing: 1.2 });
+  y += 15; const iw = doc.text(M, y, 'INVOICE', { size: 15, bold: true, spacing: 1.2 });
+  if (draft) { const dw = doc.width('DRAFT · NOT ISSUED', 8, true, null, 0.5) + 12; doc.frame(M + iw + 10, y - 11, dw, 14, { color: RED, w: 0.8 }); doc.text(M + iw + 16, y - 1, 'DRAFT · NOT ISSUED', { size: 8, bold: true, color: RED, spacing: 0.5 }); }
   y += 18;
-  const refs = [['Invoice no.', inv.no || '—'], ['Date', fmtD(inv.date, true)]].concat(inv.due ? [['Due by', fmtD(inv.due, true)]] : []);
+  const refs = [['Invoice no.', inv.no || 'given when issued'], ['Date', fmtD(inv.date, true)]].concat(inv.due ? [['Due by', fmtD(inv.due, true)]] : []);
   let rx = M; refs.forEach(([l, v]) => { const lw = doc.text(rx, y, l + ' ', { size: 9, color: GREY }); const vw = doc.text(rx + lw, y, v, { size: 9, bold: true }); rx += lw + vw + 22; });
 
   /* bill to */
@@ -1859,7 +1860,7 @@ function invoicePDF(id, plain) {
     doc.frame(M, y, R - M, bh, { w: 1 });
     y += bh + 13;
     const prev = r2(sb.outstanding - t.total);
-    y += doc.para(M, y, `Amount due is ${prev > 0.5 ? `this invoice plus Tk ${fmt(prev)} still unpaid on earlier bills` : 'this invoice'}${inv.due ? ', payable by ' + fmtD(inv.due, true) : ''}. Billed to date: Tk ${fmt(sb.billed)} (this invoice and the advance received). Each upcoming stage is billed when it is reached.`, R - M, { size: 8.5, color: GREY });
+    y += doc.para(M, y, `The amount due is the total of this invoice${prev > 0.5 ? ` plus Tk ${fmt(prev)} still unpaid on earlier bills` : ''}${inv.due ? ', payable by ' + fmtD(inv.due, true) : ''}. Billed to date: Tk ${fmt(sb.billed)}, including this invoice${sb.rows.some(r => r.st === 'adv') ? ' and the advance received' : ''}. Each upcoming stage will be billed when it is reached.`, R - M, { size: 8.5, color: GREY });
   }
   const note = inv.note || S.settings.invNote || '';
   if (note) { need(46); y += 12; doc.text(M, y, 'NOTES', { size: 7.5, bold: true, color: GREY, spacing: 0.9 }); y += 13; y += doc.para(M, y, note, R - M, { size: 9 }); }
@@ -2961,7 +2962,15 @@ function sheetInvForm() {
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
     h('div', { class: 'form-row' }, field('VAT', sel('vatMode', [['none', 'No VAT on this invoice'], ['add', 'Add VAT on top'], ['incl', 'Amounts include VAT']])), d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null),
     field('Note on the invoice', ta('note', { rows: 2, placeholder: S.settings.invNote || 'Payment terms, bank details' })), attachBlock('files')];
-  return [head(S.sheet.editId ? 'Edit invoice' : 'New invoice', S.sheet.editId ? S.invoices[S.sheet.editId].no : 'Invoice'), form(null, fields, S.sheet.editId ? 'Save' : 'Save and issue', () => saveInvoice('issued'), S.sheet.editId ? null : h('button', { class: 'btn', type: 'button', onclick: () => saveInvoice('draft'), text: 'Save as draft' }))];
+  return [head(S.sheet.editId ? 'Edit invoice' : 'New invoice', S.sheet.editId ? S.invoices[S.sheet.editId].no : 'Invoice'), form(null, fields, S.sheet.editId ? 'Save' : 'Save and issue', () => saveInvoice('issued'), [S.sheet.editId ? null : h('button', { class: 'btn', type: 'button', onclick: () => saveInvoice('draft'), text: 'Save as draft' }), downloadsCap ? h('button', { class: 'btn', type: 'button', onclick: () => previewInvoice(), text: 'Preview (PDF)' }) : null])];
+}
+function previewInvoice() {
+  const d = D(); if (!d.client) return fail('Choose the client.');
+  const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
+  if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
+  const old = S.sheet.editId ? S.invoices[S.sheet.editId] : null;
+  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), status: 'draft' };
+  savePDF(() => invoicePDF(S.sheet.editId || '_preview', false, inv), safeName(`Preview ${inv.clientName || L(inv.client)}`) + '.pdf');
 }
 function saveInvoice(status) {
   const d = D();
@@ -2984,6 +2993,7 @@ function sheetInvoice() {
   const acts = [];
   if (can.enter() && ['unpaid', 'part', 'overdue'].includes(st)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openMoney('in', { cat: x.client, proj: x.project, inv: x._id, amount: String(t.due), party: x.clientName || '', narr: 'Against invoice ' + x.no }), text: 'Record a payment' }));
   if (can.enter() && st === 'draft') acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'issued', trail: trailAdd(raw.trail, 'issued') }), 'Issued'), text: 'Issue' }));
+  if (downloadsCap && st === 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`Preview ${cliN(x)}`) + '.pdf'), text: 'Preview (PDF)' }));
   if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`${x.no} ${cliN(x)}`) + '.pdf'), text: 'Invoice (PDF)', title: 'On the SLATE letterhead, to send by email or WhatsApp' }),
     h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id, true), safeName(`${x.no} ${cliN(x)} - print on letterhead pad`) + '.pdf'), text: 'Print copy (pad)', title: 'The same invoice without the letterhead, to print on the SLATE pad at 100%' }));
   if (can.enter() && st !== 'cancelled') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openInvoice(x._id), text: 'Edit' }));
