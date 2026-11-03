@@ -4432,10 +4432,26 @@ function rcCost(id) {
   const r = S.recurring[id]; if (!r) return null;
   return { id, name: r.name || '', kind: ['fixed', 'variable', 'rent'].includes(r.kind) ? r.kind : 'fixed', amount: +r.amount || 0, est: +r.est || 0, payee: r.payee || r.party || '', meter: r.meter || '',
     cat: r.cat || '', acc: r.acc || '', proj: r.proj || S.settings.overhead || '', day: +r.day || 1, paid: r.paid === 'post' ? 'post' : 'pre', kwh: !!r.kwh, seasonal: !!r.seasonal,
+    every: r.kind === 'rent' ? 1 : [3, 6, 12].includes(+r.every) ? +r.every : 1,
     from: r.from || RC_FROM, until: r.until || '', rent: +r.rent || 0, advance: +r.advance || 0, adjust: +r.adjust || 0, advFrom: r.advFrom || '', active: r.active !== false, note: r.note || '' };
 }
 const rcCosts = () => Object.keys(S.recurring).map(rcCost).filter(Boolean);
 const rcOn = (c, ym) => c.active && c.from <= ym && (!c.until || ym <= c.until);
+/* costs that are not monthly (every 3, 6 or 12 months) fall due in `from` and every N months after it */
+const RC_EVERY = { 1: 'Monthly', 3: 'Every 3 months', 6: 'Every 6 months', 12: 'Yearly' };
+const ymDiffB = (a, b) => (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7));
+const rcDueIn = (c, ym) => rcOn(c, ym) && ymDiffB(c.from, ym) % (c.every || 1) === 0;
+/* the due month whose bill covers month ym (prepaid: that month and the ones after; postpaid: the months before it) */
+function rcCoverDue(c, ym) {
+  const e = c.every || 1; if (e === 1) return rcOn(c, ym) ? ym : null;
+  if (!c.active) return null;
+  const k = Math.floor(ymDiffB(c.from, ym) / e), D = ymAddB(c.from, (c.paid === 'post' ? k + 1 : k) * e);
+  if ((D < c.from && ym < RC_FROM) || (c.until && D > c.until)) return null; return D;  /* before the first due month: the last bill was paid before it was set up here */
+}
+/* the months one bill covers, in words */
+function rcPeriod(c, D) { const e = c.every || 1, a = c.paid === 'post' ? ymAddB(D, -e) : D, b = ymAddB(a, e - 1); return e === 1 ? monthName(a) : monthName(a).split(' ')[0] + ' ' + (a.slice(0, 4) === b.slice(0, 4) ? '' : a.slice(0, 4) + ' ') + '– ' + monthName(b); }
+/* next due date on or after today (for costs that are not monthly) */
+function rcNextDue(c) { const td = today(); let ym = curMonth(); for (let i = 0; i < 25; i++, ym = ymAddB(ym, 1)) { if (rcDueIn(c, ym) && rcDueDate(c, ym) >= td) return { ym, date: rcDueDate(c, ym) }; } return null; }
 const rcDueDate = (c, ym) => ym + '-' + String(Math.min(c.day, rcDim(ym))).padStart(2, '0');
 function rcRent(c, ym) {
   const [y1, m1] = (c.advFrom || c.from).split('-').map(Number), n = (+ym.slice(0, 4) - y1) * 12 + (+ym.slice(5, 7) - m1) + 1;
@@ -4448,30 +4464,44 @@ function rcEstimate(c, ym) {
   if (c.kind === 'rent') return rcRent(c, ym).cash;
   if (c.kind !== 'variable') return c.amount;
   const hs = rcHist(c.id).filter(m => m.month < ym);
-  if (c.seasonal && hs.length >= 12) { const s = hs.find(m => m.month === ymAddB(ym, -12)); if (s) return Math.round(+s.amount || 0); }
+  if (c.seasonal && hs.length >= 12 / (c.every || 1)) { const s = hs.find(m => m.month === ymAddB(ym, -12)); if (s) return Math.round(+s.amount || 0); }
   return hs.length ? Math.round(hs.slice(0, 3).reduce((s, m) => s + (+m.amount || 0), 0) / Math.min(3, hs.length)) : c.est;
 }
 function rcBasis(c, ym) {
   if (c.kind !== 'variable') return c.kind === 'rent' ? 'Rent less the advance adjusted this month' : 'The fixed monthly amount';
   const n = rcHist(c.id).filter(m => m.month < ym).length;
-  return c.seasonal && n >= 12 && rcHist(c.id).some(m => m.month === ymAddB(ym, -12)) ? 'Same month last year' : n ? `Average of the last ${Math.min(3, n)} bill${n > 1 ? 's' : ''}` : 'First estimate set by the COO';
+  return c.seasonal && n >= 12 / (c.every || 1) && rcHist(c.id).some(m => m.month === ymAddB(ym, -12)) ? 'Same month last year' : n ? `Average of the last ${Math.min(3, n)} bill${n > 1 ? 's' : ''}` : 'First estimate set by the COO';
 }
 /* the month's entries: the ones SLATE OS has added, plus (before go-live, or before today's run) the ones it will add */
 function rcRows(ym) {
   const td = today(), out = [], seen = {};
   Object.entries(S.rcmonth).forEach(([key, m]) => { if (!m || m.month !== ym) return; seen[m.cost] = 1;
     out.push({ key, m, c: rcCost(m.cost) || { id: m.cost, name: m.name || 'Removed cost', kind: m.kind || 'fixed', cat: '', acc: '', proj: '', payee: '', meter: '', paid: 'post', kwh: false }, state: m.status, est: +m.est || 0, due: m.due || ym + '-01' }); });
-  if (ym >= RC_FROM) rcCosts().forEach(c => { if (seen[c.id] || !rcOn(c, ym)) return; const due = rcDueDate(c, ym);
+  if (ym >= RC_FROM) rcCosts().forEach(c => { if (seen[c.id] || !rcDueIn(c, ym)) return; const due = rcDueDate(c, ym);
     out.push({ key: ym + '~' + c.id, m: null, c, state: due <= td ? (S.rcLive ? 'adding' : 'preview') : 'upcoming', est: rcEstimate(c, ym), due }); });
   return out.sort((a, b) => a.due.localeCompare(b.due) || a.c.name.localeCompare(b.c.name));
 }
 const rcOpen = r => ['due', 'adding', 'preview'].includes(r.state);
-/* a month's overhead: confirmed bills at the actual, skipped at nothing, the rest (a Variable bill not in yet) at the estimate */
+/* a month's overhead: confirmed bills at the actual, skipped at nothing, the rest (a Variable bill not in yet) at the estimate.
+   A cost that is not monthly is spread evenly over the months its bill covers (1/3, 1/6 or 1/12 a month); its cash still
+   goes out in full in the due month. `cash` is what is due to be paid in the month (the entries in the list). */
 function rcOverhead(ym) {
-  const rows = rcRows(ym); let act = 0, est = 0;
-  rows.forEach(r => { if (r.state === 'skipped') return; const full = r.c.kind === 'rent' ? rcRent(r.c, ym).rent : null;
-    if (r.state === 'confirmed') act += full != null ? full : (+r.m.amount || 0); else est += full != null ? full : r.est; });
-  return { rows, act: r2(act), est: r2(est), total: r2(act + est) };
+  const rows = rcRows(ym), lines = []; let act = 0, est = 0, cash = 0;
+  rows.forEach(r => { if (r.state === 'skipped') return; cash += r.state === 'confirmed' ? (+r.m.amount || 0) : r.est;
+    if ((r.c.every || +(r.m || {}).every || 1) > 1) return;
+    const full = r.c.kind === 'rent' ? rcRent(r.c, ym).rent : null, conf = r.state === 'confirmed', v = full != null ? full : conf ? (+r.m.amount || 0) : r.est;
+    if (conf) act += v; else est += v;
+    lines.push({ c: r.c, sub: 'Due ' + fmtD(r.due), est: r.est, act: conf ? v : null, state: r.state, vid: r.m && r.m.vid, over: !!(r.m && r.m.over) }); });
+  rows.filter(r => r.state === 'skipped' && (r.c.every || 1) === 1).forEach(r => lines.push({ c: r.c, sub: 'Due ' + fmtD(r.due), est: r.est, act: null, state: 'skipped' }));
+  if (ym >= RC_FROM) rcCosts().filter(c => c.every > 1).forEach(c => {
+    const D = rcCoverDue(c, ym); if (!D) return;
+    const m = S.rcmonth[D + '~' + c.id], e = c.every, full = m && m.est != null ? +m.est : rcEstimate(c, D);
+    const st = m ? m.status : D < c.from || D < RC_FROM ? 'before' : rcDueDate(c, D) <= today() ? 'due' : 'upcoming';
+    const sh = st === 'skipped' ? 0 : r2((st === 'confirmed' ? +m.amount || 0 : full) / e);
+    if (st === 'confirmed') act += sh; else est += sh;
+    lines.push({ c, sub: `1/${e} of the ${RC_EVERY[e].toLowerCase()} bill for ${rcPeriod(c, D)} · ` + (st === 'before' ? 'paid before it was set up here (estimate)' : 'due ' + fmtD(rcDueDate(c, D))), est: r2(full / e), act: st === 'confirmed' ? sh : null, state: st === 'before' ? 'upcoming' : st, vid: m && m.vid, spread: true });
+  });
+  return { rows, lines, act: r2(act), est: r2(est), total: r2(act + est), cash: r2(cash) };
 }
 /* due entries for the Accountant: this month and any earlier month still open */
 function recurringDue() {
@@ -4488,7 +4518,7 @@ async function rcEnsure(force) {
 }
 function rcRowEl(r, opts) {
   const c = r.c, v = r.m && r.m.vid ? S.vouchers[r.m.vid] : null, st = v ? vStatus(v) : '';
-  const meta = [r.state === 'upcoming' ? 'Due ' + fmtD(r.due) : 'Due ' + fmtD(r.due), RC_KIND[c.kind] || 'Fixed', L(c.acc) || '', c.kind === 'variable' && rcOpen(r) ? 'estimate ' + tk(r.est) : ''].filter(Boolean).join(' · ');
+  const meta = ['Due ' + fmtD(r.due), (c.every || 1) > 1 ? RC_EVERY[c.every] + ' · ' + rcPeriod(c, r.key.slice(0, 7)) : '', RC_KIND[c.kind] || 'Fixed', L(c.acc) || '', c.kind === 'variable' && rcOpen(r) ? 'estimate ' + tk(r.est) : ''].filter(Boolean).join(' · ');
   const tag = rcOpen(r) ? h('span', { class: 'pill st-pending', text: 'Amount to confirm' }) : r.state === 'skipped' ? h('span', { class: 'tag', text: 'Skipped' }) : r.state === 'confirmed' && v ? pill(st) : null;
   const amt = r.state === 'confirmed' ? fmt(r.m.amount) : r.state === 'skipped' ? '—' : (c.kind === 'variable' ? '≈ ' : '') + fmt(r.est);
   const open = () => r.state === 'confirmed' && r.m.vid && S.vouchers[r.m.vid] ? openSheet({ type: 'voucher', id: r.m.vid }) : openRcConfirm(r.key);
@@ -4516,7 +4546,7 @@ function rcVoucher(r, d) {
   const c = r.c, ym = r.key.slice(0, 7), amt = r2(+d.amount || 0);
   const md = { kind: 'out', mode: 'spend', amount: String(amt), acc: d.acc || c.acc, cat: c.cat, vendor: '', proj: c.proj, party: c.payee, tds: '', jvSplit: false };
   const usage = c.paid === 'post' ? ymAddB(ym, -1) : ym;
-  return { type: 'Payment', date: d.date, party: c.payee || '', narr: `${c.name} · ${c.paid === 'post' ? 'bill for ' : ''}${monthName(usage)}` + (+d.kwh > 0 ? ` · ${+d.kwh} kWh` : ''),
+  return { type: 'Payment', date: d.date, party: c.payee || '', narr: `${c.name} · ${(c.every || 1) > 1 ? (c.paid === 'post' ? 'bill for ' : 'for ') + rcPeriod(c, ym) : (c.paid === 'post' ? 'bill for ' : '') + monthName(usage)}` + (+d.kwh > 0 ? ` · ${+d.kwh} kWh` : ''),
     ref: c.meter ? 'No. ' + c.meter : '', lines: moneyLines(md), files: d.files || [], inv: '', req: '',
     form: { kind: 'out', mode: 'spend', vendor: '', amount: amt, acc: md.acc, to: '', cat: c.cat, proj: md.proj || '', jvSplit: false, tds: '', ait: '', vat: '', ref: '' },
     rc: { id: c.id, month: ym, est: r.est, kwh: +d.kwh > 0 ? +d.kwh : null, note: (d.note || '').trim() } };
@@ -4534,7 +4564,7 @@ function sheetRcConfirm() {
   const out = [head(monthName(ym) + ' · ' + (r.state === 'skipped' ? 'Skipped' : rcOpen(r) ? 'Amount to confirm' : 'Coming'), c.name)];
   if (!S.rcLive) out.push(h('div', { class: 'callout' }, h('div', {}, h('b', { text: 'Preview' })), h('div', { class: 'muted', text: 'Confirming opens at go-live, once the database part is run. Nothing here is saved yet.' })));
   out.push(h('div', { class: 'facts' }, fact('Payee', c.payee || '—'), fact('Account / meter no.', c.meter || '—'), fact('Head of account', L(c.cat) || '—'), fact('Cost centre', c.proj ? projLabel(c.proj) : '—'),
-    fact('Cash point', L(c.acc) || '—'), fact('Due', fmtD(r.due, true), c.paid === 'post' ? 'Postpaid: the bill for ' + monthName(ymAddB(ym, -1)) : 'Prepaid: for ' + monthName(ym)),
+    fact('Cash point', L(c.acc) || '—'), fact('Due', fmtD(r.due, true), (c.every || 1) > 1 ? `${RC_EVERY[c.every]}, ${c.paid === 'post' ? 'postpaid' : 'prepaid'}: covers ${rcPeriod(c, ym)}` : c.paid === 'post' ? 'Postpaid: the bill for ' + monthName(ymAddB(ym, -1)) : 'Prepaid: for ' + monthName(ym)),
     fact(vari ? 'Estimate' : 'Amount', tk(r.est), rcBasis(c, ym)), fact('Set up', 'Business › Running costs', 'By the Principal or the COO')));
   if (m === 'skip') {
     out.push(form('Skip ' + monthName(ym), [field('Why it is skipped this month', ta('skipNote', { rows: 2, required: true, placeholder: 'e.g. Paid with last month’s bill' }))], 'Skip this month', () => {
@@ -4582,15 +4612,19 @@ function moreRecurring() {
   out.push(h('div', { class: 'bar' }, h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Previous month', onclick: () => { S.rcYm = ymAddB(ym, -1); render(true); }, text: '‹' }), h('b', { style: 'min-width:120px;text-align:center', text: monthName(ym) }),
     h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Next month', onclick: () => { S.rcYm = ymAddB(ym, 1); render(true); }, text: '›' }), ym !== tm ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { S.rcYm = tm; render(true); }, text: 'This month' }) : null));
   const toC = rows.filter(rcOpen), conf = rows.filter(r => r.state === 'confirmed'), soon = rows.filter(r => r.state === 'upcoming'), skip = rows.filter(r => r.state === 'skipped');
-  out.push(h('div', { class: 'kpis' }, kpi(ym > tm ? 'Forecast' : 'Overhead', tkShort(ov.total), ov.est ? 'incl. ' + tkShort(ov.est) + ' by estimate' : 'all confirmed'), kpi('Confirmed', tkShort(ov.act), conf.length + ' of ' + rows.length),
+  out.push(h('div', { class: 'kpis' }, kpi(ym > tm ? 'Forecast' : 'Overhead', tkShort(ov.total), (ov.lines.some(l => l.spread) ? 'yearly bills spread · ' : '') + (ov.est ? 'incl. ' + tkShort(ov.est) + ' by estimate' : 'all confirmed')), kpi('Confirmed', tkShort(ov.act), conf.length + ' of ' + rows.length),
     kpi('To confirm', String(toC.length), toC.length ? tkShort(toC.reduce((s, r) => s + r.est, 0)) : ''), kpi('Coming', String(soon.length), soon.length ? tkShort(soon.reduce((s, r) => s + r.est, 0)) : '')));
   if (!rows.length) out.push(emptyBox(ym < RC_FROM ? 'Before monthly entries started' : 'Nothing this month', ym < RC_FROM ? 'Monthly entries start in November 2026.' : 'No running costs are set up for this month. The Principal or the COO adds them in Business › Running costs.'));
   [['To confirm', toC], ['Coming this month', soon], ['Confirmed', conf], ['Skipped', skip]].forEach(([t, xs]) => {
     if (xs.length) out.push(h('div', { class: 'sec' }, secH(t, String(xs.length)), h('div', { class: 'list' }, xs.map(r => rcRowEl(r, { quick: t === 'To confirm' }))))); });
+  /* quarterly, half-yearly and yearly costs falling due in the next 60 days (after this month's) */
+  const lim60 = ymd(new Date(Date.now() + 60 * 864e5)), nextL = ym === tm ? rcCosts().filter(c => c.every > 1).map(c => ({ c, n: rcNextDue(c) })).filter(x => x.n && x.n.ym > tm && x.n.date <= lim60).sort((a, b) => a.n.date.localeCompare(b.n.date)) : [];
+  if (nextL.length) out.push(h('div', { class: 'sec' }, secH('Not monthly, coming soon', String(nextL.length)), h('div', { class: 'list' }, nextL.map(({ c, n }) => rcRowEl({ key: n.ym + '~' + c.id, m: null, c, state: 'upcoming', est: rcEstimate(c, n.ym), due: n.date })))));
   const costs = rcCosts().sort((a, b) => a.day - b.day);
   if (costs.length) out.push(h('details', { class: 'sec' }, h('summary', { class: 'sec-h', style: 'cursor:pointer' }, h('h2', { text: 'Set up in Business' }), h('span', { class: 'cnt', text: String(costs.length) })),
     h('p', { class: 'muted', style: 'margin:0 4px 6px', text: 'Read-only here. To add, change or pause one, the Principal or the COO opens SLATE OS › Business › Running costs.' }),
-    table(['Cost', 'Due', 'Amount', 'Paid from'], costs.map(c => ({ c: [two(c.name + (c.active ? '' : ' (paused)'), [RC_KIND[c.kind], L(c.cat), c.payee].filter(Boolean).join(' · ')), ordinal(c.day), (c.kind === 'variable' ? '≈ ' : '') + fmt(rcEstimate(c, tm)), L(c.acc)] })), [2])));
+    table(['Cost', 'Due', 'Amount', 'Paid from'], costs.map(c => { const nx = c.every > 1 ? rcNextDue(c) : null;
+      return { c: [two(c.name + (c.active ? '' : ' (paused)'), [RC_KIND[c.kind], c.every > 1 ? RC_EVERY[c.every] : '', L(c.cat), c.payee].filter(Boolean).join(' · ')), c.every > 1 ? (nx ? 'next ' + fmtD(nx.date) : '—') : ordinal(c.day), (c.kind === 'variable' ? '≈ ' : '') + fmt(rcEstimate(c, nx ? nx.ym : tm)) + (c.every > 1 ? ' · ' + fmt(Math.round(rcEstimate(c, nx ? nx.ym : tm) / c.every)) + '/mo' : ''), L(c.acc)] }; }), [2])));
   return out;
 }
 /* report: the month's running costs, estimate against actual */
@@ -4600,11 +4634,12 @@ function repRC(r) {
     h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Next month', onclick: () => { S.rep.rcYm = ymAddB(ym, 1); render(true); }, text: '›' }))];
   out.push(h('div', { class: 'say' }, ym > tm ? ['A future month: every cost at its amount or estimate, ', h('b', { text: tk(ov.total) }), ' in all.']
     : ['Running the studio in ', monthName(ym), ' cost ', h('b', { text: tk(ov.total) }), ov.est ? [': ', tk(ov.act), ' from confirmed bills and ', tk(ov.est), ' by estimate for bills not confirmed yet. Each estimate is replaced by the actual bill when it is confirmed.'] : ', all from confirmed bills.']));
-  const rows = ov.rows.map(x => { const act = x.state === 'confirmed' ? +x.m.amount || 0 : null, df = act != null ? r2(act - x.est) : null;
-    return { c: [two(x.c.name, [L(x.c.cat), x.c.proj ? projLabel(x.c.proj) : ''].filter(Boolean).join(' · ')), fmt(x.est), act != null ? fmt(act) : '', df != null ? (df > 0 ? '+' : df < 0 ? '−' : '') + fmt(Math.abs(df)) : '',
-      x.state === 'confirmed' ? (x.m.over ? 'Over the estimate' : 'Confirmed') : x.state === 'skipped' ? 'Skipped' : x.state === 'upcoming' ? 'Coming' : x.c.kind === 'variable' ? 'Estimate (bill not in)' : 'Amount (not confirmed)'],
-      click: x.m && x.m.vid && S.vouchers[x.m.vid] ? () => openSheet({ type: 'voucher', id: x.m.vid }) : null }; });
+  const rows = ov.lines.map(x => { const act = x.act, df = act != null ? r2(act - x.est) : null;
+    return { c: [two(x.c.name, [x.spread ? x.sub : '', L(x.c.cat), x.c.proj ? projLabel(x.c.proj) : ''].filter(Boolean).join(' · ')), fmt(x.est), act != null ? fmt(act) : '', df != null ? (df > 0 ? '+' : df < 0 ? '−' : '') + fmt(Math.abs(df)) : '',
+      x.state === 'confirmed' ? (x.spread ? 'Spread (bill confirmed)' : x.over ? 'Over the estimate' : 'Confirmed') : x.state === 'skipped' ? 'Skipped' : x.spread ? 'Spread (by estimate)' : x.state === 'upcoming' ? 'Coming' : x.c.kind === 'variable' ? 'Estimate (bill not in)' : 'Amount (not confirmed)'],
+      click: x.vid && S.vouchers[x.vid] ? () => openSheet({ type: 'voucher', id: x.vid }) : null }; });
   rows.push({ cls: 't', c: ['Overhead for ' + monthName(ym), '', fmt(ov.act), '', 'Total ' + fmt(ov.total)] });
+  if (ov.lines.some(l => l.spread)) out.push(h('p', { class: 'muted', style: 'margin:0 4px 8px', text: `Costs paid every 3, 6 or 12 months are spread evenly over the months they cover. Cash due this month: ${tk(ov.cash)}.` }));
   out.push(table(['Cost', 'Estimate', 'Actual', 'Difference', 'Counted as'], rows, [1, 2, 3]));
   const ms = [-5, -4, -3, -2, -1, 0].map(n => ymAddB(ym, n)).filter(m => m >= RC_FROM);
   if (ms.length > 1) out.push(h('div', { class: 'sec' }, secH('Month by month'), table(['Month', 'Confirmed', 'By estimate', 'Overhead'], ms.map(m => { const o = rcOverhead(m); return { c: [monthName(m), fmt(o.act), o.est ? fmt(o.est) : '—', fmt(o.total)], click: () => { S.rep.rcYm = m; render(true); } }; }), [1, 2, 3])));
@@ -4612,8 +4647,8 @@ function repRC(r) {
 }
 function rcSheet() {
   const ym = S.rep.rcYm || curMonth(), ov = rcOverhead(ym);
-  return [{ name: 'Running costs ' + ym, wide: [0], rows: [['Cost', 'Head of account', 'Cost centre', 'Due', 'Estimate', 'Actual', 'Counted', 'Status']].concat(ov.rows.map(x => [x.c.name, L(x.c.cat), x.c.proj ? projLabel(x.c.proj) : '', x.due, x.est, x.state === 'confirmed' ? +x.m.amount || 0 : '',
-    x.state === 'skipped' ? 0 : x.state === 'confirmed' ? +x.m.amount || 0 : x.est, x.state])).concat([['Overhead for ' + monthName(ym), '', '', '', '', ov.act, ov.total, '']]) }];
+  return [{ name: 'Running costs ' + ym, wide: [0], rows: [['Cost', 'Head of account', 'Cost centre', 'How often', 'Note', 'Estimate', 'Actual', 'Counted', 'Status']].concat(ov.lines.map(x => [x.c.name, L(x.c.cat), x.c.proj ? projLabel(x.c.proj) : '', RC_EVERY[x.c.every || 1], x.sub, x.est, x.act != null ? x.act : '',
+    x.state === 'skipped' ? 0 : x.act != null ? x.act : x.est, x.state])).concat([['Overhead for ' + monthName(ym), '', '', '', '', '', ov.act, ov.total, ''], ['Cash due in ' + monthName(ym), '', '', '', '', '', '', ov.cash, '']]) }];
 }
 Object.assign(SHEETS, { rcconf: sheetRcConfirm });
 
@@ -4776,12 +4811,12 @@ function forecastBox() {
   });
   const burn = r2(avg.out - avg.fees - avg.otherIn);
   const pay = Object.values(S.payroll).sort((a, b) => b.month.localeCompare(a.month))[0], sal = pay ? payTotals(payRows(pay)).net : 0;
-  const cm = curMonth(), nm = ymAddB(cm, 1), rec = r2(rcRows(cm).filter(rcOpen).concat(rcRows(cm).filter(r => r.state === 'upcoming')).reduce((s, r) => s + r.est, 0)), recN = rcOverhead(nm).total, ow = owes();
+  const cm = curMonth(), nm = ymAddB(cm, 1), rec = r2(rcRows(cm).filter(rcOpen).concat(rcRows(cm).filter(r => r.state === 'upcoming')).reduce((s, r) => s + r.est, 0)), recN = rcOverhead(nm).cash, ow = owes();
   const firstNeg = ends.findIndex(x => x < 0);
   const notes = [h('div', { class: 'muted', style: 'font-size:13px' }, hasPlan ? 'Worked out from the plan. ' : 'No plan yet, so this uses the average of the last six months. ',
     firstNeg >= 0 ? ['At this rate cash and bank run out in ', h('b', { text: monthName(ms[firstNeg]) }), burn > 0 ? [', unless more fees come in. Over the last six months SLATE spent about ', h('b', { text: tk(Math.round(burn / 100) * 100) }), ' a month more than it collected.'] : ', unless more fees come in.']
       : 'Cash and bank stay above zero for the next three months.')];
-  const fixed = [sal ? ['Salaries (last salary sheet)', sal] : null, rec ? ['Running costs still to confirm in ' + monthName(cm), rec] : null, recN ? ['Running costs in ' + monthName(nm) + ' (amounts and estimates)', recN] : null, ow.by.pay ? ['Owed to consultants and vendors now', ow.by.pay] : null, ow.by.stat ? ['Tax and VAT to deposit', ow.by.stat] : null, ow.by.accr ? ['Salaries and costs owed', ow.by.accr] : null].filter(Boolean);
+  const fixed = [sal ? ['Salaries (last salary sheet)', sal] : null, rec ? ['Running costs still to confirm in ' + monthName(cm), rec] : null, recN ? ['Running costs due in ' + monthName(nm) + ' (amounts and estimates)', recN] : null, ow.by.pay ? ['Owed to consultants and vendors now', ow.by.pay] : null, ow.by.stat ? ['Tax and VAT to deposit', ow.by.stat] : null, ow.by.accr ? ['Salaries and costs owed', ow.by.accr] : null].filter(Boolean);
   return widget('Cash for the next 3 months', hasPlan ? 'From the plan' : 'From the last 6 months', h('div', { style: 'display:grid;gap:10px' }, table(['', 'Start', 'Coming in', 'Going out', 'End'], rows, [1, 2, 3, 4]), notes,
     fixed.length ? h('div', {}, h('div', { class: 'lbl', style: 'margin-bottom:4px', text: 'Already known to go out' }), wlist(fixed.map(([n, v]) => h('button', { type: 'button', onclick: () => go('reports', 'bs') }, h('span', { class: 't', text: n }), h('span', { class: 'd', text: tk(v) }))))) : null), 'span2');
 }
