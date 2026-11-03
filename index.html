@@ -669,6 +669,33 @@ main.wide{max-width:1160px}
 .fm-item:hover .fm-b,.fm-item:focus-visible .fm-b{background:var(--ink);color:#fff;border-color:var(--ink)}.fm-item:focus-visible{outline:none}
 @media (prefers-reduced-motion:reduce){#fab,.fm-item,#fab-menu{transition:none}}
 body.locked #fab{display:none}
+/* floating bell: on every screen and in every space (Studio, Business, Books), just above the + ; tap for the last 5 notifications */
+#fbell{position:fixed;right:calc(max(18px,env(safe-area-inset-right,0px)) + 4px);bottom:calc(92px + env(safe-area-inset-bottom,0px));width:48px;height:48px;border-radius:50%;border:0;background:#fff;color:var(--ink);box-shadow:0 0 0 1px var(--border),0 6px 18px rgba(0,0,0,.16);z-index:15;display:grid;place-items:center;cursor:pointer;padding:0;transition:transform .15s ease}
+#fbell[hidden]{display:none}
+#fbell:active{transform:scale(.94)}
+#fbell svg{width:22px;height:22px}
+#fbell.has{color:#d7262b;box-shadow:0 0 0 2px #d7262b,0 6px 18px rgba(215,38,43,.22)}
+#fbell .fb-n{position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;background:#d7262b;color:#fff;font-size:11.5px;font-weight:700;line-height:16px;border:2px solid #fff;font-variant-numeric:tabular-nums}
+#fbell.on{background:var(--ink);color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+body.locked #fbell,body.locked #fbell-pop,body.sheet-dock #fbell,body.sheet-dock #fbell-pop{display:none}
+#fbell-pop{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(150px + env(safe-area-inset-bottom,0px));width:min(370px,calc(100vw - 32px));max-height:min(64vh,520px);display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 0 0 1px var(--border),0 18px 50px rgba(0,0,0,.18);z-index:16;overflow:hidden;transform-origin:bottom right;animation:fbIn .16s ease}
+@keyframes fbIn{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#fbell-pop{animation:none}#fbell{transition:none}}
+#fbell-pop .fp-h{display:flex;align-items:baseline;gap:8px;padding:12px 14px 10px;border-bottom:1px solid var(--line,var(--border))}
+#fbell-pop .fp-h b{font-size:15px;font-weight:700}#fbell-pop .fp-h span{font-size:12.5px;color:var(--muted)}
+#fbell-pop .fp-l{overflow-y:auto;flex:1 1 auto}
+#fbell-pop .fp-i{appearance:none;border:0;background:none;width:100%;text-align:left;display:grid;grid-template-columns:8px minmax(0,1fr);gap:2px 10px;padding:10px 14px;border-bottom:1px solid var(--line,var(--border));cursor:pointer;font:inherit;color:var(--ink)}
+#fbell-pop .fp-i:last-child{border-bottom:0}
+#fbell-pop .fp-i:hover,#fbell-pop .fp-i:focus-visible{background:var(--group);outline:none}
+#fbell-pop .fp-i .dot{width:8px;height:8px;border-radius:50%;margin-top:6px;background:transparent;grid-row:1/4}
+#fbell-pop .fp-i.unread .dot{background:var(--c)}
+#fbell-pop .fp-t{font-size:14px;font-weight:400;color:#3a3a3c;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+#fbell-pop .fp-i.unread .fp-t{font-weight:600;color:var(--ink)}
+#fbell-pop .fp-b{font-size:12.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;overflow-wrap:anywhere}
+#fbell-pop .fp-m{font-size:11.5px;color:var(--muted)}
+#fbell-pop .fp-msg .fp-t{color:#d7262b;font-weight:600}
+#fbell-pop .fp-e{padding:18px 14px;color:var(--muted);font-size:13.5px;margin:0}
+#fbell-pop .fp-f{display:flex;gap:8px;justify-content:flex-end;padding:10px 12px;border-top:1px solid var(--line,var(--border));background:#fafafa}
 .chip.qd{border:0;cursor:pointer;padding:6px 12px;display:grid;gap:0;text-align:left;border-radius:10px;background:#fff}
 .chip.qd b{font-size:13px}.chip.qd span{font-size:11.5px;color:var(--muted)}
 .chip.on{background:var(--ink)!important;color:#fff}.chip.on span{color:#ccc}
@@ -2857,6 +2884,7 @@ function render(force){
   if(!force&&isTyping(view)){ S.pendingRender=true; return; }
   const k=keepFocus(view);
   renderHeader();
+  try{ renderFloatBell(); }catch(e){}
   view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','all','projects','team','cal','risk','drafting','worklog'].includes(S.view)?' wide':'');
   view.replaceChildren(...[].concat(buildView())); secInfo(view);
   view.classList.toggle('wrap-desk',S.view==='mine'&&!!view.querySelector('.desk'));
@@ -5965,7 +5993,52 @@ function nSave(patch){ if(!S.db||!S.uid) return; const ids=new Set(buildNotifs()
   const next={openedAt:st.openedAt||'',seenAt:st.seenAt||'',read:prune(st.read),archived:prune(st.archived),restored:prune(st.restored),...patch};
   S.nst=next; schedule();
   nWriting=nWriting.then(()=>S.db.doc(`data/users/${S.uid}/notif`).set(next)).catch(()=>{}); }
-function openNotifs(){ S.sheet={type:'notif'}; nSave({openedAt:new Date().toISOString()}); renderSheet(); }
+function openNotifs(){ fbellClose(); S.sheet={type:'notif'}; nSave({openedAt:new Date().toISOString()}); renderSheet(); }
+/* floating bell: the same count as the top bell; tap shows the last 5 notifications in a small card (no panel needed).
+   It sits above the + on every screen, so Books and Business never hide Studio's notifications. */
+const FB_ICO=()=>svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'}));
+function renderFloatBell(){
+  let b=document.getElementById('fbell');
+  if(S.state!=='ready'){ if(b) b.hidden=true; fbellClose(); return; }
+  if(!b){ b=h('button',{id:'fbell',type:'button','aria-haspopup':'dialog','aria-expanded':'false',onclick:fbellToggle}); document.body.append(b); }
+  const n=newCount()+msgCount();
+  b.hidden=false; b.classList.toggle('has',!!n); b.classList.toggle('on',!!S.fbell);
+  b.setAttribute('aria-label',n?`Notifications, ${n} new`:'Notifications'); b.title=n?`${n} new notification${n===1?'':'s'}`:'Notifications';
+  b.replaceChildren(FB_ICO(),n?h('span',{class:'fb-n',text:n>99?'99+':String(n)}):null);
+  if(S.fbell) fbellPaint();
+}
+function fbellToggle(){ if(S.fbell) return fbellClose(); if(S.fabOpen) fabClose();
+  S.fbell=true; nSave({openedAt:new Date().toISOString()}); fbellPaint(); renderFloatBell();
+  requestAnimationFrame(()=>{ const f=document.querySelector('#fbell-pop .fp-i'); if(f) f.focus({preventScroll:true}); }); }
+function fbellClose(){ if(!S.fbell) return; S.fbell=false; const p=document.getElementById('fbell-pop'); if(p) p.remove(); const b=document.getElementById('fbell'); if(b){ b.classList.remove('on'); b.setAttribute('aria-expanded','false'); } }
+function fbellGo(n){ fbellClose();
+  /* a task or a meeting opens over Books; anything else is a Studio screen, so leave Books for it */
+  const over=(n.taskId&&S.tasks[n.taskId])||(n.meetId&&S.pmeet&&S.pmeet[n.meetId]);
+  const wasBooks=!!S.books; if(wasBooks&&!over) S.books=false;
+  nOpen(n);
+  if(wasBooks&&!S.books) render(true); }
+function fbellPaint(){
+  let p=document.getElementById('fbell-pop');
+  const all=buildNotifs().filter(n=>!isArchived(n)), last=all.slice(0,5), unread=all.filter(isUnread).length, mc=msgCount();
+  const rows=[];
+  if(mc) rows.push(h('button',{type:'button',class:'fp-i fp-msg unread c-action',onclick:()=>{ fbellClose(); openNotifs(); }},h('span',{class:'dot'}),h('span',{class:'fp-t',text:`${mc} message${mc===1?'':'s'} waiting for your reply`}),h('span',{class:'fp-m',text:'Open to answer'})));
+  for(const n of last){ const un=isUnread(n), body=(n.body||'').split('\n').filter(Boolean).slice(0,2).join('\n');
+    rows.push(h('button',{type:'button',class:'fp-i c-'+n.cat+(un?' unread':''),onclick:()=>fbellGo(n)},
+      h('span',{class:'dot'}),h('span',{class:'fp-t',text:n.title}),body?h('span',{class:'fp-b',text:body}):null,
+      h('span',{class:'fp-m',text:`${NCAT[n.cat]||''} · ${relTime(n.at)}`}))); }
+  const kids=[h('div',{class:'fp-h'},h('b',{text:'Notifications'}),h('span',{text:unread?`${unread} unread`:'All read'})),
+    h('div',{class:'fp-l'},rows.length?rows:[h('p',{class:'fp-e',text:'You’re all caught up.'})]),
+    h('div',{class:'fp-f'},unread?h('button',{class:'btn btn-sm',type:'button',onclick:()=>nSave({seenAt:new Date().toISOString(),read:{}}),text:'Mark all read'}):null,
+      h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ fbellClose(); openNotifs(); },text:all.length>5?`See all ${all.length}`:'Open notifications'}))];
+  if(!p){ p=h('div',{id:'fbell-pop',role:'dialog','aria-label':'Latest notifications'}); document.body.append(p); }
+  const sc=(p.querySelector('.fp-l')||{}).scrollTop||0;
+  p.replaceChildren(...kids); const l=p.querySelector('.fp-l'); if(l) l.scrollTop=sc;
+  const b=document.getElementById('fbell'); if(b) b.setAttribute('aria-expanded','true');
+}
+document.addEventListener('pointerdown',e=>{ if(!S.fbell) return; const t=e.target; if(t.closest&&(t.closest('#fbell-pop')||t.closest('#fbell'))) return; fbellClose(); },true);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.fbell){ fbellClose(); const b=document.getElementById('fbell'); if(b) b.focus(); } });
+/* a tap inside Books (its own page in a frame) never reaches this page; the window losing focus is the sign */
+addEventListener('blur',()=>{ setTimeout(()=>{ const a=document.activeElement; if(S.fbell&&a&&a.tagName==='IFRAME') fbellClose(); },0); });
 function nOpen(n){ const st=nst(); nSave({read:{...(st.read||{}),[n.id]:1}});
   if(n.taskId&&S.tasks[n.taskId]){ openTask(n.taskId); return; }
   if(n.projId&&S.projects[n.projId]){ openProjectView(n.projId); return; }
