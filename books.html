@@ -1487,7 +1487,10 @@ function invTotals(inv) {
     received += amt; pays.push({ id, v, amt });
   });
   received = r2(received);
-  return { sub, vat, total, received, due: r2(total - received), pays };
+  /* tax the client keeps back at source: AIT on the fee before VAT, and the VAT itself when the client withholds it (VDS) */
+  const base = r2(sub - (inv.vatMode === 'incl' ? vat : 0)), aitPct = +inv.aitPct || 0;
+  const ait = aitPct > 0 ? r2(base * aitPct / 100) : 0, vds = inv.vds && inv.vatMode !== 'none' ? vat : 0;
+  return { sub, vat, total, received, due: r2(total - received), pays, base, ait, vds, net: r2(total - ait - vds) };
 }
 function invStatus(inv) {
   if (inv.status === 'cancelled') return 'cancelled';
@@ -1889,6 +1892,13 @@ function invoicePDF(id, plain, unsaved) {
   if (inv.vatMode === 'add') { row('Subtotal', fmt(t.sub)); row('VAT ' + inv.vatPct + '%', fmt(t.vat)); }
   y += 6; doc.line(R - 250, y, R, y, { w: 1, color: '#000000' }); row('Total', 'Tk ' + fmt(t.total), true);
   if (inv.vatMode === 'incl') { y += 13; doc.text(R, y, 'Includes VAT ' + inv.vatPct + '%: Tk ' + fmt(t.vat), { size: 8.5, color: GREY, align: 'right' }); }
+  if (t.ait > 0 || t.vds > 0) {
+    need(70);
+    if (t.vds > 0) row('Less VAT withheld at source', '(' + fmt(t.vds) + ')');
+    if (t.ait > 0) row('Less AIT ' + inv.aitPct + '% on Tk ' + fmt(t.base), '(' + fmt(t.ait) + ')');
+    y += 6; doc.line(R - 250, y, R, y, { w: 1, color: '#000000' }); row('Net payable to SLATE', 'Tk ' + fmt(t.net), true);
+    y += 13; doc.text(R, y, 'Please send the tax challans or certificates for the amounts withheld.', { size: 8.5, color: GREY, align: 'right' });
+  }
   y += 18; y += doc.para(M, y, words(t.total), R - M, { size: 9, color: GREY });
   if (t.received > 0) { y += 4; doc.text(M, y, 'Received against this invoice Tk ' + fmt(t.received) + '  ·  Balance due Tk ' + fmt(t.due), { size: 9.5, bold: true }); y += 12; }
 
@@ -2608,7 +2618,7 @@ function sheetMoney() {
     if (jv) { if (d.jvSplit == null) d.jvSplit = !(S.ledgers[d.cat] || {}).noJvShare; const a = parseAmt(d.amount) || 0; fields.push(chk('jvSplit', `Share this cost with ${L(jv.partner)}: SLATE ${jv.share}%${a ? ' (' + tk(a * jv.share / 100) + ')' : ''}, ${L(jv.partner)} ${100 - jv.share}%${a ? ' (' + tk(a - a * jv.share / 100) + ', which they owe SLATE)' : ''}`)); }
     if (k === 'in') {
       const inv = invList().filter(x => ['unpaid', 'part', 'overdue'].includes(invStatus(x)) && (!d.cat || x.client === d.cat) || x._id === d.inv);
-      if (inv.length) fields.push(field('Against invoice', sel('inv', [['', 'Not against an invoice']].concat(inv.map(x => [x._id, `${x.no} · ${cliN(x)} · due ${tk(invTotals(x).due)}`])))));
+      if (inv.length) fields.push(field('Against invoice', sel('inv', [['', 'Not against an invoice']].concat(inv.map(x => [x._id, `${x.no} · ${cliN(x)} · due ${tk(invTotals(x).due)}`])), { onpick: id => { const x = inv.find(i => i._id === id), dd = D(); if (!x) return; const due = invTotals(x).due; if (!(parseAmt(dd.amount) > 0)) dd.amount = String(due); Object.assign(dd, invWithheld(x, parseAmt(dd.amount) || due)); } })));
     }
   }
   fields.push(field('Note', ta('narr', { rows: 2, placeholder: k === 'out' ? 'What was bought or paid, and why' : k === 'in' ? 'What this payment is for' : 'Why the money moved' })));
@@ -2617,6 +2627,7 @@ function sheetMoney() {
     if (d.more) {
       if (k === 'out') fields.push(h('div', { class: 'form-row' }, field('Tax deducted, TDS (Tk)', inp('tds', { inputmode: 'decimal', placeholder: '0' }), 'Kept by SLATE and deposited to the government.'), field('Cheque or reference', inp('ref'))));
       else fields.push(h('div', { class: 'form-row' }, field('AIT deducted by client (Tk)', inp('ait', { inputmode: 'decimal', placeholder: '0' })), field('VAT deducted by client (Tk)', inp('vat', { inputmode: 'decimal', placeholder: '0' })), field('Cheque or reference', inp('ref'))));
+      if (k === 'in') { const g = parseAmt(d.amount) || 0, w = (parseAmt(d.ait) || 0) + (parseAmt(d.vat) || 0); if (g > 0 && w > 0) fields.push(h('p', { class: 'f-hint', style: 'margin:0', text: `Amount is what the client settled before deductions. Reaching ${d.acc ? L(d.acc) : 'the bank'}: ${tk(r2(g - w))}.` })); }
     }
   } else fields.push(field('Reference', inp('ref')));
   fields.push(attachBlock('files'));
@@ -2988,8 +2999,8 @@ function payRequest(r) {
 function openInvoice(id, pre) {
   if (!can.enter()) return toast('Only the Principal, COO and Accountant can raise invoices.');
   const x = id ? S.invoices[id] : null;
-  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '' })), files: (x.files || []).slice() })
-    : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: 'none', vatPct: S.settings.vatPct || 15, note: '', files: [], signIt: !!mySign() };
+  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '' })), files: (x.files || []).slice(), aitPct: String(+x.aitPct || 0), vds: !!x.vds })
+    : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: S.settings.invVat || 'add', vatPct: S.settings.vatPct || 15, aitPct: String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct), vds: true, note: '', files: [], signIt: !!mySign() };
   if (x) d.signIt = !!(x.sign && x.sign.uid === S.uid && mySign());
   if (!x && pre && pre.project) invPickProject(d, pre.project);
   openSheet({ type: 'invform', d, editId: id || null });
@@ -3030,6 +3041,8 @@ function sheetInvForm() {
     h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Due by', inp('due', { type: 'date' }))),
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
     h('div', { class: 'form-row' }, field('VAT', sel('vatMode', [['none', 'No VAT on this invoice'], ['add', 'Add VAT on top'], ['incl', 'Amounts include VAT']])), d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null),
+    h('div', { class: 'form-row' }, field('AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal', placeholder: '0' }), 'Included in the fee: taken from the fee before VAT. 0 if the client deducts none.'), d.vatMode !== 'none' ? chk('vds', 'The client withholds the VAT at source') : null),
+    invNetHint(d),
     field('Note on the invoice', ta('note', { rows: 2, placeholder: S.settings.invNote || 'Payment terms, bank details' })),
     canSign() ? (mySign() ? chk('signIt', `Sign this invoice as ${mySign().name}, ${mySign().desig}`) : h('p', { class: 'f-hint', style: 'margin:0' }, 'To sign invoices digitally, add your signature in ', h('button', { class: 'linkish', type: 'button', onclick: () => openMySign(), text: 'More › My signature' }), '.'))
       : h('p', { class: 'f-hint', style: 'margin:0', text: 'The Principal or the COO signs the invoice from its page once it is saved.' }),
@@ -3041,7 +3054,7 @@ function previewInvoice() {
   const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const old = S.sheet.editId ? S.invoices[S.sheet.editId] : null;
-  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), status: 'draft', sign: d.signIt && mySign() ? signStamp() : (old && old.sign) || null };
+  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), status: 'draft', sign: d.signIt && mySign() ? signStamp() : (old && old.sign) || null };
   savePDF(() => invoicePDF(S.sheet.editId || '_preview', false, inv), safeName(`Preview ${inv.clientName || L(inv.client)}`) + '.pdf');
 }
 function saveInvoice(status) {
@@ -3050,12 +3063,25 @@ function saveInvoice(status) {
   const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const id = S.sheet.editId || 'i' + uidShort(), old = S.invoices[id];
-  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), files: d.files || [], sign: null,
+  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), files: d.files || [], sign: null,
     status: old ? (old.status === 'draft' && status === 'issued' ? 'issued' : old.status) : status, trail: old ? trailAdd(old.trail, 'edited') : trailAdd([], status === 'issued' ? 'issued' : 'created'), at: new Date().toISOString(), by: old ? old.by : S.uid };
   /* the signature: signed now by the signer, or kept only if what the client sees is unchanged */
-  const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '']), x.vatMode, +x.vatPct || 0, x.note || '']);
+  const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '']), x.vatMode, +x.vatPct || 0, +x.aitPct || 0, !!x.vds, x.note || '']);
   doc.sign = d.signIt && mySign() ? signStamp() : old && old.sign && what(old) === what(doc) && !(old.sign.uid === S.uid && !d.signIt) ? old.sign : null;
   run(() => Store.put('invoices', id, doc), old ? 'Saved' : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
+}
+/* AIT and VAT the client keeps back on a payment of `amt` against invoice x, in proportion to the invoice */
+function invWithheld(x, amt) {
+  const t = invTotals(x); if (!(t.total > 0) || !(t.ait > 0 || t.vds > 0)) return {};
+  const f = Math.min(1, (+amt || 0) / t.total);
+  return { more: true, ait: t.ait > 0 ? String(r2(t.ait * f)) : '', vat: t.vds > 0 ? String(r2(t.vds * f)) : '' };
+}
+/* the amount that reaches SLATE once the client keeps back AIT and VAT */
+function invNetHint(d) {
+  const items = (d.items || []).map(x => ({ amount: parseAmt(x.amount) || 0 }));
+  const t = invTotals({ items, vatMode: d.vatMode, vatPct: +d.vatPct || 0, aitPct: +d.aitPct || 0, vds: !!d.vds, _id: '_hint' });
+  if (!(t.total > 0) || !(t.ait > 0 || t.vds > 0)) return null;
+  return h('p', { class: 'f-hint', style: 'margin:0', text: `Invoice total ${tk(t.total)}. ` + (t.vds > 0 ? `VAT withheld ${tk(t.vds)}. ` : '') + (t.ait > 0 ? `AIT withheld ${tk(t.ait)}. ` : '') + `Net payable to SLATE ${tk(t.net)}.` });
 }
 function sheetInvoice() {
   const raw = S.invoices[S.sheet.id]; if (!raw) return [head('Invoice', 'Not found')];
@@ -3063,10 +3089,10 @@ function sheetInvoice() {
   const out = [head('Invoice · ' + (x.no || ''), cliN(x))];
   out.push(h('div', { class: 'sh-status' }, pill(st), x.project ? h('span', { class: 'tag', text: projLabel(x.project) }) : null));
   out.push(h('div', { class: 'big-amt', text: tk(st === 'paid' ? t.total : t.due) }), h('div', { class: 'f-hint', style: 'margin-top:-12px', text: st === 'paid' ? 'Paid in full' : `Still to collect, of ${tk(t.total)}` }));
-  out.push(h('div', { class: 'facts' }, fact('Signed by', x.sign ? x.sign.name : 'Not signed', x.sign ? `${x.sign.desig} · ${fmtTs(x.sign.at)}` : 'Printed with a line to sign by hand'), fact('Date', fmtD(x.date, true)), fact('Due by', x.due ? fmtD(x.due, true) : '—'), fact('Total', tk(t.total), x.vatMode !== 'none' ? `VAT ${tk(t.vat)}` : 'No VAT'), fact('Received', tk(t.received), t.pays.length + ' payment' + (t.pays.length === 1 ? '' : 's'))));
+  out.push(h('div', { class: 'facts' }, fact('Signed by', x.sign ? x.sign.name : 'Not signed', x.sign ? `${x.sign.desig} · ${fmtTs(x.sign.at)}` : 'Printed with a line to sign by hand'), fact('Date', fmtD(x.date, true)), fact('Due by', x.due ? fmtD(x.due, true) : '—'), fact('Total', tk(t.total), x.vatMode !== 'none' ? `VAT ${tk(t.vat)}` : 'No VAT'), (t.ait > 0 || t.vds > 0) ? fact('Net to SLATE', tk(t.net), [t.vds > 0 ? `VAT withheld ${tk(t.vds)}` : '', t.ait > 0 ? `AIT ${x.aitPct}% ${tk(t.ait)}` : ''].filter(Boolean).join(' · ')) : null, fact('Received', tk(t.received), t.pays.length + ' payment' + (t.pays.length === 1 ? '' : 's'))));
   out.push(h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {}, (x.items || []).map(i => h('tr', {}, h('td', { text: i.desc || '—' }), h('td', { class: 'n', text: fmt(i.amount) }))), h('tr', { class: 't' }, h('td', { text: 'Total' }), h('td', { class: 'n', text: fmt(t.total) }))))));
   const acts = [];
-  if (can.enter() && ['unpaid', 'part', 'overdue'].includes(st)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openMoney('in', { cat: x.client, proj: x.project, inv: x._id, amount: String(t.due), party: x.clientName || '', narr: 'Against invoice ' + x.no }), text: 'Record a payment' }));
+  if (can.enter() && ['unpaid', 'part', 'overdue'].includes(st)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openMoney('in', Object.assign({ cat: x.client, proj: x.project, inv: x._id, amount: String(t.due), party: x.clientName || '', narr: 'Against invoice ' + x.no }, invWithheld(x, t.due))), text: 'Record a payment' }));
   if (can.enter() && st === 'draft') acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'issued', trail: trailAdd(raw.trail, 'issued') }), 'Issued'), text: 'Issue' }));
   if (canSign() && st !== 'cancelled' && (!x.sign || x.sign.uid !== S.uid)) acts.push(mySign()
     ? h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { if (x.sign && !confirm(`Signed by ${x.sign.name}. Sign it yourself instead?`)) return; run(() => Store.patch('invoices', x._id, { sign: signStamp(), trail: trailAdd(raw.trail, 'signed') }), 'Signed'); }, text: 'Sign as ' + mySign().name })
@@ -3997,7 +4023,7 @@ function moreSettings() {
     fact('Invoice numbers', (st.prefixes || {}).Invoice ? `${st.prefixes.Invoice}/${curFY().short}/001` : `INV/${curFY().short}/001`), fact('Checks on cash', st.flagCash ? 'On' : 'Off', 'Flags salary, rent and payments over Tk 50,000 made in cash'), fact('Number style', st.grouping === 'intl' ? '1,234,567' : '12,34,567')));
   return out;
 }
-function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', vatPct: String(st.vatPct || 15) }; }
+function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', vatPct: String(st.vatPct || 15), aitPct: String(st.aitPct == null ? 7.5 : st.aitPct), invVat: st.invVat || 'add' }; }
 function sheetSettings() {
   const cashL = [['', 'Ask each time']].concat(Object.keys(S.ledgers).filter(k => isCashL(k)).map(k => [k, L(k)]));
   const fields = [field('Company name on documents', inp('company')), field('Address', inp('address', { placeholder: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212' })),
@@ -4008,12 +4034,13 @@ function sheetSettings() {
     h('div', { class: 'form-row' }, field('Office staff float held by', sel('floatHolder', [['', 'No float']].concat((window.BooksHost && BooksHost.peopleIds ? BooksHost.peopleIds() : []).map(id => [id, nameOf(id)]).sort((a, b) => a[1].localeCompare(b[1]))))), field('Float kept in', sel('floatLedger', [['', 'Choose…']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'cash').map(k => [k, L(k)])))), field('Float amount (Tk)', inp('floatAmount', { inputmode: 'decimal' }))),
     field('Tax withheld (TDS) account', sel('tdsVendor', [['', 'Find automatically']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'stat').map(k => [k, L(k)])))),
     h('div', { class: 'form-row' }, field('Payment prefix', inp('pPayment')), field('Receipt prefix', inp('pReceipt')), field('Transfer prefix', inp('pContra')), field('Journal prefix', inp('pJournal')), field('Invoice prefix', inp('pInvoice'))),
+    h('div', { class: 'form-row' }, field('New invoices', sel('invVat', [['add', 'VAT added on top for the client'], ['none', 'No VAT'], ['incl', 'Amounts include VAT']])), field('Usual AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal' }), 'Taken from SLATE’s fee. 7.5% for a firm or company, 15% for an individual.')),
     h('div', { class: 'form-row' }, field('Usual VAT %', inp('vatPct', { inputmode: 'decimal' })), field('Number style', sel('grouping', [['lakh', '12,34,567 (lakh)'], ['intl', '1,234,567']])))
     , field('Note printed on invoices', ta('invNote', { rows: 2, placeholder: 'Bank details and payment terms' })), chk('flagCash', 'Check cash payments (salary, rent and payments over Tk 50,000 in cash)')];
   return [head('Settings', 'Edit settings'), form(null, fields, 'Save', () => {
     const d = D();
     const prefixes = Object.assign({}, S.settings.prefixes || {}, { Payment: d.pPayment.trim() || 'PV', Receipt: d.pReceipt.trim() || 'CV', Contra: d.pContra.trim() || 'CT', Journal: d.pJournal.trim() || 'JV', Invoice: d.pInvoice.trim() || 'INV' });
-    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), vatPct: +d.vatPct || 15 }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
+    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), vatPct: +d.vatPct || 15, aitPct: Math.max(0, parseAmt(d.aitPct) || 0), invVat: d.invVat || 'add' }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
   })];
 }
 
