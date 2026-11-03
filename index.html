@@ -190,7 +190,7 @@ main.wrap.wrap-desk{max-width:1480px}
 .wl-sel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center}
 .wl-sel select{min-width:0}
 .wl-text{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:9px 11px;font:inherit;font-size:14.5px;resize:vertical;background:#fff;min-height:58px}
-.wl-n{font-size:12px;color:var(--late);justify-self:end}.wl-n.ok{color:var(--ontime)}
+.wl-cnt{font-size:12px;color:var(--late);justify-self:end}.wl-cnt.ok{color:var(--ontime)}
 @media (max-width:560px){.wl-sel{grid-template-columns:1fr auto}.wl-sel select:nth-child(2){grid-column:1/-1}}
 .who-plan{grid-area:t;display:grid;gap:3px;min-width:0;font-size:13.5px}
 /* the morning's written plan sits in a gray-lined box, so it reads as the person's own words, apart from the task data */
@@ -1447,6 +1447,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .wl{display:grid;gap:2px}.wl-r{display:grid;grid-template-columns:150px repeat(4,minmax(0,1fr));gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
 .wl-h{font-size:12px;color:var(--muted);font-weight:600}.wl-n{display:grid;min-width:0}.wl-n b{font-size:13.5px}.wl-n small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wl-c{display:grid;grid-template-columns:1fr 22px;gap:6px;align-items:center;font-size:12px;color:var(--muted);text-align:right}
+.wl-gh{display:flex;align-items:baseline;gap:8px;margin-top:10px;padding:7px 10px;border-radius:8px;background:var(--group);font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.wl-gh b{margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none}
+.wl-h+.wl-gh{margin-top:4px}
 .wl-b{position:relative;height:14px;border-radius:4px;background:var(--group)}.wl-b i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}.wl-b em{position:absolute;left:var(--cap);top:-3px;bottom:-3px;width:2px;background:var(--ink)}
 @media (max-width:760px){.wl-r{grid-template-columns:90px repeat(4,minmax(0,1fr));gap:6px}.wl-h span{font-size:10.5px}.wl-c{grid-template-columns:1fr}.wl-c span{display:none}}
 .pg-trk{height:40px}
@@ -3895,8 +3897,8 @@ function sheetWlog(){
     return h('div',{class:'wl-line'},
       h('div',{class:'wl-sel'},pSel,tSel,sh.lines.length>1?h('button',{class:'icon-btn',type:'button','aria-label':'Remove this line',title:'Remove',onclick:()=>{ sh.lines.splice(i,1); if(l.from) sh.y[l.from]=''; renderSheet(); },text:'×'}):null),
       h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:'What exactly will you do on it today? e.g. 4th floor plan: kitchen and toilet layout, revise after client comments',value:l.text||'',
-        oninput:e=>{ l.text=e.target.value; const c=e.target.parentNode.querySelector('.wl-n'); const k=e.target.value.trim().length; if(c){ c.textContent=k<10?`${10-k} more characters`:'✓'; c.classList.toggle('ok',k>=10); } }}),
-      h('div',{class:'wl-n'+(n>=10?' ok':''),text:n<10?`${10-n} more characters`:'✓'}));
+        oninput:e=>{ l.text=e.target.value; const c=e.target.parentNode.querySelector('.wl-cnt'); const k=e.target.value.trim().length; if(c){ c.textContent=k<10?`${10-k} more characters`:'✓'; c.classList.toggle('ok',k>=10); } }}),
+      h('div',{class:'wl-cnt'+(n>=10?' ok':''),text:n<10?`${10-n} more characters`:'✓'}));
   };
   const save=()=>{
     const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':yOpen.find(l=>!sh.y[l.id])?'Say how each of yesterday’s lines went: Done, Carry on today or Stopped.':'';
@@ -4937,12 +4939,17 @@ function workloadW(){ if(!canSeeScoring()) return null; const td=today(), cap=+(
   const xs=activeTasks().filter(t=>t.target&&t.assignee&&!t.doneAt&&!t.legacy&&!isChalkTask(t)&&t.target<addDays(td,28));
   const ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&(xs.some(t=>t.assignee===id)||/^pod\b/i.test(teamOf(id)||'')||isSupport(id))).filter(id=>!isChalkP(id)&&!isPriv(id)&&!isOfficeStaff(id));
   const wk=i=>[addDays(td,i*7),addDays(td,i*7+6)], cnt=(id,i)=>{ const [a,b]=wk(i); return xs.filter(t=>t.assignee===id&&(i===0?t.target<=b:t.target>=a&&t.target<=b)).length; };
-  const rows=ids.map(id=>({id,n:[0,1,2,3].map(i=>cnt(id,i))})).sort((a,b)=>Math.max(...b.n)-Math.max(...a.n));
   const bar=n=>{ const max=cap*1.6, col=n>cap?'var(--overdue)':n>=cap*0.8?'var(--late)':'var(--ontime)'; return h('div',{class:'wl-c'},h('div',{class:'wl-b',style:`--cap:${cap/max*100}%`},h('i',{style:`width:${Math.min(100,n/max*100)}%;background:${col}`}),h('em')),h('span',{text:n?String(n):'—'})); };
+  const ord=[...pods(),...supportTeams()], tk=id=>{ const i=ord.indexOf(teamOf(id)); return i<0?99:i; }, lead=id=>isPodLead(id,teamOf(id))||roleGroup(id)==='dhead'?0:1;
+  const rows=ids.map(id=>({id,n:[0,1,2,3].map(i=>cnt(id,i))})).sort((a,b)=>tk(a.id)-tk(b.id)||lead(a.id)-lead(b.id)||nameOf(a.id).localeCompare(nameOf(b.id)));
+  const body=[]; let last=null;
+  rows.forEach(r=>{ const t=teamOf(r.id)||''; if(t!==last){ last=t; const tot=rows.filter(x=>(teamOf(x.id)||'')===t).reduce((a,x)=>a+x.n[0],0);
+      body.push(h('div',{class:'wl-gh'},h('span',{text:t?podLabel(t):'No team'}),h('b',{text:`${rows.filter(x=>(teamOf(x.id)||'')===t).length} people · ${tot} this week`}))); }
+    body.push(h('div',{class:'wl-r'},h('span',{class:'wl-n',title:teamLabel(r.id)},h('b',{text:shortName(r.id)}),h('small',{text:lead(r.id)===0?(/^pod\b/i.test(t)?'POD leader':'Team lead'):(roleOf(r.id)||'')})),...r.n.map(bar))); });
   const capIn=S.canWrite?h('label',{class:'f-hint',style:'display:flex;gap:6px;align-items:center;margin:0'},'A normal week:',h('input',{type:'number',min:'1',max:'40',value:String(cap),style:'width:56px;padding:3px 6px',onchange:e=>{ const v=Math.max(1,Math.min(40,parseInt(e.target.value,10)||6)); run(()=>settingsRef().update({loadCap:v}),'Normal week saved'); }}),'items'):null;
   return widget('Workload','open items due per person and week · only you and the COO see this',h('div',{},
     h('div',{class:'wl'},h('div',{class:'wl-r wl-h'},h('span',{text:''}),...['This week (and late)','Next week','Week 3','Week 4'].map(l=>h('span',{text:l}))),
-      rows.map(r=>h('div',{class:'wl-r'},h('span',{class:'wl-n',title:teamLabel(r.id)},h('b',{text:nameOf(r.id)}),h('small',{text:teamLabel(r.id)})),...r.n.map(bar)))),
+      body),
     S.view!=='risk'?h('button',{class:'linkish',type:'button',style:'font-size:13px;margin-top:8px',onclick:()=>{ S.view='risk'; render(true); window.scrollTo(0,0); },text:'Risk and grace: decisions waiting and grace used ›'}):null,
     h('div',{style:'display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px'},h('span',{class:'f-hint',style:'margin:0',text:'Green under a normal week, amber near it, red over it. Only dated tasks and deliverables count; give checklist items as dated tasks to see juniors’ load.'}),capIn)),true); }
 /* ---------- morning check-in (Principal, 1 Nov 2026): two minutes after the day's greeting, on Home, one prompt a day:
