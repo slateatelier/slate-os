@@ -9723,7 +9723,7 @@ async function propVersion(id,d){ const cur=(S.props||{})[id]; if(!cur) return d
   const now=new Date().toISOString(), rev=last?(+last.rev||0)+1:0, F=pbFee(d);
   Object.assign(d,{rev,madeAt:now,madeBy:S.uid}); const doc=JSON.parse(JSON.stringify(d));
   const nv=[...vs,{rev,at:now,by:S.uid,total:Math.round(F.total||0),doc}];
-  const log=[...(cur.log||[]),{at:now,by:S.uid,kind:'version',kindL:rev?'Rev '+rev+' made':'First issue made',note:F.total?'Fee '+pbTk(Math.round(F.total))+' + VAT/AIT':''}];
+  const log=[...(cur.log||[]),{at:now,by:S.uid,kind:'version',kindL:rev?'Rev '+rev+' made':'First issue made',note:F.total?'Fee '+pbTk(Math.round(F.total))+', '+ptaxShort(d):''}];
   await propWrite(id,{...cur,doc,versions:nv,log,fee:F.total?String(Math.round(F.total)):cur.fee||''}); (S.props[id]={...cur,doc,versions:nv,log});
   return d; }
 const revTxt=d=>d&&+d.rev?' · Rev '+d.rev:'';
@@ -9791,8 +9791,9 @@ function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).t
   const guide=+doc.lump||0, fm=sh.fm||'sft', fv=+sh.fv||0, area=+doc.area||0, fee=fm==='sft'?(fv>0&&area?Math.round(fv*area/1000)*1000:0):(fv>0?Math.round(fv):0);
   const on=Object.keys(pqSel(sh).on).filter(l=>sh.sel.on[l]), ord=[...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0])]; on.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
   doc.parts=on.map(l=>doc.parts.find(x=>x.label===l)||(()=>{ const x={label:l,rate:''}; pbSvcFill(x); return x; })());
-  const addons=on.filter(pqIsAdd).map(l=>({label:l,...pqAddFee(sh,l,area)})), addSum=addons.reduce((a,x)=>a+x.amt,0), vatP=15, aitP=7.5, total=fee?(sh.vat?Math.round(fee/(1-aitP/100)*(1+vatP/100)):fee):0;
-  doc.tax=sh.vat?'incl':'excl'; doc.taxNet=sh.vat&&fee?fee:''; doc.vatPct=vatP; doc.aitPct=aitP;
+  const addons=on.filter(pqIsAdd).map(l=>({label:l,...pqAddFee(sh,l,area)})), addSum=addons.reduce((a,x)=>a+x.amt,0), vatP=15, aitP=7.5, tterm=sh.taxTerms||(sh.vat?'':'both'), total=fee?(!tterm&&sh.vat?Math.round(fee/(1-aitP/100)*(1+vatP/100)):fee):0;
+  /* tterm '' = an older proposal made with the "VAT and AIT included" tick: the entered fee was net and the total grossed up */
+  doc.tax=tterm?(tterm==='allin'?'incl':'excl'):sh.vat?'incl':'excl'; doc.taxNet=!tterm&&sh.vat&&fee?fee:''; doc.vatPct=vatP; doc.aitPct=aitP; doc.taxTerms=tterm; doc.splitBoth=tterm==='split'?(sh.splitBoth||''):''; doc.splitAit=tterm==='split'?(sh.splitAit||''):'';
   doc.addons=addons.map(x=>({label:x.label,amount:x.amt,value:x.value,inc:x.inc,basis:x.t==='sft'?`Tk ${x.v}/sft`:'lump sum'})); doc.mainFee=total||'';
   const sup=on.includes('Site supervision'), nv=d.visits!=null&&String(d.visits).trim()!==''?Math.max(0,parseInt(d.visits,10)||0):(sup?SP_PLANS.comp.visits:0); doc.vFree=String(nv); doc.asBuilt='x';
   const dLead=doc.vLead, dSen=doc.vSenior; ['vLead','vSenior'].forEach(k=>{ if(d[k]!=null&&String(d[k]).trim()!=='') doc[k]=String(Math.max(0,+d[k]||0)); });
@@ -9806,7 +9807,7 @@ function pqDoc(sh){ const d=sh.d, p={name:((d.name||'').trim()||pqAutoName(d)).t
   /* the timeline shows the marketing stage only when marketing materials are in the scope */
   if(doc.tl&&Array.isArray(doc.tl.rows)&&!on.includes('Marketing materials (3D, animation, brochure)')) doc.tl.rows=doc.tl.rows.filter(x=>!/^Marketing/i.test(x.label||''));
   if(fm==='sft'&&fv) doc.ownRate=String(fv); doc.lumpTag=fm==='lump'; doc.plan=''; doc.cmp=false;
-  return {p,doc,guide,fee,fm,fv,addons,addSum,total,nv,dLead,dSen,vatP,aitP}; }
+  return {p,doc,guide,fee,fm,fv,addons,addSum,total,nv,dLead,dSen,vatP,aitP,tterm}; }
 function pqCheck(on){ const out=[];
   if(on['Interior design']||on['Construction management (interior)']) out.push({lvl:'warn',t:'Interior design and interior construction management are MODO interior services: they usually go in a separate interior proposal.'});
   return out; }
@@ -9817,7 +9818,7 @@ function sheetPropQuick(){
   if(sh.done){ const p=(S.props||{})[sh.done]||{}, doc=p.doc||{}, f=sh.pdf||{};
     const share=async(which)=>{ const fl=f[which==='print'?'print':'file']; if(!fl) return; try{ if(navigator.canShare&&navigator.canShare({files:[fl]})){ await navigator.share({files:[fl],title:fl.name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; } dlFile(fl); };
     return [head(p.name||'Proposal','Proposal ready'),
-      h('div',{class:'qs-box'},kv('Reference',h('span',{class:'qs-t',text:doc.ref||'—'})),kv('Client',h('span',{class:'qs-t',text:p.client||'—'})),kv('Services',h('span',{class:'qs-t',text:(doc.parts||[]).map(x=>x.label).join(', ')||'—'})),kv('Fee',h('span',{class:'qs-t',style:'font-weight:700',text:doc.total?pbTk(doc.total)+' + VAT/AIT':'—'}))),
+      h('div',{class:'qs-box'},kv('Reference',h('span',{class:'qs-t',text:doc.ref||'—'})),kv('Client',h('span',{class:'qs-t',text:p.client||'—'})),kv('Services',h('span',{class:'qs-t',text:(doc.parts||[]).map(x=>x.label).join(', ')||'—'})),kv('Fee',h('span',{class:'qs-t',style:'font-weight:700',text:doc.total?pbTk(doc.total)+', '+ptaxShort(doc):'—'}))),
       f.state==='making'?h('div',{class:'callout',text:'Making the PDFs on the SLATE letterhead…'}):null,
       f.state==='err'?h('div',{class:'err',role:'alert',text:f.err}):null,
       f.state==='ok'?h('div',{class:'f-hint',style:'margin:0',text:'Two copies: the PDF on the letterhead to send, and a print copy without the letterhead for the SLATE pad. Follow-up is set for '+fmtD(p.next)+'.'}):null,
@@ -9828,7 +9829,7 @@ function sheetPropQuick(){
         f.state==='err'?h('button',{class:'btn btn-primary',type:'button',onclick:()=>pqPdf(sh.done),text:'Try again'}):null,
         h('button',{class:'btn',type:'button',disabled:f.state==='making',onclick:()=>openPropEdit(sh.done),text:'Edit again'}),
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
-  const {doc,guide,fee,fm,fv,addons,addSum,total,nv,dLead,dSen,vatP,aitP}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
+  const {doc,guide,fee,fm,fv,addons,addSum,total,nv,dLead,dSen,vatP,aitP,tterm}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
   const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const sel=pqSel(sh), all=[...new Set([...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0]),...Object.keys(sel.on).filter(l=>sel.on[l])])].filter(l=>!PQ_PKG.includes(l)), n=all.filter(l=>sel.on[l]).length, ck=pqCheck(sel.on);
@@ -9881,12 +9882,14 @@ function sheetPropQuick(){
           h('label',{class:'pq-vi'},h('span',{text:'Included (free)'}),h('div',{class:'pq-unit'},h('input',{id:'pq-visits',class:'tl-num qs-in',type:'number',min:0,step:1,inputmode:'numeric',value:d.visits!=null&&d.visits!==''?d.visits:String(nv),onchange:e=>{ d.visits=e.target.value; renderSheet(); }}),h('span',{text:'visits'}))),
           h('label',{class:'pq-vi'},h('span',{text:'Extra visit · lead architect'}),h('div',{class:'pq-unit'},h('input',{id:'pq-vLead',class:'tl-num qs-in',type:'number',min:0,step:500,inputmode:'numeric',value:d.vLead!=null&&d.vLead!==''?d.vLead:String(+dLead||''),onchange:e=>{ d.vLead=e.target.value; renderSheet(); }}),h('span',{text:'Tk / visit'}))),
           h('label',{class:'pq-vi'},h('span',{text:'Extra visit · senior architect'}),h('div',{class:'pq-unit'},h('input',{id:'pq-vSenior',class:'tl-num qs-in',type:'number',min:0,step:500,inputmode:'numeric',value:d.vSenior!=null&&d.vSenior!==''?d.vSenior:String(+dSen||''),onchange:e=>{ d.vSenior=e.target.value; renderSheet(); }}),h('span',{text:'Tk / visit'}))))),
-      h('div',{class:'pq-fee'},h('label',{class:'pq-vat'},h('input',{type:'checkbox',checked:!!sh.vat,onchange:e=>{ sh.vat=e.target.checked; renderSheet(); }}),h('span',{text:`VAT (${vatP}%) and AIT (${aitP}%) included in the fee`})),
-        h('div',{},h('span',{class:'qs-k',text:sh.vat?'Total fee, with VAT and AIT':'Total fee'}),h('b',{text:total?pbTk(total):'—'})),
-        sh.vat&&fee?h('div',{class:'pq-fee-l'},h('span',{text:'Net to SLATE after VAT and AIT'}),h('span',{text:pbTk(fee)})):null,
+      h('div',{class:'pq-fee'},h('label',{class:'pq-vat'},h('span',{text:`VAT (${vatP}%) and AIT (${aitP}%)`}),(()=>{ const el=h('select',{'aria-label':'VAT and AIT',onchange:e=>{ sh.taxTerms=e.target.value; sh.vat=false; renderSheet(); }},[...(!tterm?[['','Included (older proposal)']]:[]),...Object.entries(PTAX).map(([k,v])=>[k,v[0]])].map(([k,l])=>h('option',{value:k,text:l}))); el.value=tterm; return el; })()),
+        tterm==='split'?h('div',{class:'pq-fee-l'},h('label',{class:'pq-vi'},h('span',{text:'With VAT and AIT'}),h('div',{class:'pq-unit'},h('input',{class:'tl-num qs-in',type:'number',min:0,step:1000,inputmode:'numeric',value:sh.splitBoth||'',onchange:e=>{ sh.splitBoth=e.target.value; renderSheet(); }}),h('span',{text:'Tk'}))),h('label',{class:'pq-vi'},h('span',{text:'With AIT only'}),h('div',{class:'pq-unit'},h('input',{class:'tl-num qs-in',type:'number',min:0,step:1000,inputmode:'numeric',value:sh.splitAit||'',onchange:e=>{ sh.splitAit=e.target.value; renderSheet(); }}),h('span',{text:'Tk'})))):null,
+        h('div',{},h('span',{class:'qs-k',text:!tterm||tterm==='allin'?'Total fee, with VAT and AIT':'Total fee'}),h('b',{text:total?pbTk(total):'—'})),
+        !tterm&&fee?h('div',{class:'pq-fee-l'},h('span',{text:'Net to SLATE after VAT and AIT'}),h('span',{text:pbTk(fee)})):null,
+        tterm&&tterm!=='net'&&total?(t=>[t.total!==total?h('div',{class:'pq-fee-l'},h('span',{text:'Client pays, with VAT and AIT'}),h('span',{text:pbTk(t.total)})):null,h('div',{class:'pq-fee-l'},h('span',{text:'Net to SLATE after VAT and AIT'}),h('span',{text:pbTk(t.net)})),tterm==='split'?h('div',{class:'pq-fee-l'},h('span',{text:'Without VAT or AIT'}),h('span',{text:pbTk(t.none)})):null])(ptaxCalc(total,tterm,vatP,aitP,sh.splitBoth,sh.splitAit)):null,
         addons.length?h('div',{class:'pq-fee-l',style:'font-weight:600;margin-top:4px'},h('span',{text:'Add-ons, charged separately'}),h('span',{text:addSum?pbTk(addSum):''})):null,
         ...(addons.map(x=>h('div',{class:'pq-fee-l'},h('span',{text:x.label+(x.t==='sft'?` (Tk ${x.v}/sft)`:'')}),h('span',{style:x.inc||x.amt?'':'color:var(--overdue)',text:x.inc?'Complimentary'+(x.value?` (${pbTk(x.value)})`:''):x.amt?pbTk(x.amt):'give the fee'})))),
-        h('span',{class:'f-hint',style:'margin:0',text:fee?[fm==='sft'?`Tk ${fv}/sft on ${area.toLocaleString('en-IN')} sft`:'Lump sum'+(area?` · about Tk ${Math.round(fee/area*10)/10}/sft`:''),guide?`rate card guide ${pbTk(guide)}`:'',sh.vat?'VAT and AIT included':'plus VAT and AIT'].filter(Boolean).join(' · '):fm==='sft'?'Give the rate per sft and the built area.':'Give the lump sum.'})))),
+        h('span',{class:'f-hint',style:'margin:0',text:fee?[fm==='sft'?`Tk ${fv}/sft on ${area.toLocaleString('en-IN')} sft`:'Lump sum'+(area?` · about Tk ${Math.round(fee/area*10)/10}/sft`:''),guide?`rate card guide ${pbTk(guide)}`:'',tterm?PTAX[tterm][2]:'VAT and AIT included'].filter(Boolean).join(' · '):fm==='sft'?'Give the rate per sft and the built area.':'Give the lump sum.'})))),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions sticky-acts'},
       h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:()=>pqMake(false),text:ed?'Save and make the new version':'Make the proposal PDF'}),
@@ -9897,13 +9900,13 @@ function sheetPropQuick(){
 /* edit a proposal in the same form as a new one (Principal, 2 Nov 2026). The form is saved with the proposal; older
    proposals are read back from the saved letter. Each time the PDFs are made after a change, a new version is kept. */
 function openPropEdit(id){ const p=(S.props||{})[id]; if(!p) return; const q=p.quick, doc=p.doc||{};
-  if(q&&q.d){ openPropQuick(q.d,id); Object.assign(S.sheet,{vat:!!q.vat,sel:{on:{...(q.on||{})},fee:{...(q.fee||{})},sub:JSON.parse(JSON.stringify(q.sub||{})),inc:{...(q.inc||{})}},fm:q.fm||'sft',fv:q.fv||'',areaSet:!!q.areaSet}); return renderSheet(); }
+  if(q&&q.d){ openPropQuick(q.d,id); Object.assign(S.sheet,{vat:!!q.vat,taxTerms:q.taxTerms||'',splitBoth:q.splitBoth||'',splitAit:q.splitAit||'',sel:{on:{...(q.on||{})},fee:{...(q.fee||{})},sub:JSON.parse(JSON.stringify(q.sub||{})),inc:{...(q.inc||{})}},fm:q.fm||'sft',fv:q.fv||'',areaSet:!!q.areaSet}); return renderSheet(); }
   const sp=p.siteParts||null, has=k=>sp&&Object.prototype.hasOwnProperty.call(sp,k);
   const d={contact:p.contact||doc.toName||'',_title:doc.toTitle||'',client:p.client||doc.toCompany||'',_picked:p.client||'',_addr:doc.toAddress||'',dear:doc.dear||'Dear Sir,',
     sArea:sp?sp.area||'':p.location||'',sPlot:sp?sp.plot||'':'',sRoad:sp?sp.road||'':'',sKind:has('sector')?'Sector':has('block')?'Block':'',sSec:sp?sp.sector||sp.block||'':'',
     name:p.name||'',use:doc.use||'',type:p.type||'dev',katha:p.katha||'',area:doc.area||'',visits:doc.vFree!=null?String(+doc.vFree||0):'',vLead:doc.vLead||'',vSenior:doc.vSenior||'',phone:p.phone||'',email:p.email||''};
   const on={}, fee={}, inc={}; (doc.parts||[]).forEach(x=>{ on[pqBase(x.label)]=true; }); (doc.addons||[]).forEach(x=>{ x={...x,label:pqBase(x.label)}; on[x.label]=true; const m=/^Tk\s*([\d.]+)\/sft/.exec(x.basis||''); fee[x.label]=m?{t:'sft',v:m[1]}:{t:'lump',v:String((x.inc?x.value:x.amount)||'')}; if(x.inc) inc[x.label]=true; });
-  const own=+doc.ownRate||0; openPropQuick(d,id); Object.assign(S.sheet,{vat:doc.tax==='incl'&&!!doc.taxNet,sel:{on,fee,inc},fm:own?'sft':'lump',fv:own?String(own):String(doc.taxNet||doc.mainFee||doc.lump||''),areaSet:!!d.area}); renderSheet(); }
+  const own=+doc.ownRate||0; openPropQuick(d,id); Object.assign(S.sheet,{vat:doc.tax==='incl'&&!!doc.taxNet,taxTerms:doc.taxTerms||'',splitBoth:doc.splitBoth||'',splitAit:doc.splitAit||'',sel:{on,fee,inc},fm:own?'sft':'lump',fv:own?String(own):String(doc.taxNet||doc.mainFee||doc.lump||''),areaSet:!!d.area}); renderSheet(); }
 /* duplicate a proposal for another client with a similar project (Principal, 2 Nov 2026): services, fee basis, rate,
    add-on fees and site visits are carried over; the client, the site and the project name are cleared to fill in again.
    It is saved as a new proposal with its own reference. */
@@ -9915,9 +9918,9 @@ function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('O
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc), editing=!!(sh.id&&old.doc&&!sh.convert);
   if(old.doc&&old.doc.ref) doc.ref=old.doc.ref;
   const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:phoneNorm(d.phone),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),[(pqKind(d)||'none').toLowerCase()]:pqKind(d)?pqT(d.sSec):''},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
-    feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:sh.vat?'VAT and AIT included':'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
+    feeBasis:'lump',fee:F.total?String(Math.round(F.total)):'',feeNote:sh.taxTerms&&PTAX[sh.taxTerms]?PTAX[sh.taxTerms][2]:sh.vat?'VAT and AIT included':'plus VAT and AIT',sentOn:'',stage:'prep',next:addWorkDays(today(),3),note:(d.note||'').trim(),src:d.src||old.src||'',status:old.status||'open',log:old.log||[],
     ...(sh.id?{}:{createdAt:now,createdBy:S.uid}),proposedAt:now,...(sh.convert?{lead:false}:{}),doc:{...doc,total:Math.round(F.total),savedAt:now},...(draft?{draft:true}:{}),
-    quick:{d:{...JSON.parse(JSON.stringify(d)),_picked:p.client},on:{...((sh.sel||{}).on||{})},fee:{...((sh.sel||{}).fee||{})},sub:JSON.parse(JSON.stringify((sh.sel||{}).sub||{})),inc:{...((sh.sel||{}).inc||{})},vat:!!sh.vat,fm:sh.fm||'sft',fv:sh.fv||'',areaSet:!!sh.areaSet},
+    quick:{d:{...JSON.parse(JSON.stringify(d)),_picked:p.client},on:{...((sh.sel||{}).on||{})},fee:{...((sh.sel||{}).fee||{})},sub:JSON.parse(JSON.stringify((sh.sel||{}).sub||{})),inc:{...((sh.sel||{}).inc||{})},vat:!!sh.vat,taxTerms:sh.taxTerms||'',splitBoth:sh.splitBoth||'',splitAit:sh.splitAit||'',fm:sh.fm||'sft',fv:sh.fv||'',areaSet:!!sh.areaSet},
     ...(editing?{stage:old.stage||'prep',sentOn:old.sentOn||'',next:old.next||addWorkDays(today(),3),proposedAt:old.proposedAt||now}:{})};
   delete v._hint; if(!draft) delete v.draft;
   run(async()=>{ await propWrite(pid,v); try{ await clientUpsert({name:p.client,contact:p.contact,title:d._title,phone:d.phone,email:d.email,address:d._addr,type:d.type}); }catch(_){} },draft?'Draft saved. Continue any time from Business › Proposals':editing?'Proposal updated: making the new version':'Proposal saved').then(ok=>{ if(!ok) return; (S.props=S.props||{})[pid]={...(S.props[pid]||{}),...v}; if(draft) return openPropView(pid); sh.id=pid; sh.done=pid; pqPdf(pid); }); }
@@ -10056,7 +10059,7 @@ function pbDefaults(p,kind){
     feeMode:k==='det'?'parts':'lump',parts:PB_PARTS[k].map(([label,rate])=>({label,rate:String(rate)})),disc:'',discMode:'amt',
     lump:p.fee&&p.feeBasis!=='sft'?String(p.fee):'',iab:true,iabJur:'0',tl:{on:true,start:'',setup:'3',table:pbDaysTable(p.type),rows:pbTlRows(p.type,p.katha)},
     sched:PB_SCHED[k].map(([label,pct])=>({label,pct:String(pct)})),
-    vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',validDays:'30',revFree:'2',revRate:'10000',
+    vFree:k==='det'?'10':'5',vLead:'10000',vSenior:'8000',asBuilt:'200000',extra3d:'12000',tax:'excl',taxTerms:'both',vatPct:'15',aitPct:'7.5',validDays:'30',revFree:'2',revRate:'10000',
     terms:PB_TERMS.join('\n'),signName:'Syed Mohammed Imran',signTitle:'Principal Architect'}; }
 function pbDefaultsPlan(p){ const d=pbDefaults(p,'dev'); d.area=''; d.plan='comp'; d.tier=p.type==='private'?'p':'s'; d.adj=spAdjDef(p); d.cmp=true; spApply(d,p); return d; }
 /* project timeline in the proposal: SLATE's standard phases for the project type, in working days (SLATE days + client review days) */
@@ -10195,6 +10198,30 @@ function pbTl(d){ const tl=d.tl||{}, setup=tl.setup==null||tl.setup===''?3:Math.
   const end=Math.max(at,...out.map(x=>x.to)); at=end;
   return {rows:out,setup,total:at,weeks:Math.ceil(at/5),start,end:start&&at?dt(at):'',dt}; }
 const pbRevFee=d=>{ const v=Math.round((+d.katha||0)*(+d.revRate||0)); return +d.revCap>0?Math.min(v,+d.revCap):v; };
+/* VAT and AIT terms on a proposal (Principal, 3 Nov 2026), the same choices as Books invoices.
+   The quoted fee is the line amount; the terms say what the client adds and what reaches SLATE.
+   [label, sentence on the proposal, short note] */
+const PTAX={both:['VAT and AIT excluded (client bears both)','The fee is net to SLATE. AIT and VAT are added to each invoice at the rates in force and borne by the client.','plus VAT and AIT'],
+  aitin:['AIT inclusive, VAT excluded','The fee includes AIT. VAT is added to each invoice at the rate in force and borne by the client.','AIT included, plus VAT'],
+  allin:['VAT and AIT inclusive','The fee includes VAT and AIT at the rates shown.','VAT and AIT included'],
+  vatonly:['VAT excluded, no AIT deducted','VAT is added to each invoice at the rate in force and borne by the client. No AIT is deducted.','plus VAT, no AIT'],
+  net:['Net amount, no VAT or AIT','The fee is a net amount. No VAT or AIT applies.','net, no VAT or AIT'],
+  split:['Split: part with VAT and AIT, part with AIT only, the rest without','The fee is net to SLATE. AIT and VAT are added on the parts shown and borne by the client.','split VAT and AIT']};
+const ptaxShort=d=>d&&PTAX[d.taxTerms]?PTAX[d.taxTerms][2]:(d&&d.tax==='incl'?'VAT and AIT included':'plus VAT and AIT');
+/* what the client pays and what reaches SLATE on a quoted fee x; the client withholds the VAT and AIT */
+function ptaxCalc(x,k,vp,ap,sb,sa){ x=+x||0; vp=+vp||0; ap=+ap||0; const R=v=>Math.round(v), up=a=>ap>0&&ap<100?a/(1-ap/100)-a:0;
+  if(k==='split'){ const both=Math.min(Math.max(+sb||0,0),x), ait=Math.min(Math.max(+sa||0,0),x-both), none=x-both-ait, aitUp=up(both)+up(ait), vb=both+up(both), vat=vb*vp/100;
+    return {both,ait,none,aitUp:R(aitUp),vatBase:R(vb),vat:R(vat),total:R(x+aitUp+vat),aitDed:R(aitUp),net:R(x)}; }
+  if(k==='both'){ const aitUp=up(x), vat=(x+aitUp)*vp/100; return {aitUp:R(aitUp),vatBase:R(x+aitUp),vat:R(vat),total:R(x+aitUp+vat),aitDed:R(aitUp),net:R(x)}; }
+  if(k==='aitin'){ const vat=x*vp/100, a=x*ap/100; return {aitUp:0,vatBase:R(x),vat:R(vat),total:R(x+vat),aitDed:R(a),net:R(x-a)}; }
+  if(k==='allin'){ const vat=x-x/(1+vp/100), a=(x-vat)*ap/100; return {aitUp:0,vatBase:R(x-vat),vat:R(vat),total:R(x),aitDed:R(a),net:R(x-vat-a)}; }
+  if(k==='vatonly'){ const vat=x*vp/100; return {aitUp:0,vatBase:R(x),vat:R(vat),total:R(x+vat),aitDed:0,net:R(x)}; }
+  return {aitUp:0,vatBase:0,vat:0,total:R(x),aitDed:0,net:R(x)}; }
+/* the VAT and AIT table under the fee on the proposal PDF */
+function ptaxTable(d,x){ const k=d.taxTerms; if(!PTAX[k]||k==='net'||!(+x)) return ''; const vp=+d.vatPct||15, ap=+d.aitPct||7.5, t=ptaxCalc(x,k,vp,ap,d.splitBoth,d.splitAit), row=(l,v,c)=>`<tr${c?` class="${c}"`:''}><td>${l}</td><td class="n">${pbTk(v)}</td></tr>`;
+  if(k==='allin') return `<table style="margin-top:3mm"><tbody>${row('Total fee, including VAT and AIT',t.total)}${row(`VAT (${vp}%) included`,t.vat,'sub')}${row(`AIT (${ap}%) included`,t.aitDed,'sub')}${row('Net value to SLATE',t.net,'tot')}</tbody></table>`;
+  const sp=k==='split'?`<p class="pb-small">Of the fee, ${pbTk(t.both)} carries VAT and AIT, ${pbTk(t.ait)} carries AIT only and ${pbTk(t.none)} carries neither.</p>`:'';
+  return `${sp}<table style="margin-top:3mm"><tbody>${row('Fee',x)}${t.aitUp?row(`AIT (${ap}%) added, so the fee is net to SLATE`,t.aitUp,'sub'):''}${t.vat?row(`VAT (${vp}%)${k==='split'?' on '+pbTk(t.vatBase):''}`,t.vat,'sub'):''}${row('Total payable by the client',t.total,'tot')}${t.vat||t.aitDed?row('VAT and AIT the client deducts at source',t.vat+t.aitDed,'sub'):''}${row('Net to SLATE',t.net,'tot')}</tbody></table>`; }
 function pbFee(d){ const area=+d.area||0;
   if(d.feeMode==='lump'){ const t=+d.lump||0; return {sub:t,disc:0,total:t,rate:area?t/area:0,area}; }
   const rate=d.parts.reduce((a,x)=>a+(+x.rate||0),0), sub=rate*area, disc=d.discMode==='sft'?(+d.disc||0)*area:(+d.disc||0), total=Math.max(0,sub-disc);
@@ -10241,7 +10268,7 @@ function sheetPropDoc(){
   const save=async(silent)=>{ if(!canProps()) return fail('Only the Principal or the COO builds proposals.');
     if(d.feeMode==='parts'&&!(+d.area>0)) return fail('Enter the construction area (sft) to work out the fee.');
     const f=pbFee(d), cur=S.props[id]||p, doc={...d,total:Math.round(f.total),savedAt:new Date().toISOString()};
-    const ok=await run(()=>propWrite(id,{...cur,doc,fee:f.total?String(Math.round(f.total)):cur.fee||'',feeBasis:'lump',feeNote:cur.feeNote||(d.tax==='excl'?'plus VAT and AIT':'')}),silent?null:'Proposal saved');
+    const ok=await run(()=>propWrite(id,{...cur,doc,fee:f.total?String(Math.round(f.total)):cur.fee||'',feeBasis:'lump',feeNote:cur.feeNote||ptaxShort(d)}),silent?null:'Proposal saved');
     return ok; };
   const preview=async(plain)=>{ if(await save(true)===false) return; pbShowPreview(await pbHTML(S.props[id]||p,d,true,plain===true),plain===true,()=>pbPdfRetry(S.props[id]||p,d,plain===true),null,()=>preview(plain!==true)); };
   const makePdf=async()=>{ if(await save(true)===false) return; sh.pdf={state:'making'}; renderSheet();
@@ -10340,13 +10367,15 @@ function sheetPropDoc(){
       gsec('Payment schedule',`${d.sched.filter(x=>x.label||+x.pct).length} stages · ${Math.round(schSum*100)/100}%`,Math.round(schSum)!==100),
       rowsEd(d.sched,[{k:'pct',w:'72px',ph:'%'}],()=>({label:'',pct:''}),'+ Add a stage'),
       h('div',{id:'pb-sum',class:'f-hint',style:Math.round(schSum)!==100?'color:var(--overdue)':'',text:`${Math.round(schSum*100)/100}% of the fee`+(Math.round(schSum)!==100?' · should total 100%':'')}),
-      gsec('Site visits, revisions and validity',`${+d.vFree||0} visits · valid ${+d.validDays||0} days · ${d.tax==='incl'?'VAT/AIT included':'plus VAT and AIT'}`),
+      gsec('Site visits, revisions and validity',`${+d.vFree||0} visits · valid ${+d.validDays||0} days · ${ptaxShort(d)}`),
       h('div',{class:'form-row'},field('Free site visits',inp('vFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field(d.plan?'Extra visit, Principal (Tk)':'Extra visit, lead (Tk)',inp('vLead',{type:'number',min:0,step:'any',inputmode:'decimal'}))),
       h('div',{class:'form-row'},field(d.plan?'Extra visit, POD architect (Tk)':'Extra visit, senior (Tk)',inp('vSenior',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('As-built drawings (Tk)',inp('asBuilt',{type:'number',min:0,step:'any',inputmode:'decimal'},),'Leave empty if included')),
       field('Extra 3D view (Tk per image)',inp('extra3d',{type:'number',min:0,step:'any',inputmode:'decimal'})),
       h('div',{class:'form-row'},d.revMode==='stage'?field('Revisions included',h('span',{class:'f-hint',style:'padding-top:10px',text:'3 rounds at schematic, 2 at each later stage'})):field('Free revisions (whole project)',inp('revFree',{type:'number',min:0,step:'1',inputmode:'numeric'})),field('Extra revision (Tk per katha)',inp('revRate',{type:'number',min:0,step:'any',inputmode:'decimal'}),+d.katha&&+d.revRate?'= '+pbTk(pbRevFee(d))+' per revision on '+d.katha+' katha':'Enter the land size above')),
       field('Offer valid for (days)',inp('validDays',{type:'number',min:1,step:'1',inputmode:'numeric'}),d.date&&+d.validDays>0?'Valid until '+fmtD(addDays(d.date,+d.validDays))+'. Shown on the proposal.':null),
-      field('VAT and AIT',sel('tax',[['excl','Not included: added to each invoice (client pays)'],['incl','Included in the fee']])),
+      field('VAT and AIT',sel('taxTerms',Object.entries(PTAX).map(([k,v])=>[k,v[0]])),PTAX[d.taxTerms]?PTAX[d.taxTerms][1]:''),
+      d.taxTerms==='split'?h('div',{class:'form-row'},field('Part with VAT and AIT (Tk)',inp('splitBoth',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Part with AIT only (Tk)',inp('splitAit',{type:'number',min:0,step:'any',inputmode:'decimal'}),'The rest of the fee carries neither.')):null,
+      PTAX[d.taxTerms]&&d.taxTerms!=='net'?h('div',{class:'form-row'},field('VAT %',inp('vatPct',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('AIT %',inp('aitPct',{type:'number',min:0,step:'any',inputmode:'decimal'}),'7.5% while SLATE is a firm.')):null,
       gsec('Terms and signature',`${pbLines(d.terms).length} terms · signed by ${d.signName||'—'}`),field('One per line',ta('terms',{rows:6})),
       h('div',{class:'form-row'},field('Signed by',inp('signName',{maxlength:80})),field('Title',inp('signTitle',{maxlength:80}))),
       {end:true}]),
@@ -10444,12 +10473,12 @@ function pbBlocks(p,d){
       ${d.parts.filter(x=>x.label||+x.rate).map((x,i)=>`<tr><td>${d.scopeAuto?(i+1)+'. ':''}${pbEsc(x.label)}</td>${+x.rate?`<td class="n">${(+x.rate).toLocaleString('en-IN')}</td><td class="n">${Math.round((+x.rate)*(+d.area||0)).toLocaleString('en-IN')}</td>`:'<td class="n">—</td><td class="n">Included</td>'}</tr>`).join('')}
       ${f.disc?`<tr class="sub"><td>Subtotal (${(+d.area||0).toLocaleString('en-IN')} sft × Tk ${(f.rawRate||0).toLocaleString('en-IN')})</td><td></td><td class="n">${Math.round(f.sub).toLocaleString('en-IN')}</td></tr><tr class="sub"><td>Less special discount${d.discMode==='sft'?` (Tk ${(+d.disc||0).toLocaleString('en-IN')}/sft)`:''}</td><td></td><td class="n">−${Math.round(f.disc).toLocaleString('en-IN')}</td></tr>`:''}
       <tr class="tot"><td>Total fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`;
-  } else fee=`<div class="amtbox"><span>Total fee${d.tax==='incl'&&+d.taxNet?' (including VAT and AIT)':''}${d.lumpTag?' · lump sum, with goodwill discount':''}${d.plan&&SP_PLANS[d.plan]?' ('+SP_PLANS[d.plan].n+' plan)':''}${f.area&&!d.lumpTag?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${d.tax==='incl'&&+d.taxNet?(()=>{ const g=Math.round(f.total), av=Math.round(g/(1+(+d.vatPct||15)/100)), vat=g-av, ait=Math.round(av*(+d.aitPct||7.5)/100);
+  } else fee=`<div class="amtbox"><span>Total fee${PTAX[d.taxTerms]?(d.taxTerms==='allin'?' (including VAT and AIT)':''):d.tax==='incl'&&+d.taxNet?' (including VAT and AIT)':''}${d.lumpTag?' · lump sum, with goodwill discount':''}${d.plan&&SP_PLANS[d.plan]?' ('+SP_PLANS[d.plan].n+' plan)':''}${f.area&&!d.lumpTag?` · about Tk ${Math.round(f.rate).toLocaleString('en-IN')}/sft on ${(+f.area).toLocaleString('en-IN')} sft`:''}</span><b>${pbTk(f.total)}</b></div>${PTAX[d.taxTerms]?ptaxTable(d,f.total):d.tax==='incl'&&+d.taxNet?(()=>{ const g=Math.round(f.total), av=Math.round(g/(1+(+d.vatPct||15)/100)), vat=g-av, ait=Math.round(av*(+d.aitPct||7.5)/100);
       return `<table style="margin-top:3mm"><tbody><tr class="sub"><td>VAT (${+d.vatPct||15}%)</td><td class="n">${pbTk(vat)}</td></tr><tr><td>Value after VAT</td><td class="n">${pbTk(av)}</td></tr><tr class="sub"><td>AIT / tax (${+d.aitPct||7.5}%)</td><td class="n">${pbTk(ait)}</td></tr><tr class="tot"><td>Net value after VAT and AIT</td><td class="n">${pbTk(av-ait)}</td></tr></tbody></table>`; })():''}${(()=>{ if(!d.scopeAuto) return ''; const al=(d.addons||[]).map(x=>x.label), ps=d.parts.filter(x=>x.label), nums=ps.map((x,i)=>al.includes(x.label)?0:i+1).filter(Boolean); if(!nums.length) return '';
       const run=nums.every((n,i)=>n===i+1); return `<p class="pb-small">The total fee covers services ${run&&nums.length>1?'1 to '+nums.length:nums.join(', ')} in the scope of work${al.length?'; add-on services are charged separately, as listed below':''}.</p>`; })()}${(d.addons||[]).length?(()=>{ const isInc=x=>x.inc||(x.inc==null&&!+x.amount), disc=d.addons.filter(isInc).reduce((a,x)=>a+(+x.value||0),0), pay=d.addons.filter(x=>!isInc(x)).reduce((a,x)=>a+(+x.amount||0),0), anyInc=d.addons.some(isInc);
       return `<table style="margin-top:4mm"><thead><tr><th>Add-on services (charged separately, not in the total fee)</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${d.addons.map(x=>isInc(x)?`<tr><td>${pbEsc(x.label)}</td><td class="n">Complimentary</td></tr>`:`<tr><td>${pbEsc(x.label)}</td><td class="n">${pbTk(x.amount)}</td></tr>`).join('')}
       ${pay?`<tr class="tot"><td>Add-on fees payable</td><td class="n">${pbTk(pay)}</td></tr>`:''}</tbody></table>${anyInc?'<p class="pb-gw">Complimentary add-ons are provided by SLATE as a goodwill discount, at no charge.</p>':''}${pay?'<p class="pb-small">Add-on fees are invoiced when the add-on service starts.</p>':''}`; })():''}`;
-  add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${d.tax==='incl'?(+d.taxNet?'The total fee includes VAT and AIT at the rates shown.':'The fee includes VAT and AIT.'):'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
+  add(`<h2>Financial proposal</h2>${fee}<p class="pb-small">${PTAX[d.taxTerms]?PTAX[d.taxTerms][1]+(d.taxTerms==='net'?'':' The client provides the VAT and AIT certificates for amounts deducted at source.'):d.tax==='incl'?(+d.taxNet?'The total fee includes VAT and AIT at the rates shown.':'The fee includes VAT and AIT.'):'The fee does not include VAT and AIT. They are added to each invoice at the rates in force and paid by the client; the client provides the AIT certificate.'}${d.feeMode==='parts'?' The fee is adjusted to the final approved design area.':''}</p>`);
   if(d.plan&&SP_PLANS[d.plan]&&d.cmp) add(spCompare(d));
   if(d.iab&&f.area){ const I=pbIab(d,f);
     if(I.bi>=0) add(`<h2>IAB recommended minimum fees (Schedule D, 2018)</h2>
@@ -10639,7 +10668,13 @@ function tkWords(n){ n=Math.round(+n||0); if(!n) return 'Taka Zero only';
   return 'Taka '+w(n)+' only'; }
 const agOrd=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th');
 function agVars(p,a){ const d=p.doc||{}, f=pbFee(d), area=+d.area||0;
-  const tax=d.tax==='incl'?'The Fee includes Value Added Tax (VAT) and Advance Income Tax (AIT) at the rates in force on the date of this Agreement.'
+  const AGT={both:'The Fee is net to the CONSULTANT. Value Added Tax (VAT) and Advance Income Tax (AIT) shall be added to each invoice at the rates in force and borne by the CLIENT, so that the CONSULTANT receives the Fee in full. Where the CLIENT deducts VAT or AIT at source, it shall give the CONSULTANT the certificates within 30 (thirty) days.',
+    aitin:'The Fee includes Advance Income Tax (AIT). Value Added Tax (VAT) shall be added to each invoice at the rate in force and borne by the CLIENT. Where the CLIENT deducts VAT or AIT at source, it shall give the CONSULTANT the certificates within 30 (thirty) days.',
+    allin:'The Fee includes Value Added Tax (VAT) and Advance Income Tax (AIT) at the rates in force on the date of this Agreement. Where the CLIENT deducts VAT or AIT at source, it shall give the CONSULTANT the certificates within 30 (thirty) days.',
+    vatonly:'Value Added Tax (VAT) shall be added to each invoice at the rate in force and borne by the CLIENT. No Advance Income Tax (AIT) is deducted from the Fee.',
+    net:'The Fee is a net amount. No Value Added Tax (VAT) or Advance Income Tax (AIT) applies to it.',
+    split:'The Fee is net to the CONSULTANT. Value Added Tax (VAT) and Advance Income Tax (AIT) shall be added on the parts of the Fee set out in Schedule B and borne by the CLIENT. Where the CLIENT deducts VAT or AIT at source, it shall give the CONSULTANT the certificates within 30 (thirty) days.'};
+  const tax=AGT[d.taxTerms]?AGT[d.taxTerms]:d.tax==='incl'?'The Fee includes Value Added Tax (VAT) and Advance Income Tax (AIT) at the rates in force on the date of this Agreement.'
     :'The Fee does not include Value Added Tax (VAT) or Advance Income Tax (AIT), which shall be added to each invoice at the rates in force and borne by the CLIENT. Where the CLIENT deducts AIT at source, it shall give the CONSULTANT the tax deduction certificate within 30 (thirty) days.';
   return {katha:d.katha||p.katha||'—',land:a.land||d.site||'—',use:(d.use||'residential').toLowerCase(),area:area?area.toLocaleString('en-IN'):'—',ref:d.ref||'—',refDate:d.date?fmtLong(d.date):'—',
     fee:pbTk(f.total),feeWords:tkWords(f.total),taxLine:tax,revFree:String(+d.revFree||0),revRate:pbTk(d.revRate),revTotal:pbTk(pbRevFee(d)),vFree:String(+d.vFree||0),
@@ -10677,7 +10712,7 @@ function agBlocks(p,a){ const d=p.doc||{}, v=agVars(p,a), f=pbFee(d), B=[], add=
       ${f.disc?`<tr><td>Less special discount</td><td></td><td class="n">(${Math.round(f.disc).toLocaleString('en-IN')})</td></tr>`:''}
       <tr class="tot"><td>Total Fee</td><td class="n">${f.area?Math.round(f.rate*100)/100:''}</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`
     :`<table class="ag-tb"><tr class="tot"><td>Total Fee (package, all services in Schedule A)</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></table>`;
-  add(`<h2 class="ag-s">Schedule B · Fee and payment</h2><p class="ag-p">Total Fee: <b>${pbTk(f.total)}</b> (${pbEsc(tkWords(f.total))}), ${d.tax==='incl'?'including':'excluding'} VAT and AIT.</p>${fee}`,{brk:true});
+  add(`<h2 class="ag-s">Schedule B · Fee and payment</h2><p class="ag-p">Total Fee: <b>${pbTk(f.total)}</b> (${pbEsc(tkWords(f.total))}), ${PTAX[d.taxTerms]?ptaxShort(d):d.tax==='incl'?'including VAT and AIT':'excluding VAT and AIT'}.</p>${PTAX[d.taxTerms]?ptaxTable(d,f.total):''}${fee}`,{brk:true});
   const sc=(d.sched||[]).filter(x=>x.label||+x.pct);
   if(sc.length) add(`<p class="ag-cl"><b>Payment stages</b></p><table class="ag-tb"><thead><tr><th style="width:9mm">#</th><th>Stage</th><th class="n">%</th><th class="n">Amount (Tk)</th></tr></thead><tbody>${sc.map((x,i)=>`<tr><td>${i+1}</td><td>${pbEsc(x.label)}</td><td class="n">${Math.round((+x.pct||0)*100)/100}%</td><td class="n">${Math.round((+x.pct||0)/100*f.total).toLocaleString('en-IN')}</td></tr>`).join('')}<tr class="tot"><td></td><td>Total</td><td class="n">${Math.round(sc.reduce((s,x)=>s+(+x.pct||0),0)*100)/100}%</td><td class="n">${Math.round(f.total).toLocaleString('en-IN')}</td></tr></tbody></table>`);
   // Schedule C: additional services
@@ -10787,7 +10822,7 @@ function sheetAgrDoc(){
       sec('From the proposal'),
       h('div',{class:'card',style:'gap:4px;font-size:14px'},
         h('div',{text:`Fee ${pbTk(f.total)} · ${tkWords(f.total)}`}),
-        h('div',{class:'f-hint',style:'margin:0',text:`${(pd.parts||[]).filter(x=>x.label).length} services · ${(pd.sched||[]).length} payment stages · ${pd.tax==='incl'?'VAT and AIT included':'plus VAT and AIT'} · proposal ${pd.ref||''}`}),
+        h('div',{class:'f-hint',style:'margin:0',text:`${(pd.parts||[]).filter(x=>x.label).length} services · ${(pd.sched||[]).length} payment stages · ${ptaxShort(pd)} · proposal ${pd.ref||''}`}),
         h('button',{type:'button',class:'btn btn-sm',style:'justify-self:start;margin-top:4px',onclick:()=>openPropDoc(id),text:'Open the proposal document'})),
       sec('Recitals and clauses'),
       field('Recitals (WHEREAS) · one per line',ta('recitals',{rows:5})),
@@ -12042,7 +12077,7 @@ function viewFees(){
 /* a project confirmed from a proposal: its fee, area, payment stages and site visit terms come from the proposal document */
 function feeFromProp(pid){ const pr=Object.values(S.props||{}).find(x=>x&&x.projectId===pid&&x.doc); if(!pr) return null; const d=pr.doc, f=pbFee(d), area=+d.area||0;
   return {basis:d.feeMode==='parts'&&area?'sft':'lump',area:area?String(area):'',rate:area?String(Math.round(f.total/area*100)/100):'',fee:String(Math.round(f.total)),
-    note:[d.tax==='incl'?'VAT and AIT included':'plus VAT and AIT',d.ref?'as proposal '+d.ref:''].filter(Boolean).join(', '),
+    note:[ptaxShort(d),d.ref?'as proposal '+d.ref:''].filter(Boolean).join(', '),
     ms:(d.sched||[]).filter(x=>x.label||+x.pct).map(x=>({id:Math.random().toString(36).slice(2,9),label:x.label,pct:+x.pct||0})),vFree:d.vFree==null?'':String(d.vFree),vFee:+d.vLead?String(d.vLead):''}; }
 function openFee(pid){ const p=S.projects[pid]; if(!p) return; const fr=feeRecOf({...p,id:pid});
   const area=fr&&+fr.areaSft?String(fr.areaSft):String(+p.constManual||(p.farCalc&&p.farCalc.construction)||'');
