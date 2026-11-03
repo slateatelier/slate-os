@@ -345,6 +345,15 @@ tr.flag td{background:#FFF6E5} tr.flag td:first-child{box-shadow:inset 3px 0 0 v
 .pva-over{position:absolute;right:0;top:0;height:100%;background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(255,255,255,.6) 3px 5px)}
 .pva-d{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px} .pva-d.good{color:var(--k-in)} .pva-d.bad{color:var(--k-out)}
 .pva-w td:nth-child(4){width:28%}
+.dash{display:grid;gap:12px;margin:4px 0 16px}
+.dash .kpi .num{font-size:21px}
+.db-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px}
+.db-l{display:grid;gap:7px}
+.db-k{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:2px}.db-sw{width:10px;height:10px;border-radius:2px;display:inline-block}.db-sw.a{background:var(--k-tr)}.db-sw.b{background:#C9B79C;margin-left:8px}
+.db-r{display:grid;grid-template-columns:minmax(0,38%) minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12.5px}
+.db-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-bs{display:grid;gap:2px}.db-b{display:block;height:8px;border-radius:3px;background:var(--k-tr);opacity:.8}.db-b.b{background:#C9B79C}.db-b.neg{background:var(--k-out)}
+.db-v{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}
 .w .tbl-wrap{margin:0}
 .w table{font-size:13px}
 b.neg,.neg{color:var(--k-out)} .pos{color:var(--k-in)}
@@ -3479,10 +3488,12 @@ function viewReports() {
   if (S.sub) {
     const r = REPORTS.find(x => x.id === S.sub); if (!r) { S.sub = ''; return viewReports(); }
     const fn = { pl: repPL, cf: repCF, bs: repBS, projects: repProjects, spend: repSpend, combined: repCombined, counts: repCounts, rc: repRC, ledger: repLedger, daybook: repDaybook, tb: repTB, tax: repTax, assets: repAssets, checks: repChecks }[r.id];
-    return [backBtn('Reports', () => { S.rep.proj = ''; S.rep.spendKey = ''; go('reports'); })].concat(fn(r));
+    const out = fn(r); let ds = null; try { ds = dashEl(repDash(r.id, reportData(r.id))); } catch (e) { ds = null; }
+    if (ds) { const i = out.findIndex(el => el && el.classList && (el.classList.contains('say') || el.classList.contains('callout'))); out.splice(i >= 0 ? i + 1 : Math.min(out.length, 2), 0, ds); }
+    return [backBtn('Reports', () => { S.rep.proj = ''; S.rep.spendKey = ''; go('reports'); })].concat(out);
   }
   const card = r => h('button', { class: 'rcard', type: 'button', onclick: () => go('reports', r.id) }, h('span', { class: 'rc-t', text: r.t }), h('span', { class: 'rc-q', text: r.q }));
-  return [pageH('Reports', 'Plain-language reports from the books. Each one downloads as Excel.'),
+  return [pageH('Reports', 'Plain-language reports from the books, each with its key figures and charts. Each one downloads as PDF and Excel.'),
     h('div', { class: 'sec' }, secH('For everyone'), h('div', { class: 'rgrid' }, REPORTS.filter(r => r.who === 'all').map(card))),
     h('div', { class: 'sec' }, secH('For the accountant'), h('div', { class: 'rgrid' }, REPORTS.filter(r => r.who === 'acc').map(card)))];
 }
@@ -3927,6 +3938,128 @@ function exportReport(id) {
   const d = reportData(id); if (!d.sheets) return toast('Choose an account first.');
   saveXlsx(d.name + '.xlsx', d.sheets);
 }
+/* ---------- report dashboards: the key figures and one or two charts for each report, on screen and at the top of its PDF.
+   Built from the same sheets as the Excel and PDF, so the three always agree. ---------- */
+function repDash(id, d) {
+  if (!d || !d.sheets) return null;
+  const sh = (i) => { const s = d.sheets[i]; if (!s) return null; const rows = s.rows || [], n = rows.reduce((m, x) => Math.max(m, (x || []).length), 0);
+    let hi = rows.findIndex(x => x && x.length === n && x.every(c => typeof c === 'string' && c.trim() !== '')); if (hi < 0) hi = 0;
+    const head = rows[hi] || [], body = rows.slice(hi + 1).filter(x => x && x.length && !x.every(c => c == null || c === ''));
+    const c = name => head.indexOf(name); return { head, body, c, num: (x, name) => { const v = x[c(name)]; return typeof v === 'number' && isFinite(v) ? v : 0; } }; };
+  const isTot = x => typeof x[0] === 'string' && /^(Total|Opening |Closing |Net change|Difference|Overhead for|Cash due in)/i.test(x[0]);
+  const sum = (t, name, f) => r2(t.body.filter(x => !isTot(x) && (!f || f(x))).reduce((s, x) => s + t.num(x, name), 0));
+  const find = (t, label, name) => { const x = t.body.find(r => r[0] === label); return x ? t.num(x, name) : 0; };
+  const top = (pairs, k) => pairs.filter(p => Math.abs(p.v) > 0.5).sort((a, b) => Math.abs(b.v) - Math.abs(a.v)).slice(0, k || 8);
+  const group = (t, key, name, f) => { const m = {}; t.body.filter(x => !isTot(x) && (!f || f(x))).forEach(x => { const k = String(x[t.c(key)] || '—'); m[k] = (m[k] || 0) + t.num(x, name); }); return Object.entries(m).map(([l, v]) => ({ l, v: r2(v) })); };
+  const money = (l, v, o) => Object.assign({ l, v, money: true }, o || {});
+  const pctOf = (a, b) => b ? Math.round(a / b * 1000) / 10 + '%' : '—';
+  let tiles = [], charts = [];
+  if (id === 'projects') {
+    const t = sh(0), real = x => x[t.c('Code')] && !isTot(x);
+    const fees = sum(t, 'Fees'), costs = sum(t, 'Project costs'), prof = sum(t, 'Profit'), owed = sum(t, 'Still to collect');
+    tiles = [money('Fees earned', fees, { good: true }), money('Project costs', costs), money('Profit', prof, { sign: true }), { l: 'Margin', v: pctOf(prof, fees) }, money('Still to collect', owed), { l: 'Projects', v: String(t.body.filter(real).length) }];
+    charts = [{ t: 'Fees by project', items: top(t.body.filter(real).map(x => ({ l: x[t.c('Project')], v: t.num(x, 'Fees') })), 10) },
+      { t: 'Still to collect', items: top(t.body.filter(real).map(x => ({ l: x[t.c('Project')], v: t.num(x, 'Still to collect') })), 10) }];
+  } else if (id === 'pl') {
+    const t = sh(0), m = sh(1), fees = find(t, 'Total fees', 'Tk'), pc = find(t, 'Total project costs', 'Tk'), gp = find(t, 'Gross profit', 'Tk'), op = find(t, 'Operating profit', 'Tk'), np = find(t, 'Net profit', 'Tk');
+    tiles = [money('Fees', fees, { good: true }), money('Project costs', pc), money('Gross profit', gp, { sign: true }), money('Studio running costs', r2(gp - op)), money('Net profit', np, { sign: true }), { l: 'Net margin', v: pctOf(np, fees) }];
+    const kinds = t.body.filter(x => /^Total /.test(x[0]) && !/^Total (fees|project costs|other income)$/i.test(x[0])).map(x => ({ l: x[0].replace(/^Total /, '').replace(/^./, c => c.toUpperCase()), v: t.num(x, 'Tk') }));
+    if (m && m.body.length > 1) charts.push({ t: 'Income and costs by month', pair: ['Income', 'Costs'], items: m.body.map(x => ({ l: x[0], v: m.num(x, 'Income'), v2: m.num(x, 'Costs') })) });
+    charts.push({ t: 'Where the money went', items: top(kinds, 8) });
+  } else if (id === 'cf') {
+    const t = sh(0), a = sh(1), cin = sum(t, 'In', x => !isTot(x)), cout = sum(t, 'Out', x => !isTot(x));
+    tiles = [money('Opening cash and bank', find(t, 'Opening cash and bank', 'Net')), money('Money in', cin, { good: true }), money('Money out', cout), money('Net change', find(t, 'Net change', 'Net'), { sign: true }), money('Closing cash and bank', find(t, 'Closing cash and bank', 'Net'))];
+    charts = [{ t: 'Closing balance by account', items: top(a.body.map(x => ({ l: x[0], v: a.num(x, 'Closing') })), 10) }, { t: 'Money in and out by kind', pair: ['In', 'Out'], items: t.body.filter(x => !isTot(x)).map(x => ({ l: x[1], v: t.num(x, 'In'), v2: t.num(x, 'Out') })).filter(x => x.v || x.v2).sort((p, q) => (q.v + q.v2) - (p.v + p.v2)).slice(0, 8) }];
+  } else if (id === 'bs') {
+    const t = sh(0), diff = find(t, 'Difference', 'Tk');
+    tiles = [money('Total assets', find(t, 'Total assets', 'Tk')), money('Total liabilities', find(t, 'Total liabilities', 'Tk')), money('Total equity', find(t, 'Total equity', 'Tk')), { l: 'Balances', v: Math.abs(diff) < 1 ? 'Yes' : 'Off by Tk ' + fmt(Math.abs(diff)), bad: Math.abs(diff) >= 1 }];
+    charts = [{ t: 'What SLATE owns', items: top(group(t, 'Group', 'Tk', x => x[0] === 'Assets'), 8) }, { t: 'What SLATE owes', items: top(group(t, 'Group', 'Tk', x => x[0] === 'Liabilities'), 8) }];
+  } else if (id === 'tb') {
+    const t = sh(0), x = t.body.find(r => r[0] === 'Total') || [];
+    const v = n => typeof x[t.c(n)] === 'number' ? x[t.c(n)] : 0, diff = r2(v('Closing Dr') - v('Closing Cr'));
+    tiles = [money('Debits in period', v('Debit')), money('Credits in period', v('Credit')), money('Closing debits', v('Closing Dr')), money('Closing credits', v('Closing Cr')), { l: 'Agrees', v: Math.abs(diff) < 1 ? 'Yes' : 'Off by Tk ' + fmt(Math.abs(diff)), bad: Math.abs(diff) >= 1 }, { l: 'Accounts', v: String(t.body.filter(r => r[0] !== 'Total').length) }];
+    charts = [{ t: 'Activity by group', items: top(group(t, 'Group', 'Debit').map((g, i) => g), 10) }];
+  } else if (id === 'spend') {
+    const t = sh(0), spent = sum(t, 'Spent'), paid = sum(t, 'Paid (tagged to project)'), owed = sum(t, 'Still owed to date');
+    tiles = [money('Spent on projects', spent), money('Paid', paid), money('Still owed', owed, { bad: owed > 0.5 }), { l: 'Consultants and suppliers', v: String(new Set(t.body.map(x => x[t.c('Consultant or supplier')])).size) }];
+    charts = [{ t: 'By consultant or supplier', items: top(group(t, 'Consultant or supplier', 'Spent'), 10) }, { t: 'By project', items: top(group(t, 'Project', 'Spent'), 10) }];
+  } else if (id === 'daybook') {
+    const t = sh(0), vs = new Set(t.body.map(x => x[t.c('Voucher')] || x[t.c('Date')] + x[t.c('Party')]));
+    tiles = [{ l: 'Entries', v: String(vs.size) }, money('Total debits', sum(t, 'Debit')), money('Total credits', sum(t, 'Credit')), { l: 'Waiting for a check or approval', v: String(new Set(t.body.filter(x => /wait|check|approv/i.test(String(x[t.c('Status')] || '')) && !/^approved$/i.test(String(x[t.c('Status')] || ''))).map(x => x[t.c('Voucher')])).size) }];
+    charts = [{ t: 'Amount by type', items: top(group(t, 'Type', 'Debit'), 6) }, { t: 'Largest accounts', items: top(group(t, 'Account', 'Debit'), 8) }];
+  } else if (id === 'ledger') {
+    const t = sh(0), op = t.body.find(x => x[4] === 'Opening balance'), cl = t.body.find(x => x[4] === 'Closing balance'), rows = t.body.filter(x => x !== op && x !== cl);
+    tiles = [money('Opening', op ? t.num(op, 'Balance') : 0), money('Debits', sum({ body: rows, num: t.num, c: t.c }, 'Debit')), money('Credits', sum({ body: rows, num: t.num, c: t.c }, 'Credit')), money('Closing', cl ? t.num(cl, 'Balance') : 0), { l: 'Entries', v: String(rows.length) }];
+    const bym = {}; rows.forEach(x => { const k = String(x[0] || '').slice(0, 7); if (!/^\d{4}-\d{2}$/.test(k)) return; bym[k] = bym[k] || { l: k, v: 0, v2: 0 }; bym[k].v += t.num(x, 'Debit'); bym[k].v2 += t.num(x, 'Credit'); });
+    const ms = Object.values(bym).sort((a, b) => a.l.localeCompare(b.l)).slice(-12); if (ms.length) charts = [{ t: 'Debits and credits by month', pair: ['Debits', 'Credits'], items: ms }];
+  } else if (id === 'tax') {
+    const t = sh(0); tiles = t.body.slice(0, 6).map(x => money(x[0], t.num(x, 'Closing'))); charts = [{ t: 'Closing balance by account', items: top(t.body.map(x => ({ l: x[0], v: t.num(x, 'Closing') })), 10) }];
+  } else if (id === 'assets') {
+    const t = sh(0); tiles = [money('Cost', sum(t, 'Cost at end')), money('Bought in period', sum(t, 'Bought')), money('Depreciation this period', sum(t, 'Dep. this period')), money('Worth now', sum(t, 'Worth now'), { good: true }), { l: 'Items', v: String(sum(t, 'Items')) }];
+    charts = [{ t: 'Worth now by category', items: top(t.body.map(x => ({ l: x[0], v: t.num(x, 'Worth now') })), 8) }];
+  } else if (id === 'rc') {
+    const t = sh(0), ov = t.body.find(x => /^Overhead for/.test(x[0])), cash = t.body.find(x => /^Cash due in/.test(x[0])), rows = t.body.filter(x => !isTot(x));
+    tiles = [money('Overhead this month', ov ? t.num(ov, 'Counted') : 0), money('Confirmed so far', ov ? t.num(ov, 'Actual') : 0), money('Cash due this month', cash ? t.num(cash, 'Counted') : 0), { l: 'Still to confirm', v: String(rows.filter(x => /due|confirm|estimate/i.test(String(x[t.c('Status')] || ''))).length) }];
+    charts = [{ t: 'Estimate and actual by cost', pair: ['Estimate', 'Actual'], items: rows.map(x => ({ l: x[0], v: t.num(x, 'Estimate'), v2: t.num(x, 'Actual') })).filter(x => x.v || x.v2).slice(0, 10) }];
+  } else if (id === 'counts') {
+    const t = sh(0), last = t.body[t.body.length - 1];
+    tiles = [{ l: 'Counts recorded', v: String(t.body.length) }].concat(last ? [{ l: 'Last count', v: fmtD(last[0], true) + ' · ' + last[1] }, money('Counted', t.num(last, 'Counted')), money('Difference', t.num(last, 'Difference'), { bad: Math.abs(t.num(last, 'Difference')) >= 1 })] : []);
+  } else if (id === 'checks') {
+    const t = sh(0), sev = s => new Set(t.body.filter(x => x[t.c('Severity')] === s).map(x => x[0])).size;
+    tiles = [{ l: 'Fix now', v: String(sev('critical')), bad: sev('critical') > 0 }, { l: 'Check', v: String(sev('warning')) }, { l: 'Note', v: String(sev('info')) }];
+    const cnt = {}; t.body.forEach(x => { cnt[x[0]] = (cnt[x[0]] || 0) + 1; }); charts = [{ t: 'Items per check', count: true, items: top(Object.entries(cnt).map(([l, v]) => ({ l, v })), 10) }];
+  } else if (id === 'combined') {
+    const t = sh(0); tiles = [{ l: 'Entries', v: String(new Set(t.body.map(x => x[1])).size) }, money('Total', sum(t, 'Tk')), { l: 'Payees', v: String(new Set(t.body.map(x => x[4])).size) }];
+    charts = [{ t: 'By payee', items: top(group(t, 'Who', 'Tk'), 10) }, { t: 'By project', items: top(group(t, 'Project', 'Tk'), 10) }];
+  }
+  charts = charts.filter(c => c.items && c.items.length);
+  return tiles.length || charts.length ? { tiles, charts } : null;
+}
+const dashVal = x => x.money ? 'Tk ' + fmt(Math.round(x.v)) : x.v;
+const dashLbl = l => /^\d{4}-\d{2}$/.test(l) ? MON[+l.slice(5) - 1] + ' ' + l.slice(2, 4) : l;
+/* on screen: the tiles, then the charts as plain bars */
+function dashEl(ds) {
+  if (!ds) return null;
+  const tone = x => x.bad || (x.sign && x.v < 0) ? 'out' : x.good || (x.sign && x.v > 0) ? 'in' : null;
+  const chart = c => { const max = Math.max(1, ...c.items.map(i => Math.max(Math.abs(i.v), Math.abs(i.v2 || 0))));
+    const bar = (v, cls) => h('span', { class: 'db-b ' + cls, style: `width:${Math.max(0.5, Math.abs(v) / max * 100)}%` });
+    return widget(c.t, null, h('div', { class: 'db-l' }, c.pair ? h('div', { class: 'db-k' }, h('span', { class: 'db-sw a' }), c.pair[0], h('span', { class: 'db-sw b' }), c.pair[1]) : null,
+      c.items.map(i => h('div', { class: 'db-r' }, h('div', { class: 'db-n', text: dashLbl(i.l), title: i.l }), h('div', { class: 'db-bs' }, bar(i.v, 'a' + (i.v < 0 ? ' neg' : '')), c.pair ? bar(i.v2, 'b') : null),
+        h('div', { class: 'db-v', text: c.count ? String(i.v) : c.pair ? fmt(Math.round(i.v)) + ' / ' + fmt(Math.round(i.v2)) : fmt(Math.round(i.v)) }))))); };
+  return h('div', { class: 'dash' }, ds.tiles.length ? h('div', { class: 'kpis' }, ds.tiles.map(x => kpi(x.l, dashVal(x), null, tone(x)))) : null, ds.charts.length ? h('div', { class: 'db-g' }, ds.charts.map(chart)) : null);
+}
+/* in the PDF: tiles in a row, charts as horizontal bars; returns the new y */
+function dashPDF(doc, ds, y, M, avail) {
+  const ink = '#231f20', mut = '#55565a', IN = '#3F7F5A', OUT = '#A85A4E', B1 = '#4F6F96', B2 = '#C9B79C';
+  const n = ds.tiles.length; if (n) {
+    const per = Math.min(n, avail > 600 ? 6 : 3), gap = 8, tw = (avail - gap * (per - 1)) / per, th = 46;
+    ds.tiles.forEach((x, i) => { const cx = M + (i % per) * (tw + gap), cy = y + Math.floor(i / per) * (th + gap);
+      doc.rect(cx, cy, tw, th, { fill: '#F3F4F5' });
+      doc.text(cx + 8, cy + 14, doc.wrap(x.l, tw - 16, 7.5)[0], { size: 7.5, color: mut });
+      let s = dashVal(x), fs = 13; while (fs > 8 && doc.width(s, fs, true) > tw - 16) fs -= 0.5;
+      doc.text(cx + 8, cy + 34, s, { size: fs, bold: true, color: x.bad || (x.sign && x.v < 0) ? OUT : x.good || (x.sign && x.v > 0) ? IN : ink });
+    });
+    y += Math.ceil(n / per) * (th + gap) + 6;
+  }
+  if (ds.charts.length) {
+    const cols = avail > 600 && ds.charts.length > 1 ? 2 : 1, cw = (avail - (cols - 1) * 18) / cols;
+    let rowH = 0;
+    ds.charts.forEach((c, ci) => { const cx = M + (ci % cols) * (cw + 18); if (ci % cols === 0 && ci) { y += rowH + 12; rowH = 0; }
+      let cy = y; doc.text(cx, cy + 10, c.t, { size: 10, bold: true }); cy += 16;
+      if (c.pair) { doc.rect(cx, cy + 1, 7, 7, { fill: B1 }); doc.text(cx + 10, cy + 7.5, c.pair[0], { size: 7.5, color: mut }); const w0 = doc.width(c.pair[0], 7.5) + 22; doc.rect(cx + w0, cy + 1, 7, 7, { fill: B2 }); doc.text(cx + w0 + 10, cy + 7.5, c.pair[1], { size: 7.5, color: mut }); cy += 13; }
+      const max = Math.max(1, ...c.items.map(i => Math.max(Math.abs(i.v), Math.abs(i.v2 || 0)))), lw = Math.min(150, cw * 0.36), vw = c.pair ? 96 : 62, bw = cw - lw - vw - 8, rh = c.pair ? 15 : 13;
+      c.items.forEach(i => { let lab = dashLbl(i.l); while (lab.length > 3 && doc.width(lab, 7.5) > lw - 6) lab = lab.slice(0, -2).trim() + '…';
+        doc.text(cx, cy + 8.5, lab, { size: 7.5 });
+        const w1 = Math.max(0.6, Math.abs(i.v) / max * bw); doc.rect(cx + lw, cy + 2, w1, c.pair ? 5 : 8, { fill: i.v < 0 ? OUT : B1 });
+        if (c.pair) doc.rect(cx + lw, cy + 8, Math.max(0.6, Math.abs(i.v2 || 0) / max * bw), 5, { fill: B2 });
+        doc.text(cx + cw, cy + 8.5, c.count ? String(i.v) : c.pair ? fmt(Math.round(i.v)) + ' / ' + fmt(Math.round(i.v2)) : fmt(Math.round(i.v)), { size: 7.5, align: 'right', color: i.v < 0 ? OUT : ink });
+        cy += rh; });
+      rowH = Math.max(rowH, cy - y);
+    });
+    y += rowH + 8;
+  }
+  return y;
+}
 /* the same report as a PDF on the SLATE letterhead: the Excel sheets laid out as tables, landscape when they are wide */
 function reportPDF(id) {
   const d = reportData(id); if (!d.sheets) return null;
@@ -3950,6 +4083,8 @@ function reportPDF(id) {
   doc.text(M, y, d.period, { size: 9.5, color: '#55565a' });
   doc.text(R, y, `Prepared ${fmtTs(new Date().toISOString())} by ${nameOf(S.uid)}`, { size: 8, color: '#939598', align: 'right' }); y += 14;
   if (say) { y += 2; y += doc.para(M, y, say, avail, { size: 9, lh: 12.5 }) + 4; }
+  const ds = repDash(id, d);
+  if (ds) { y = dashPDF(doc, ds, y + 6, M, avail); if (ds.charts.length) y = newPage(); else y += 4; }
   tables.forEach((t, ti) => {
     if (!t.head.length) return;
     /* leave out columns with nothing in them */
