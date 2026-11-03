@@ -243,7 +243,7 @@ td input,td select{min-width:110px;background:#fff;padding:7px 9px;font-size:14p
 .stg-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--line,#eceded)}
 .stg-row:first-of-type{border-top:0}.stg-row.is-done{opacity:.75}.stg-l{display:grid;gap:2px;min-width:0}
 .stg-tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap;background:#F1F2F3;color:#55565a}
-.stg-tag.t-adv,.stg-tag.t-rec{background:#E3F1E8;color:#1F6B3F}.stg-tag.t-part,.stg-tag.t-due{background:#FFF3DC;color:#8A5A00}.stg-tag.t-now{background:#c1272d;color:#fff}
+.stg-tag.t-adv,.stg-tag.t-rec{background:#E3F1E8;color:#1F6B3F}.stg-tag.t-part,.stg-tag.t-partdue,.stg-tag.t-due{background:#FFF3DC;color:#8A5A00}.stg-tag.t-now{background:#c1272d;color:#fff}
 .ln{display:grid;grid-template-columns:minmax(0,2fr) minmax(90px,1fr) minmax(90px,1fr) 34px;gap:8px;align-items:center}
 .ln-h{font-size:12px;font-weight:600;color:var(--muted)}
 @media (max-width:560px){.ln{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px}.ln>:first-child{grid-column:1/-1}}
@@ -1541,7 +1541,8 @@ function splitTotals(inv, sub, vp, aitPct) {
   });
   received = r2(received);
   const vds = inv.vds ? vat : 0;
-  return { sub, aitUp, pre, vat, total, received, due: r2(total - received), pays, base: aitBase, vatBase, groups: g, ait: aitUp, vds, net: r2(total - aitUp - vds) };
+  const shortAmt = inv.short ? +inv.short.amt || 0 : 0;
+  return { sub, aitUp, pre, vat, total, received, shortAmt, due: r2(total - received - shortAmt), pays, base: aitBase, vatBase, groups: g, ait: aitUp, vds, net: r2(total - aitUp - vds) };
 }
 function invTotals(inv) {
   const sub = r2((inv.items || []).reduce((s, x) => s + (+x.amount || 0), 0));
@@ -1562,7 +1563,8 @@ function invTotals(inv) {
   /* tax the client keeps back at source: AIT on the fee before VAT, and the VAT itself when the client withholds it (VDS) */
   const base = inv.vatMode === 'incl' ? r2(sub - vat) : pre;
   const ait = aitUp > 0 ? aitUp : aitPct > 0 ? r2(base * aitPct / 100) : 0, vds = inv.vds && inv.vatMode !== 'none' ? vat : 0;
-  return { sub, aitUp, pre, vat, total, received, due: r2(total - received), pays, base, ait, vds, net: r2(total - ait - vds) };
+  const shortAmt = inv.short ? +inv.short.amt || 0 : 0;
+  return { sub, aitUp, pre, vat, total, received, shortAmt, due: r2(total - received - shortAmt), pays, base, ait, vds, net: r2(total - ait - vds) };
 }
 function invStatus(inv) {
   if (inv.status === 'cancelled') return 'cancelled';
@@ -1642,7 +1644,9 @@ function sheetMySign() {
 /* ---------- fee stages: the payment stages set in SLATE OS › Business › Fees (copied to the Books project as `stages`).
    A stage is billed by an invoice line that carries its id. Fee money received on the project without an invoice
    (the advance, older Tally receipts) settles the unbilled stages in order, so the advance shows as received. ---------- */
-const STG_TAG = { adv: 'Advance received', rec: 'Received', part: 'Part received', due: 'Billed, due', now: 'Billed now', next: 'Upcoming' };
+const STG_TAG = { adv: 'Advance received', rec: 'Received', part: 'Part received', partdue: 'Part paid', due: 'Billed, due', now: 'Billed now', next: 'Upcoming' };
+/* differences up to this many taka count as settled (rounding on the client's side, e.g. Tk 1,91,087 for a Tk 1,91,088 stage) */
+const STG_TOL = 10;
 const vCounts = v => !!v && ['approved', 'tally', 'checked'].includes(vStatus(v));
 function projFeeIn(pid) {
   let all = 0, unl = 0;
@@ -1657,33 +1661,65 @@ function projFeeIn(pid) {
   });
   return { all: r2(all), unl: r2(unl) };
 }
-/* every stage of a project with its tag; cur = the invoice being made or printed ({ _id, items }) */
+/* a balance closed without payment (discount, write-off, rounding), in fee terms (before VAT and AIT) */
+const invShortFee = x => x && x.short && +x.short.fee > 0 ? +x.short.fee : 0;
+/* every stage of a project with its tag; cur = the invoice being made or printed ({ _id, items }).
+   Per stage: inv = billed on saved invoices, paid = paid on those invoices (or closed short), rec = covered by fee money
+   received without an invoice, now = on the invoice being made, open = not yet billed or covered (billable). */
 function stageBook(pid, cur) {
   const p = S.projects[pid]; if (!p || !(p.stages || []).length) return null;
-  const rows = p.stages.map((s, i) => ({ id: s.id, n: i + 1, label: s.label, pct: +s.pct || 0, amount: +s.amount || 0, billed: 0, paid: 0, now: 0, inv: [], byRec: false }));
+  const rows = p.stages.map((s, i) => ({ id: s.id, n: i + 1, label: s.label, pct: +s.pct || 0, amount: +s.amount || 0, inv: 0, paid: 0, rec: 0, now: 0, nos: [], billed: 0, open: 0, due: 0 }));
   const by = {}; rows.forEach(r => { by[r.id] = r; });
-  let other = 0;
+  let other = 0, short = 0;
   invList().forEach(x => {
     if (x.project !== pid || ['draft', 'cancelled'].includes(x.status) || (cur && x._id === cur._id)) return;
-    let left = invTotals(x).received;
+    const t = invTotals(x), sf = invShortFee(x); short += sf;
+    /* payments settle the invoice's lines in order, in fee terms; a closed-short balance counts as settled */
+    let left = (t.total > 0 ? Math.min(t.total, t.received + (x.short ? +x.short.amt || 0 : 0)) * t.sub / t.total : 0);
     (x.items || []).forEach(it => {
       const a = +it.amount || 0, got = Math.max(0, Math.min(left, a)); left -= got;
       const r = by[it.stage]; if (!r) { other += a; return; }
-      r.billed += a; r.paid += got; if (!r.inv.includes(x.no)) r.inv.push(x.no);
+      r.inv += a; r.paid += got; if (x.no && !r.nos.includes(x.no)) r.nos.push(x.no);
     });
   });
   if (cur) (cur.items || []).forEach(it => { const r = by[it.stage]; if (r) r.now += +it.amount || 0; else other += +it.amount || 0; });
+  /* fee money received without an invoice fills, in order, what each stage still has unbilled */
   const fin = projFeeIn(pid); let left = Math.max(0, fin.unl);
-  rows.forEach(r => { if (r.billed || r.now || left <= 0.5) return; const got = Math.min(left, r.amount); r.billed += got; r.paid += got; r.byRec = true; left -= got; });
+  rows.forEach(r => { const room = r.amount - r.inv - r.now; if (room <= STG_TOL || left <= 0.5) return; const got = Math.min(left, room); r.rec += got; left -= got; });
   rows.forEach((r, i) => {
-    r.st = r.now ? 'now' : !r.billed ? 'next' : r.paid >= r.billed - 0.5 ? (r.byRec && (i === 0 || /advance|signing|mobili/i.test(r.label)) ? 'adv' : 'rec') : r.paid > 0.5 ? 'part' : 'due';
+    r.billed = r2(r.inv + r.rec);
+    const op = r2(r.amount - r.inv - r.rec - r.now); r.open = op > STG_TOL ? op : 0;
+    const dueInv = r2(r.inv - r.paid); r.due = dueInv > STG_TOL ? dueInv : 0;
+    const got = r2(r.paid + r.rec);
+    r.st = r.now ? 'now'
+      : r.billed <= STG_TOL ? 'next'
+      : r.due ? (got > STG_TOL ? 'partdue' : 'due')
+      : r.open ? 'part'
+      : (r.rec > 0.5 && !r.inv && (i === 0 || /advance|signing|mobili/i.test(r.label)) ? 'adv' : 'rec');
+    r.got = got;
   });
   const fee = +p.contract || rows.reduce((s, r) => s + r.amount, 0);
   const thisInv = cur ? r2((cur.items || []).reduce((s, it) => s + (+it.amount || 0), 0)) : 0;
-  /* billed to date = stage invoices + stages settled by receipts + other invoice lines + any fee money beyond the stages + this invoice */
+  /* billed to date = stage invoices + stages covered by receipts + other invoice lines + any fee money beyond the stages + this invoice */
   const billed = r2(rows.reduce((s, r) => s + r.billed + r.now, 0) + other + Math.max(0, left));
-  const toBill = r2(rows.reduce((s, r) => s + Math.max(0, r.amount - r.billed - r.now), 0));
-  return { rows, fee, received: fin.all, billed, thisInv, outstanding: r2(billed - fin.all), toBill, extraIn: r2(Math.max(0, left)) };
+  const toBill = r2(rows.reduce((s, r) => s + r.open, 0));
+  return { rows, fee, received: fin.all, billed, thisInv, short: r2(short), outstanding: r2(Math.max(0, billed - fin.all - short)), toBill, extraIn: r2(Math.max(0, left)) };
+}
+/* what a stage row says: the tag, plus the amounts when it is part paid */
+function stgTag(r) {
+  if (r.st === 'part') return `Part received · ${tk(r.open)} to bill`;
+  if (r.st === 'partdue') return `Part paid · ${tk(r.due)} due`;
+  if (r.st === 'due') return `Billed · ${tk(r.due)} due`;
+  return STG_TAG[r.st];
+}
+/* earlier invoices on the same project with money still due (issued before this one) */
+function prevUnpaid(inv) {
+  if (!inv || !inv.project) return { list: [], total: 0 };
+  const key = x => (x.date || '') + '|' + (x.no || '');
+  const me = key(inv);
+  const list = invList().filter(x => x.project === inv.project && x._id !== inv._id && !['draft', 'cancelled'].includes(x.status) && key(x) < me)
+    .map(x => ({ x, t: invTotals(x) })).filter(o => o.t.due > STG_TOL).sort((a, b) => key(a.x).localeCompare(key(b.x)));
+  return { list, total: r2(list.reduce((s, o) => s + o.t.due, 0)) };
 }
 
 /* ---------- files ---------- */
@@ -1985,17 +2021,29 @@ function invoicePDF(id, plain, unsaved) {
   const tnote = inv.split ? SPLIT_NOTE : inv.terms && TAX_TERMS[inv.terms] ? TAX_TERMS[inv.terms].note : '';
   if (tnote) { y += 13; doc.text(R, y, tnote, { size: 8.5, color: GREY, align: 'right' }); }
   y += 18; y += doc.para(M, y, words(t.total), R - M, { size: 9, color: GREY });
-  if (t.received > 0) { y += 4; doc.text(M, y, 'Received against this invoice Tk ' + fmt(t.received) + '  ·  Balance due Tk ' + fmt(t.due), { size: 9.5, bold: true }); y += 12; }
+  if (t.received > 0 || t.shortAmt > 0) { y += 4; doc.text(M, y, 'Received against this invoice Tk ' + fmt(t.received) + (t.shortAmt > 0 ? '  ·  Not collected Tk ' + fmt(t.shortAmt) : '') + '  ·  Balance due Tk ' + fmt(Math.max(0, t.due)), { size: 9.5, bold: true }); y += 12; }
+
+  /* earlier invoices on this project still unpaid: listed, and added to the amount now due (they are not billed again) */
+  const pu = prevUnpaid(Object.assign({ _id: id }, inv, inv.no ? {} : { no: '\uffff' }));
+  if (pu.total > STG_TOL) {
+    need(60 + pu.list.length * 15);
+    y += 18; doc.text(M, y, 'PREVIOUS BALANCE', { size: 8.5, bold: true, spacing: 1.36 });
+    y += 8; doc.line(M, y, R, y, { w: 0.75, color: '#000000' });
+    pu.list.forEach(o => { y += 15; doc.text(M, y, `Invoice ${o.x.no} of ${fmtD(o.x.date, true)}: Tk ${fmt(o.t.total)}, received Tk ${fmt(o.t.received)}`, { size: 9.5, color: GREY }); doc.text(R, y, fmt(o.t.due), { size: 9.5, align: 'right' }); });
+    row('This invoice', fmt(Math.max(0, t.due)));
+    row('Earlier invoices unpaid', fmt(pu.total));
+    y += 6; doc.line(R - 250, y, R, y, { w: 1, color: '#000000' }); row('Total now due', 'Tk ' + fmt(r2(Math.max(0, t.due) + pu.total)), true);
+  }
 
   /* the project's fee schedule: every stage and what has happened to it, then the running account */
   const sb = inv.project ? stageBook(inv.project, inv) : null;
   if (sb) {
-    need(56 + sb.rows.length * 20);
+    need(56 + sb.rows.length * 31);
     y += 20; doc.text(M, y, 'FEE SCHEDULE', { size: 8.5, bold: true, spacing: 1.36 });
     y += 16; const cN = M, cS = M + 18, cP = R - 200, cA = R - 112, cT = R;
     th(cN, y, '#'); th(cS, y, 'Stage'); th(cP, y, '%', 'right'); th(cA, y, 'Amount (Tk)', 'right'); th(cT, y, 'Status', 'right');
     y += 6; doc.line(M, y, R, y, { w: 0.75, color: '#000000' });
-    const TAGC = { adv: ['#E6F2EA', '#1F6B3F'], rec: ['#E6F2EA', '#1F6B3F'], part: ['#FFF3DC', '#8A5A00'], due: ['#FFF3DC', '#8A5A00'], now: [RED, '#FFFFFF'], next: ['#F2F2F2', GREY] };
+    const TAGC = { adv: ['#E6F2EA', '#1F6B3F'], rec: ['#E6F2EA', '#1F6B3F'], part: ['#FFF3DC', '#8A5A00'], partdue: ['#FFF3DC', '#8A5A00'], due: ['#FFF3DC', '#8A5A00'], now: [RED, '#FFFFFF'], next: ['#F2F2F2', GREY] };
     sb.rows.forEach(r => {
       const now = r.st === 'now', tag = STG_TAG[r.st].toUpperCase(), c = TAGC[r.st];
       if (now) doc.rect(M, y + 0.5, R - M, 19.5, { fill: '#FBEDEE' });
@@ -2006,6 +2054,12 @@ function invoicePDF(id, plain, unsaved) {
       doc.text(cP, by, fmt(r.pct) + '%', { size: 9.5, align: 'right' });
       doc.text(cA, by, fmt(r.amount), { size: 9.5, bold: now, align: 'right' });
       const tw = doc.width(tag, 6.8, true, null, 0.4) + 12; doc.rect(cT - tw, y + 4, tw, 12, { fill: c[0] }); doc.text(cT - 6, y + 12.6, tag, { size: 6.8, bold: true, color: c[1], align: 'right', spacing: 0.4 });
+      /* a part-paid stage says how much came in and what is left */
+      const det = r.st === 'part' ? `Received Tk ${fmt(r.got)} · Tk ${fmt(r.open)} still to bill`
+        : r.st === 'partdue' ? `Paid Tk ${fmt(r.got)} · Tk ${fmt(r.due)} due on ${r.nos.join(', ')}`
+        : r.st === 'due' ? `Tk ${fmt(r.due)} due on ${r.nos.join(', ')}`
+        : now && r.now < r.amount - STG_TOL ? `Billed now: the balance, Tk ${fmt(r.now)}` + (r.got > 0.5 ? ` (Tk ${fmt(r.got)} received before)` : '') : '';
+      if (det) { y += 11; doc.text(cS, y + 11, det, { size: 7.8, color: GREY }); }
       y += 20; doc.line(M, y, R, y, { color: '#D9D9D9', w: 0.5 });
     });
 
@@ -2018,8 +2072,8 @@ function invoicePDF(id, plain, unsaved) {
       doc.text(x, y + 17, l.toUpperCase(), { size: 6.8, bold: true, color: due ? '#FFFFFF' : GREY, spacing: 0.7 }); doc.text(x, y + 35, 'Tk ' + fmt(v), { size: due ? 13 : 12, bold: true, color: due ? '#FFFFFF' : '#000000' }); });
     doc.frame(M, y, R - M, bh, { w: 1 });
     y += bh + 13;
-    const prev = r2(sb.outstanding - t.total);
-    y += doc.para(M, y, `The amount due is the total of this invoice${prev > 0.5 ? ` plus Tk ${fmt(prev)} still unpaid on earlier bills` : ''}${inv.due ? ', payable by ' + fmtD(inv.due, true) : ''}. Billed to date: Tk ${fmt(sb.billed)}, including this invoice${sb.rows.some(r => r.st === 'adv') ? ' and the advance received' : ''}. Each upcoming stage will be billed when it is reached.`, R - M, { size: 8.5, color: GREY });
+    const prev = pu.total;
+    y += doc.para(M, y, `The amount due is the total of this invoice${prev > STG_TOL ? ` plus Tk ${fmt(prev)} still unpaid on earlier invoices` : ''}${inv.due ? ', payable by ' + fmtD(inv.due, true) : ''}. Billed to date: Tk ${fmt(sb.billed)}, including this invoice${sb.rows.some(r => r.st === 'adv') ? ' and the advance received' : ''}. Each upcoming stage will be billed when it is reached.`, R - M, { size: 8.5, color: GREY });
   }
   const note = inv.note || S.settings.invNote || '';
   if (note) { need(46); y += 12; doc.text(M, y, 'NOTES', { size: 7.5, bold: true, color: GREY, spacing: 0.9 }); y += 13; y += doc.para(M, y, note, R - M, { size: 9 }); }
@@ -2601,7 +2655,7 @@ function form(title, fields, submit, onSubmit, extra) {
 }
 function fact(l, v, s) { return h('div', {}, h('div', { class: 'lbl', text: l }), h('div', { class: 'v', text: v || '—' }), s ? h('div', { class: 's', text: s }) : null); }
 function timeline(trail) {
-  const lab = { signed: 'Signed', created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', restored: 'Restored', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed' };
+  const lab = { signed: 'Signed', created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', restored: 'Restored', shortclosed: 'Balance closed without payment', reopened: 'Balance reopened', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed' };
   const col = { approved: 'var(--ontime)', paid: 'var(--ontime)', posted: 'var(--ontime)', checked: 'var(--early)', returned: 'var(--overdue)', rejected: 'var(--overdue)', cancelled: 'var(--faint)' };
   const t = (trail || []).slice().reverse();
   if (!t.length) return null;
@@ -3195,23 +3249,33 @@ function projTerms(d, p) {
 }
 /* a stage on a split project is billed in the agreed parts: with VAT and AIT, with AIT only, and the rest with neither */
 function stageLines(r, d) {
-  const p = S.projects[d.project] || {}, fee = +p.contract || 0;
+  const p = S.projects[d.project] || {}, fee = +p.contract || 0, amt = stgBillable(r);
   if (!d.split || p.taxTerms !== 'split' || !(fee > 0)) return [Object.assign(stageLine(r), d.split ? { tax: 'both' } : {})];
   const fb = Math.min(1, Math.max(0, (+p.splitBoth || 0) / fee)), fa = Math.min(1 - fb, Math.max(0, (+p.splitAit || 0) / fee));
-  const b = Math.round(r.amount * fb), a = Math.round(r.amount * fa), n = r2(r.amount - b - a), base = stageLine(r);
+  const b = Math.round(amt * fb), a = Math.round(amt * fa), n = r2(amt - b - a), base = stageLine(r);
   return [[b, 'both'], [a, 'ait'], [n, 'none']].filter(([v]) => v > 0).map(([v, t]) => ({ desc: base.desc, amount: String(v), stage: r.id, tax: t }));
 }
-function stageLine(r) { return { desc: `Stage ${r.n}: ${r.label} (${r.pct}% of the fee)`, amount: String(r.amount), stage: r.id }; }
+/* what is left to bill on a stage: the whole stage, or its balance when part of it was already received or billed */
+const stgBillable = r => r.open && r.open < r.amount - STG_TOL ? r.open : r.amount;
+function stageLine(r) {
+  const amt = stgBillable(r);
+  if (amt < r.amount) return { desc: `Stage ${r.n}: ${r.label}, balance (${r.pct}% of the fee, Tk ${fmt(r.amount)}, less Tk ${fmt(r2(r.amount - amt))} already ${r.inv ? 'billed' : 'received'})`, amount: String(amt), stage: r.id };
+  return { desc: `Stage ${r.n}: ${r.label} (${r.pct}% of the fee)`, amount: String(r.amount), stage: r.id };
+}
 function invStagePicker(d) {
   const sb = d.project ? stageBook(d.project, { _id: S.sheet.editId, items: [] }) : null; if (!sb) return null;
   const on = id => d.items.some(i => i.stage === id);
   const toggle = r => { if (on(r.id)) d.items = d.items.filter(i => i.stage !== r.id); else { d.items = d.items.filter(i => i.stage || (i.desc || '').trim() || parseAmt(i.amount)); d.items.push(...stageLines(r, d)); d.items.sort((a, b) => ((sb.rows.find(x => x.id === a.stage) || { n: 99 }).n) - ((sb.rows.find(x => x.id === b.stage) || { n: 99 }).n)); } if (!d.items.length) d.items.push({ desc: '', amount: '' }); renderSheet(); };
   return h('div', { class: 'stg-pick' }, h('div', { class: 'ln-h', text: 'Fee stages · tick the stages this invoice bills' }),
-    sb.rows.map(r => { const free = r.st === 'next' || on(r.id);
+    sb.rows.map(r => { const free = r.open > 0 || on(r.id);
+      const sub = `${r.pct}% · ${tk(r.amount)}` + (r.got > 0.5 && r.got < r.amount - STG_TOL ? ` · ${tk(r.got)} received` : '') + (r.nos.length ? ' · ' + r.nos.join(', ') : '');
       return h('label', { class: 'stg-row' + (free ? '' : ' is-done') }, h('input', { type: 'checkbox', checked: on(r.id), disabled: !free, onchange: () => toggle(r) }),
-        h('span', { class: 'stg-l' }, h('b', { text: `${r.n}. ${r.label}` }), h('span', { class: 'f-hint', style: 'margin:0', text: `${r.pct}% · ${tk(r.amount)}` + (r.inv.length ? ' · ' + r.inv.join(', ') : '') })),
-        h('span', { class: 'stg-tag t-' + (on(r.id) ? 'now' : r.st), text: on(r.id) ? STG_TAG.now : STG_TAG[r.st] })); }),
-    h('div', { class: 'f-hint', text: `Fee ${tk(sb.fee)} · received ${tk(sb.received)} · billed before this invoice ${tk(sb.billed)} · still to bill ${tk(sb.toBill)}` }));
+        h('span', { class: 'stg-l' }, h('b', { text: `${r.n}. ${r.label}` }), h('span', { class: 'f-hint', style: 'margin:0', text: sub })),
+        h('span', { class: 'stg-tag t-' + (on(r.id) ? 'now' : r.st), text: on(r.id) ? (r.open && r.open < r.amount - STG_TOL ? `Billing the balance ${tk(r.open)}` : STG_TAG.now) : stgTag(r) })); }),
+    h('div', { class: 'f-hint', text: `Fee ${tk(sb.fee)} · received ${tk(sb.received)} · billed before this invoice ${tk(sb.billed)} · still to bill ${tk(sb.toBill)}` + (sb.outstanding > STG_TOL ? ` · unpaid on earlier bills ${tk(sb.outstanding)}` : '') }),
+    (() => { const pu = prevUnpaid({ _id: S.sheet.editId || '_new', project: d.project, date: d.date || today(), no: (S.invoices[S.sheet.editId] || {}).no || '\uffff' });
+      return pu.total > STG_TOL ? h('div', { class: 'callout', style: 'margin-top:8px' }, h('b', { text: `Earlier invoices still unpaid: ${tk(pu.total)}` }),
+        h('div', { class: 'muted', text: pu.list.map(o => `${o.x.no} · ${tk(o.t.due)} of ${tk(o.t.total)}`).join(' · ') + '. They print on this invoice as the previous balance, added to the amount due. Don’t bill those stages again.' })) : null; })());
 }
 function sheetInvForm() {
   const d = D();
@@ -3289,11 +3353,16 @@ function sheetInvoice() {
   const x = Object.assign({ _id: S.sheet.id }, raw), t = invTotals(x), st = invStatus(x);
   const out = [head('Invoice · ' + (x.no || ''), cliN(x))];
   out.push(h('div', { class: 'sh-status' }, pill(st), x.project ? h('span', { class: 'tag', text: projLabel(x.project) }) : null));
-  out.push(h('div', { class: 'big-amt', text: tk(st === 'paid' ? t.total : t.due) }), h('div', { class: 'f-hint', style: 'margin-top:-12px', text: st === 'paid' ? 'Paid in full' : `Still to collect, of ${tk(t.total)}` }));
+  out.push(h('div', { class: 'big-amt', text: tk(st === 'paid' ? t.total : t.due) }), h('div', { class: 'f-hint', style: 'margin-top:-12px', text: st === 'paid' ? (t.shortAmt > 0 ? `Settled: ${tk(t.received)} received, ${tk(t.shortAmt)} not collected` : 'Paid in full') : `Still to collect, of ${tk(t.total)}` + (t.received > 0.5 ? ` (${tk(t.received)} received)` : '') }));
+  if (x.short) out.push(h('div', { class: 'callout' }, h('b', { text: `${tk(x.short.amt)} closed without payment: ${INV_SHORT[x.short.why] || x.short.why}` }), h('div', { class: 'muted', text: [x.short.note, `By ${nameOf(x.short.by)} on ${fmtD(String(x.short.at || '').slice(0, 10), true)}`].filter(Boolean).join(' · ') })));
+  const pu = prevUnpaid(x);
+  if (pu.total > STG_TOL && st !== 'cancelled') out.push(h('div', { class: 'callout' }, h('b', { text: `Earlier invoices on this project still unpaid: ${tk(pu.total)}` }), h('div', { class: 'muted', text: pu.list.map(o => `${o.x.no} · ${tk(o.t.due)}`).join(' · ') + `. The invoice PDF lists them as the previous balance; total now due ${tk(r2(Math.max(0, t.due) + pu.total))}.` })));
   out.push(h('div', { class: 'facts' }, fact('Signed by', x.sign ? x.sign.name : 'Not signed', x.sign ? `${x.sign.desig} · ${fmtTs(x.sign.at)}` : 'Printed with a line to sign by hand'), fact('Date', fmtD(x.date, true)), fact('Due by', x.due ? fmtD(x.due, true) : '—'), fact('Total', tk(t.total), x.vatMode !== 'none' ? `VAT ${tk(t.vat)}` : 'No VAT'), (t.ait > 0 || t.vds > 0) ? fact('Net to SLATE', tk(t.net), [t.vds > 0 ? `VAT withheld ${tk(t.vds)}` : '', t.ait > 0 ? `AIT ${x.aitPct}% ${tk(t.ait)}` : ''].filter(Boolean).join(' · ')) : null, fact('Received', tk(t.received), t.pays.length + ' payment' + (t.pays.length === 1 ? '' : 's'))));
   out.push(h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {}, (x.items || []).map(i => h('tr', {}, h('td', { text: i.desc || '—' }), h('td', { class: 'n', text: fmt(i.amount) }))), h('tr', { class: 't' }, h('td', { text: 'Total' }), h('td', { class: 'n', text: fmt(t.total) }))))));
   const acts = [];
   if (can.enter() && ['unpaid', 'part', 'overdue'].includes(st)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openMoney('in', Object.assign({ cat: x.client, proj: x.project, inv: x._id, amount: String(t.due), party: x.clientName || '', narr: 'Against invoice ' + x.no }, invWithheld(x, t.due))), text: 'Record a payment' }));
+  if (canSign() && ['unpaid', 'part', 'overdue'].includes(st) && t.due > 0.5) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openSheet({ type: 'invshort', id: x._id, d: { amt: String(t.due), why: t.due <= STG_TOL ? 'round' : 'discount', note: '' } }), text: 'Close the balance', title: 'The client won’t pay the rest: a discount, a write-off or a small difference' }));
+  if (canSign() && x.short) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => { if (!confirm(`Reopen the ${tk(x.short.amt)} balance? The invoice shows it as due again.`)) return; run(() => Store.patch('invoices', x._id, { short: null, trail: trailAdd(raw.trail, 'reopened', tk(x.short.amt)) }), 'Balance reopened'); }, text: 'Reopen the balance' }));
   if (can.enter() && st === 'draft') acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'issued', trail: trailAdd(raw.trail, 'issued') }), 'Issued'), text: 'Issue' }));
   if (canSign() && st !== 'cancelled' && (!x.sign || x.sign.uid !== S.uid)) acts.push(mySign()
     ? h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { if (x.sign && !confirm(`Signed by ${x.sign.name}. Sign it yourself instead?`)) return; run(() => Store.patch('invoices', x._id, { sign: signStamp(), trail: trailAdd(raw.trail, 'signed') }), 'Signed'); }, text: 'Sign as ' + mySign().name })
@@ -3314,13 +3383,35 @@ function sheetInvoice() {
   if (acts.length) out.push(h('div', { class: 'actions' }, acts));
   const sb = x.project ? stageBook(x.project, x) : null;
   if (sb) out.push(h('div', { class: 'sec' }, secH('Fee stages', 'as printed on the invoice'), h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {},
-    sb.rows.map(r => h('tr', {}, h('td', { text: `${r.n}. ${r.label} · ${r.pct}%` }), h('td', {}, h('span', { class: 'stg-tag t-' + r.st, text: STG_TAG[r.st] })), h('td', { class: 'n', text: fmt(r.amount) }))),
+    sb.rows.map(r => h('tr', {}, h('td', { text: `${r.n}. ${r.label} · ${r.pct}%` }), h('td', {}, h('span', { class: 'stg-tag t-' + r.st, text: r.st === 'now' && r.now < r.amount - STG_TOL ? `Balance billed now · ${tk(r.now)}` : stgTag(r) })), h('td', { class: 'n', text: fmt(r.amount) }))),
     h('tr', { class: 't' }, h('td', { text: 'Total fee' }), h('td'), h('td', { class: 'n', text: fmt(sb.fee) }))))),
     h('div', { class: 'facts' }, fact('Amount due', tk(sb.outstanding), 'all billed stages not yet paid'), fact('Received to date', tk(sb.received)), fact('Still to bill', tk(sb.toBill)), fact('Billed to date', tk(sb.billed), 'incl. this invoice'))));
   if (t.pays.length) out.push(h('div', { class: 'sec' }, secH('Payments received'), h('div', { class: 'list' }, t.pays.map(p => moneyRowV(Object.assign({ id: p.id }, p.v))))));
   if ((x.files || []).length) out.push(h('div', { class: 'sec' }, secH('Files'), h('div', { class: 'files' }, x.files.map((f, i) => fileTile(f, () => openSheet({ type: 'doc', id: 'i:' + x._id + ':' + i }))))));
   out.push(timeline(x.trail));
   return out;
+}
+
+/* closing what is left on an invoice without payment: only the Principal and the COO (tax kept back by the client
+   is not this: record it with the payment, as AIT or VAT withheld) */
+const INV_SHORT = { discount: 'Discount agreed with the client', writeoff: 'Written off (won’t be paid)', round: 'Small difference (rounding)' };
+function sheetInvShort() {
+  const raw = S.invoices[S.sheet.id]; if (!raw) return [head('Invoice', 'Not found')];
+  const x = Object.assign({ _id: S.sheet.id }, raw), t = invTotals(x), d = D();
+  const fields = [
+    h('p', { class: 'f-hint', style: 'margin:0', text: `${x.no} · total ${tk(t.total)} · received ${tk(t.received)} · still due ${tk(t.due)}. Closing the balance marks the invoice settled and the stages it bills as done. Nothing is posted to the books: fees are counted when money comes in.` }),
+    h('div', { class: 'callout' }, h('b', { text: 'Did the client keep back AIT or VAT?' }), h('div', { class: 'muted', text: 'That is not a loss. Record it with the payment (Record a payment › AIT / VAT withheld) and keep the challan; the invoice then counts as paid.' })),
+    field('Amount not collected', inp('amt', { inputmode: 'decimal' })),
+    field('Why', sel('why', Object.entries(INV_SHORT))),
+    field('Note', ta('note', { rows: 2, placeholder: 'e.g. agreed with the client’s MD on 4 Nov' }))];
+  return [head('Close the balance', x.no + ' · ' + cliN(x)), form(null, fields, 'Close the balance', () => {
+    const amt = r2(parseAmt(d.amt) || 0);
+    if (!(amt > 0)) return fail('Enter the amount that won’t be collected.');
+    if (amt > t.due + 0.5) return fail(`That is more than what is still due (${tk(t.due)}).`);
+    if (d.why !== 'round' && !(d.note || '').trim()) return fail('Add a short note: who agreed it, and why.');
+    const fee = t.total > 0 ? r2(amt * t.sub / t.total) : amt;
+    run(() => Store.patch('invoices', x._id, { short: { amt, fee, why: d.why, note: (d.note || '').trim(), by: S.uid, at: new Date().toISOString() }, trail: trailAdd(raw.trail, 'shortclosed', `${tk(amt)} · ${INV_SHORT[d.why]}`) }), 'Balance closed').then(ok => { if (ok) openSheet({ type: 'invoice', id: x._id }); });
+  })];
 }
 
 /* ---------- documents ---------- */
@@ -3447,7 +3538,7 @@ function saveTag(it, st) {
   run(() => Store.patch('vouchers', it.id, { lines, trail: trailAdd(raw.trail, 'tagged', note) }), 'Tagged to ' + cc.map(c => (S.projects[c.p] || {}).code || (S.projects[c.p] || {}).name).join(', '));
 }
 
-const SHEETS = { mysign: sheetMySign, tagpay: sheetTagPay, money: sheetMoney, journal: sheetJournal, voucher: sheetVoucher, reqform: sheetReqForm, request: sheetRequest, invform: sheetInvForm, invoice: sheetInvoice, upload: sheetUpload, doc: sheetDoc, count: sheetCount, countview: sheetCountView, holders: sheetHolders };
+const SHEETS = { mysign: sheetMySign, tagpay: sheetTagPay, money: sheetMoney, journal: sheetJournal, voucher: sheetVoucher, reqform: sheetReqForm, request: sheetRequest, invform: sheetInvForm, invoice: sheetInvoice, invshort: sheetInvShort, upload: sheetUpload, doc: sheetDoc, count: sheetCount, countview: sheetCountView, holders: sheetHolders };
 
 /* ---------- reports ---------- */
 const REPORTS = [
@@ -3642,10 +3733,11 @@ function clientRows() {
       if (!p || p.overhead || p.osRemoved && !projFeeIn(pid).all) return;
       const id = p.partyId || '_none', fin = projFeeIn(pid), sb = stageBook(pid);
       let billed, toBill; const fee = r2(+p.contract || (sb ? sb.fee : 0));
-      if (sb) { billed = sb.billed; toBill = sb.toBill; }
+      let dueNow = null;
+      if (sb) { billed = sb.billed; toBill = sb.toBill; dueNow = sb.outstanding; }
       else { const inv = r2(invs.filter(x => x.project === pid && !['draft', 'cancelled'].includes(x.status)).reduce((t, x) => t + invTotals(x).sub, 0)); billed = r2(Math.max(inv, fin.all)); toBill = fee ? r2(Math.max(0, fee - billed)) : 0; }
       if (!fee && !billed && !fin.all && p.status === 'Closed') return;
-      const row = { pid, code: p.code || '', name: p.name || '', status: p.status || '', fee, tba: !!p.feeTba, free: !!p.free, billed, received: fin.all, due: r2(Math.max(0, billed - fin.all)), toBill };
+      const row = { pid, code: p.code || '', name: p.name || '', status: p.status || '', fee, tba: !!p.feeTba, free: !!p.free, billed, received: fin.all, due: dueNow != null ? dueNow : r2(Math.max(0, billed - fin.all)), toBill };
       const c = get(id); c.projects.push(row); c.fee += fee; c.billed += billed; c.received += fin.all; c.due += row.due; c.toBill += toBill; if (row.tba) c.tba++;
     });
     Object.keys(S.ledgers).forEach(k => { const l = S.ledgers[k]; if (!l || !l.party) return; const b = r2((B[k] || {}).close || 0); const c = get(l.party); c.accounts.push({ k, bal: b }); c.owe -= b; });
