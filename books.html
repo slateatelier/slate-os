@@ -1483,8 +1483,12 @@ const TAX_TERMS = {
   vatonly: { label: 'VAT excluded, no AIT deducted',            vatMode: 'add',  aitMode: 'in',  ait: false, note: 'VAT is borne by the client. No AIT is deducted.' },
   net:     { label: 'Net amount, no VAT or AIT',                vatMode: 'none', aitMode: 'in',  ait: false, note: 'Net amount. No VAT or AIT applies.' }
 };
+/* a split invoice: each line carries its own tax, all net to SLATE with the client's tax added on top */
+const LINE_TAX = { both: 'VAT and AIT', ait: 'AIT only', none: 'No VAT or AIT' };
+const SPLIT_NOTE = 'Fee is net to SLATE. AIT and VAT, where shown, are borne by the client.';
 /* the terms an invoice was saved with, or the nearest match for an older one */
 function termsOf(x) {
+  if (x.split) return 'split';
   if (x.terms && TAX_TERMS[x.terms]) return x.terms;
   const ait = +x.aitPct > 0;
   if (x.vatMode === 'none') return 'net';
@@ -1496,9 +1500,28 @@ function applyTerms(d, k) {
   d.aitPct = T.ait ? (parseAmt(d.aitPct) > 0 ? d.aitPct : String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct)) : '0';
   d.vds = T.vatMode !== 'none';
 }
+function splitTotals(inv, sub, vp, aitPct) {
+  const up = a => aitPct > 0 && aitPct < 100 ? r2(a / (1 - aitPct / 100) - a) : 0;
+  const g = { both: 0, ait: 0, none: 0 };
+  (inv.items || []).forEach(x => { g[LINE_TAX[x.tax] ? x.tax : 'both'] += +x.amount || 0; });
+  Object.keys(g).forEach(k => { g[k] = r2(g[k]); });
+  const upBoth = up(g.both), upAit = up(g.ait), aitUp = r2(upBoth + upAit);
+  const vatBase = r2(g.both + upBoth), aitBase = r2(vatBase + g.ait + upAit);
+  const vat = r2(vatBase * vp / 100), pre = r2(sub + aitUp), total = r2(pre + vat);
+  let received = 0; const pays = [];
+  Object.entries(S.vouchers).forEach(([id, v]) => {
+    if (!v || v.status === 'void' || v.status === 'split' || v.inv !== inv._id) return;
+    const amt = r2(v.lines.filter(x => groupOf(x.l) === 'inc' || x.l === inv.client).reduce((s, x) => s + (+x.cr || 0) - (+x.dr || 0), 0));
+    received += amt; pays.push({ id, v, amt });
+  });
+  received = r2(received);
+  const vds = inv.vds ? vat : 0;
+  return { sub, aitUp, pre, vat, total, received, due: r2(total - received), pays, base: aitBase, vatBase, groups: g, ait: aitUp, vds, net: r2(total - aitUp - vds) };
+}
 function invTotals(inv) {
   const sub = r2((inv.items || []).reduce((s, x) => s + (+x.amount || 0), 0));
   const vp = +inv.vatPct || 0, aitPct = +inv.aitPct || 0;
+  if (inv.split) return splitTotals(inv, sub, vp, aitPct);
   /* AIT added on top: the fee is net to SLATE, so it is grossed up until the client's AIT leaves exactly the fee */
   const aitUp = inv.aitMode === 'add' && inv.vatMode !== 'incl' && aitPct > 0 && aitPct < 100 ? r2(sub / (1 - aitPct / 100) - sub) : 0;
   const pre = r2(sub + aitUp);
@@ -1908,13 +1931,17 @@ function invoicePDF(id, plain, unsaved) {
   /* what is billed */
   y += 26; th(M, y, 'Description'); th(R, y, 'Amount (Tk)', 'right'); y += 6; doc.line(M, y, R, y, { w: 0.75, color: '#000000' });
   (inv.items || []).forEach(x => {
-    need(30); y += 16; const used = doc.para(M, y, x.desc || '', R - M - 130, { size: 10 }); doc.text(R, y, fmt(x.amount), { size: 10, align: 'right' });
+    need(30); y += 16; const used = doc.para(M, y, (x.desc || '') + (inv.split ? '  ·  ' + LINE_TAX[LINE_TAX[x.tax] ? x.tax : 'both'] : ''), R - M - 130, { size: 10 }); doc.text(R, y, fmt(x.amount), { size: 10, align: 'right' });
     y += used - 13.5 + 7; doc.line(M, y, R, y, { color: '#D9D9D9', w: 0.5 });
   });
   const row = (lab, val, b) => { y += b ? 18 : 15; doc.text(R - 130, y, lab, { size: 9.5, bold: b, color: b ? '#000000' : GREY, align: 'right' }); doc.text(R, y, val, { size: b ? 11 : 9.5, bold: b, align: 'right' }); };
   need(70);
-  if (t.aitUp > 0) { row('Fee, net to SLATE', fmt(t.sub)); row('AIT ' + inv.aitPct + '% added', fmt(t.aitUp)); }
-  if (inv.vatMode === 'add') { row(t.aitUp > 0 ? 'Value before VAT' : 'Subtotal', fmt(t.pre)); row('VAT ' + inv.vatPct + '%', fmt(t.vat)); }
+  if (inv.split) {
+    row('Fee, net to SLATE', fmt(t.sub));
+    if (t.aitUp > 0) row('AIT ' + inv.aitPct + '% added', fmt(t.aitUp));
+    if (t.vat > 0) row('VAT ' + inv.vatPct + '% on Tk ' + fmt(t.vatBase), fmt(t.vat));
+  } else if (t.aitUp > 0) { row('Fee, net to SLATE', fmt(t.sub)); row('AIT ' + inv.aitPct + '% added', fmt(t.aitUp)); }
+  if (inv.vatMode === 'add' && !inv.split) { row(t.aitUp > 0 ? 'Value before VAT' : 'Subtotal', fmt(t.pre)); row('VAT ' + inv.vatPct + '%', fmt(t.vat)); }
   y += 6; doc.line(R - 250, y, R, y, { w: 1, color: '#000000' }); row('Total', 'Tk ' + fmt(t.total), true);
   if (inv.vatMode === 'incl') { y += 13; doc.text(R, y, 'Includes VAT ' + inv.vatPct + '%: Tk ' + fmt(t.vat), { size: 8.5, color: GREY, align: 'right' }); }
   if (t.ait > 0 || t.vds > 0) {
@@ -1924,7 +1951,8 @@ function invoicePDF(id, plain, unsaved) {
     y += 6; doc.line(R - 250, y, R, y, { w: 1, color: '#000000' }); row('Net payable to SLATE', 'Tk ' + fmt(t.net), true);
     y += 13; doc.text(R, y, 'Please send the tax challans or certificates for the amounts withheld.', { size: 8.5, color: GREY, align: 'right' });
   }
-  if (inv.terms && TAX_TERMS[inv.terms]) { y += 13; doc.text(R, y, TAX_TERMS[inv.terms].note, { size: 8.5, color: GREY, align: 'right' }); }
+  const tnote = inv.split ? SPLIT_NOTE : inv.terms && TAX_TERMS[inv.terms] ? TAX_TERMS[inv.terms].note : '';
+  if (tnote) { y += 13; doc.text(R, y, tnote, { size: 8.5, color: GREY, align: 'right' }); }
   y += 18; y += doc.para(M, y, words(t.total), R - M, { size: 9, color: GREY });
   if (t.received > 0) { y += 4; doc.text(M, y, 'Received against this invoice Tk ' + fmt(t.received) + '  ·  Balance due Tk ' + fmt(t.due), { size: 9.5, bold: true }); y += 12; }
 
@@ -3025,7 +3053,7 @@ function payRequest(r) {
 function openInvoice(id, pre) {
   if (!can.enter()) return toast('Only the Principal, COO and Accountant can raise invoices.');
   const x = id ? S.invoices[id] : null;
-  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '' })), files: (x.files || []).slice(), aitPct: String(+x.aitPct || 0), aitMode: x.aitMode || 'in', vds: !!x.vds, terms: termsOf(x) })
+  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '', tax: i.tax || '' })), files: (x.files || []).slice(), aitPct: String(+x.aitPct || 0), aitMode: x.aitMode || 'in', vds: !!x.vds, terms: termsOf(x) })
     : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: S.settings.invVat || 'add', vatPct: S.settings.vatPct || 15, aitPct: String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct), aitMode: S.settings.aitMode || 'add', vds: true, note: '', files: [], signIt: !!mySign() };
   if (!x) applyTerms(d, TAX_TERMS[S.settings.invTerms] ? S.settings.invTerms : 'both');
   if (x) d.signIt = !!(x.sign && x.sign.uid === S.uid && mySign());
@@ -3057,8 +3085,9 @@ function invStagePicker(d) {
 function sheetInvForm() {
   const d = D();
   const clients = [['', 'Choose client…']].concat(ledgerOpts(['inc']));
-  const itemRow = (x, i) => h('div', { class: 'ln', style: 'grid-template-columns:minmax(0,1fr) 140px 34px' },
+  const itemRow = (x, i) => h('div', { class: 'ln', style: 'grid-template-columns:minmax(0,1fr) ' + (d.split ? '150px ' : '') + '140px 34px' },
     h('input', { placeholder: 'e.g. Phase 2: design development', 'aria-label': 'Description', id: 'ii-d' + i, value: x.desc, oninput: e => { x.desc = e.target.value; } }),
+    d.split ? (() => { const el = h('select', { 'aria-label': 'Tax on this line', id: 'ii-t' + i, onchange: e => { x.tax = e.target.value; renderSheet(); } }, Object.entries(LINE_TAX).map(([k, l]) => h('option', { value: k, text: l }))); el.value = LINE_TAX[x.tax] ? x.tax : 'both'; return el; })() : null,
     h('input', { placeholder: 'Amount', inputmode: 'decimal', 'aria-label': 'Amount', id: 'ii-a' + i, value: x.amount, oninput: e => { x.amount = e.target.value; } }),
     h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remove line', onclick: () => { d.items.splice(i, 1); if (!d.items.length) d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '−' }));
   const fields = [field('Client', sel('client', clients), 'Clients are the fee accounts in the books. Add a new one in More › Accounts.'),
@@ -3067,8 +3096,9 @@ function sheetInvForm() {
     invStagePicker(d),
     h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Due by', inp('due', { type: 'date' }))),
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
-    field('Tax terms', sel('terms', Object.entries(TAX_TERMS).map(([k, T]) => [k, T.label]), { onpick: k => applyTerms(D(), k) }), TAX_TERMS[d.terms] ? TAX_TERMS[d.terms].note : ''),
-    (d.vatMode !== 'none' || TAX_TERMS[d.terms].ait) ? h('div', { class: 'form-row' }, d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null, TAX_TERMS[d.terms].ait ? field('AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal', placeholder: '0' }), '7.5% for a firm, 15% for an individual.') : null) : null,
+    h('label', { class: 'chk-l' }, h('input', { type: 'checkbox', checked: !!d.split, onchange: e => { d.split = e.target.checked; if (d.split) { d.vatMode = 'add'; d.aitMode = 'add'; d.vds = true; if (!(parseAmt(d.aitPct) > 0)) d.aitPct = String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct); d.items.forEach(x => { if (!LINE_TAX[x.tax]) x.tax = 'both'; }); } else applyTerms(d, TAX_TERMS[d.terms] ? d.terms : 'both'); renderSheet(); } }), h('span', { text: 'Split the amount: some lines with VAT and AIT, some with AIT only, some with neither' })),
+    d.split ? h('p', { class: 'f-hint', style: 'margin:0', text: 'Pick the tax on each line above. Every line is net to SLATE; the client’s AIT and VAT are added on top.' }) : field('Tax terms', sel('terms', Object.entries(TAX_TERMS).map(([k, T]) => [k, T.label]), { onpick: k => applyTerms(D(), k) }), TAX_TERMS[d.terms] ? TAX_TERMS[d.terms].note : ''),
+    (d.split || d.vatMode !== 'none' || TAX_TERMS[d.terms].ait) ? h('div', { class: 'form-row' }, d.split || d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null, d.split || TAX_TERMS[d.terms].ait ? field('AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal', placeholder: '0' }), '7.5% for a firm, 15% for an individual.') : null) : null,
     d.vatMode !== 'none' ? chk('vds', 'The client withholds the VAT at source') : null,
     invNetHint(d),
     field('Note on the invoice', ta('note', { rows: 2, placeholder: S.settings.invNote || 'Payment terms, bank details' })),
@@ -3079,22 +3109,22 @@ function sheetInvForm() {
 }
 function previewInvoice() {
   const d = D(); if (!d.client) return fail('Choose the client.');
-  const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
+  const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}, d.split ? { tax: LINE_TAX[x.tax] ? x.tax : 'both' } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const old = S.sheet.editId ? S.invoices[S.sheet.editId] : null;
-  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'add' ? 'add' : 'in', terms: TAX_TERMS[d.terms] ? d.terms : termsOf(d), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), status: 'draft', sign: d.signIt && mySign() ? signStamp() : (old && old.sign) || null };
+  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'add' ? 'add' : 'in', split: !!d.split, terms: d.split ? 'split' : TAX_TERMS[d.terms] ? d.terms : termsOf(d), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), status: 'draft', sign: d.signIt && mySign() ? signStamp() : (old && old.sign) || null };
   savePDF(() => invoicePDF(S.sheet.editId || '_preview', false, inv), safeName(`Preview ${inv.clientName || L(inv.client)}`) + '.pdf');
 }
 function saveInvoice(status) {
   const d = D();
   if (!d.client) return fail('Choose the client.');
-  const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
+  const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}, d.split ? { tax: LINE_TAX[x.tax] ? x.tax : 'both' } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const id = S.sheet.editId || 'i' + uidShort(), old = S.invoices[id];
-  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'add' ? 'add' : 'in', terms: TAX_TERMS[d.terms] ? d.terms : termsOf(d), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), files: d.files || [], sign: null,
+  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'add' ? 'add' : 'in', split: !!d.split, terms: d.split ? 'split' : TAX_TERMS[d.terms] ? d.terms : termsOf(d), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), files: d.files || [], sign: null,
     status: old ? (old.status === 'draft' && status === 'issued' ? 'issued' : old.status) : status, trail: old ? trailAdd(old.trail, 'edited') : trailAdd([], status === 'issued' ? 'issued' : 'created'), at: new Date().toISOString(), by: old ? old.by : S.uid };
   /* the signature: signed now by the signer, or kept only if what the client sees is unchanged */
-  const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '']), x.vatMode, +x.vatPct || 0, +x.aitPct || 0, x.aitMode || 'in', !!x.vds, x.terms || '', x.note || '']);
+  const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '', i.tax || '']), x.vatMode, +x.vatPct || 0, +x.aitPct || 0, x.aitMode || 'in', !!x.vds, x.terms || '', !!x.split, x.note || '']);
   doc.sign = d.signIt && mySign() ? signStamp() : old && old.sign && what(old) === what(doc) && !(old.sign.uid === S.uid && !d.signIt) ? old.sign : null;
   run(() => Store.put('invoices', id, doc), old ? 'Saved' : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
 }
@@ -3106,8 +3136,8 @@ function invWithheld(x, amt) {
 }
 /* the amount that reaches SLATE once the client keeps back AIT and VAT */
 function invNetHint(d) {
-  const items = (d.items || []).map(x => ({ amount: parseAmt(x.amount) || 0 }));
-  const t = invTotals({ items, vatMode: d.vatMode, vatPct: +d.vatPct || 0, aitPct: +d.aitPct || 0, aitMode: d.aitMode, vds: !!d.vds, _id: '_hint' });
+  const items = (d.items || []).map(x => ({ amount: parseAmt(x.amount) || 0, tax: x.tax }));
+  const t = invTotals({ items, split: !!d.split, vatMode: d.vatMode, vatPct: +d.vatPct || 0, aitPct: +d.aitPct || 0, aitMode: d.aitMode, vds: !!d.vds, _id: '_hint' });
   if (!(t.total > 0) || !(t.ait > 0 || t.vds > 0)) return null;
   return h('p', { class: 'f-hint', style: 'margin:0', text: `Invoice total ${tk(t.total)}. ` + (t.vds > 0 ? `VAT withheld ${tk(t.vds)}. ` : '') + (t.ait > 0 ? `AIT withheld ${tk(t.ait)}. ` : '') + `Net payable to SLATE ${tk(t.net)}.` });
 }
