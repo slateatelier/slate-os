@@ -1851,12 +1851,15 @@ function invoicePDF(id, plain) {
 
     /* the running account */
     need(70);
-    y += 12; const bh = 46, bw = (R - M) / 4, box = [['Total fee', sb.fee], ['Received to date', sb.received], ['Billed to date', sb.billed], ['Still to bill', sb.toBill]];
+    y += 12; const bh = 46, bw = (R - M) / 4, box = [['Total fee', sb.fee], ['Received to date', sb.received], ['Still to bill', sb.toBill], ['Amount due', sb.outstanding]];
     doc.rect(M, y, R - M, bh, { fill: '#F2F2F2' }); doc.frame(M, y, R - M, bh, { w: 1 });
     box.forEach(([l, v], i) => { const x = M + i * bw + 12; if (i) doc.line(M + i * bw, y + 9, M + i * bw, y + bh - 9, { color: '#BDBDBD', w: 0.5 });
-      doc.text(x, y + 17, l.toUpperCase(), { size: 6.8, bold: true, color: GREY, spacing: 0.7 }); doc.text(x, y + 35, 'Tk ' + fmt(v), { size: 12, bold: true, color: i === 2 ? RED : '#000000' }); });
+      const due = i === 3; if (due) doc.rect(M + i * bw, y, bw, bh, { fill: RED });
+      doc.text(x, y + 17, l.toUpperCase(), { size: 6.8, bold: true, color: due ? '#FFFFFF' : GREY, spacing: 0.7 }); doc.text(x, y + 35, 'Tk ' + fmt(v), { size: due ? 13 : 12, bold: true, color: due ? '#FFFFFF' : '#000000' }); });
+    doc.frame(M, y, R - M, bh, { w: 1 });
     y += bh + 13;
-    y += doc.para(M, y, `Billed to date includes this invoice and the advance received. Outstanding on billed stages: Tk ${fmt(sb.outstanding)}. Each upcoming stage is billed when it is reached.`, R - M, { size: 8.5, color: GREY });
+    const prev = r2(sb.outstanding - t.total);
+    y += doc.para(M, y, `Amount due is ${prev > 0.5 ? `this invoice plus Tk ${fmt(prev)} still unpaid on earlier bills` : 'this invoice'}${inv.due ? ', payable by ' + fmtD(inv.due, true) : ''}. Billed to date: Tk ${fmt(sb.billed)} (this invoice and the advance received). Each upcoming stage is billed when it is reached.`, R - M, { size: 8.5, color: GREY });
   }
   const note = inv.note || S.settings.invNote || '';
   if (note) { need(46); y += 12; doc.text(M, y, 'NOTES', { size: 7.5, bold: true, color: GREY, spacing: 0.9 }); y += 13; y += doc.para(M, y, note, R - M, { size: 9 }); }
@@ -2990,7 +2993,7 @@ function sheetInvoice() {
   if (sb) out.push(h('div', { class: 'sec' }, secH('Fee stages', 'as printed on the invoice'), h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {},
     sb.rows.map(r => h('tr', {}, h('td', { text: `${r.n}. ${r.label} · ${r.pct}%` }), h('td', {}, h('span', { class: 'stg-tag t-' + r.st, text: STG_TAG[r.st] })), h('td', { class: 'n', text: fmt(r.amount) }))),
     h('tr', { class: 't' }, h('td', { text: 'Total fee' }), h('td'), h('td', { class: 'n', text: fmt(sb.fee) }))))),
-    h('div', { class: 'facts' }, fact('Received to date', tk(sb.received)), fact('Billed to date', tk(sb.billed), 'incl. this invoice'), fact('Outstanding', tk(sb.outstanding)), fact('Still to bill', tk(sb.toBill)))));
+    h('div', { class: 'facts' }, fact('Amount due', tk(sb.outstanding), 'all billed stages not yet paid'), fact('Received to date', tk(sb.received)), fact('Still to bill', tk(sb.toBill)), fact('Billed to date', tk(sb.billed), 'incl. this invoice'))));
   if (t.pays.length) out.push(h('div', { class: 'sec' }, secH('Payments received'), h('div', { class: 'list' }, t.pays.map(p => moneyRowV(Object.assign({ id: p.id }, p.v))))));
   if ((x.files || []).length) out.push(h('div', { class: 'sec' }, secH('Files'), h('div', { class: 'files' }, x.files.map((f, i) => fileTile(f, () => openSheet({ type: 'doc', id: 'i:' + x._id + ':' + i }))))));
   out.push(timeline(x.trail));
