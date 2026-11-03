@@ -11480,7 +11480,7 @@ function viewAdmin(){
   if(offL.length) out.push(h('p',{class:'f-hint',style:'margin:10px 2px 0',text:'Not running in '+ymLabel(ym)+': '+offL.map(x=>x.name+(x.active===false?' (paused)':'')).join(', ')+'.'}),h('div',{class:'chips'},offL.map(x=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>openRec(x.id),text:'Edit '+x.name}))));
   return out; }
 function openRec(id){ const x=id?RC().costs.find(r=>r.id===id):null;
-  const d={name:'',kind:'fixed',amount:'',est:'',payee:'',meter:'',cat:'',proj:rcOverheadId(),dueDay:'',every:1,acc:'',paid:'post',kwh:false,seasonal:false,from:today().slice(0,7),until:'',rent:'',advance:'',adjust:'',advFrom:'',deposit:'',note:'',active:true,...(x?JSON.parse(JSON.stringify(x)):{})};
+  const d={name:'',kind:'fixed',amount:'',est:'',payee:'',meter:'',cat:'',proj:rcOverheadId(),dueDay:'',every:1,acc:'',paid:'post',kwh:false,seasonal:false,from:today().slice(0,7),until:'',rent:'',advance:'',adjust:'',advFrom:'',advAcc:'',deposit:'',note:'',active:true,...(x?JSON.parse(JSON.stringify(x)):{})};
   ['amount','est','rent','advance','adjust','deposit','dueDay'].forEach(k=>{ d[k]=d[k]?String(d[k]):''; });
   S.sheet={type:'rec',id:id||null,d,err:''}; renderSheet(); }
 /* a select with option groups: [[label,[[value,text],…]],…] */
@@ -11496,6 +11496,7 @@ function sheetRec(){
   const heads=Object.entries(R.L).filter(([k,l])=>RC_COST_G.includes(l.group)&&(l.active!==false||k===d.cat)).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
   const headG=RC_COST_G.map(g=>[(MONEY_G[g]||[])[1]||g,heads.filter(([,l])=>l.group===g).map(([k,l])=>[k,l.name])]).filter(([,o])=>o.length);
   const cashG=[['Cash',Object.entries(R.L).filter(([k,l])=>l.group==='cash'&&(l.active!==false||k===d.acc)).map(([k,l])=>[k,l.name])],['Bank',Object.entries(R.L).filter(([k,l])=>l.group==='bank'&&(l.active!==false||k===d.acc)).map(([k,l])=>[k,l.name])]].filter(([,o])=>o.length);
+  const advG=[['Deposits and advances',Object.entries(R.L).filter(([k,l])=>l.group==='adv'&&(l.active!==false||k===d.advAcc)).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'')).map(([k,l])=>[k,l.name])]].filter(([,o])=>o.length);
   const projs=Object.entries(R.P).filter(([k,p])=>p.overhead||k===d.proj||!['Closed','Cancelled','Completed'].includes(p.status)).sort((a,b)=>(b[1].overhead?1:0)-(a[1].overhead?1:0)||(a[1].code||a[1].name||'').localeCompare(b[1].code||b[1].name||''));
   const projG=[['',projs.filter(([,p])=>p.overhead).map(([k])=>[k,'Studio overhead'])],['Projects',projs.filter(([,p])=>!p.overhead).map(([k,p])=>[k,[p.code,p.name].filter(Boolean).join(' · ')])]].filter(([,o])=>o.length);
   const save=async e=>{ e.preventDefault(); if(!canBiz()) return fail('Only the Principal or the COO sets up running costs.');
@@ -11510,10 +11511,11 @@ function sheetRec(){
     if(vari&&!(+d.est>0)&&!(x&&recHist(x).length)) return fail('Set the first estimate. After that it follows the last three bills.');
     if(rent&&+d.advance&&!(+d.adjust>0)) return fail('How much of the advance is adjusted each month?');
     if(rent&&+d.adjust>+d.rent) return fail('The monthly adjustment can’t be more than the rent.');
+    if(rent&&+d.advance&&+d.adjust&&!d.advAcc) return fail('Choose the account the advance is held in, e.g. Advance Office Rent.');
     const raw=x?(R.raw[id]||{}):{};
     const data={...raw,name:d.name.trim(),kind:d.kind,amount:d.kind==='fixed'?+d.amount:0,est:vari?+d.est||0:0,payee:(d.payee||'').trim(),meter:(d.meter||'').trim(),cat:d.cat,proj:d.proj||rcOverheadId(),
       day:+d.dueDay,every:ev,acc:d.acc,paid:d.paid==='pre'?'pre':'post',kwh:!!d.kwh,seasonal:vari&&!!d.seasonal,from:d.from,until:d.until||'',
-      rent:rent?+d.rent:0,advance:rent?+d.advance||0:0,adjust:rent?+d.adjust||0:0,advFrom:rent?(d.advFrom||d.from):'',deposit:rent?+d.deposit||0:0,
+      rent:rent?+d.rent:0,advance:rent?+d.advance||0:0,adjust:rent?+d.adjust||0:0,advFrom:rent?(d.advFrom||d.from):'',advAcc:rent&&+d.advance&&+d.adjust?d.advAcc||'':'',deposit:rent?+d.deposit||0:0,
       note:(d.note||'').trim(),active:!!d.active,mode:'spend',by:S.uid,at:new Date().toISOString()};
     const sb=window.slateSupabase; const ok=await run(async()=>{
       if(id){ const {data:o,error}=await sb.from('books_docs').update({data}).eq('path','recurring/'+id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Not saved. Check your Books role.'); }
@@ -11532,6 +11534,7 @@ function sheetRec(){
       h('div',{class:'form-row'},field(ev===1?'Due day of the month *':'Due day *',n('dueDay','e.g. 10'),ev===1?'The month’s entry appears in Books on this day':'In each month it falls due, the entry appears in Books on this day'),field('Paid',seg('Paid',Object.entries(ADM_PAID),d.paid==='pre'?'pre':'post',v=>{ d.paid=v; renderSheet(); }),ev>1?(d.paid==='pre'?`Paid up front: covers the due month and the next ${ev-1}`:`Paid after use: covers the ${ev} months before the due month`):d.paid==='pre'?'Paid before the month it covers':'Paid after use: the bill is for last month')),
       rent?[h('div',{class:'form-row'},field('Monthly rent (Tk) *',n('rent')),field('Advance paid (Tk)',n('advance'),'Paid up front, adjusted against rent')),
           h('div',{class:'form-row',style:'align-items:start'},field('Adjusted from the advance each month (Tk)',n('adjust')),field('Adjustment starts',h('input',{type:'month',value:d.advFrom||d.from,oninput:e=>{d.advFrom=e.target.value; const t=document.getElementById('rent-sum'); if(t) t.textContent=rentTxt();}}))),
+          field('Advance held in'+(+d.advance&&+d.adjust?' *':''),rcSel(d,'advAcc',advG,'Choose…'),'Confirming a month takes the adjustment from this account and posts the full rent: one entry, rent = advance + cash.'),
           field('Security deposit (Tk)',n('deposit'),'Refundable when you leave: shown, not counted as a cost'),
           h('div',{id:'rent-sum',style:'font-weight:600;font-size:14px',text:rentTxt()})]
         :vari?field('First estimate (Tk)'+(x&&recHist(x).length?'':' *'),n('est'),x&&recHist(x).length?`Now worked out from the bills: ${taka(recCalc(x,today().slice(0,7)))} this month (`+(d.seasonal&&recHist(x).length>=12?'same month last year':'average of the last '+Math.min(3,recHist(x).length)+' bills')+').':'Used until the first bill is confirmed; then the average of the last three bills.')
@@ -11560,7 +11563,7 @@ async function loadRunCosts(sb){
       else if(r.coll==='rcmonth') R.months[r.doc_id]=d;
       else { R.raw[r.doc_id]=d; R.costs.push({id:r.doc_id,name:d.name||'',kind:['fixed','variable','rent'].includes(d.kind)?d.kind:'fixed',amount:+d.amount||0,est:+d.est||0,payee:d.payee||d.party||'',meter:d.meter||'',
         cat:d.cat||'',acc:d.acc||'',proj:d.proj||'',dueDay:+d.day||1,every:d.kind==='rent'?1:([3,6,12].includes(+d.every)?+d.every:1),paid:d.paid==='post'?'post':'pre',kwh:!!d.kwh,seasonal:!!d.seasonal,from:d.from||'2026-11',until:d.until||'',
-        rent:+d.rent||0,advance:+d.advance||0,adjust:+d.adjust||0,advFrom:d.advFrom||'',deposit:+d.deposit||0,note:d.note||'',active:d.active!==false}); } });
+        rent:+d.rent||0,advance:+d.advance||0,adjust:+d.adjust||0,advFrom:d.advFrom||'',advAcc:d.advAcc||'',deposit:+d.deposit||0,note:d.note||'',active:d.active!==false}); } });
     R.ok=true;
     /* live once m_running_costs.sql is run: Books then adds the month's entries (and this call adds any due today) */
     try{ const r=await sb.rpc('books_rc_due'); R.live=!r.error; if(R.live&&r.data>0){ const {data:m2}=await sb.from('books_docs').select('doc_id,data').eq('coll','rcmonth'); (m2||[]).forEach(x=>{ R.months[x.doc_id]=x.data||{}; }); } }catch(e){}

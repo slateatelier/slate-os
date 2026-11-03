@@ -4433,7 +4433,7 @@ function rcCost(id) {
   return { id, name: r.name || '', kind: ['fixed', 'variable', 'rent'].includes(r.kind) ? r.kind : 'fixed', amount: +r.amount || 0, est: +r.est || 0, payee: r.payee || r.party || '', meter: r.meter || '',
     cat: r.cat || '', acc: r.acc || '', proj: r.proj || S.settings.overhead || '', day: +r.day || 1, paid: r.paid === 'post' ? 'post' : 'pre', kwh: !!r.kwh, seasonal: !!r.seasonal,
     every: r.kind === 'rent' ? 1 : [3, 6, 12].includes(+r.every) ? +r.every : 1,
-    from: r.from || RC_FROM, until: r.until || '', rent: +r.rent || 0, advance: +r.advance || 0, adjust: +r.adjust || 0, advFrom: r.advFrom || '', active: r.active !== false, note: r.note || '' };
+    from: r.from || RC_FROM, until: r.until || '', rent: +r.rent || 0, advance: +r.advance || 0, adjust: +r.adjust || 0, advFrom: r.advFrom || '', advAcc: r.advAcc || '', active: r.active !== false, note: r.note || '' };
 }
 const rcCosts = () => Object.keys(S.recurring).map(rcCost).filter(Boolean);
 const rcOn = (c, ym) => c.active && c.from <= ym && (!c.until || ym <= c.until);
@@ -4457,6 +4457,13 @@ function rcRent(c, ym) {
   const [y1, m1] = (c.advFrom || c.from).split('-').map(Number), n = (+ym.slice(0, 4) - y1) * 12 + (+ym.slice(5, 7) - m1) + 1;
   if (n < 1 || !c.advance || !c.adjust) return { rent: c.rent, cash: c.rent };
   const before = Math.max(0, c.advance - c.adjust * (n - 1)); return { rent: c.rent, cash: c.rent - Math.min(c.adjust, before, c.rent) };
+}
+/* the part of this month's rent taken from the advance account: the planned adjustment, never more than the advance still open in the books */
+function rcAdvPart(c, ym, date) {
+  if (c.kind !== 'rent' || !c.advAcc || !S.ledgers[c.advAcc] || !c.advance || !c.adjust) return 0;
+  const plan = r2(c.rent - rcRent(c, ym).cash); if (!(plan > 0)) return 0;
+  const open = r2((((SB.balances(P(), null, date || today()) || {})[c.advAcc]) || {}).close || 0);
+  return Math.max(0, Math.min(plan, open));
 }
 function rcHist(id) { return Object.values(S.rcmonth).filter(m => m && m.cost === id && m.status === 'confirmed').sort((a, b) => b.month.localeCompare(a.month)); }
 /* same rule as the database: Fixed = the amount; Variable = the last 3 bills' average, or the same month last year once 12 months exist */
@@ -4545,10 +4552,12 @@ function rcConfirmFixed(r) {
 function rcVoucher(r, d) {
   const c = r.c, ym = r.key.slice(0, 7), amt = r2(+d.amount || 0);
   const md = { kind: 'out', mode: 'spend', amount: String(amt), acc: d.acc || c.acc, cat: c.cat, vendor: '', proj: c.proj, party: c.payee, tds: '', jvSplit: false };
-  const usage = c.paid === 'post' ? ymAddB(ym, -1) : ym;
-  return { type: 'Payment', date: d.date, party: c.payee || '', narr: `${c.name} · ${(c.every || 1) > 1 ? (c.paid === 'post' ? 'bill for ' : 'for ') + rcPeriod(c, ym) : (c.paid === 'post' ? 'bill for ' : '') + monthName(usage)}` + (+d.kwh > 0 ? ` · ${+d.kwh} kWh` : ''),
-    ref: c.meter ? 'No. ' + c.meter : '', lines: moneyLines(md), files: d.files || [], inv: '', req: '',
-    form: { kind: 'out', mode: 'spend', vendor: '', amount: amt, acc: md.acc, to: '', cat: c.cat, proj: md.proj || '', jvSplit: false, tds: '', ait: '', vat: '', ref: '' },
+  const usage = c.paid === 'post' ? ymAddB(ym, -1) : ym, ra = rcAdvPart(c, ym, d.date);
+  /* rent with an advance: one entry, the full rent = this month's adjustment from the advance + the cash paid */
+  const lines = ra > 0 ? [{ l: c.cat, dr: r2(amt + ra), cr: 0, cc: c.proj ? [{ p: c.proj, a: r2(amt + ra) }] : undefined }, { l: c.advAcc, dr: 0, cr: ra }, { l: md.acc, dr: 0, cr: amt }] : moneyLines(md);
+  return { type: 'Payment', date: d.date, party: c.payee || '', narr: `${c.name} · ${(c.every || 1) > 1 ? (c.paid === 'post' ? 'bill for ' : 'for ') + rcPeriod(c, ym) : (c.paid === 'post' ? 'bill for ' : '') + monthName(usage)}` + (+d.kwh > 0 ? ` · ${+d.kwh} kWh` : '') + (ra > 0 ? ` · rent ${tk(r2(amt + ra))}: ${tk(ra)} from ${L(c.advAcc)}, ${tk(amt)} paid` : ''),
+    ref: c.meter ? 'No. ' + c.meter : '', lines, files: d.files || [], inv: '', req: '',
+    form: ra > 0 ? null : { kind: 'out', mode: 'spend', vendor: '', amount: amt, acc: md.acc, to: '', cat: c.cat, proj: md.proj || '', jvSplit: false, tds: '', ait: '', vat: '', ref: '' },
     rc: { id: c.id, month: ym, est: r.est, kwh: +d.kwh > 0 ? +d.kwh : null, note: (d.note || '').trim() } };
 }
 const rcOverBy = (amt, est) => est > 0 && amt > est * (1 + rcVarLimit() / 100);
@@ -4565,7 +4574,9 @@ function sheetRcConfirm() {
   if (!S.rcLive) out.push(h('div', { class: 'callout' }, h('div', {}, h('b', { text: 'Preview' })), h('div', { class: 'muted', text: 'Confirming opens at go-live, once the database part is run. Nothing here is saved yet.' })));
   out.push(h('div', { class: 'facts' }, fact('Payee', c.payee || '—'), fact('Account / meter no.', c.meter || '—'), fact('Head of account', L(c.cat) || '—'), fact('Cost centre', c.proj ? projLabel(c.proj) : '—'),
     fact('Cash point', L(c.acc) || '—'), fact('Due', fmtD(r.due, true), (c.every || 1) > 1 ? `${RC_EVERY[c.every]}, ${c.paid === 'post' ? 'postpaid' : 'prepaid'}: covers ${rcPeriod(c, ym)}` : c.paid === 'post' ? 'Postpaid: the bill for ' + monthName(ymAddB(ym, -1)) : 'Prepaid: for ' + monthName(ym)),
-    fact(vari ? 'Estimate' : 'Amount', tk(r.est), rcBasis(c, ym)), fact('Set up', 'Business › Running costs', 'By the Principal or the COO')));
+    fact(vari ? 'Estimate' : 'Amount', tk(r.est), rcBasis(c, ym)),
+    c.kind === 'rent' ? fact('Rent', tk(c.rent), c.advAcc && c.adjust ? (rcAdvPart(c, ym) > 0 ? `${tk(rcAdvPart(c, ym))} from ${L(c.advAcc)} + the amount paid` + (rcAdvPart(c, ym) < r2(c.rent - r.est) ? ` (only ${tk(rcAdvPart(c, ym))} of the advance is left in the books)` : '') : `Nothing left in ${L(c.advAcc)}: the amount paid is the whole rent`) : c.adjust ? 'Set “Advance held in” in Business › Running costs so the advance is taken in the same entry' : 'Paid in full') : null,
+    fact('Set up', 'Business › Running costs', 'By the Principal or the COO')));
   if (m === 'skip') {
     out.push(form('Skip ' + monthName(ym), [field('Why it is skipped this month', ta('skipNote', { rows: 2, required: true, placeholder: 'e.g. Paid with last month’s bill' }))], 'Skip this month', () => {
       const note = (D().skipNote || '').trim(); if (!note) return fail('Write a short reason.');
