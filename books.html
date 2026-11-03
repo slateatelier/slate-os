@@ -2361,6 +2361,8 @@ function ta(key, attrs = {}) { const el = h('textarea', Object.assign({}, attrs,
 function sel(key, opts, attrs = {}) {
   const el = h('select', Object.assign({}, attrs, { id: 'sh-' + key, onchange: e => { D()[key] = e.target.value; if (attrs.onpick) attrs.onpick(e.target.value); renderSheet(); } }));
   opts.forEach(o => { if (o.group) el.append(h('optgroup', { label: o.group }, o.items.map(([v, l]) => h('option', { value: v, text: l })))); else el.append(h('option', { value: o[0], text: o[1] })); });
+  // a list of accounts opens with a search box (pick.js)
+  if (!el.hasAttribute('data-pick') && opts.some(o => o.group ? o.items.some(([v]) => v && S.ledgers[v]) : (o[0] && S.ledgers[o[0]]))) el.setAttribute('data-pick', 'account');
   el.value = D()[key] == null ? '' : D()[key]; return el;
 }
 function chk(key, label) { return h('label', { class: 'chk-l' }, h('input', { type: 'checkbox', id: 'sh-' + key, checked: !!D()[key], onchange: e => { D()[key] = e.target.checked; renderSheet(); } }), h('span', { text: label })); }

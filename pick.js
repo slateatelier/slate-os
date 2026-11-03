@@ -6,13 +6,17 @@
 
    Which drop-downs: any <select> with data-pick (data-pick="off" leaves one plain), or one that is clearly a
    project picker: aria-label "Project…" (not "Project type"), an id ending in proj / project / projectId /
-   pid / prj / defProj, or name="projectId".
+   pid / prj / defProj, or name="projectId". Account pickers too: Books marks every account list it builds
+   (data-pick="account"), and aria-label "Account…", account/ledger ids and name="…accountId" are caught here.
    Search: every word typed must appear somewhere in the option (code, name, client, in any order). */
 (function () {
   'use strict';
   if (window.__slatePick) return; window.__slatePick = true;
 
   const isProjSel = s => /(^|[-_])(proj|project|projectid|pid|prj|defproj)$/i.test(s.id || '') || (s.getAttribute('name') || '') === 'projectId';
+  const isAccSel = s => s.getAttribute('data-pick') === 'account' || /^(account|head of account)\b/i.test(s.getAttribute('aria-label') || '')
+    || /(^|[-_])(acc|acct|ledger|bankacc|cashacc|dedacc|accdep|pettyledger|floatledger|otherledger|jvpartner|tdsvendor)$/i.test(s.id || '') || /^sh-led-/.test(s.id || '')
+    || /acc(oun)?tid$/i.test(s.getAttribute('name') || '');
   const isPick = s => {
     if (!s || s.tagName !== 'SELECT' || s.multiple || s.size > 1 || s.disabled) return false;
     const dp = s.getAttribute('data-pick');
@@ -21,6 +25,7 @@
     if (/^project\b/i.test(al) && !/^project type/i.test(al)) return true;
     if (/(^|[-_])(proj|project|projectid|pid|prj|defproj)$/i.test(s.id || '')) return true;
     if ((s.getAttribute('name') || '') === 'projectId') return true;
+    if (isAccSel(s)) return true;
     return false;
   };
 
@@ -167,7 +172,7 @@
     const top = document.createElement('div'); top.className = 'pk-top';
     const q = document.createElement('input'); q.className = 'pk-q'; q.type = 'search'; q.autocomplete = 'off'; q.spellcheck = false;
     q.setAttribute('enterkeyhint', 'go'); q.setAttribute('role', 'combobox'); q.setAttribute('aria-expanded', 'true'); q.setAttribute('aria-autocomplete', 'list');
-    q.placeholder = /project/i.test(lbl) || isProjSel(sel) ? 'Search by project code or name' : 'Type to search';
+    q.placeholder = isAccSel(sel) ? 'Search accounts by name or group' : /project/i.test(lbl) || isProjSel(sel) ? 'Search by project code or name' : 'Type to search';
     const x = document.createElement('button'); x.type = 'button'; x.className = 'pk-x'; x.textContent = 'Cancel';
     const list = document.createElement('ul'); list.className = 'pk-list'; list.setAttribute('role', 'listbox'); list.id = 'pk-list'; q.setAttribute('aria-controls', 'pk-list');
     const foot = document.createElement('div'); foot.className = 'pk-foot';
