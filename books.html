@@ -2572,7 +2572,7 @@ function form(title, fields, submit, onSubmit, extra) {
 }
 function fact(l, v, s) { return h('div', {}, h('div', { class: 'lbl', text: l }), h('div', { class: 'v', text: v || '—' }), s ? h('div', { class: 's', text: s }) : null); }
 function timeline(trail) {
-  const lab = { signed: 'Signed', created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed' };
+  const lab = { signed: 'Signed', created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', restored: 'Restored', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed' };
   const col = { approved: 'var(--ontime)', paid: 'var(--ontime)', posted: 'var(--ontime)', checked: 'var(--early)', returned: 'var(--overdue)', rejected: 'var(--overdue)', cancelled: 'var(--faint)' };
   const t = (trail || []).slice().reverse();
   if (!t.length) return null;
@@ -3017,7 +3017,7 @@ function sheetRequest() {
   out.push(h('div', { class: 'facts' }, fact('Asked by', r.byName || nameOf(r.owner, r.createdAt || r.at), fmtTs(r.createdAt || r.at)), fact('Date', fmtD(r.date, true)), fact('Category', cat || '—'), fact('Project', pj || '—'), fact(r.type === 'petty' ? 'Paid to' : 'Pay to', r.payTo || '—'), fact('How', r.type === 'petty' ? (r.from === 'float' ? 'From the cash with ' + (r.byName || nameOf(r.owner)) : 'From petty cash') + (r.purpose ? ' · ' + purposeName(r.purpose) : '') : r.method || '—')));
   if (r.note) out.push(h('div', { class: 'card' }, h('div', { class: 'lbl', text: r.type === 'topup' ? 'Statement since the last refill' : 'Details' }), h('div', { text: r.note, style: 'overflow-wrap:anywhere;white-space:pre-line' })));
   if ((r.files || []).length) out.push(h('div', { class: 'sec' }, secH('Bills', String(r.files.length)), h('div', { class: 'files' }, r.files.map((f, i) => fileTile(f, () => openSheet({ type: 'doc', id: 'r:' + r.key + ':' + i }))))));
-  const decide = (status, act, note, extra) => run(() => Store.put('reqdec', r.key, Object.assign({}, dec, { status, trail: trailAdd(dec.trail, act, note), at: new Date().toISOString() }, extra || {})), { checked: 'Checked', approved: 'Approved', returned: 'Sent back', rejected: 'Rejected' }[status] || 'Saved');
+  const decide = (status, act, note, extra) => run(() => Store.put('reqdec', r.key, Object.assign({}, dec, { status, trail: trailAdd(dec.trail, act, note), at: new Date().toISOString() }, extra || {})), { checked: 'Checked', approved: 'Approved', returned: 'Sent back', restored: 'Restored', rejected: 'Rejected' }[status] || 'Saved');
   if (m === 'return' || m === 'reject') {
     out.push(form(m === 'return' ? 'Send back with a reason' : 'Reject this request', [field('Reason', ta('note', { rows: 3 }))], m === 'return' ? 'Send back' : 'Reject', () => {
       const note = (D().note || '').trim(); if (!note) return fail('Write a short reason.');
@@ -3193,7 +3193,15 @@ function sheetInvoice() {
   if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`${x.no} ${cliN(x)}`) + '.pdf'), text: 'Invoice (PDF)', title: 'On the SLATE letterhead, to send by email or WhatsApp' }),
     h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id, true), safeName(`${x.no} ${cliN(x)} - print on letterhead pad`) + '.pdf'), text: 'Print copy (pad)', title: 'The same invoice without the letterhead, to print on the SLATE pad at 100%' }));
   if (can.enter() && st !== 'cancelled') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openInvoice(x._id), text: 'Edit' }));
-  if (can.enter() && st !== 'cancelled' && !t.pays.length) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'cancelled', trail: trailAdd(raw.trail, 'cancelled') }), 'Cancelled'), text: 'Cancel invoice' }));
+  /* cancelling asks for a second tap within 4 seconds; a cancelled invoice can be restored to what it was (Principal, 3 Nov 2026) */
+  if (can.enter() && st !== 'cancelled' && !t.pays.length) { const armed = S.cxArm === x._id;
+    acts.push(h('button', { class: 'btn btn-danger', type: 'button', style: armed ? 'outline:2px solid currentColor' : '', onclick: () => {
+      if (!armed) { S.cxArm = x._id; renderSheet(); setTimeout(() => { if (S.cxArm === x._id) { S.cxArm = null; renderSheet(); } }, 4000); return; }
+      S.cxArm = null; run(() => Store.patch('invoices', x._id, { status: 'cancelled', trail: trailAdd(raw.trail, 'cancelled') }), 'Cancelled. Restore it from the invoice if this was a mistake');
+    }, text: armed ? 'Tap again to cancel' : 'Cancel invoice' })); }
+  if (can.enter() && st === 'cancelled') { const prev = (raw.trail || []).slice().reverse().find(e => e && ['issued', 'draft', 'restored'].includes(e.act));
+    const back = prev && prev.act === 'draft' ? 'draft' : (raw.trail || []).some(e => e && e.act === 'issued') || x.no ? 'issued' : 'draft';
+    acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: back, trail: trailAdd(raw.trail, 'restored') }), back === 'draft' ? 'Restored as a draft' : 'Restored'), text: 'Restore invoice' })); }
   if (acts.length) out.push(h('div', { class: 'actions' }, acts));
   const sb = x.project ? stageBook(x.project, x) : null;
   if (sb) out.push(h('div', { class: 'sec' }, secH('Fee stages', 'as printed on the invoice'), h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {},
