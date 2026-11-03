@@ -1566,7 +1566,7 @@ const amApprover=()=>S.isOwner||isApprover(S.uid);
 /* only the Principal and the COO can give work to the Principal's Office */
 const isPO=id=>!!id&&(id===ownerId()||/principal/i.test(teamOf(id)));
 /* only the Principal gives work to the COO (Principal, 1 Nov 2026) */
-const canAssignTo=id=>(!isCOO(id)||S.isOwner)&&(!isPO(id)||amApprover())&&(!isChalkP(id)||S.isOwner);
+const canAssignTo=id=>(!isCOO(id)||S.isOwner||id===S.uid)&&(!isPO(id)||amApprover())&&(!isChalkP(id)||S.isOwner);
 const isCOO=id=>!!id&&id!==ownerId()&&(isApprover(id)||/\bcoo\b|chief operat/i.test(roleOf(id)));
 /* Chalk Create: a separate SBU. Its lead and the Principal assign Chalk work; the COO views and edits; no SLATE process or scoring */
 const isChalkName=t=>/^\s*chalk\s*create\s*$/i.test(t||'');
