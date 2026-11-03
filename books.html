@@ -3189,9 +3189,9 @@ function sheetInvoice() {
   if (canSign() && st !== 'cancelled' && (!x.sign || x.sign.uid !== S.uid)) acts.push(mySign()
     ? h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { if (x.sign && !confirm(`Signed by ${x.sign.name}. Sign it yourself instead?`)) return; run(() => Store.patch('invoices', x._id, { sign: signStamp(), trail: trailAdd(raw.trail, 'signed') }), 'Signed'); }, text: 'Sign as ' + mySign().name })
     : h('button', { class: 'btn', type: 'button', onclick: () => openMySign(), text: 'Add my signature' }));
-  if (downloadsCap && st === 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`Preview ${cliN(x)}`) + '.pdf'), text: 'Preview (PDF)' }));
-  if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`${x.no} ${cliN(x)}`) + '.pdf'), text: 'Invoice (PDF)', title: 'On the SLATE letterhead, to send by email or WhatsApp' }),
-    h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id, true), safeName(`${x.no} ${cliN(x)} - print on letterhead pad`) + '.pdf'), text: 'Print copy (pad)', title: 'The same invoice without the letterhead, to print on the SLATE pad at 100%' }));
+  if (downloadsCap && st === 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), invFileName(x, 'preview')), text: 'Preview (PDF)' }));
+  if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), invFileName(x)), text: 'Invoice (PDF)', title: 'On the SLATE letterhead, to send by email or WhatsApp' }),
+    h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id, true), invFileName(x, 'print on letterhead pad')), text: 'Print copy (pad)', title: 'The same invoice without the letterhead, to print on the SLATE pad at 100%' }));
   if (can.enter() && st !== 'cancelled') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openInvoice(x._id), text: 'Edit' }));
   /* cancelling asks for a second tap within 4 seconds; a cancelled invoice can be restored to what it was (Principal, 3 Nov 2026) */
   if (can.enter() && st !== 'cancelled' && !t.pays.length) { const armed = S.cxArm === x._id;
@@ -4708,6 +4708,12 @@ function sheetJvCost() {
 const jvIns = p => Object.entries(S.jvin || {}).map(([id, x]) => Object.assign({ id }, x)).filter(x => x.proj === p).sort((a, b) => b.date.localeCompare(a.date));
 const clientOf = p => String((S.projects[p] || {}).client || 'The client').toUpperCase();
 const cliN = x => String(x.clientName || L(x.client) || '').toUpperCase();
+/* invoice file names say what is billed (Principal, 3 Nov 2026): number, client, project and the stages, e.g.
+   "INV-26-27-001 CSRM REAL ESTATE - CSRM JOLSHIRI 01 - Stage 2 Final architectural design, Stage 3 Authority drawings" */
+function invFileName(x, tail) { const p = x.project ? S.projects[x.project] : null;
+  const st = [...new Set((x.items || []).map(i => String(i.desc || '').split('(')[0].replace(/\b(submitted|issued|handed over|approved)\b/gi, '').replace(/:\s*/, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean))];
+  let what = st.join(', '); if (what.length > 90) what = what.slice(0, 88).replace(/[ ,]+\S*$/, '') + '…';
+  return safeName([`${x.no || 'Draft'} ${cliN(x)}`, p ? p.name : '', what, tail || ''].filter(Boolean).join(' - ')).slice(0, 180) + '.pdf'; }
 function jvBox() {
   const ps = jvProjects(); if (!ps.length || !can.books()) return null;
   const B = memo('bal:now', () => SB.balances(P(), null, today()));
