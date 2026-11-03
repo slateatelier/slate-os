@@ -3438,6 +3438,7 @@ const SHEETS = { mysign: sheetMySign, tagpay: sheetTagPay, money: sheetMoney, jo
 
 /* ---------- reports ---------- */
 const REPORTS = [
+  { id: 'company', t: 'Company report', q: 'Everything about SLATE in one report: a headline dashboard, then profit, cash, what SLATE owns and owes, projects, spending, running costs, tax, assets, book checks and every entry.', who: 'all' },
   { id: 'pl', t: 'Profit and loss', q: 'Did SLATE make money? Fees earned against what it cost.', who: 'all' },
   { id: 'cf', t: 'Cash flow', q: 'Where cash and bank money came from and where it went.', who: 'all' },
   { id: 'bs', t: 'What SLATE owns and owes', q: 'The balance sheet on any date.', who: 'all' },
@@ -3481,14 +3482,14 @@ function table(head, rows, numCols) {
       r.c.map((x, i) => h('td', { class: isN(i) ? 'n' : null, colspan: r.span && i === 0 ? r.span : null }, x == null ? '' : (typeof x === 'object' ? x : String(x)))))))));
 }
 const two = (a, b) => h('div', {}, h('div', { text: a }), b ? h('div', { class: 'sub2', text: b }) : null);
-const repHead = (r, extra) => pageH(r.t, r.q, (downloadsCap ? [h('button', { class: 'btn', type: 'button', onclick: () => { const d = reportData(r.id); if (!d.sheets) return toast('Choose an account first.'); savePDF(() => reportPDF(r.id), d.name + '.pdf'); }, text: 'Download PDF', title: 'On the SLATE letterhead, to share or print' }), h('button', { class: 'btn', type: 'button', onclick: () => exportReport(r.id), text: 'Download Excel' })] : []).concat(extra || []));
+const repHead = (r, extra) => pageH(r.t, r.q, (downloadsCap ? [h('button', { class: 'btn', type: 'button', onclick: () => { const d = reportData(r.id); if (!d.sheets) return toast('Choose an account first.'); savePDF(() => r.id === 'company' ? companyPDF() : reportPDF(r.id), d.name + '.pdf'); }, text: 'Download PDF', title: 'On the SLATE letterhead, to share or print' }), h('button', { class: 'btn', type: 'button', onclick: () => exportReport(r.id), text: 'Download Excel' })] : []).concat(extra || []));
 const openLedger = (lid, from, to) => { Object.assign(S.rep, { ledger: lid }); if (from) Object.assign(S.rep, { p: 'custom', from, to }); go('reports', 'ledger'); };
 
 function viewReports() {
   if (S.sub) {
     const r = REPORTS.find(x => x.id === S.sub); if (!r) { S.sub = ''; return viewReports(); }
-    const fn = { pl: repPL, cf: repCF, bs: repBS, projects: repProjects, spend: repSpend, combined: repCombined, counts: repCounts, rc: repRC, ledger: repLedger, daybook: repDaybook, tb: repTB, tax: repTax, assets: repAssets, checks: repChecks }[r.id];
-    const out = fn(r); let ds = null; try { ds = dashEl(repDash(r.id, reportData(r.id))); } catch (e) { ds = null; }
+    const fn = { company: repCompany, pl: repPL, cf: repCF, bs: repBS, projects: repProjects, spend: repSpend, combined: repCombined, counts: repCounts, rc: repRC, ledger: repLedger, daybook: repDaybook, tb: repTB, tax: repTax, assets: repAssets, checks: repChecks }[r.id];
+    const out = fn(r); let ds = null; if (r.id !== 'company') try { ds = dashEl(repDash(r.id, reportData(r.id))); } catch (e) { ds = null; }
     if (ds) { const i = out.findIndex(el => el && el.classList && (el.classList.contains('say') || el.classList.contains('callout'))); out.splice(i >= 0 ? i + 1 : Math.min(out.length, 2), 0, ds); }
     return [backBtn('Reports', () => { S.rep.proj = ''; S.rep.spendKey = ''; go('reports'); })].concat(out);
   }
@@ -3927,6 +3928,7 @@ async function saveXlsx(filename, sheets) {
   catch (e) { toast(e && e.code === 'declined' ? 'Download cancelled' : 'Couldn’t save the file.'); }
 }
 function reportData(id) {
+  if (id === 'company') return companyData();
   const pr = repRange(), tag = id === 'bs' ? (S.rep.asAt || today()) : id === 'rc' ? (S.rep.rcYm || curMonth()) : ['counts', 'checks'].includes(id) ? today() : pr.from + ' to ' + pr.to;
   const r = REPORTS.find(x => x.id === id);
   const sheets = { pl: plSheet, cf: cfSheet, bs: bsSheet, projects: projSheet, spend: spendSheet, combined: combinedSheet, counts: countsSheet, rc: rcSheet, ledger: ledgerSheet, daybook: daybookSheet, tb: tbSheet, tax: taxSheet, assets: assetsSheet, checks: checksSheet }[id](pr);
@@ -3937,6 +3939,43 @@ function reportData(id) {
 function exportReport(id) {
   const d = reportData(id); if (!d.sheets) return toast('Choose an account first.');
   saveXlsx(d.name + '.xlsx', d.sheets);
+}
+/* ---------- the company report: every report for the chosen period in one PDF or one Excel workbook, under a headline dashboard ---------- */
+const COMPANY_PARTS = ['pl', 'cf', 'bs', 'projects', 'spend', 'rc', 'tax', 'assets', 'tb', 'checks', 'counts', 'daybook'];
+function companyData() {
+  const pr = repRange(), r = REPORTS.find(x => x.id === 'company'), keepAsAt = S.rep.asAt;
+  const period = `${pr.label ? pr.label + ': ' : ''}${fmtD(pr.from, true)} to ${fmtD(pr.to, true)}`;
+  const parts = [];
+  S.rep.asAt = pr.to;
+  try {
+    COMPANY_PARTS.forEach(id => { let d = null; try { d = reportData(id); } catch (e) { d = null; } if (d && d.sheets) parts.push({ id, d, ds: (() => { try { return repDash(id, d); } catch (e) { return null; } })() }); });
+  } finally { S.rep.asAt = keepAsAt; }
+  const part = id => parts.find(x => x.id === id), tile = (id, l) => { const x = part(id); return x && x.ds ? x.ds.tiles.find(t => t.l === l) : null; };
+  const chart = (id, t) => { const x = part(id); return x && x.ds ? x.ds.charts.find(c => c.t === t) : null; };
+  const pick = (id, l, as) => { const t = tile(id, l); return t ? Object.assign({}, t, as ? { l: as } : {}) : null; };
+  const tiles = [pick('pl', 'Fees', 'Fees earned'), pick('pl', 'Net profit'), pick('pl', 'Net margin'), pick('cf', 'Closing cash and bank', 'Cash and bank now'), pick('projects', 'Still to collect', 'Fees still to collect'), pick('spend', 'Still owed', 'Owed to consultants'), pick('bs', 'Total assets'), pick('bs', 'Total liabilities'), pick('checks', 'Fix now', 'Book checks to fix now')].filter(Boolean);
+  const charts = [chart('pl', 'Income and costs by month'), chart('pl', 'Where the money went'), chart('projects', 'Fees by project'), chart('cf', 'Closing balance by account')].filter(Boolean);
+  const v = (id, l) => { const t = tile(id, l); return t ? t.v : 0; };
+  const fees = v('pl', 'Fees'), net = v('pl', 'Net profit'), cash = v('cf', 'Closing cash and bank'), owed = v('projects', 'Still to collect'), fix = +v('checks', 'Fix now') || 0;
+  const say = `From ${fmtD(pr.from, true)} to ${fmtD(pr.to, true)}, SLATE earned ${tk(fees)} in fees and made a ${net >= 0 ? 'profit' : 'loss'} of ${tk(net)}${fees ? ` (${Math.round(net / fees * 1000) / 10}% of fees)` : ''}. Cash and bank stood at ${tk(cash)} on ${fmtD(pr.to, true)}, and ${tk(owed)} of agreed fees is still to be collected.` + (fix ? ` ${fix} book check${fix === 1 ? '' : 's'} need fixing.` : ' The books pass every check.');
+  /* one workbook: the headline figures first, then every report's sheets */
+  const used = new Set(), nm = (t, n) => { let k = (t + ' · ' + n).slice(0, 31), i = 2; while (used.has(k)) k = (t + ' · ' + n).slice(0, 28) + ' ' + i++; used.add(k); return k; };
+  const sheets = [{ name: nm('Summary', 'Headline'), wide: [0], rows: [['SLATE company report'], [period], [say], [], ['Figure', 'Value']].concat(tiles.map(t => [t.l, t.money ? Math.round(t.v) : t.v])) }];
+  const SHORT = { pl: 'P&L', cf: 'Cash', bs: 'Balance', projects: 'Projects', spend: 'Spending', rc: 'Running', tax: 'Tax', assets: 'Assets', tb: 'TB', checks: 'Checks', counts: 'Counts', daybook: 'Day book' };
+  parts.forEach(x => x.d.sheets.forEach(sh => sheets.push(Object.assign({}, sh, { name: nm(SHORT[x.id] || x.id, sh.name).replace(/[:\\/?*\[\]]/g, '-') }))));
+  return { r, sheets, name: safeName(`SLATE Company report ${pr.from} to ${pr.to}`), period, parts, say, exec: tiles.length || charts.length ? { tiles, charts } : null };
+}
+function companyPDF() {
+  const c = companyData();
+  const secs = [{ title: 'SLATE company report', big: true, period: c.period, say: c.say, ds: c.exec, sheets: [] }]
+    .concat(c.parts.map((x, i) => ({ kicker: 'PART ' + (i + 1) + ' OF ' + c.parts.length, title: x.d.r.t, period: x.d.period, say: x.d.r.q, ds: x.ds, sheets: x.d.sheets })));
+  return buildReportPDF(secs, { title: 'Company report', period: c.period, land: true });
+}
+function repCompany(r) {
+  const c = companyData();
+  const card = x => h('button', { class: 'rcard', type: 'button', onclick: () => go('reports', x.id) }, h('span', { class: 'rc-t', text: x.d.r.t }), h('span', { class: 'rc-q', text: x.d.r.q }));
+  return [repHead(r), periodBar(), h('div', { class: 'say', text: c.say }), dashEl(c.exec),
+    h('div', { class: 'sec' }, secH('In the report', c.parts.length + ' parts'), h('p', { class: 'f-hint', text: 'The PDF puts each part on its own pages with its dashboard and full tables. The Excel file has every table as its own sheet. Open a part here to see it on its own.' }), h('div', { class: 'rgrid' }, c.parts.map(card)))];
 }
 /* ---------- report dashboards: the key figures and one or two charts for each report, on screen and at the top of its PDF.
    Built from the same sheets as the Excel and PDF, so the three always agree. ---------- */
@@ -4061,17 +4100,22 @@ function dashPDF(doc, ds, y, M, avail) {
   return y;
 }
 /* the same report as a PDF on the SLATE letterhead: the Excel sheets laid out as tables, landscape when they are wide */
+const sheetTables = sheets => sheets.map(sh => {
+  const rows = sh.rows || [], maxC = rows.reduce((m, x) => Math.max(m, (x || []).length), 0);
+  let hi = rows.findIndex(x => x && x.length === maxC && x.every(c => typeof c === 'string' && c.trim() !== ''));
+  if (hi < 0) hi = 0;
+  return { name: sh.name, head: rows[hi] || [], body: rows.slice(hi + 1), wide: sh.wide || [], n: maxC };
+});
 function reportPDF(id) {
   const d = reportData(id); if (!d.sheets) return null;
   const sayEl = document.querySelector('#view .say') || document.querySelector('.say'), say = sayEl ? sayEl.textContent.replace(/\s+/g, ' ').trim() : '';
-  const tables = d.sheets.map(sh => {
-    const rows = sh.rows || [], maxC = rows.reduce((m, x) => Math.max(m, (x || []).length), 0);
-    let hi = rows.findIndex(x => x && x.length === maxC && x.every(c => typeof c === 'string' && c.trim() !== ''));
-    if (hi < 0) hi = 0;
-    return { name: sh.name, head: rows[hi] || [], body: rows.slice(hi + 1), wide: sh.wide || [], n: maxC };
-  });
-  const land = tables.some(t => t.n >= 7), doc = PDFDoc(land), M = PAD.l, R = doc.W - PAD.r, avail = R - M;
-  const bottom = land ? doc.H - 16 * MM : PAD.b - 4, foot = `SLATE · ${d.r.t} · ${d.period}`;
+  return buildReportPDF([{ title: d.r.t, period: d.period, say, ds: repDash(id, d), sheets: d.sheets }], { title: d.r.t, period: d.period });
+}
+/* one or more report sections on the SLATE letterhead: title, summary, dashboard, then the tables */
+function buildReportPDF(sections, meta) {
+  const all = sections.map(sec => Object.assign({}, sec, { tables: sheetTables(sec.sheets || []) }));
+  const land = meta.land != null ? meta.land : all.some(sec => sec.tables.some(t => t.n >= 7)), doc = PDFDoc(land), M = PAD.l, R = doc.W - PAD.r, avail = R - M;
+  const bottom = land ? doc.H - 16 * MM : PAD.b - 4, foot = `SLATE · ${meta.title} · ${meta.period}`;
   let pg = 1;
   const isNum = c => typeof c === 'number' && isFinite(c);
   const isDate = c => typeof c === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c), isMon = c => typeof c === 'string' && /^\d{4}-\d{2}$/.test(c);
@@ -4079,64 +4123,70 @@ function reportPDF(id) {
   const boldRow = x => typeof x[0] === 'string' && /^(Total|Gross profit|Operating profit|Net profit|Net change|Opening |Closing |Difference|Overhead for|Cash due in)/i.test(x[0]);
   const newPage = () => { padFoot(doc, foot + ' · page ' + pg); doc.page(); pg++; return letterhead(doc) + (land ? 10 : -18); };
   let y = letterhead(doc) + (land ? 14 : -18);
-  doc.text(M, y, d.r.t, { size: 16, bold: true }); y += 16;
-  doc.text(M, y, d.period, { size: 9.5, color: '#55565a' });
-  doc.text(R, y, `Prepared ${fmtTs(new Date().toISOString())} by ${nameOf(S.uid)}`, { size: 8, color: '#939598', align: 'right' }); y += 14;
-  if (say) { y += 2; y += doc.para(M, y, say, avail, { size: 9, lh: 12.5 }) + 4; }
-  const ds = repDash(id, d);
-  if (ds) { y = dashPDF(doc, ds, y + 6, M, avail); if (ds.charts.length) y = newPage(); else y += 4; }
+  all.forEach((sec, si) => {
+    const tables = sec.tables;
+    if (si) y = newPage();
+    if (sec.kicker) { doc.text(M, y, sec.kicker, { size: 8, color: '#939598', spacing: 0.6 }); y += 18; }
+    doc.text(M, y, sec.title, { size: sec.big ? 22 : 16, bold: true }); y += sec.big ? 18 : 16;
+    doc.text(M, y, sec.period || meta.period, { size: 9.5, color: '#55565a' });
+    if (!si) doc.text(R, y, `Prepared ${fmtTs(new Date().toISOString())} by ${nameOf(S.uid)}`, { size: 8, color: '#939598', align: 'right' });
+    y += 14;
+    if (sec.say) { y += 2; y += doc.para(M, y, sec.say, avail, { size: 9, lh: 12.5 }) + 4; }
+    const ds = sec.ds;
+    if (ds) { y = dashPDF(doc, ds, y + 6, M, avail); if (ds.charts.length && tables.some(t => t.body.length)) y = newPage(); else y += 4; }
   tables.forEach((t, ti) => {
-    if (!t.head.length) return;
-    /* leave out columns with nothing in them */
-    const keep = t.head.map((_, i) => t.n <= 4 || t.body.some(x => x && x[i] != null && x[i] !== ''));
-    if (keep.some(k => !k)) { const ix = keep.map((k, i) => k ? i : -1).filter(i => i >= 0); t.wide = ix.map((i, j) => t.wide.includes(i) ? j : -1).filter(j => j >= 0); t.head = ix.map(i => t.head[i]); t.body = t.body.map(x => x && x.length ? ix.map(i => x[i]) : x); t.n = ix.length; }
-    let fs = 8, pad = 4;
-    const kind = t.head.map((_, i) => { const v = t.body.find(x => x && x[i] != null && x[i] !== ''); const c = v ? v[i] : ''; return isNum(c) ? 'n' : isDate(c) || isMon(c) ? 'd' : t.wide.includes(i) ? 'w' : 't'; });
-    const colW = () => t.head.map((hd, i) => {
-      let w = Math.max(...String(hd).split(/\s+/).map(wd => doc.width(wd, fs - 0.5, true)), kind[i] === 'w' ? 0 : doc.width(String(hd), fs - 0.5, true) * (kind[i] === 'n' ? 0.6 : 0.5));
-      t.body.forEach(x => { if (x && x[i] != null && x[i] !== '') w = Math.max(w, doc.width(cell(x[i]), fs, boldRow(x))); });
-      return Math.min(w, kind[i] === 'w' ? 220 : kind[i] === 't' ? 130 : 110) + pad * 2;
-    });
-    const sum = a => a.reduce((p, q) => p + q, 0);
-    let ws = colW();
-    for (let k = 0; k < 8 && sum(ws) > avail; k++) {
-      let over = sum(ws) - avail;
-      for (const [kd, min] of [['w', 90], ['t', 46]]) {
-        const room = ws.map((w, i) => kind[i] === kd ? Math.max(0, w - min) : 0), rs = sum(room); if (!rs) continue;
-        const cut = Math.min(over, rs); ws = ws.map((w, i) => w - cut * room[i] / rs); over -= cut; if (over <= 0.01) break;
+      if (!t.head.length) return;
+      /* leave out columns with nothing in them */
+      const keep = t.head.map((_, i) => t.n <= 4 || t.body.some(x => x && x[i] != null && x[i] !== ''));
+      if (keep.some(k => !k)) { const ix = keep.map((k, i) => k ? i : -1).filter(i => i >= 0); t.wide = ix.map((i, j) => t.wide.includes(i) ? j : -1).filter(j => j >= 0); t.head = ix.map(i => t.head[i]); t.body = t.body.map(x => x && x.length ? ix.map(i => x[i]) : x); t.n = ix.length; }
+      let fs = 8, pad = 4;
+      const kind = t.head.map((_, i) => { const v = t.body.find(x => x && x[i] != null && x[i] !== ''); const c = v ? v[i] : ''; return isNum(c) ? 'n' : isDate(c) || isMon(c) ? 'd' : t.wide.includes(i) ? 'w' : 't'; });
+      const colW = () => t.head.map((hd, i) => {
+        let w = Math.max(...String(hd).split(/\s+/).map(wd => doc.width(wd, fs - 0.5, true)), kind[i] === 'w' ? 0 : doc.width(String(hd), fs - 0.5, true) * (kind[i] === 'n' ? 0.6 : 0.5));
+        t.body.forEach(x => { if (x && x[i] != null && x[i] !== '') w = Math.max(w, doc.width(cell(x[i]), fs, boldRow(x))); });
+        return Math.min(w, kind[i] === 'w' ? 220 : kind[i] === 't' ? 130 : 110) + pad * 2;
+      });
+      const sum = a => a.reduce((p, q) => p + q, 0);
+      let ws = colW();
+      for (let k = 0; k < 8 && sum(ws) > avail; k++) {
+        let over = sum(ws) - avail;
+        for (const [kd, min] of [['w', 90], ['t', 46]]) {
+          const room = ws.map((w, i) => kind[i] === kd ? Math.max(0, w - min) : 0), rs = sum(room); if (!rs) continue;
+          const cut = Math.min(over, rs); ws = ws.map((w, i) => w - cut * room[i] / rs); over -= cut; if (over <= 0.01) break;
+        }
+        if (over <= 0.01) break;
+        if (fs > 6) { fs -= 0.5; pad = Math.max(2.5, pad - 0.5); ws = colW(); } else { ws = ws.map(w => w * avail / sum(ws)); break; }
       }
-      if (over <= 0.01) break;
-      if (fs > 6) { fs -= 0.5; pad = Math.max(2.5, pad - 0.5); ws = colW(); } else { ws = ws.map(w => w * avail / sum(ws)); break; }
-    }
-    const tot = ws.reduce((a, b) => a + b, 0); if (tot < avail && t.n <= 4) { const extra = avail - tot, wi = t.wide.length ? t.wide : [0]; wi.forEach(i => { ws[i] += extra / wi.length; }); }
-    const xs = ws.reduce((a, w, i) => (a.push(i ? a[i - 1] + ws[i - 1] : M), a), []);
-    const numCol = t.head.map((_, i) => t.body.some(x => x && isNum(x[i])));
-    const lh = fs * 1.3;
-    const drawHead = () => {
-      const hl = t.head.map((hd, i) => doc.wrap(String(hd), ws[i] - pad * 2, fs - 0.5, true));
-      const hh = Math.max(...hl.map(l => l.length)) * lh + 6;
-      doc.rect(M, y, tot < avail && t.n <= 4 ? avail : tot, hh, { fill: '#EFF2F4' });
-      hl.forEach((ls, i) => ls.forEach((ln, j) => doc.text(numCol[i] ? xs[i] + ws[i] - pad : xs[i] + pad, y + 4 + fs * 0.85 + j * lh, ln, { size: fs - 0.5, bold: true, color: '#55565a', align: numCol[i] ? 'right' : undefined })));
-      y += hh;
-    };
-    if (tables.length > 1 || ti > 0) { if (y + 40 > bottom) y = newPage(); y += 6; doc.text(M, y + 10, t.name, { size: 11, bold: true }); y += 18; }
-    if (y + 30 > bottom) y = newPage();
-    drawHead();
-    const W = tot < avail && t.n <= 4 ? avail : tot;
-    t.body.forEach(x => {
-      if (!x || !x.length || x.every(c => c == null || c === '')) { y += 6; return; }
-      const b = boldRow(x), ls = t.head.map((_, i) => numCol[i] && isNum(x[i]) ? [cell(x[i])] : doc.wrap(cell(x[i]), ws[i] - pad * 2, fs, b));
-      const rh = Math.max(1, ...ls.map(l => l.length)) * lh + 5;
-      if (y + rh > bottom) { y = newPage(); drawHead(); }
-      if (b) doc.line(M, y, M + W, y, { color: '#231f20', w: 0.6 });
-      ls.forEach((l, i) => l.forEach((ln, j) => {
-        const neg = isNum(x[i]) && x[i] < 0;
-        doc.text(numCol[i] ? xs[i] + ws[i] - pad : xs[i] + pad, y + 3 + fs * 0.85 + j * lh, ln, { size: fs, bold: b, align: numCol[i] ? 'right' : undefined, color: neg ? '#c1272d' : '#231f20' });
-      }));
-      y += rh;
-      doc.line(M, y, M + W, y, { color: '#d9dadb', w: 0.4 });
+      const tot = ws.reduce((a, b) => a + b, 0); if (tot < avail && t.n <= 4) { const extra = avail - tot, wi = t.wide.length ? t.wide : [0]; wi.forEach(i => { ws[i] += extra / wi.length; }); }
+      const xs = ws.reduce((a, w, i) => (a.push(i ? a[i - 1] + ws[i - 1] : M), a), []);
+      const numCol = t.head.map((_, i) => t.body.some(x => x && isNum(x[i])));
+      const lh = fs * 1.3;
+      const drawHead = () => {
+        const hl = t.head.map((hd, i) => doc.wrap(String(hd), ws[i] - pad * 2, fs - 0.5, true));
+        const hh = Math.max(...hl.map(l => l.length)) * lh + 6;
+        doc.rect(M, y, tot < avail && t.n <= 4 ? avail : tot, hh, { fill: '#EFF2F4' });
+        hl.forEach((ls, i) => ls.forEach((ln, j) => doc.text(numCol[i] ? xs[i] + ws[i] - pad : xs[i] + pad, y + 4 + fs * 0.85 + j * lh, ln, { size: fs - 0.5, bold: true, color: '#55565a', align: numCol[i] ? 'right' : undefined })));
+        y += hh;
+      };
+      if (tables.length > 1 || ti > 0) { if (y + 40 > bottom) y = newPage(); y += 6; doc.text(M, y + 10, t.name, { size: 11, bold: true }); y += 18; }
+      if (y + 30 > bottom) y = newPage();
+      drawHead();
+      const W = tot < avail && t.n <= 4 ? avail : tot;
+      t.body.forEach(x => {
+        if (!x || !x.length || x.every(c => c == null || c === '')) { y += 6; return; }
+        const b = boldRow(x), ls = t.head.map((_, i) => numCol[i] && isNum(x[i]) ? [cell(x[i])] : doc.wrap(cell(x[i]), ws[i] - pad * 2, fs, b));
+        const rh = Math.max(1, ...ls.map(l => l.length)) * lh + 5;
+        if (y + rh > bottom) { y = newPage(); drawHead(); }
+        if (b) doc.line(M, y, M + W, y, { color: '#231f20', w: 0.6 });
+        ls.forEach((l, i) => l.forEach((ln, j) => {
+          const neg = isNum(x[i]) && x[i] < 0;
+          doc.text(numCol[i] ? xs[i] + ws[i] - pad : xs[i] + pad, y + 3 + fs * 0.85 + j * lh, ln, { size: fs, bold: b, align: numCol[i] ? 'right' : undefined, color: neg ? '#c1272d' : '#231f20' });
+        }));
+        y += rh;
+        doc.line(M, y, M + W, y, { color: '#d9dadb', w: 0.4 });
+      });
+      y += 8;
     });
-    y += 8;
   });
   padFoot(doc, foot + (pg > 1 ? ' · page ' + pg : ''));
   return doc.output();
