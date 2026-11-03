@@ -1263,7 +1263,7 @@ const uidShort = () => Date.now().toString(36) + Math.random().toString(36).slic
 /* ---------- state ---------- */
 const S = {
   state: 'loading', uid: null, me: null, isOwner: false, admin: false, canWriteShared: null, readonly: false,
-  settings: {}, catalog: {}, ledgers: {}, projects: {}, assets: {}, vouchers: {}, invoices: {}, files: {}, members: {},
+  settings: {}, catalog: {}, ledgers: {}, projects: {}, assets: {}, vouchers: {}, invoices: {}, files: {}, members: {}, signs: {},
   requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, staff: {}, payroll: {}, recurring: {}, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
   view: 'home', sub: '', f: { period: 'fy', kind: 'all', acc: '', proj: '', q: '', month: '' },
   rep: { id: '', from: '', to: '', asAt: '', ledger: '', fy: '' }, reqTab: 'mine', invTab: 'open', docKind: '', docQ: '',
@@ -1503,6 +1503,67 @@ function nextInvNo(date) {
   let max = 0; Object.values(S.invoices).forEach(x => { if (x.no && x.no.startsWith(head)) max = Math.max(max, parseInt(x.no.slice(head.length), 10) || 0); });
   return head + String(max + 1).padStart(3, '0');
 }
+/* ---------- digital signatures: the Principal and the COO keep their own (signs/<their id>: name, designation, image).
+   Only the person themself sets theirs and signs with it; the database holds both rules (m_signatures.sql). ---------- */
+const canSign = () => ['Principal', 'COO'].includes(myRole());
+const mySign = () => (S.uid && S.signs[S.uid] && S.signs[S.uid].img) ? S.signs[S.uid] : null;
+function signImg(uid) {
+  const g = S.signs[uid]; if (!g || !g.img) return null;
+  try { return { bin: atob(g.img.split(',')[1]), w: g.w, h: g.h }; } catch (e) { return null; }
+}
+const signStamp = () => { const g = mySign(); return g ? { uid: S.uid, name: g.name, desig: g.desig, at: new Date().toISOString() } : null; };
+/* a photo of a signature on white paper: background to pure white, cropped to the ink, as a small JPEG */
+function cleanSignature(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1400 / Math.max(img.width, img.height)), W = Math.round(img.width * k), H = Math.round(img.height * k);
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(img, 0, 0, W, H); URL.revokeObjectURL(url);
+      const d = g.getImageData(0, 0, W, H), p = d.data; let x0 = W, y0 = H, x1 = -1, y1 = -1;
+      for (let i = 0; i < p.length; i += 4) {
+        const l = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+        if (l > 175) { p[i] = p[i + 1] = p[i + 2] = 255; continue; }
+        const f = Math.max(0, (l - 40) / 135) * 0.5; p[i] = Math.round(p[i] * f); p[i + 1] = Math.round(p[i + 1] * f); p[i + 2] = Math.round(p[i + 2] * f);
+        const n = i / 4, x = n % W, y = (n / W) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x1 < 0) return rej({ userMsg: 'No signature found in that photo. Sign in dark ink on plain white paper and try again.' });
+      g.putImageData(d, 0, 0);
+      const pad = 8; x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(W - 1, x1 + pad); y1 = Math.min(H - 1, y1 + pad);
+      const cw = x1 - x0 + 1, ch = y1 - y0 + 1, s2 = Math.min(1, 520 / cw, 200 / ch), o = document.createElement('canvas');
+      o.width = Math.max(1, Math.round(cw * s2)); o.height = Math.max(1, Math.round(ch * s2));
+      const og = o.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, o.width, o.height); og.drawImage(c, x0, y0, cw, ch, 0, 0, o.width, o.height);
+      res({ img: o.toDataURL('image/jpeg', 0.9), w: o.width, h: o.height });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej({ userMsg: 'That file isn’t a photo the browser can read. Use a JPG or PNG.' }); };
+    img.src = url;
+  });
+}
+function openMySign() {
+  if (!canSign()) return toast('Only the Principal and the COO keep a digital signature.');
+  const g = S.signs[S.uid] || {};
+  openSheet({ type: 'mysign', d: { name: g.name || nameOf(S.uid), desig: g.desig || (myRole() === 'Principal' ? 'Principal' : 'Chief Operating Officer'), img: g.img || '', w: g.w || 0, h: g.h || 0 } });
+}
+function sheetMySign() {
+  const d = D();
+  const pick = h('input', { type: 'file', accept: 'image/*', style: 'display:none', onchange: async e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    try { Object.assign(d, await cleanSignature(f)); S.sheet.err = ''; } catch (er) { S.sheet.err = (er && er.userMsg) || 'Couldn’t read that photo.'; }
+    renderSheet(); } });
+  const fields = [
+    h('p', { class: 'f-hint', style: 'margin:0', text: 'Sign in dark ink on plain white paper and take a clear photo, or upload a scan. SLATE Books cleans the background and crops it. Only you can sign with it, and every invoice records who signed and when.' }),
+    d.img ? h('div', { style: 'background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;display:grid;justify-items:start;gap:4px' },
+      h('img', { src: d.img, alt: 'Your signature', style: 'max-height:64px;max-width:100%' }), h('div', { style: 'border-top:1px solid #000;width:200px;max-width:100%;padding-top:4px' }, h('b', { text: d.name || '' }), h('div', { class: 'f-hint', style: 'margin:0', text: (d.desig || '') + ', SLATE' })))
+      : h('div', { class: 'w-empty', text: 'No signature yet.' }),
+    h('div', {}, pick, h('button', { class: 'btn', type: 'button', onclick: () => pick.click(), text: d.img ? 'Replace the photo' : 'Upload a photo of your signature' })),
+    h('div', { class: 'form-row' }, field('Name under the signature', inp('name')), field('Designation', inp('desig')))];
+  return [head('My signature', nameOf(S.uid)), form(null, fields, 'Save my signature', () => {
+    if (!d.img) return fail('Upload a photo of your signature first.');
+    if (!(d.name || '').trim() || !(d.desig || '').trim()) return fail('Enter your name and designation.');
+    run(() => Store.put('signs', S.uid, { name: d.name.trim(), desig: d.desig.trim(), img: d.img, w: d.w, h: d.h, at: new Date().toISOString() }), 'Signature saved').then(ok => { if (ok) closeSheet(); });
+  })];
+}
+
 /* ---------- fee stages: the payment stages set in SLATE OS › Business › Fees (copied to the Books project as `stages`).
    A stage is billed by an invoice line that carries its id. Fee money received on the project without an invoice
    (the advance, older Tally receipts) settles the unbilled stages in order, so the advance shows as received. ---------- */
@@ -1639,7 +1700,7 @@ const pdfFontsReady = (async () => {
   } catch (e) { PDF_FONTS = null; }
 })();
 function PDFDoc(landscape) {
-  const W = landscape ? 841.89 : 595.28, H = landscape ? 595.28 : 841.89, pages = []; let ops = [];
+  const W = landscape ? 841.89 : 595.28, H = landscape ? 595.28 : 841.89, pages = [], imgs = []; let ops = [];
   const rgb = c => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c || '#000000'); return m ? [1, 2, 3].map(i => (parseInt(m[i], 16) / 255).toFixed(3)).join(' ') : '0 0 0'; };
   const doc = {
     W, H,
@@ -1667,6 +1728,8 @@ function PDFDoc(landscape) {
     line(x1, y1, x2, y2, o = {}) { ops.push(`${rgb(o.color || '#231f20')} RG ${o.w || 0.6} w ${x1.toFixed(2)} ${(H - y1).toFixed(2)} m ${x2.toFixed(2)} ${(H - y2).toFixed(2)} l S`); },
     rect(x, y, w, h, o = {}) { ops.push(`${rgb(o.fill || '#EFF2F4')} rg ${x.toFixed(2)} ${(H - y - h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); },
     frame(x, y, w, h, o = {}) { ops.push(`${rgb(o.color || '#000000')} RG ${o.w || 0.75} w ${x.toFixed(2)} ${(H - y - h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S`); },
+    /* a JPEG (binary string) drawn w points wide at x, y; pw × ph are its pixel size */
+    image(bin, pw, ph, x, y, w) { const k = 'Im' + (imgs.length + 2), h = w * ph / pw; imgs.push({ k, bin, pw, ph }); ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${(H - y - h).toFixed(2)} cm /${k} Do Q`); return h; },
     logo(x, y, w) { doc.usedLogo = true; const h = w * 596 / 420; ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${(H - y - h).toFixed(2)} cm /Im1 Do Q`); return h; },
     page() { if (ops.length) pages.push(ops.join('\n')); ops = []; },
     output() {
@@ -1682,10 +1745,11 @@ function PDFDoc(landscape) {
       const f2 = PDF_FONTS ? ttf('F2') : add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
       const f3 = PDF_FONTS ? ttf('F3') : f1;
       const im = doc.usedLogo ? add({ img: true }) : 0;
+      const xo = (im ? `/Im1 ${im} 0 R ` : '') + imgs.map(g => `/${g.k} ${add({ stream: g.bin, dict: `/Type /XObject /Subtype /Image /Width ${g.pw} /Height ${g.ph} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode` })} 0 R`).join(' ');
       const kids = [];
       pages.forEach(content => {
         const c = add({ stream: content });
-        kids.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R /F3 ${f3} 0 R >>${im ? ` /XObject << /Im1 ${im} 0 R >>` : ''} >> /Contents ${c} 0 R >>`));
+        kids.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R /F3 ${f3} 0 R >>${xo ? ` /XObject << ${xo} >>` : ''} >> /Contents ${c} 0 R >>`));
       });
       objs[1] = `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;
       const parts = [], offs = []; let len = 0;
@@ -1865,10 +1929,14 @@ function invoicePDF(id, plain, unsaved) {
   const note = inv.note || S.settings.invNote || '';
   if (note) { need(46); y += 12; doc.text(M, y, 'NOTES', { size: 7.5, bold: true, color: GREY, spacing: 0.9 }); y += 13; y += doc.para(M, y, note, R - M, { size: 9 }); }
 
-  /* signature */
-  need(46); const sy = y + 34;
+  /* signature: the Principal's or the COO's digital signature, or a line to sign by hand */
+  const sg = inv.sign && inv.sign.uid ? inv.sign : null, img = sg ? signImg(sg.uid) : null;
+  /* the signature may run down to the top of the DESIGN WITH PURPOSE watermark */
+  if (y + (img ? 86 : 46) > PAD.b + 10) y = newPage(); let sy = y + 34;
+  if (img) { const ih = Math.min(34, 60 * MM * img.h / img.w), iw = ih * img.w / img.h; sy = y + 14 + ih; doc.image(img.bin, img.w, img.h, M, sy - ih - 2, iw); }
   doc.line(M, sy, M + 60 * MM, sy, { w: 0.75, color: '#000000' });
-  doc.text(M, sy + 13, 'For SLATE', { size: 9, bold: true }); doc.text(M, sy + 25, 'Authorised signature', { size: 8.5, color: GREY });
+  if (sg) { doc.text(M, sy + 13, sg.name || 'For SLATE', { size: 9.5, bold: true }); doc.text(M, sy + 25, (sg.desig || '') + (sg.desig ? ', ' : '') + 'SLATE', { size: 8.5, color: GREY }); doc.text(M, sy + 37, 'Signed digitally, ' + fmtTs(sg.at), { size: 7.5, color: GREY }); }
+  else { doc.text(M, sy + 13, 'For SLATE', { size: 9, bold: true }); doc.text(M, sy + 25, 'Authorised signature', { size: 8.5, color: GREY }); }
   padFoot(doc, ref);
   return doc.output();
 }
@@ -2434,7 +2502,7 @@ function form(title, fields, submit, onSubmit, extra) {
 }
 function fact(l, v, s) { return h('div', {}, h('div', { class: 'lbl', text: l }), h('div', { class: 'v', text: v || '—' }), s ? h('div', { class: 's', text: s }) : null); }
 function timeline(trail) {
-  const lab = { created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed' };
+  const lab = { signed: 'Signed', created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed' };
   const col = { approved: 'var(--ontime)', paid: 'var(--ontime)', posted: 'var(--ontime)', checked: 'var(--early)', returned: 'var(--overdue)', rejected: 'var(--overdue)', cancelled: 'var(--faint)' };
   const t = (trail || []).slice().reverse();
   if (!t.length) return null;
@@ -2921,7 +2989,8 @@ function openInvoice(id, pre) {
   if (!can.enter()) return toast('Only the Principal, COO and Accountant can raise invoices.');
   const x = id ? S.invoices[id] : null;
   const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '' })), files: (x.files || []).slice() })
-    : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: 'none', vatPct: S.settings.vatPct || 15, note: '', files: [] };
+    : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: 'none', vatPct: S.settings.vatPct || 15, note: '', files: [], signIt: !!mySign() };
+  if (x) d.signIt = !!(x.sign && x.sign.uid === S.uid && mySign());
   if (!x && pre && pre.project) invPickProject(d, pre.project);
   openSheet({ type: 'invform', d, editId: id || null });
 }
@@ -2961,7 +3030,10 @@ function sheetInvForm() {
     h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Due by', inp('due', { type: 'date' }))),
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
     h('div', { class: 'form-row' }, field('VAT', sel('vatMode', [['none', 'No VAT on this invoice'], ['add', 'Add VAT on top'], ['incl', 'Amounts include VAT']])), d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null),
-    field('Note on the invoice', ta('note', { rows: 2, placeholder: S.settings.invNote || 'Payment terms, bank details' })), attachBlock('files')];
+    field('Note on the invoice', ta('note', { rows: 2, placeholder: S.settings.invNote || 'Payment terms, bank details' })),
+    canSign() ? (mySign() ? chk('signIt', `Sign this invoice as ${mySign().name}, ${mySign().desig}`) : h('p', { class: 'f-hint', style: 'margin:0' }, 'To sign invoices digitally, add your signature in ', h('button', { class: 'linkish', type: 'button', onclick: () => openMySign(), text: 'More › My signature' }), '.'))
+      : h('p', { class: 'f-hint', style: 'margin:0', text: 'The Principal or the COO signs the invoice from its page once it is saved.' }),
+    attachBlock('files')];
   return [head(S.sheet.editId ? 'Edit invoice' : 'New invoice', S.sheet.editId ? S.invoices[S.sheet.editId].no : 'Invoice'), form(null, fields, S.sheet.editId ? 'Save' : 'Save and issue', () => saveInvoice('issued'), [S.sheet.editId ? null : h('button', { class: 'btn', type: 'button', onclick: () => saveInvoice('draft'), text: 'Save as draft' }), downloadsCap ? h('button', { class: 'btn', type: 'button', onclick: () => previewInvoice(), text: 'Preview (PDF)' }) : null])];
 }
 function previewInvoice() {
@@ -2969,7 +3041,7 @@ function previewInvoice() {
   const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const old = S.sheet.editId ? S.invoices[S.sheet.editId] : null;
-  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), status: 'draft' };
+  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), status: 'draft', sign: d.signIt && mySign() ? signStamp() : (old && old.sign) || null };
   savePDF(() => invoicePDF(S.sheet.editId || '_preview', false, inv), safeName(`Preview ${inv.clientName || L(inv.client)}`) + '.pdf');
 }
 function saveInvoice(status) {
@@ -2978,8 +3050,11 @@ function saveInvoice(status) {
   const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const id = S.sheet.editId || 'i' + uidShort(), old = S.invoices[id];
-  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), files: d.files || [],
+  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), files: d.files || [], sign: null,
     status: old ? (old.status === 'draft' && status === 'issued' ? 'issued' : old.status) : status, trail: old ? trailAdd(old.trail, 'edited') : trailAdd([], status === 'issued' ? 'issued' : 'created'), at: new Date().toISOString(), by: old ? old.by : S.uid };
+  /* the signature: signed now by the signer, or kept only if what the client sees is unchanged */
+  const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '']), x.vatMode, +x.vatPct || 0, x.note || '']);
+  doc.sign = d.signIt && mySign() ? signStamp() : old && old.sign && what(old) === what(doc) && !(old.sign.uid === S.uid && !d.signIt) ? old.sign : null;
   run(() => Store.put('invoices', id, doc), old ? 'Saved' : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
 }
 function sheetInvoice() {
@@ -2988,11 +3063,14 @@ function sheetInvoice() {
   const out = [head('Invoice · ' + (x.no || ''), cliN(x))];
   out.push(h('div', { class: 'sh-status' }, pill(st), x.project ? h('span', { class: 'tag', text: projLabel(x.project) }) : null));
   out.push(h('div', { class: 'big-amt', text: tk(st === 'paid' ? t.total : t.due) }), h('div', { class: 'f-hint', style: 'margin-top:-12px', text: st === 'paid' ? 'Paid in full' : `Still to collect, of ${tk(t.total)}` }));
-  out.push(h('div', { class: 'facts' }, fact('Date', fmtD(x.date, true)), fact('Due by', x.due ? fmtD(x.due, true) : '—'), fact('Total', tk(t.total), x.vatMode !== 'none' ? `VAT ${tk(t.vat)}` : 'No VAT'), fact('Received', tk(t.received), t.pays.length + ' payment' + (t.pays.length === 1 ? '' : 's'))));
+  out.push(h('div', { class: 'facts' }, fact('Signed by', x.sign ? x.sign.name : 'Not signed', x.sign ? `${x.sign.desig} · ${fmtTs(x.sign.at)}` : 'Printed with a line to sign by hand'), fact('Date', fmtD(x.date, true)), fact('Due by', x.due ? fmtD(x.due, true) : '—'), fact('Total', tk(t.total), x.vatMode !== 'none' ? `VAT ${tk(t.vat)}` : 'No VAT'), fact('Received', tk(t.received), t.pays.length + ' payment' + (t.pays.length === 1 ? '' : 's'))));
   out.push(h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {}, (x.items || []).map(i => h('tr', {}, h('td', { text: i.desc || '—' }), h('td', { class: 'n', text: fmt(i.amount) }))), h('tr', { class: 't' }, h('td', { text: 'Total' }), h('td', { class: 'n', text: fmt(t.total) }))))));
   const acts = [];
   if (can.enter() && ['unpaid', 'part', 'overdue'].includes(st)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openMoney('in', { cat: x.client, proj: x.project, inv: x._id, amount: String(t.due), party: x.clientName || '', narr: 'Against invoice ' + x.no }), text: 'Record a payment' }));
   if (can.enter() && st === 'draft') acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'issued', trail: trailAdd(raw.trail, 'issued') }), 'Issued'), text: 'Issue' }));
+  if (canSign() && st !== 'cancelled' && (!x.sign || x.sign.uid !== S.uid)) acts.push(mySign()
+    ? h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { if (x.sign && !confirm(`Signed by ${x.sign.name}. Sign it yourself instead?`)) return; run(() => Store.patch('invoices', x._id, { sign: signStamp(), trail: trailAdd(raw.trail, 'signed') }), 'Signed'); }, text: 'Sign as ' + mySign().name })
+    : h('button', { class: 'btn', type: 'button', onclick: () => openMySign(), text: 'Add my signature' }));
   if (downloadsCap && st === 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`Preview ${cliN(x)}`) + '.pdf'), text: 'Preview (PDF)' }));
   if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`${x.no} ${cliN(x)}`) + '.pdf'), text: 'Invoice (PDF)', title: 'On the SLATE letterhead, to send by email or WhatsApp' }),
     h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id, true), safeName(`${x.no} ${cliN(x)} - print on letterhead pad`) + '.pdf'), text: 'Print copy (pad)', title: 'The same invoice without the letterhead, to print on the SLATE pad at 100%' }));
@@ -3134,7 +3212,7 @@ function saveTag(it, st) {
   run(() => Store.patch('vouchers', it.id, { lines, trail: trailAdd(raw.trail, 'tagged', note) }), 'Tagged to ' + cc.map(c => (S.projects[c.p] || {}).code || (S.projects[c.p] || {}).name).join(', '));
 }
 
-const SHEETS = { tagpay: sheetTagPay, money: sheetMoney, journal: sheetJournal, voucher: sheetVoucher, reqform: sheetReqForm, request: sheetRequest, invform: sheetInvForm, invoice: sheetInvoice, upload: sheetUpload, doc: sheetDoc, count: sheetCount, countview: sheetCountView, holders: sheetHolders };
+const SHEETS = { mysign: sheetMySign, tagpay: sheetTagPay, money: sheetMoney, journal: sheetJournal, voucher: sheetVoucher, reqform: sheetReqForm, request: sheetRequest, invform: sheetInvForm, invoice: sheetInvoice, upload: sheetUpload, doc: sheetDoc, count: sheetCount, countview: sheetCountView, holders: sheetHolders };
 
 /* ---------- reports ---------- */
 const REPORTS = [
@@ -3699,6 +3777,8 @@ function viewMore() {
   if (canPayroll()) out.push(h('div', { class: 'sec' }, secH('Salaries'), h('div', { class: 'list' },
     moreItem('Salary sheets', Object.keys(S.payroll).length ? 'Latest: ' + monthName(Object.keys(S.payroll).sort().slice(-1)[0]) + ' · ' + (PAY_ST[(S.payroll[Object.keys(S.payroll).sort().slice(-1)[0]] || {}).status] || '') : 'Prepare, check, approve and pay salaries', () => go('more', 'payroll')),
     moreItem('Staff', Object.values(S.staff).filter(x => x.active !== false).length + ' on the salary sheet', () => go('more', 'staff')))));
+  if (canSign()) out.push(h('div', { class: 'sec' }, secH('Signature'), h('div', { class: 'list' },
+    moreItem('My signature', mySign() ? `${mySign().name}, ${mySign().desig} · used on invoices you sign` : 'Add your signature to sign invoices digitally', () => openMySign()))));
   out.push(h('div', { class: 'sec' }, secH('Set-up'), h('div', { class: 'list' },
     moreItem('Accounts', `${nA} accounts: cash, bank, clients, expenses and more`, () => go('more', 'accounts')),
     moreItem('Projects', `${nP} projects, with codes from SLATE OS`, () => go('more', 'projects')),
@@ -5170,7 +5250,7 @@ async function holderAutoApprove(key, body) {
 }
 
 /* ---------- start-up: capabilities, roles, live data ---------- */
-const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists'];
+const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs'];
 const NEED = ['settings', 'ledgers', 'vouchers', 'projects'];
 let loaded = {}, profTimer = null, catTimer = null, lastProfKey = '';
 function changed() { S.ver++; render(); renderSheet(true); scheduleProfiles(); scheduleCatalog(); }
