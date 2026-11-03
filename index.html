@@ -193,6 +193,9 @@ main.wrap.wrap-desk{max-width:1480px}
 .wl-n{font-size:12px;color:var(--late);justify-self:end}.wl-n.ok{color:var(--ontime)}
 @media (max-width:560px){.wl-sel{grid-template-columns:1fr auto}.wl-sel select:nth-child(2){grid-column:1/-1}}
 .who-plan{grid-area:t;display:grid;gap:3px;min-width:0;font-size:13.5px}
+/* the morning's written plan sits in a gray-lined box, so it reads as the person's own words, apart from the task data */
+.wl-mine>.h-list{border:1px solid #C7C7CC}
+.who-plan:not(.none){border:1px solid #C7C7CC;border-radius:8px;padding:6px 10px;background:#FAFAFB;margin:2px 0}
 .who-pl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.who-pl b{font-weight:600}.who-pl span{color:#3a3a3c}
 .who-plan.none{color:var(--late);font-size:13px}.who-plan.none.late{color:var(--overdue);font-weight:600}
 .who-more{font-size:12px;color:var(--muted)}
@@ -201,7 +204,7 @@ main.wrap.wrap-desk{max-width:1480px}
 .wl-card{background:var(--group);border-radius:14px;padding:12px 14px;display:grid;gap:8px;align-content:start}
 .wl-ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.wl-ch b{font-size:14.5px}.wl-ch .muted{font-size:12.5px}
 .wl-at{margin-left:auto;font-size:12px;color:var(--muted)}.wl-at.late{color:var(--late)}
-.wl-ls{display:grid;gap:6px;background:#fff;border-radius:10px;padding:8px 10px}
+.wl-ls{display:grid;gap:6px;background:#fff;border:1px solid #C7C7CC;border-radius:10px;padding:8px 10px}
 .wl-l{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:start;font-size:13.5px}
 .wl-st{font-weight:700;text-align:center;line-height:1.4}.wl-tx{color:#3a3a3c}.wl-sub{font-size:11.5px;color:var(--muted)}
 </style><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
@@ -3915,7 +3918,8 @@ function sheetWlog(){
 function wlMyCard(){
   if(!WL.loaded||!needPlan(S.uid)||!isWorkDay(today())) return null; const r=wlGet(S.uid,today());
   if(!r) return h('div',{class:'wl-due'},h('div',{},h('b',{text:'Write today’s plan'}),h('span',{text:'Which projects and tasks are you working on today? It takes a minute.'})),h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:openWlog,text:'Write now'}));
-  return deskSub('Today’s plan',(r.lines||[]).map(l=>hRow({dot:'var(--early)',strong:wlProjName(l.projectId)+(l.taskId&&wlTaskName(l.taskId)?' · '+wlTaskName(l.taskId):''),meta:l.text,onclick:openWlog})),null,openWlog);
+  const el=deskSub('Today’s plan',(r.lines||[]).map(l=>hRow({dot:'var(--early)',strong:wlProjName(l.projectId)+(l.taskId&&wlTaskName(l.taskId)?' · '+wlTaskName(l.taskId):''),meta:l.text,onclick:openWlog})),null,openWlog);
+  if(el) el.classList.add('wl-mine'); return el;
 }
 /* Who is doing what: today's plan lines for a person, or that it isn't written yet */
 function wlWhoLines(id){ if(!WL.loaded||!needPlan(id)) return null; const td=today(); if(!isWorkDay(td)) return null; const r=wlGet(id,td);
