@@ -3102,7 +3102,7 @@ function viewMore(){
     ...grp('Tools',canDBoard()?item('drafting','Drafting board',(()=>{ const r=dbRows(); const late=r.filter(x=>x.st==='late').length; return r.length?`${r.filter(x=>x.st!=='done').length} open with the drafting team${late?` · ${late} late`:''}`:'What the drafting team is doing for every POD'; })(),dbRows().filter(x=>x.st==='late').length):null,item('conv','Expense claims',convApprover()&&convWaiting().length?`${convWaiting().length} to approve · transport, meals and client costs`:'Claim transport and meals for site visits, meetings and errands',convApprover()?convWaiting().length:0),item('far','FAR calculator','RAJUK FAR, ground coverage and areas · every calculation is logged'),
       S.booksRole&&!(S.isOwner||/\bcoo\b/i.test(roster(S.uid).role||''))?h('a',{class:'more-i',href:'/books?solo=1',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Books'}),h('div',{class:'mi-d',text:S.booksRole==='Office staff'?'Monthly office shopping list':S.booksRole==='Accountant'?'SLATE’s accounts':'SLATE’s accounts · view only'})),h('span',{class:'mi-a',text:'›'})):null,
       FIN_UI&&window.slateFinanceRole?h('a',{class:'more-i',href:'/finance',style:'text-decoration:none;color:inherit'},h('div',{},h('div',{class:'mi-t',text:'Finance'}),h('div',{class:'mi-d',text:'Fees, invoices and payments · only you and '+(window.slateFinanceRole==='principal'?'the COO':'the Principal')+' can see it'})),h('span',{class:'mi-a',text:'›'})):null),
-    ...grp('Records',WL.loaded&&wlPeople().length?item('worklog','Day log',amApprover()||S.isOwner?'What each person in the PODs planned and finished, day by day':amPodLead()?'What your POD planned and finished, day by day':'Your plans and what you finished, day by day'):null,item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
+    ...grp('Records',WL.loaded&&wlPeople().length?item('worklog','Day log',amApprover()||S.isOwner?'What each person in the PODs and the Drafting Pool planned and finished, day by day':amPodLead()?'What your POD planned and finished, day by day':myHeadTeam()?'What your team planned and finished, day by day':'Your plans and what you finished, day by day'):null,item('activity','Activity log',logScope()==='all'?'Audit trail: every change, notification and message':logScope()==='team'?'Your activity and your team’s':'Your own activity'),
       window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?item('entries','Entry log','When each person came in and left · only you and '+(S.isOwner?'the COO':'the Principal')+' can see it'):null,
       item('reports','Issue reports',amApprover()?'Issues the team reported with the button at the bottom left':'Issues you reported and what happened to them',amApprover()&&window.slateOpenReports?window.slateOpenReports():0),
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
@@ -3842,7 +3842,9 @@ function gsearchMount(){
    A record for the Principal, the COO and the POD leader; not scored. Data: public.work_logs (m_work_logs.sql). ---------- */
 const WL={rows:{},on:false,loaded:false,from:''};
 const wlKey=(u,d)=>u+'|'+d;
-const needPlan=id=>!!id&&!isLeft(id)&&/^pod\b/i.test(teamOf(id)||'')&&!isChalkP(id);
+/* who writes the day's plan: everyone in a POD and in the Drafting Pool (3 Nov 2026) */
+const wlTeam=id=>{ const t=teamOf(id)||''; return /^pod\b/i.test(t)||/draft/i.test(t); };
+const needPlan=id=>!!id&&!isLeft(id)&&wlTeam(id)&&!isChalkP(id);
 const wlGet=(u,d)=>WL.rows[wlKey(u,d)]||null;
 const wlPrevDay=d=>{ let x=addDays(d,-1); for(let i=0;i<14&&!isWorkDay(x);i++) x=addDays(x,-1); return x; };
 const wlTime=ts=>{ try{ return new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}); }catch(e){ return ''; } };
@@ -3866,7 +3868,8 @@ function wlMaybePrompt(){
   savePref('planLater',{d:td,at:Date.now()}); openWlog(); }
 function openWlog(){ S.sheet={type:'wlog'}; renderSheet(); }
 const wlNewLine=(x={})=>({id:Math.random().toString(36).slice(2,10),projectId:x.projectId==null?null:x.projectId,taskId:x.taskId||'',text:x.text||'',status:'planned',...(x.from?{from:x.from}:{})});
-function wlMyProjects(){ return projects().filter(p=>!p.closed&&(fullView()||inMyPodProject(p)||isMemberOk(p,S.uid)||activeTasks().some(t=>t.projectId===p.id&&t.assignee===S.uid)))
+function wlMyProjects(){ const dp=isDraftMember(S.uid);   /* the Drafting Pool works for every POD, so it can pick any open project */
+  return projects().filter(p=>!p.closed&&(fullView()||dp||inMyPodProject(p)||isMemberOk(p,S.uid)||activeTasks().some(t=>t.projectId===p.id&&t.assignee===S.uid)))
   .sort((a,b)=>String(a.name||a.code).localeCompare(String(b.name||b.code))); }
 function sheetWlog(){
   const sh=S.sheet, td=today(), y=wlPrevDay(td), yLog=wlGet(S.uid,y), cur=wlGet(S.uid,td);
@@ -3905,7 +3908,7 @@ function sheetWlog(){
     },cur?'Today’s plan updated':'Thanks, your plan is in').then(ok=>{ if(ok){ closeSheet(); render(true); } });
   };
   return [head(fmtD(td)+' · '+(cur?'update':'every working morning'),cur?'Update today’s plan':'What are you working on today?'),
-    h('p',{class:'lead',style:'margin:0',text:'Which projects and which tasks, in your own words. Your POD leader, the COO and the Principal see it. It is a work record, not a score.'}),
+    h('p',{class:'lead',style:'margin:0',text:'Which projects and which tasks, in your own words. '+(myHeadTeam()||amPodLead()?'The COO and the Principal see it.':isDraftMember(S.uid)?'The Design Associate Lead, the COO and the Principal see it.':'Your POD leader, the COO and the Principal see it.')+' It is a work record, not a score.'}),
     yOpen.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Yesterday · '+fmtD(y)}),h('span',{class:'cnt',text:'how did it go?'})),h('div',{class:'wl-ys'},yOpen.map(yRow))):null,
     h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Today'}),h('span',{class:'cnt',text:`${sh.lines.length} line${sh.lines.length>1?'s':''}`})),
       h('div',{class:'wl-lines'},sh.lines.map(line)),
@@ -3930,7 +3933,7 @@ function wlWhoLines(id){ if(!WL.loaded||!needPlan(id)) return null; const td=tod
 /* ---------- Day log: what each person planned and how it went, day by day ---------- */
 const WL_ST={done:['✓','Done','var(--ontime)'],carried:['→','Carried on','var(--early)'],stopped:['✕','Stopped','var(--muted)'],planned:['•','Planned','var(--ink)']};
 function wlPeople(){ const all=people().filter(id=>!isLeft(id)&&needPlan(id));
-  if(amApprover()||S.isOwner||isCOO(S.uid)) return all; if(amPodLead()) return all.filter(id=>teamOf(id)===myPod()); return all.filter(id=>id===S.uid); }
+  if(amApprover()||S.isOwner||isCOO(S.uid)) return all; if(amPodLead()) return all.filter(id=>teamOf(id)===myPod()); const hd=myHeadTeam(); if(hd) return all.filter(id=>teamOf(id)===hd); return all.filter(id=>id===S.uid); }
 function viewWorklog(){
   const V=S.wlv||(S.wlv={d:today(),pod:'',who:''}), td=today(), ap=amApprover()||S.isOwner;
   if(!WL.loaded) return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Records'}),h('h1',{class:'h1',text:'Day log'}))),h('p',{class:'muted',text:WL.err?'The day log isn’t set up yet: run m_work_logs.sql in Supabase.':'Loading…'})];
@@ -3938,9 +3941,9 @@ function viewWorklog(){
   if(V.who&&addDays(td,-28)<WL.from&&!V.loading){ V.loading=1; wlLoad(addDays(td,-35),WL.from).then(()=>{ V.loading=0; render(true); }); }
   let ids=wlPeople(); if(V.pod) ids=ids.filter(id=>teamOf(id)===V.pod);
   const go=n=>{ let x=addDays(V.d,n); for(let i=0;i<14&&!isWorkDay(x);i++) x=addDays(x,n); if(x>td) x=td; V.d=x; render(true); };
-  const podSel=ap?h('select',{'aria-label':'POD',onchange:e=>{ V.pod=e.target.value; render(true); }},h('option',{value:'',text:'All PODs'}),pods().map(p=>h('option',{value:p,text:podLabel(p)}))):null; if(podSel) podSel.value=V.pod;
+  const podSel=ap?h('select',{'aria-label':'POD',onchange:e=>{ V.pod=e.target.value; render(true); }},h('option',{value:'',text:'All teams'}),[...pods(),...[...new Set(wlPeople().map(teamOf))].filter(t=>t&&!pods().includes(t))].map(p=>h('option',{value:p,text:podLabel(p)}))):null; if(podSel) podSel.value=V.pod;
   const all=wlPeople(), whoSel=all.length>1?h('select',{'aria-label':'Person',onchange:e=>{ V.who=e.target.value; render(true); }},h('option',{value:'',text:'Everyone'}),all.map(id=>h('option',{value:id,text:nameOf(id)}))):null; if(whoSel) whoSel.value=V.who;
-  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Records · '+(ap?'every POD':amPodLead()?podLabel(myPod()):'your own')}),h('h1',{class:'h1',text:'Day log'})),
+  const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Records · '+(ap?'every POD and the Drafting Pool':amPodLead()?podLabel(myPod()):myHeadTeam()?myHeadTeam():'your own')}),h('h1',{class:'h1',text:'Day log'})),
     h('div',{class:'bar dash-bar'},podSel,whoSel,V.who?null:[V.d!==td?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ V.d=td; render(true); },text:'Today'}):null,
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous day',onclick:()=>go(-1),text:'‹'}),h('span',{class:'wl-day',text:fmtD(V.d)+(V.d===td?' · today':'')}),h('button',{class:'btn btn-sm',type:'button','aria-label':'Next day',disabled:V.d>=td,onclick:()=>go(1),text:'›'})]))];
   const lineEl=(l,day)=>{ const st=(l.status||'planned')==='planned'&&day<td?['?','Not closed','var(--late)']:WL_ST[l.status||'planned'];
@@ -3951,7 +3954,7 @@ function viewWorklog(){
       r?h('div',{class:'wl-ls'},(r.lines||[]).map(l=>lineEl(l,day))):null); };
   if(V.who){ const days=[]; let x=td; for(let i=0;i<40&&days.length<20;i++){ if(isWorkDay(x)) days.push(x); x=addDays(x,-1); }
     out.push(h('div',{class:'wl-grid'},days.map(d=>card(V.who,d,false)))); return out; }
-  if(!ids.length){ out.push(h('p',{class:'muted',text:'No one in a POD to show.'})); return out; }
+  if(!ids.length){ out.push(h('p',{class:'muted',text:'No one to show.'})); return out; }
   const wrote=ids.filter(id=>wlGet(id,V.d)).length;
   out.push(h('div',{class:'f-hint',style:'margin:0 4px',text:isWorkDay(V.d)?`${wrote} of ${ids.length} wrote a plan`:'Not a working day'}));
   out.push(h('div',{class:'wl-grid'},ids.map(id=>card(id,V.d,true))));
