@@ -234,6 +234,11 @@ td input,td select{min-width:110px;background:#fff;padding:7px 9px;font-size:14p
 .tl-item time{font-family:var(--mono);font-size:12px;color:var(--muted)}
 .tl-note{font-size:13.5px;color:var(--muted);border-left:2px solid var(--border);padding-left:8px;margin-top:2px;overflow-wrap:anywhere}
 .lines{display:grid;gap:8px}
+.stg-pick{display:grid;gap:6px;padding:12px;border:1px solid var(--line,#e3e4e6);border-radius:12px}
+.stg-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--line,#eceded)}
+.stg-row:first-of-type{border-top:0}.stg-row.is-done{opacity:.75}.stg-l{display:grid;gap:2px;min-width:0}
+.stg-tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap;background:#F1F2F3;color:#55565a}
+.stg-tag.t-adv,.stg-tag.t-rec{background:#E3F1E8;color:#1F6B3F}.stg-tag.t-part,.stg-tag.t-due{background:#FFF3DC;color:#8A5A00}.stg-tag.t-now{background:#c1272d;color:#fff}
 .ln{display:grid;grid-template-columns:minmax(0,2fr) minmax(90px,1fr) minmax(90px,1fr) 34px;gap:8px;align-items:center}
 .ln-h{font-size:12px;font-weight:600;color:var(--muted)}
 @media (max-width:560px){.ln{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px}.ln>:first-child{grid-column:1/-1}}
@@ -1497,6 +1502,53 @@ function nextInvNo(date) {
   let max = 0; Object.values(S.invoices).forEach(x => { if (x.no && x.no.startsWith(head)) max = Math.max(max, parseInt(x.no.slice(head.length), 10) || 0); });
   return head + String(max + 1).padStart(3, '0');
 }
+/* ---------- fee stages: the payment stages set in SLATE OS › Business › Fees (copied to the Books project as `stages`).
+   A stage is billed by an invoice line that carries its id. Fee money received on the project without an invoice
+   (the advance, older Tally receipts) settles the unbilled stages in order, so the advance shows as received. ---------- */
+const STG_TAG = { adv: 'Advance received', rec: 'Received', part: 'Part received', due: 'Billed, due', now: 'Billed now', next: 'Upcoming' };
+const vCounts = v => !!v && ['approved', 'tally', 'checked'].includes(vStatus(v));
+function projFeeIn(pid) {
+  let all = 0, unl = 0;
+  Object.values(S.vouchers).forEach(v => {
+    if (!vCounts(v)) return;
+    const loose = !v.inv || !S.invoices[v.inv] || ['draft', 'cancelled'].includes(S.invoices[v.inv].status);
+    (v.lines || []).forEach(l => {
+      if (groupOf(l.l) !== 'inc') return;
+      const sg = (+l.cr || 0) > 0 ? 1 : -1;
+      (l.cc || []).forEach(c => { if (c.p !== pid) return; const a = sg * (+c.a || 0); all += a; if (loose) unl += a; });
+    });
+  });
+  return { all: r2(all), unl: r2(unl) };
+}
+const feeVatDefault = p => /VAT[^.]{0,40}(payable|paid|borne)\s+by\s+(the\s+)?client|VAT[^.]{0,20}(extra|not included|excluded)/i.test((p && p.feeTerms) || '') ? 'add' : 'none';
+/* every stage of a project with its tag; cur = the invoice being made or printed ({ _id, items }) */
+function stageBook(pid, cur) {
+  const p = S.projects[pid]; if (!p || !(p.stages || []).length) return null;
+  const rows = p.stages.map((s, i) => ({ id: s.id, n: i + 1, label: s.label, pct: +s.pct || 0, amount: +s.amount || 0, billed: 0, paid: 0, now: 0, inv: [], byRec: false }));
+  const by = {}; rows.forEach(r => { by[r.id] = r; });
+  let other = 0;
+  invList().forEach(x => {
+    if (x.project !== pid || ['draft', 'cancelled'].includes(x.status) || (cur && x._id === cur._id)) return;
+    let left = invTotals(x).received;
+    (x.items || []).forEach(it => {
+      const a = +it.amount || 0, got = Math.max(0, Math.min(left, a)); left -= got;
+      const r = by[it.stage]; if (!r) { other += a; return; }
+      r.billed += a; r.paid += got; if (!r.inv.includes(x.no)) r.inv.push(x.no);
+    });
+  });
+  if (cur) (cur.items || []).forEach(it => { const r = by[it.stage]; if (r) r.now += +it.amount || 0; else other += +it.amount || 0; });
+  const fin = projFeeIn(pid); let left = Math.max(0, fin.unl);
+  rows.forEach(r => { if (r.billed || r.now || left <= 0.5) return; const got = Math.min(left, r.amount); r.billed += got; r.paid += got; r.byRec = true; left -= got; });
+  rows.forEach((r, i) => {
+    r.st = r.now ? 'now' : !r.billed ? 'next' : r.paid >= r.billed - 0.5 ? (r.byRec && (i === 0 || /advance|signing|mobili/i.test(r.label)) ? 'adv' : 'rec') : r.paid > 0.5 ? 'part' : 'due';
+  });
+  const fee = +p.contract || rows.reduce((s, r) => s + r.amount, 0);
+  const thisInv = cur ? r2((cur.items || []).reduce((s, it) => s + (+it.amount || 0), 0)) : 0;
+  /* billed to date = stage invoices + stages settled by receipts + other invoice lines + any fee money beyond the stages + this invoice */
+  const billed = r2(rows.reduce((s, r) => s + r.billed + r.now, 0) + other + Math.max(0, left));
+  const toBill = r2(rows.reduce((s, r) => s + Math.max(0, r.amount - r.billed - r.now), 0));
+  return { rows, fee, received: fin.all, billed, thisInv, outstanding: r2(billed - fin.all), toBill, extraIn: r2(Math.max(0, left)) };
+}
 
 /* ---------- files ---------- */
 async function uploadFile(file) {
@@ -1725,8 +1777,38 @@ function invoicePDF(id) {
   y += 4; doc.line(R - 260, y, R, y, { w: 0.8 }); row('Total', 'Tk ' + fmt(t.total), true);
   y += 18; y += doc.para(M, y, words(t.total), R - M, { size: 9, color: '#333333' });
   if (t.received > 0) { y += 8; doc.text(M, y, 'Received so far Tk ' + fmt(t.received) + '  ·  Balance due Tk ' + fmt(t.due), { size: 9.5, bold: true }); y += 14; }
+  const need = hh => { if (y + hh > doc.H - 170) { doc.page(); y = letterhead(doc) + 10; } };
+  /* the project's fee schedule: every stage with what has happened to it, then the running account */
+  const sb = inv.project ? stageBook(inv.project, inv) : null;
+  if (sb) {
+    need(70 + sb.rows.length * 20);
+    y += 22; doc.text(M, y, 'FEE SCHEDULE', { size: 9, bold: true, spacing: 1.2 }); doc.text(R, y, 'Total fee Tk ' + fmt(sb.fee) + ' (before VAT)', { size: 8.5, color: '#55565a', align: 'right' });
+    y += 8; doc.rect(M, y, R - M, 20, { fill: '#EFF2F4' });
+    const cN = M + 8, cS = M + 26, cP = R - 205, cA = R - 120, cT = R - 8;
+    doc.text(cN, y + 13.5, '#', { size: 8.5, bold: true }); doc.text(cS, y + 13.5, 'Stage', { size: 8.5, bold: true });
+    doc.text(cP, y + 13.5, '%', { size: 8.5, bold: true, align: 'right' }); doc.text(cA, y + 13.5, 'Amount (Tk)', { size: 8.5, bold: true, align: 'right' }); doc.text(cT, y + 13.5, 'Status', { size: 8.5, bold: true, align: 'right' });
+    y += 20;
+    const TAGC = { adv: ['#E3F1E8', '#1F6B3F'], rec: ['#E3F1E8', '#1F6B3F'], part: ['#FFF3DC', '#8A5A00'], due: ['#FFF3DC', '#8A5A00'], now: ['#c1272d', '#FFFFFF'], next: ['#F1F2F3', '#55565a'] };
+    sb.rows.forEach(r => {
+      const now = r.st === 'now', tag = STG_TAG[r.st].toUpperCase(), c = TAGC[r.st];
+      if (now) doc.rect(M, y, R - M, 20, { fill: '#FBEDEE' });
+      doc.text(cN, y + 13.5, String(r.n), { size: 9.5, bold: now });
+      let lab = r.label; while (doc.width(lab, 9.5, now) > cP - cS - 40 && lab.length > 8) lab = lab.slice(0, -2);
+      doc.text(cS, y + 13.5, lab === r.label ? lab : lab.trim() + '…', { size: 9.5, bold: now });
+      doc.text(cP, y + 13.5, fmt(r.pct) + '%', { size: 9.5, align: 'right' });
+      doc.text(cA, y + 13.5, fmt(r.amount), { size: 9.5, bold: now, align: 'right' });
+      const tw = doc.width(tag, 7, true) + 12; doc.rect(cT - tw, y + 4, tw, 12, { fill: c[0] }); doc.text(cT - 6, y + 12.8, tag, { size: 7, bold: true, color: c[1], align: 'right' });
+      y += 20; doc.line(M, y, R, y, { color: '#DCDDDE', w: 0.4 });
+    });
+    need(80);
+    y += 14; const bw = (R - M) / 4, box = [['Total fee', sb.fee], ['Received to date', sb.received], ['Billed to date', sb.billed], ['Still to bill', sb.toBill]];
+    doc.rect(M, y, R - M, 46, { fill: '#F6F7F8' });
+    box.forEach(([l, v], i) => { const x = M + i * bw + 10; doc.text(x, y + 16, l, { size: 8, color: '#55565a' }); doc.text(x, y + 34, 'Tk ' + fmt(v), { size: 11.5, bold: true, color: i === 2 ? '#c1272d' : '#231f20' }); });
+    y += 46 + 14;
+    doc.para(M, y, `Billed to date includes this invoice and the advance received. Outstanding on billed stages: Tk ${fmt(sb.outstanding)} before VAT. Upcoming stages are billed when each stage is reached.`, R - M, { size: 8, color: '#55565a' }); y += 22;
+  }
   const note = inv.note || S.settings.invNote || '';
-  if (note) { y += 14; doc.text(M, y, 'Notes', { size: 8.5, color: '#55565a' }); y += 13; doc.para(M, y, note, R - M, { size: 9 }); }
+  if (note) { need(40); y += 14; doc.text(M, y, 'Notes', { size: 8.5, color: '#55565a' }); y += 13; doc.para(M, y, note, R - M, { size: 9 }); }
   const sy = doc.H - 150; doc.line(M, sy, M + 170, sy, { color: '#939598', w: 0.5 }); doc.text(M, sy + 13, 'For ' + (S.settings.company || 'SLATE'), { size: 8.5, color: '#55565a' });
   return doc.output();
 }
@@ -2772,12 +2854,36 @@ function payRequest(r) {
 }
 
 /* ---------- invoices ---------- */
-function openInvoice(id) {
+function openInvoice(id, pre) {
   if (!can.enter()) return toast('Only the Principal, COO and Accountant can raise invoices.');
   const x = id ? S.invoices[id] : null;
-  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount) })), files: (x.files || []).slice() })
+  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '' })), files: (x.files || []).slice() })
     : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: 'none', vatPct: S.settings.vatPct || 15, note: '', files: [] };
+  if (!x && pre && pre.project) invPickProject(d, pre.project);
   openSheet({ type: 'invform', d, editId: id || null });
+}
+/* picking a project fills the client account (the project's fee account), the formal client name and the VAT terms */
+function invPickProject(d, pid) {
+  d.project = pid; const p = S.projects[pid]; if (!p) return;
+  const acct = Object.entries(S.ledgers).find(([, l]) => l.group === 'inc' && l.project === pid && l.active !== false);
+  if (acct) d.client = acct[0];
+  if (!d.clientName && p.client) d.clientName = String(p.client).toUpperCase();
+  const ids = (p.stages || []).map(x => x.id);
+  d.items = d.items.filter(i => i.stage ? ids.includes(i.stage) : (i.desc || '').trim() || parseAmt(i.amount));
+  if (ids.length) d.vatMode = feeVatDefault(p);
+  if (!d.items.length) d.items.push({ desc: '', amount: '' });
+}
+function stageLine(r) { return { desc: `Stage ${r.n}: ${r.label} (${r.pct}% of the fee)`, amount: String(r.amount), stage: r.id }; }
+function invStagePicker(d) {
+  const sb = d.project ? stageBook(d.project, { _id: S.sheet.editId, items: [] }) : null; if (!sb) return null;
+  const on = id => d.items.some(i => i.stage === id);
+  const toggle = r => { if (on(r.id)) d.items = d.items.filter(i => i.stage !== r.id); else { d.items = d.items.filter(i => i.stage || (i.desc || '').trim() || parseAmt(i.amount)); d.items.push(stageLine(r)); d.items.sort((a, b) => ((sb.rows.find(x => x.id === a.stage) || { n: 99 }).n) - ((sb.rows.find(x => x.id === b.stage) || { n: 99 }).n)); } if (!d.items.length) d.items.push({ desc: '', amount: '' }); renderSheet(); };
+  return h('div', { class: 'stg-pick' }, h('div', { class: 'ln-h', text: 'Fee stages · tick the stages this invoice bills' }),
+    sb.rows.map(r => { const free = r.st === 'next' || on(r.id);
+      return h('label', { class: 'stg-row' + (free ? '' : ' is-done') }, h('input', { type: 'checkbox', checked: on(r.id), disabled: !free, onchange: () => toggle(r) }),
+        h('span', { class: 'stg-l' }, h('b', { text: `${r.n}. ${r.label}` }), h('span', { class: 'f-hint', style: 'margin:0', text: `${r.pct}% · ${tk(r.amount)}` + (r.inv.length ? ' · ' + r.inv.join(', ') : '') })),
+        h('span', { class: 'stg-tag t-' + (on(r.id) ? 'now' : r.st), text: on(r.id) ? STG_TAG.now : STG_TAG[r.st] })); }),
+    h('div', { class: 'f-hint', text: `Fee ${tk(sb.fee)} · received ${tk(sb.received)} · billed before this invoice ${tk(sb.billed)} · still to bill ${tk(sb.toBill)}` }));
 }
 function sheetInvForm() {
   const d = D();
@@ -2788,7 +2894,8 @@ function sheetInvForm() {
     h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remove line', onclick: () => { d.items.splice(i, 1); if (!d.items.length) d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '−' }));
   const fields = [field('Client', sel('client', clients), 'Clients are the fee accounts in the books. Add a new one in More › Accounts.'),
     field('Name on the invoice', inp('clientName', { placeholder: 'Leave blank to use the client account name', style: 'text-transform:uppercase', autocapitalize: 'characters' })),
-    field('Project', sel('project', projOpts())),
+    field('Project', sel('project', projOpts(), { onpick: v => invPickProject(d, v) })),
+    invStagePicker(d),
     h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Due by', inp('due', { type: 'date' }))),
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
     h('div', { class: 'form-row' }, field('VAT', sel('vatMode', [['none', 'No VAT on this invoice'], ['add', 'Add VAT on top'], ['incl', 'Amounts include VAT']])), d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null),
@@ -2798,7 +2905,7 @@ function sheetInvForm() {
 function saveInvoice(status) {
   const d = D();
   if (!d.client) return fail('Choose the client.');
-  const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => ({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }));
+  const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const id = S.sheet.editId || 'i' + uidShort(), old = S.invoices[id];
   const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, note: (d.note || '').trim(), files: d.files || [],
@@ -2820,6 +2927,11 @@ function sheetInvoice() {
   if (can.enter() && st !== 'cancelled') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openInvoice(x._id), text: 'Edit' }));
   if (can.enter() && st !== 'cancelled' && !t.pays.length) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'cancelled', trail: trailAdd(raw.trail, 'cancelled') }), 'Cancelled'), text: 'Cancel invoice' }));
   if (acts.length) out.push(h('div', { class: 'actions' }, acts));
+  const sb = x.project ? stageBook(x.project, x) : null;
+  if (sb) out.push(h('div', { class: 'sec' }, secH('Fee stages', 'as printed on the invoice'), h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {},
+    sb.rows.map(r => h('tr', {}, h('td', { text: `${r.n}. ${r.label} · ${r.pct}%` }), h('td', {}, h('span', { class: 'stg-tag t-' + r.st, text: STG_TAG[r.st] })), h('td', { class: 'n', text: fmt(r.amount) }))),
+    h('tr', { class: 't' }, h('td', { text: 'Total fee' }), h('td'), h('td', { class: 'n', text: fmt(sb.fee) }))))),
+    h('div', { class: 'facts' }, fact('Received to date', tk(sb.received)), fact('Billed to date', tk(sb.billed), 'incl. this invoice'), fact('Outstanding', tk(sb.outstanding)), fact('Still to bill', tk(sb.toBill)))));
   if (t.pays.length) out.push(h('div', { class: 'sec' }, secH('Payments received'), h('div', { class: 'list' }, t.pays.map(p => moneyRowV(Object.assign({ id: p.id }, p.v))))));
   if ((x.files || []).length) out.push(h('div', { class: 'sec' }, secH('Files'), h('div', { class: 'files' }, x.files.map((f, i) => fileTile(f, () => openSheet({ type: 'doc', id: 'i:' + x._id + ':' + i }))))));
   out.push(timeline(x.trail));

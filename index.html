@@ -11436,15 +11436,15 @@ async function loadFeeFin(force){
 function feeRecOf(p){ const F=S.feeFin; if(!F||F.state!=='ok') return null; const all=Object.values(F.fp);
   return all.find(x=>x.osId===p.id)||(p.code?all.find(x=>!x.osId&&(x.code||'').toUpperCase()===p.code.toUpperCase()):null)||null; }
 function feeStats(fr){ const F=S.feeFin, tba=!!fr&&fr.feeBasis==='tba', fee=tba?0:+((fr||{}).fee)||0; if(!fr||!F||F.state!=='ok') return {fee,billed:0,col:0,due:0,unb:fee,tba,est:tba?+fr.estFee||0:0};
-  /* from Books: received = fee money paid in (with or without an invoice); billed = invoiced, or received where there was no invoice */
-  if(F.bkOk){ const b=(F.bk||{})[fr.osId]||{}, col=+b.rec||0, billed=Math.max(+b.inv||0,col);
+  /* from Books: received = fee money paid in (with or without an invoice); billed = invoiced + fee received without an invoice (the advance, Tally receipts) */
+  if(F.bkOk){ const b=(F.bk||{})[fr.osId]||{}, col=+b.rec||0, billed=b.unl!=null?(+b.inv||0)+Math.max(0,+b.unl||0):Math.max(+b.inv||0,col);
     return {fee,billed,col,due:Math.max(0,billed-col),unb:tba?0:Math.max(0,fee-billed),tba,est:tba?+fr.estFee||0:0,m:b.m||{}}; }
   let billed=0,col=0; const st=i=>i.status==='void'?'void':(i.status==='draft'||!i.status)?'draft':'issued';
   for(const i of F.inv.filter(i=>i.projectId===fr.id&&st(i)==='issued')){ const t=(+i.amount||0)*(1+(+i.vatPct||0)/100)||1, net=i.net!=null?+i.net:+i.amount||0;
     const paid=F.rec.filter(r=>r.invoiceId===i.id).reduce((s,r)=>s+(+r.received||0)+(+r.ait||0)+(+r.vds||0),0);
     billed+=net; col+=Math.min(paid,t)*net/t; }
   return {fee,billed,col,due:Math.max(0,billed-col),unb:Math.max(0,fee-billed)}; }
-const msLocked=(fr,m)=>!!fr&&!!S.feeFin&&S.feeFin.inv.some(i=>i.projectId===fr.id&&i.milestoneId===m.id&&i.status!=='void');
+const msLocked=(fr,m)=>!!fr&&!!S.feeFin&&(S.feeFin.inv.some(i=>i.projectId===fr.id&&i.milestoneId===m.id&&i.status!=='void')||(((S.feeFin.bk||{})[fr.osId]||{}).st||[]).includes(m.id));
 function bizHead(lead,action){ const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl, ph=window.innerWidth<=640, d=n=>n?' · '+n+(ph?'':' due'):'';
   const out=[h('div',{class:'page-h biz-h'},h('div',{},h('div',{class:'eyebrow',text:'Business · '+(S.biz.tab==='value'?'only you':'only you and the COO')}),h('h1',{class:'h1',text:({over:'Overview',money:'Money',leads:'Leads',proposed:'Proposals',clients:'Clients',fees:'Fees',hr:'HR & salaries',admin:'Running costs',value:'People value'})[S.biz.tab]||'Business'})),action?h('div',{class:'biz-act'},action):null),
     S.canWrite?null:h('div',{class:'bar pj-kind biz-bar'},h('div',{class:'biz-seg'},seg('Business',[['over','Overview'],['money','Money'],['leads','Leads'+d(nl)],['proposed',(ph?'Proposals':'Proposed')+d(np)],['clients','Clients'],['fees','Fees'],['hr','HR'],['admin','Admin'],...(S.uid===ownerId()?[['value',ph?'Value':'People value']]:[])],S.biz.tab,v=>{ S.biz.tab=v; render(true); window.scrollTo(0,0); })))];
