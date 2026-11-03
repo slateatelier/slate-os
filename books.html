@@ -1477,9 +1477,12 @@ function myQueue() {
 /* ---------- invoices ---------- */
 function invTotals(inv) {
   const sub = r2((inv.items || []).reduce((s, x) => s + (+x.amount || 0), 0));
-  const vp = +inv.vatPct || 0;
-  const vat = inv.vatMode === 'add' ? r2(sub * vp / 100) : inv.vatMode === 'incl' ? r2(sub - sub / (1 + vp / 100)) : 0;
-  const total = inv.vatMode === 'add' ? r2(sub + vat) : sub;
+  const vp = +inv.vatPct || 0, aitPct = +inv.aitPct || 0;
+  /* AIT added on top: the fee is net to SLATE, so it is grossed up until the client's AIT leaves exactly the fee */
+  const aitUp = inv.aitMode === 'add' && inv.vatMode !== 'incl' && aitPct > 0 && aitPct < 100 ? r2(sub / (1 - aitPct / 100) - sub) : 0;
+  const pre = r2(sub + aitUp);
+  const vat = inv.vatMode === 'add' ? r2(pre * vp / 100) : inv.vatMode === 'incl' ? r2(sub - sub / (1 + vp / 100)) : 0;
+  const total = inv.vatMode === 'add' ? r2(pre + vat) : pre;
   let received = 0; const pays = [];
   Object.entries(S.vouchers).forEach(([id, v]) => {
     if (!v || v.status === 'void' || v.status === 'split' || v.inv !== inv._id) return;
@@ -1488,9 +1491,9 @@ function invTotals(inv) {
   });
   received = r2(received);
   /* tax the client keeps back at source: AIT on the fee before VAT, and the VAT itself when the client withholds it (VDS) */
-  const base = r2(sub - (inv.vatMode === 'incl' ? vat : 0)), aitPct = +inv.aitPct || 0;
-  const ait = aitPct > 0 ? r2(base * aitPct / 100) : 0, vds = inv.vds && inv.vatMode !== 'none' ? vat : 0;
-  return { sub, vat, total, received, due: r2(total - received), pays, base, ait, vds, net: r2(total - ait - vds) };
+  const base = inv.vatMode === 'incl' ? r2(sub - vat) : pre;
+  const ait = aitUp > 0 ? aitUp : aitPct > 0 ? r2(base * aitPct / 100) : 0, vds = inv.vds && inv.vatMode !== 'none' ? vat : 0;
+  return { sub, aitUp, pre, vat, total, received, due: r2(total - received), pays, base, ait, vds, net: r2(total - ait - vds) };
 }
 function invStatus(inv) {
   if (inv.status === 'cancelled') return 'cancelled';
@@ -1889,7 +1892,8 @@ function invoicePDF(id, plain, unsaved) {
   });
   const row = (lab, val, b) => { y += b ? 18 : 15; doc.text(R - 130, y, lab, { size: 9.5, bold: b, color: b ? '#000000' : GREY, align: 'right' }); doc.text(R, y, val, { size: b ? 11 : 9.5, bold: b, align: 'right' }); };
   need(70);
-  if (inv.vatMode === 'add') { row('Subtotal', fmt(t.sub)); row('VAT ' + inv.vatPct + '%', fmt(t.vat)); }
+  if (t.aitUp > 0) { row('Fee, net to SLATE', fmt(t.sub)); row('AIT ' + inv.aitPct + '% added', fmt(t.aitUp)); }
+  if (inv.vatMode === 'add') { row(t.aitUp > 0 ? 'Value before VAT' : 'Subtotal', fmt(t.pre)); row('VAT ' + inv.vatPct + '%', fmt(t.vat)); }
   y += 6; doc.line(R - 250, y, R, y, { w: 1, color: '#000000' }); row('Total', 'Tk ' + fmt(t.total), true);
   if (inv.vatMode === 'incl') { y += 13; doc.text(R, y, 'Includes VAT ' + inv.vatPct + '%: Tk ' + fmt(t.vat), { size: 8.5, color: GREY, align: 'right' }); }
   if (t.ait > 0 || t.vds > 0) {
@@ -2999,8 +3003,8 @@ function payRequest(r) {
 function openInvoice(id, pre) {
   if (!can.enter()) return toast('Only the Principal, COO and Accountant can raise invoices.');
   const x = id ? S.invoices[id] : null;
-  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '' })), files: (x.files || []).slice(), aitPct: String(+x.aitPct || 0), vds: !!x.vds })
-    : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: S.settings.invVat || 'add', vatPct: S.settings.vatPct || 15, aitPct: String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct), vds: true, note: '', files: [], signIt: !!mySign() };
+  const d = x ? Object.assign({}, x, { items: (x.items || []).map(i => ({ desc: i.desc, amount: String(i.amount), stage: i.stage || '' })), files: (x.files || []).slice(), aitPct: String(+x.aitPct || 0), aitMode: x.aitMode || 'in', vds: !!x.vds })
+    : { date: today(), due: '', client: '', clientName: '', project: '', items: [{ desc: '', amount: '' }], vatMode: S.settings.invVat || 'add', vatPct: S.settings.vatPct || 15, aitPct: String(S.settings.aitPct == null ? 7.5 : S.settings.aitPct), aitMode: S.settings.aitMode || 'add', vds: true, note: '', files: [], signIt: !!mySign() };
   if (x) d.signIt = !!(x.sign && x.sign.uid === S.uid && mySign());
   if (!x && pre && pre.project) invPickProject(d, pre.project);
   openSheet({ type: 'invform', d, editId: id || null });
@@ -3041,7 +3045,8 @@ function sheetInvForm() {
     h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Due by', inp('due', { type: 'date' }))),
     h('div', { class: 'lines' }, h('div', { class: 'ln-h', text: 'What you are billing for' }), d.items.map(itemRow), h('button', { class: 'btn btn-sm', type: 'button', style: 'justify-self:start', onclick: () => { d.items.push({ desc: '', amount: '' }); renderSheet(); }, text: '+ Add line' })),
     h('div', { class: 'form-row' }, field('VAT', sel('vatMode', [['none', 'No VAT on this invoice'], ['add', 'Add VAT on top'], ['incl', 'Amounts include VAT']])), d.vatMode !== 'none' ? field('VAT %', inp('vatPct', { inputmode: 'decimal' })) : null),
-    h('div', { class: 'form-row' }, field('AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal', placeholder: '0' }), 'Included in the fee: taken from the fee before VAT. 0 if the client deducts none.'), d.vatMode !== 'none' ? chk('vds', 'The client withholds the VAT at source') : null),
+    h('div', { class: 'form-row' }, field('AIT', sel('aitMode', [['add', 'Added on top: SLATE gets the full fee'], ['in', 'Taken from the fee']])), field('AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal', placeholder: '0' }), '0 if the client deducts none.')),
+    d.vatMode !== 'none' ? chk('vds', 'The client withholds the VAT at source') : null,
     invNetHint(d),
     field('Note on the invoice', ta('note', { rows: 2, placeholder: S.settings.invNote || 'Payment terms, bank details' })),
     canSign() ? (mySign() ? chk('signIt', `Sign this invoice as ${mySign().name}, ${mySign().desig}`) : h('p', { class: 'f-hint', style: 'margin:0' }, 'To sign invoices digitally, add your signature in ', h('button', { class: 'linkish', type: 'button', onclick: () => openMySign(), text: 'More › My signature' }), '.'))
@@ -3054,7 +3059,7 @@ function previewInvoice() {
   const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const old = S.sheet.editId ? S.invoices[S.sheet.editId] : null;
-  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), status: 'draft', sign: d.signIt && mySign() ? signStamp() : (old && old.sign) || null };
+  const inv = { no: old && old.status !== 'draft' ? old.no : '', date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'add' ? 'add' : 'in', vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), status: 'draft', sign: d.signIt && mySign() ? signStamp() : (old && old.sign) || null };
   savePDF(() => invoicePDF(S.sheet.editId || '_preview', false, inv), safeName(`Preview ${inv.clientName || L(inv.client)}`) + '.pdf');
 }
 function saveInvoice(status) {
@@ -3063,10 +3068,10 @@ function saveInvoice(status) {
   const items = d.items.filter(x => (x.desc || '').trim() || parseAmt(x.amount)).map(x => Object.assign({ desc: (x.desc || '').trim(), amount: r2(parseAmt(x.amount) || 0) }, x.stage && d.project ? { stage: x.stage } : {}));
   if (!items.length || items.some(x => !(x.amount > 0))) return fail('Every line needs an amount.');
   const id = S.sheet.editId || 'i' + uidShort(), old = S.invoices[id];
-  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), files: d.files || [], sign: null,
+  const doc = { no: old ? old.no : nextInvNo(d.date), date: d.date || today(), due: d.due || '', client: d.client, clientName: (d.clientName || '').trim().toUpperCase(), project: d.project || '', items, vatMode: d.vatMode || 'none', vatPct: +d.vatPct || 0, aitPct: r2(parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'add' ? 'add' : 'in', vds: !!d.vds && (d.vatMode || 'none') !== 'none', note: (d.note || '').trim(), files: d.files || [], sign: null,
     status: old ? (old.status === 'draft' && status === 'issued' ? 'issued' : old.status) : status, trail: old ? trailAdd(old.trail, 'edited') : trailAdd([], status === 'issued' ? 'issued' : 'created'), at: new Date().toISOString(), by: old ? old.by : S.uid };
   /* the signature: signed now by the signer, or kept only if what the client sees is unchanged */
-  const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '']), x.vatMode, +x.vatPct || 0, +x.aitPct || 0, !!x.vds, x.note || '']);
+  const what = x => JSON.stringify([x.date, x.due || '', x.client, x.clientName || '', x.project || '', (x.items || []).map(i => [i.desc, +i.amount, i.stage || '']), x.vatMode, +x.vatPct || 0, +x.aitPct || 0, x.aitMode || 'in', !!x.vds, x.note || '']);
   doc.sign = d.signIt && mySign() ? signStamp() : old && old.sign && what(old) === what(doc) && !(old.sign.uid === S.uid && !d.signIt) ? old.sign : null;
   run(() => Store.put('invoices', id, doc), old ? 'Saved' : status === 'issued' ? 'Invoice ' + doc.no + ' issued' : 'Draft saved').then(ok => { if (ok) openSheet({ type: 'invoice', id }); });
 }
@@ -3079,7 +3084,7 @@ function invWithheld(x, amt) {
 /* the amount that reaches SLATE once the client keeps back AIT and VAT */
 function invNetHint(d) {
   const items = (d.items || []).map(x => ({ amount: parseAmt(x.amount) || 0 }));
-  const t = invTotals({ items, vatMode: d.vatMode, vatPct: +d.vatPct || 0, aitPct: +d.aitPct || 0, vds: !!d.vds, _id: '_hint' });
+  const t = invTotals({ items, vatMode: d.vatMode, vatPct: +d.vatPct || 0, aitPct: +d.aitPct || 0, aitMode: d.aitMode, vds: !!d.vds, _id: '_hint' });
   if (!(t.total > 0) || !(t.ait > 0 || t.vds > 0)) return null;
   return h('p', { class: 'f-hint', style: 'margin:0', text: `Invoice total ${tk(t.total)}. ` + (t.vds > 0 ? `VAT withheld ${tk(t.vds)}. ` : '') + (t.ait > 0 ? `AIT withheld ${tk(t.ait)}. ` : '') + `Net payable to SLATE ${tk(t.net)}.` });
 }
@@ -4023,7 +4028,7 @@ function moreSettings() {
     fact('Invoice numbers', (st.prefixes || {}).Invoice ? `${st.prefixes.Invoice}/${curFY().short}/001` : `INV/${curFY().short}/001`), fact('Checks on cash', st.flagCash ? 'On' : 'Off', 'Flags salary, rent and payments over Tk 50,000 made in cash'), fact('Number style', st.grouping === 'intl' ? '1,234,567' : '12,34,567')));
   return out;
 }
-function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', vatPct: String(st.vatPct || 15), aitPct: String(st.aitPct == null ? 7.5 : st.aitPct), invVat: st.invVat || 'add' }; }
+function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', vatPct: String(st.vatPct || 15), aitPct: String(st.aitPct == null ? 7.5 : st.aitPct), aitMode: st.aitMode || 'add', invVat: st.invVat || 'add' }; }
 function sheetSettings() {
   const cashL = [['', 'Ask each time']].concat(Object.keys(S.ledgers).filter(k => isCashL(k)).map(k => [k, L(k)]));
   const fields = [field('Company name on documents', inp('company')), field('Address', inp('address', { placeholder: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212' })),
@@ -4034,13 +4039,14 @@ function sheetSettings() {
     h('div', { class: 'form-row' }, field('Office staff float held by', sel('floatHolder', [['', 'No float']].concat((window.BooksHost && BooksHost.peopleIds ? BooksHost.peopleIds() : []).map(id => [id, nameOf(id)]).sort((a, b) => a[1].localeCompare(b[1]))))), field('Float kept in', sel('floatLedger', [['', 'Choose…']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'cash').map(k => [k, L(k)])))), field('Float amount (Tk)', inp('floatAmount', { inputmode: 'decimal' }))),
     field('Tax withheld (TDS) account', sel('tdsVendor', [['', 'Find automatically']].concat(Object.keys(S.ledgers).filter(k => groupOf(k) === 'stat').map(k => [k, L(k)])))),
     h('div', { class: 'form-row' }, field('Payment prefix', inp('pPayment')), field('Receipt prefix', inp('pReceipt')), field('Transfer prefix', inp('pContra')), field('Journal prefix', inp('pJournal')), field('Invoice prefix', inp('pInvoice'))),
-    h('div', { class: 'form-row' }, field('New invoices', sel('invVat', [['add', 'VAT added on top for the client'], ['none', 'No VAT'], ['incl', 'Amounts include VAT']])), field('Usual AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal' }), 'Taken from SLATE’s fee. 7.5% for a firm or company, 15% for an individual.')),
+    h('div', { class: 'form-row' }, field('New invoices', sel('invVat', [['add', 'VAT added on top for the client'], ['none', 'No VAT'], ['incl', 'Amounts include VAT']])), field('Usual AIT the client deducts (%)', inp('aitPct', { inputmode: 'decimal' }), '7.5% for a firm or company, 15% for an individual.')),
+    field('AIT on new invoices', sel('aitMode', [['add', 'Added on top: the proposed fee is net to SLATE'], ['in', 'Taken from the fee']])),
     h('div', { class: 'form-row' }, field('Usual VAT %', inp('vatPct', { inputmode: 'decimal' })), field('Number style', sel('grouping', [['lakh', '12,34,567 (lakh)'], ['intl', '1,234,567']])))
     , field('Note printed on invoices', ta('invNote', { rows: 2, placeholder: 'Bank details and payment terms' })), chk('flagCash', 'Check cash payments (salary, rent and payments over Tk 50,000 in cash)')];
   return [head('Settings', 'Edit settings'), form(null, fields, 'Save', () => {
     const d = D();
     const prefixes = Object.assign({}, S.settings.prefixes || {}, { Payment: d.pPayment.trim() || 'PV', Receipt: d.pReceipt.trim() || 'CV', Contra: d.pContra.trim() || 'CT', Journal: d.pJournal.trim() || 'JV', Invoice: d.pInvoice.trim() || 'INV' });
-    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), vatPct: +d.vatPct || 15, aitPct: Math.max(0, parseAmt(d.aitPct) || 0), invVat: d.invVat || 'add' }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
+    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), vatPct: +d.vatPct || 15, aitPct: Math.max(0, parseAmt(d.aitPct) || 0), aitMode: d.aitMode === 'in' ? 'in' : 'add', invVat: d.invVat || 'add' }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
   })];
 }
 
