@@ -1268,7 +1268,7 @@ const uidShort = () => Date.now().toString(36) + Math.random().toString(36).slic
 const S = {
   state: 'loading', uid: null, me: null, isOwner: false, admin: false, canWriteShared: null, readonly: false,
   settings: {}, catalog: {}, ledgers: {}, projects: {}, assets: {}, vouchers: {}, invoices: {}, files: {}, members: {}, signs: {},
-  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, staff: {}, payroll: {}, recurring: {}, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
+  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, staff: {}, payroll: {}, recurring: {}, rcmonth: {}, rcLive: false, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
   view: 'home', sub: '', f: { period: 'fy', kind: 'all', acc: '', proj: '', q: '', month: '' },
   rep: { id: '', from: '', to: '', asAt: '', ledger: '', fy: '' }, reqTab: 'mine', invTab: 'open', docKind: '', docQ: '',
   sheet: null, fabOpen: false, busy: false, pendingRender: false, pendingSheet: false
@@ -2763,11 +2763,11 @@ function saveVoucher(v, editId, after) {
   const id = editId || 'v' + uidShort();
   const doc = Object.assign({}, old || {}, v);
   doc.no = old && old.no && old.type === v.type && fyOf(old.date).short === fyOf(v.date).short ? old.no : SB.nextNumber(P(), v.type, v.date);
-  const forced = v.forceStatus, extra = v.trailExtra || []; delete doc.forceStatus; delete doc.trailExtra;
+  const forced = v.forceStatus, extra = v.trailExtra || [], noOpen = !!v.noOpen; delete doc.forceStatus; delete doc.trailExtra; delete doc.noOpen;
   let st = forced || startStatus(doc), trail = extra.concat(old ? trailAdd(old.trail, 'edited') : trailAdd([], 'created'));
   if (!forced) { if (myRole() === 'COO' && st !== 'pending') trail = trailAdd(trail, 'checked'); if (st === 'approved' && ['Principal', 'COO'].includes(myRole())) trail = trailAdd(trail, 'approved'); }
   doc.status = st; doc.trail = trail; doc.at = new Date().toISOString(); doc.madeBy = old ? old.madeBy || S.uid : S.uid; doc.madeName = old ? (old.madeName || madeName(Object.assign({}, old))) : nameOf(S.uid); doc.src = old ? old.src || 'app' : 'app';
-  return run(async () => { await Store.put('vouchers', id, doc); if (after) await after(id, doc); }, old ? 'Saved' : (st === 'approved' ? 'Saved' : 'Saved, waiting for ' + (st === 'pending' ? 'the COO’s check' : 'the Principal’s approval'))).then(ok => { if (ok) openSheet({ type: 'voucher', id }); });
+  return run(async () => { await Store.put('vouchers', id, doc); if (after) await after(id, doc); }, old ? 'Saved' : (st === 'approved' ? 'Saved' : 'Saved, waiting for ' + (st === 'pending' ? 'the COO’s check' : 'the Principal’s approval'))).then(ok => { if (ok && !noOpen) openSheet({ type: 'voucher', id }); });
 }
 
 /* ---------- journal (accountant) ---------- */
@@ -2836,6 +2836,13 @@ function sheetVoucher() {
   out.push(h('div', { class: 'facts' }, fact('Date', fmtD(v.date, true)), fact(s.kind === 'in' ? 'Received into' : s.kind === 'out' ? 'Paid from' : 'Cash and bank', s.accs.map(L).join(', ') || '—'),
     s.projs.length > 1 ? fact('Projects', s.projs.length + ' projects', 'Split below') : fact('Project', s.projs.map(projLabel).join(', ') || '—'), fact('Reference', v.ref || '—'), fact('Entered by', v.madeBy ? madeName(v) : (v.src === 'tally' ? 'Tally import' : '—'), v.at && v.src !== 'tally' ? fmtTs(v.at) : null), fact('Voucher', v.no || '—', v.type)));
   if (vNarr(v)) out.push(h('div', { class: 'card' }, h('div', { class: 'lbl', text: 'Note' }), h('div', { text: vNarr(v), style: 'overflow-wrap:anywhere' })));
+  const rc = v.rc && v.rc.id ? v.rc : null, needRemark = rcNeedsRemark(v);
+  if (rc) out.push(h('div', { class: 'callout' + (rc.over ? '' : ' ok') }, h('div', {}, h('b', { text: `Monthly entry: ${(S.recurring[rc.id] || {}).name || 'running cost'} · ${monthName(rc.month)}` })),
+    h('div', { class: 'muted', text: [`Estimate ${tk(rc.est)}`, rc.pct != null ? (rc.pct > 0 ? '+' : '') + rc.pct + '%' : '', rc.kwh ? rc.kwh + ' kWh' : '', rc.over ? `more than ${rc.lim || rcVarLimit()}% over the estimate` : ''].filter(Boolean).join(' · ') }),
+    rc.note ? h('div', { text: 'Remark: ' + rc.note }) : null,
+    needRemark && (can.check() || (can.enter() && ['pending', 'returned'].includes(st))) ? h('div', { style: 'display:grid;gap:6px;margin-top:6px' }, h('textarea', { id: 'rc-note', rows: 2, placeholder: 'Remark: why the bill is higher this month' }),
+      h('button', { class: 'btn btn-sm btn-primary', type: 'button', style: 'justify-self:start', onclick: () => { const t = (document.getElementById('rc-note').value || '').trim(); if (!t) return toast('Write the remark first.');
+        run(() => Store.patch('vouchers', v.id, { rc: Object.assign({}, raw.rc, { note: t }), trail: trailAdd(raw.trail, 'edited', 'Remark on the bill: ' + t) }), 'Remark saved'); }, text: 'Save remark' })) : null));
   out.push(splitTable(v));
   out.push(h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', { text: 'Debits and credits' }), h('button', { class: 'linkish', type: 'button', onclick: () => { S.sheet.showAcc = !S.sheet.showAcc; renderSheet(); }, text: S.sheet.showAcc ? 'Hide' : 'Show' })),
     S.sheet.showAcc ? accTableV(v) : null));
@@ -2854,12 +2861,13 @@ function sheetVoucher() {
       run(() => Store.patch('vouchers', v.id, { status: m === 'return' ? 'returned' : 'void', trail: trailAdd(raw.trail, m === 'return' ? 'returned' : 'cancelled', note) }), m === 'return' ? 'Sent back' : 'Cancelled').then(ok => { if (ok) { S.sheet.mode = null; renderSheet(); } });
     }));
   } else {
-    if (w === 'check' && can.check()) acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => doCheck(v), text: needs(v).approve && !can.approve(amt) ? 'Mark as checked' : 'Check and approve' }));
-    if ((w === 'check' || w === 'approve') && can.approve(amt)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => run(() => Store.patch('vouchers', v.id, { status: 'approved', trail: trailAdd(raw.trail, 'approved') }), 'Approved'), text: 'Approve' }));
+    const willApprove = !needs(v).approve || can.approve(amt);
+    if (w === 'check' && can.check() && !(needRemark && willApprove)) acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => doCheck(v), text: needs(v).approve && !can.approve(amt) ? 'Mark as checked' : 'Check and approve' }));
+    if (needRemark && (w === 'check' || w === 'approve') && (can.check() || can.approve(amt))) acts.push(h('span', { class: 'f-hint', text: 'Add the remark above to approve it.' }));
+    if ((w === 'check' || w === 'approve') && can.approve(amt) && !needRemark) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => run(() => Store.patch('vouchers', v.id, { status: 'approved', trail: trailAdd(raw.trail, 'approved') }), 'Approved'), text: 'Approve' }));
     if ((w === 'check' && can.check()) || (w === 'approve' && can.approve(amt))) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => { S.sheet.mode = 'return'; S.sheet.d = {}; renderSheet(); }, text: 'Send back' }));
     const canEdit = can.enter() && st !== 'void' && (!S.settings.lockDate || v.date > S.settings.lockDate);
     if (plan && can.enter()) acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { S.sheet.mode = 'split'; renderSheet(); }, text: 'Split by consultant' }));
-    if (can.enter() && v.form && v.form.kind === 'out' && st !== 'void') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => makeRecurringFrom(v.id), text: 'Repeat every month' }));
     if (canEdit) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => editVoucher(v.id), text: (st === 'approved' || st === 'tally') && myRole() !== 'Principal' ? 'Edit (needs approval again)' : 'Edit' }));
     if (downloadsCap) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => voucherPDF(v.id), safeName(`${v.no || v.type} ${vTitle(v)}`) + '.pdf'), text: s.kind === 'in' ? 'Money receipt (PDF)' : 'Voucher (PDF)' }));
     if (st !== 'void' && (myRole() === 'Principal' || (v.madeBy === S.uid && ['pending', 'returned'].includes(st)))) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => { S.sheet.mode = 'void'; S.sheet.d = {}; renderSheet(); }, text: 'Cancel entry' }));
@@ -3347,6 +3355,7 @@ const REPORTS = [
   { id: 'bs', t: 'What SLATE owns and owes', q: 'The balance sheet on any date.', who: 'all' },
   { id: 'projects', t: 'Projects', q: 'Fees, costs and profit for each project.', who: 'all' },
   { id: 'spend', t: 'Spending by project', q: 'How much went to each project, and to whom: consultants, suppliers and direct costs.', who: 'all' },
+  { id: 'rc', t: 'Running costs', q: 'The studio’s monthly running costs: each bill against its estimate, month by month.', who: 'all' },
   { id: 'counts', t: 'Cash counts', q: 'Note-by-note counts of the vault, office cash and petty cash.', who: 'all' },
   { id: 'ledger', t: 'Account statement', q: 'Every entry in one account, with its running balance. Use it as the cash or bank book.', who: 'acc' },
   { id: 'daybook', t: 'Day book', q: 'Every entry, line by line, for a period.', who: 'acc' },
@@ -3390,7 +3399,7 @@ const openLedger = (lid, from, to) => { Object.assign(S.rep, { ledger: lid }); i
 function viewReports() {
   if (S.sub) {
     const r = REPORTS.find(x => x.id === S.sub); if (!r) { S.sub = ''; return viewReports(); }
-    const fn = { pl: repPL, cf: repCF, bs: repBS, projects: repProjects, spend: repSpend, combined: repCombined, counts: repCounts, ledger: repLedger, daybook: repDaybook, tb: repTB, tax: repTax, assets: repAssets, checks: repChecks }[r.id];
+    const fn = { pl: repPL, cf: repCF, bs: repBS, projects: repProjects, spend: repSpend, combined: repCombined, counts: repCounts, rc: repRC, ledger: repLedger, daybook: repDaybook, tb: repTB, tax: repTax, assets: repAssets, checks: repChecks }[r.id];
     return [backBtn('Reports', () => { S.rep.proj = ''; S.rep.spendKey = ''; go('reports'); })].concat(fn(r));
   }
   const card = r => h('button', { class: 'rcard', type: 'button', onclick: () => go('reports', r.id) }, h('span', { class: 'rc-t', text: r.t }), h('span', { class: 'rc-q', text: r.q }));
@@ -3830,7 +3839,7 @@ async function saveXlsx(filename, sheets) {
 function exportReport(id) {
   const pr = repRange(), tag = id === 'bs' ? (S.rep.asAt || today()) : pr.from + ' to ' + pr.to;
   const r = REPORTS.find(x => x.id === id);
-  const sheets = { pl: plSheet, cf: cfSheet, bs: bsSheet, projects: projSheet, spend: spendSheet, combined: combinedSheet, counts: countsSheet, ledger: ledgerSheet, daybook: daybookSheet, tb: tbSheet, tax: taxSheet, assets: assetsSheet, checks: checksSheet }[id](pr);
+  const sheets = { pl: plSheet, cf: cfSheet, bs: bsSheet, projects: projSheet, spend: spendSheet, combined: combinedSheet, counts: countsSheet, rc: rcSheet, ledger: ledgerSheet, daybook: daybookSheet, tb: tbSheet, tax: taxSheet, assets: assetsSheet, checks: checksSheet }[id](pr);
   if (!sheets) return toast('Choose an account first.');
   saveXlsx(safeName(`SLATE ${r.t} ${id === 'ledger' ? L(S.rep.ledger) + ' ' : ''}${tag}`) + '.xlsx', sheets);
 }
@@ -3897,7 +3906,7 @@ function viewMore() {
     moreItem('Reconcile cash and bank', (() => { const m = lastMonth(), a = reconAccs(), n = a.filter(l => reconState(l, m).st === 'signed').length; return `${monthName(m)}: ${n} of ${a.length} accounts signed off`; })(), () => go('more', 'recon')),
     moreItem('Cash count history', Object.keys(S.cashcounts).length + ' counts saved', () => go('reports', 'counts')))));
   if (can.books()) out.push(h('div', { class: 'sec' }, secH('Every month'), h('div', { class: 'list' },
-    moreItem('Monthly entries', Object.keys(S.recurring).length ? Object.values(S.recurring).filter(r => r.active !== false).length + ' set up · rent, internet, retainers' : 'Rent, internet, utilities, retainers: ready each month in one tap', () => go('more', 'recurring')))));
+    moreItem('Monthly entries', (n => n ? n + ' to confirm · set up in Business › Running costs' : 'Rent, utilities, internet: confirm each month; set up in Business › Running costs')(recurringDue().length), () => go('more', 'recurring')))));
   if (can.enter()) out.push(h('div', { class: 'sec' }, secH('Team'), h('div', { class: 'list' },
     moreItem('Expense claims', 'Transport, meals and client costs approved in SLATE OS, paid once a month', () => go('more', 'conv')))));
   if (canPayroll()) out.push(h('div', { class: 'sec' }, secH('Salaries'), h('div', { class: 'list' },
@@ -4120,10 +4129,10 @@ function moreSettings() {
   out.push(h('div', { class: 'facts' }, fact('Company', st.company || 'SLATE'), fact('Address', st.address || 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212'), fact('Phone and email', [st.phone || '01749-390284', st.email || 'info@slate-atelier.com'].join(' · ')),
     fact('Financial year', fyRuleName(st), curFY().label + ': ' + fmtD(curFY().from, true) + ' to ' + fmtD(curFY().to, true)), fact('Books closed up to', st.lockDate ? fmtD(st.lockDate, true) : 'Open'), fact('Petty cash box', L(pettyLedger()) || '—'),
     fact('Usual cash account', L(st.defaultCash) || 'Ask each time'), fact('Tax withheld goes to', L(tdsLedger()) || '—'), fact('Voucher numbers', Object.entries(st.prefixes || {}).filter(([k]) => ['Payment', 'Receipt', 'Contra', 'Journal'].includes(k)).map(([k, v]) => `${k} ${v}/${curFY().short}/001`).join(' · ')),
-    fact('Invoice numbers', (st.prefixes || {}).Invoice ? `${st.prefixes.Invoice}/${curFY().short}/001` : `INV/${curFY().short}/001`), fact('Checks on cash', st.flagCash ? 'On' : 'Off', 'Flags salary, rent and payments over Tk 50,000 made in cash'), fact('Number style', st.grouping === 'intl' ? '1,234,567' : '12,34,567')));
+    fact('Invoice numbers', (st.prefixes || {}).Invoice ? `${st.prefixes.Invoice}/${curFY().short}/001` : `INV/${curFY().short}/001`), fact('Checks on cash', st.flagCash ? 'On' : 'Off', 'Flags salary, rent and payments over Tk 50,000 made in cash'), fact('Number style', st.grouping === 'intl' ? '1,234,567' : '12,34,567'), fact('Running cost bills', `Flagged over ${rcVarLimit()}% above the estimate`, 'A remark is needed before such a bill is approved')));
   return out;
 }
-function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', bin: st.bin || '', tin: st.tin || '', tradeLic: st.tradeLic || '', vatPct: String(st.vatPct || 15), aitPct: String(st.aitPct == null ? 7.5 : st.aitPct), invTerms: TAX_TERMS[st.invTerms] ? st.invTerms : 'both' }; }
+function settingsDraft() { const st = S.settings, p = st.prefixes || {}; return { company: st.company || 'SLATE', address: st.address || '', phone: st.phone || '', email: st.email || '', fyStart: String(st.fyStart || 7), fyRule: String(st.fyRule || 'bd'), lockDate: st.lockDate || '', pettyLedger: st.pettyLedger || pettyLedger(), pettyHolder: st.pettyHolder || pettyHolder(), pettyCap: String(st.pettyCap || 100000), floatHolder: st.floatHolder || '', floatLedger: st.floatLedger || '', floatAmount: st.floatAmount ? String(st.floatAmount) : '', defaultCash: st.defaultCash || '', tdsVendor: st.tdsVendor || '', pPayment: p.Payment || 'PV', pReceipt: p.Receipt || 'CV', pContra: p.Contra || 'CT', pJournal: p.Journal || 'JV', pInvoice: p.Invoice || 'INV', flagCash: !!st.flagCash, grouping: st.grouping || 'lakh', invNote: st.invNote || '', bin: st.bin || '', tin: st.tin || '', tradeLic: st.tradeLic || '', vatPct: String(st.vatPct || 15), aitPct: String(st.aitPct == null ? 7.5 : st.aitPct), invTerms: TAX_TERMS[st.invTerms] ? st.invTerms : 'both', rcVar: String(rcVarLimit()) }; }
 function sheetSettings() {
   const cashL = [['', 'Ask each time']].concat(Object.keys(S.ledgers).filter(k => isCashL(k)).map(k => [k, L(k)]));
   const fields = [field('Company name on documents', inp('company')), field('Address', inp('address', { placeholder: 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212' })),
@@ -4138,11 +4147,12 @@ function sheetSettings() {
     h('div', { class: 'form-row' }, field('Usual VAT %', inp('vatPct', { inputmode: 'decimal' })), field('Number style', sel('grouping', [['lakh', '12,34,567 (lakh)'], ['intl', '1,234,567']])))
     , h('div', { class: 'form-row' }, field('BIN (VAT registration)', inp('bin', { placeholder: 'Printed on invoices with VAT' })), field('TIN', inp('tin', { placeholder: 'For the client’s AIT certificate' })))
     , field('Trade licence number', inp('tradeLic', { placeholder: 'Printed on invoices if given' }))
-    , field('Note printed on invoices', ta('invNote', { rows: 2, placeholder: 'Bank details and payment terms' })), chk('flagCash', 'Check cash payments (salary, rent and payments over Tk 50,000 in cash)')];
+    , field('Note printed on invoices', ta('invNote', { rows: 2, placeholder: 'Bank details and payment terms' }))
+    , field('Running cost bill over its estimate by more than (%)', inp('rcVar', { inputmode: 'decimal' }), 'Such a bill is flagged to the COO and needs a remark before approval. 20% unless changed.'), chk('flagCash', 'Check cash payments (salary, rent and payments over Tk 50,000 in cash)')];
   return [head('Settings', 'Edit settings'), form(null, fields, 'Save', () => {
     const d = D();
     const prefixes = Object.assign({}, S.settings.prefixes || {}, { Payment: d.pPayment.trim() || 'PV', Receipt: d.pReceipt.trim() || 'CV', Contra: d.pContra.trim() || 'CT', Journal: d.pJournal.trim() || 'JV', Invoice: d.pInvoice.trim() || 'INV' });
-    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), bin: (d.bin || '').trim(), tin: (d.tin || '').trim(), tradeLic: (d.tradeLic || '').trim(), vatPct: +d.vatPct || 15, aitPct: Math.max(0, parseAmt(d.aitPct) || 0), invTerms: TAX_TERMS[d.invTerms] ? d.invTerms : 'both' }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
+    run(() => Store.patch('settings', 'main', { company: d.company.trim() || 'SLATE', address: d.address.trim(), phone: d.phone.trim(), email: d.email.trim(), fyStart: d.fyRule === 'bd' ? 7 : +d.fyRule, fyRule: d.fyRule, lockDate: d.lockDate || '', pettyLedger: d.pettyLedger || '', pettyHolder: d.pettyHolder || '', pettyCap: parseAmt(d.pettyCap) > 0 ? r2(parseAmt(d.pettyCap)) : 100000, floatHolder: d.floatHolder || '', floatLedger: d.floatLedger || '', floatAmount: parseAmt(d.floatAmount) > 0 ? r2(parseAmt(d.floatAmount)) : 0, defaultCash: d.defaultCash || '', tdsVendor: d.tdsVendor || S.settings.tdsVendor || '', prefixes, flagCash: !!d.flagCash, grouping: d.grouping, invNote: d.invNote.trim(), bin: (d.bin || '').trim(), tin: (d.tin || '').trim(), tradeLic: (d.tradeLic || '').trim(), vatPct: +d.vatPct || 15, aitPct: Math.max(0, parseAmt(d.aitPct) || 0), invTerms: TAX_TERMS[d.invTerms] ? d.invTerms : 'both', rcVar: parseAmt(d.rcVar) > 0 ? r2(parseAmt(d.rcVar)) : 20 }), 'Settings saved').then(ok => { if (ok) closeSheet(); });
   })];
 }
 
@@ -4353,6 +4363,8 @@ function salaryPDF(month) {
 Object.assign(SHEETS, { payreturn: sheetPayReturn, paypost: sheetPayPost, staffm: sheetStaff });
 
 /* ---------- time savers: approve small items together, monthly entries ---------- */
+/* a running-cost bill over the limit above its estimate needs a remark before it is approved */
+const rcNeedsRemark = v => !!(v && v.rc && v.rc.over && !String(v.rc.note || '').trim());
 const smallLimit = () => +settingsAppr().smallLimit || 0;
 function qAmt(it) { return it.kind === 'voucher' ? vAmt(it.v) : it.kind === 'request' ? +it.q.amount || 0 : 0; }
 /* items the viewer can clear in one go: the COO only small ones (up to the small limit), the Principal any approval */
@@ -4360,7 +4372,7 @@ function bulkable(q) {
   const lim = smallLimit(), pr = myRole() === 'Principal';
   /* an entry using a new category or vendor still waiting for approval goes one by one */
   const newL = it => it.kind === 'voucher' && it.v.lines.some(x => (S.ledgers[x.l] || {}).pending);
-  return q.filter(it => (it.kind === 'voucher' || it.kind === 'request') && ['check', 'approve'].includes(it.w) && (pr || qAmt(it) <= lim) && !newL(it));
+  return q.filter(it => (it.kind === 'voucher' || it.kind === 'request') && ['check', 'approve'].includes(it.w) && (pr || qAmt(it) <= lim) && !newL(it) && !(it.kind === 'voucher' && rcNeedsRemark(it.v)));
 }
 function bulkBox(q) {
   const items = bulkable(q); if (!items.length) return null;
@@ -4403,55 +4415,207 @@ function bulkApprove(list) {
   }, `${list.length} item${list.length === 1 ? '' : 's'} done`);
 }
 
-/* monthly entries: rent, internet, retainers. Each month they are ready for the Accountant to confirm in one tap. */
+/* ---------- monthly entries: the month's running costs ----------
+   Running costs are set up only in SLATE OS › Business › Running costs (Principal and COO), kept here as recurring/<id>.
+   On each due day SLATE OS adds the month's entry, rcmonth/<YYYY-MM>~<id>, marked "Amount to confirm". It is not in the
+   books until the Accountant confirms it: Fixed in one tap, Variable with the actual amount and the bill photo. Confirming
+   makes an ordinary payment that the COO checks and the Principal approves. A bill more than the limit over its estimate
+   (Settings, 20% unless set) is flagged to the COO and needs a remark before approval (the database holds both rules). */
 const curMonth = () => today().slice(0, 7);
+const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+const RC_FROM = '2026-11';
+const RC_KIND = { fixed: 'Fixed', variable: 'Variable', rent: 'Rent with advance' };
+const rcVarLimit = () => +S.settings.rcVar > 0 ? +S.settings.rcVar : 20;
+const ymAddB = (ym, n) => { const d = new Date(+ym.slice(0, 4), +ym.slice(5, 7) - 1 + n, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const rcDim = ym => new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate();
+function rcCost(id) {
+  const r = S.recurring[id]; if (!r) return null;
+  return { id, name: r.name || '', kind: ['fixed', 'variable', 'rent'].includes(r.kind) ? r.kind : 'fixed', amount: +r.amount || 0, est: +r.est || 0, payee: r.payee || r.party || '', meter: r.meter || '',
+    cat: r.cat || '', acc: r.acc || '', proj: r.proj || S.settings.overhead || '', day: +r.day || 1, paid: r.paid === 'post' ? 'post' : 'pre', kwh: !!r.kwh, seasonal: !!r.seasonal,
+    from: r.from || RC_FROM, until: r.until || '', rent: +r.rent || 0, advance: +r.advance || 0, adjust: +r.adjust || 0, advFrom: r.advFrom || '', active: r.active !== false, note: r.note || '' };
+}
+const rcCosts = () => Object.keys(S.recurring).map(rcCost).filter(Boolean);
+const rcOn = (c, ym) => c.active && c.from <= ym && (!c.until || ym <= c.until);
+const rcDueDate = (c, ym) => ym + '-' + String(Math.min(c.day, rcDim(ym))).padStart(2, '0');
+function rcRent(c, ym) {
+  const [y1, m1] = (c.advFrom || c.from).split('-').map(Number), n = (+ym.slice(0, 4) - y1) * 12 + (+ym.slice(5, 7) - m1) + 1;
+  if (n < 1 || !c.advance || !c.adjust) return { rent: c.rent, cash: c.rent };
+  const before = Math.max(0, c.advance - c.adjust * (n - 1)); return { rent: c.rent, cash: c.rent - Math.min(c.adjust, before, c.rent) };
+}
+function rcHist(id) { return Object.values(S.rcmonth).filter(m => m && m.cost === id && m.status === 'confirmed').sort((a, b) => b.month.localeCompare(a.month)); }
+/* same rule as the database: Fixed = the amount; Variable = the last 3 bills' average, or the same month last year once 12 months exist */
+function rcEstimate(c, ym) {
+  if (c.kind === 'rent') return rcRent(c, ym).cash;
+  if (c.kind !== 'variable') return c.amount;
+  const hs = rcHist(c.id).filter(m => m.month < ym);
+  if (c.seasonal && hs.length >= 12) { const s = hs.find(m => m.month === ymAddB(ym, -12)); if (s) return Math.round(+s.amount || 0); }
+  return hs.length ? Math.round(hs.slice(0, 3).reduce((s, m) => s + (+m.amount || 0), 0) / Math.min(3, hs.length)) : c.est;
+}
+function rcBasis(c, ym) {
+  if (c.kind !== 'variable') return c.kind === 'rent' ? 'Rent less the advance adjusted this month' : 'The fixed monthly amount';
+  const n = rcHist(c.id).filter(m => m.month < ym).length;
+  return c.seasonal && n >= 12 && rcHist(c.id).some(m => m.month === ymAddB(ym, -12)) ? 'Same month last year' : n ? `Average of the last ${Math.min(3, n)} bill${n > 1 ? 's' : ''}` : 'First estimate set by the COO';
+}
+/* the month's entries: the ones SLATE OS has added, plus (before go-live, or before today's run) the ones it will add */
+function rcRows(ym) {
+  const td = today(), out = [], seen = {};
+  Object.entries(S.rcmonth).forEach(([key, m]) => { if (!m || m.month !== ym) return; seen[m.cost] = 1;
+    out.push({ key, m, c: rcCost(m.cost) || { id: m.cost, name: m.name || 'Removed cost', kind: m.kind || 'fixed', cat: '', acc: '', proj: '', payee: '', meter: '', paid: 'post', kwh: false }, state: m.status, est: +m.est || 0, due: m.due || ym + '-01' }); });
+  if (ym >= RC_FROM) rcCosts().forEach(c => { if (seen[c.id] || !rcOn(c, ym)) return; const due = rcDueDate(c, ym);
+    out.push({ key: ym + '~' + c.id, m: null, c, state: due <= td ? (S.rcLive ? 'adding' : 'preview') : 'upcoming', est: rcEstimate(c, ym), due }); });
+  return out.sort((a, b) => a.due.localeCompare(b.due) || a.c.name.localeCompare(b.c.name));
+}
+const rcOpen = r => ['due', 'adding', 'preview'].includes(r.state);
+/* a month's overhead: confirmed bills at the actual, skipped at nothing, the rest (a Variable bill not in yet) at the estimate */
+function rcOverhead(ym) {
+  const rows = rcRows(ym); let act = 0, est = 0;
+  rows.forEach(r => { if (r.state === 'skipped') return; const full = r.c.kind === 'rent' ? rcRent(r.c, ym).rent : null;
+    if (r.state === 'confirmed') act += full != null ? full : (+r.m.amount || 0); else est += full != null ? full : r.est; });
+  return { rows, act: r2(act), est: r2(est), total: r2(act + est) };
+}
+/* due entries for the Accountant: this month and any earlier month still open */
 function recurringDue() {
-  const m = curMonth(), day = +today().slice(8, 10);
-  return Object.entries(S.recurring).map(([id, r]) => Object.assign({ id }, r)).filter(r => r.active !== false && (r.done || {})[m] == null && (+r.day || 1) <= day + 3).sort((a, b) => (+a.day || 1) - (+b.day || 1));
+  const tm = curMonth(), months = [...new Set([ymAddB(tm, -1), tm].concat(Object.values(S.rcmonth).filter(m => m && m.status === 'due').map(m => m.month)))].filter(m => m >= RC_FROM).sort();
+  return [].concat(...months.map(m => rcRows(m).filter(rcOpen)));
+}
+/* the database adds the entries; Books asks it to when it opens, so one due today is there straight away */
+let rcAsked = 0;
+async function rcEnsure(force) {
+  if (!window.BooksHost || !BooksHost.sb || !S.admin) return;
+  if (!force && Date.now() - rcAsked < 30 * 60 * 1000) return; rcAsked = Date.now();
+  try { const { error } = await BooksHost.sb.rpc('books_rc_due'); const was = S.rcLive; S.rcLive = !error || error.code !== 'PGRST202'; if (was !== S.rcLive) { render(); renderSheet(true); } }
+  catch (e) { /* stays as it was */ }
+}
+function rcRowEl(r, opts) {
+  const c = r.c, v = r.m && r.m.vid ? S.vouchers[r.m.vid] : null, st = v ? vStatus(v) : '';
+  const meta = [r.state === 'upcoming' ? 'Due ' + fmtD(r.due) : 'Due ' + fmtD(r.due), RC_KIND[c.kind] || 'Fixed', L(c.acc) || '', c.kind === 'variable' && rcOpen(r) ? 'estimate ' + tk(r.est) : ''].filter(Boolean).join(' · ');
+  const tag = rcOpen(r) ? h('span', { class: 'pill st-pending', text: 'Amount to confirm' }) : r.state === 'skipped' ? h('span', { class: 'tag', text: 'Skipped' }) : r.state === 'confirmed' && v ? pill(st) : null;
+  const amt = r.state === 'confirmed' ? fmt(r.m.amount) : r.state === 'skipped' ? '—' : (c.kind === 'variable' ? '≈ ' : '') + fmt(r.est);
+  const open = () => r.state === 'confirmed' && r.m.vid && S.vouchers[r.m.vid] ? openSheet({ type: 'voucher', id: r.m.vid }) : openRcConfirm(r.key);
+  const quick = opts && opts.quick && rcOpen(r) && can.enter() && c.kind !== 'variable'
+    ? h('button', { class: 'btn btn-sm btn-primary', type: 'button', disabled: !S.rcLive || S.busy, title: S.rcLive ? 'Confirm the amount: it goes to the COO for checking' : 'Confirming opens at go-live', onclick: e => { e.stopPropagation(); rcConfirmFixed(r); }, text: 'Confirm' }) : null;
+  return h('div', { class: 'rec-row' }, h('button', { class: 'row', type: 'button', onclick: open }, h('span', { class: 'ico out', 'aria-hidden': 'true', text: '↻' }),
+    h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: c.name + (r.m && r.m.month !== curMonth() && opts && opts.quick ? ' · ' + monthName(r.m.month).split(' ')[0] : '') }), tag, r.m && r.m.over ? h('span', { class: 'pill st-returned', text: (r.m.pct > 0 ? '+' : '') + r.m.pct + '%' }) : null),
+      h('div', { class: 'row-meta', text: meta })),
+    h('div', { class: 'row-amt' }, h('span', { class: 'a', text: amt }), r.state === 'confirmed' && c.kind === 'variable' ? h('span', { class: 'm', text: 'est. ' + fmt(r.est) }) : null)), quick);
 }
 function recurringBox() {
   if (!can.enter()) return null;
   const due = recurringDue(); if (!due.length) return null;
-  return widget('Monthly entries due', due.length + ' this month', wlist(due.map(r => h('div', { class: 'rec-row' }, h('button', { type: 'button', onclick: () => enterRecurring(r) }, h('span', { class: 't', text: r.name }), h('span', { class: 'm', text: `Usually on the ${ordinal(+r.day || 1)} · ${L(r.vendor) || L(r.cat)}` }), h('span', { class: 'd', text: tk(r.amount) })),
-    h('button', { class: 'linkish', type: 'button', onclick: () => run(() => Store.patch('recurring', r.id, { done: Object.assign({}, r.done || {}, { [curMonth()]: 'skipped' }) }), 'Skipped for this month'), text: 'Skip' })))), 'span2');
+  return widget('Monthly entries to confirm', due.length + (due.length === 1 ? ' entry' : ' entries'), h('div', { class: 'list' }, due.map(r => rcRowEl(r, { quick: true }))), 'span2',
+    h('button', { class: 'linkish', type: 'button', onclick: () => go('more', 'recurring'), text: 'All monthly entries' }));
 }
-const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
-function enterRecurring(r) {
-  const m = curMonth(), date = m + '-' + String(Math.min(+r.day || 1, daysInMonth(m))).padStart(2, '0');
-  openMoney('out', { mode: r.mode || 'spend', amount: String(r.amount), acc: r.acc || '', cat: r.cat || '', vendor: r.vendor || '', proj: r.proj || '', party: r.party || '', narr: (r.narr || r.name) + ' · ' + monthName(m), date: date > today() ? today() : date,
-    after: async (vid) => { await Store.patch('recurring', r.id, { done: Object.assign({}, (S.recurring[r.id] || {}).done || {}, { [m]: vid }) }); } });
+function rcConfirmFixed(r) {
+  if (!S.rcLive) return toast('Confirming opens at go-live.');
+  if (!r.m) { rcEnsure(true); return toast('It is just being added to the list. Try again in a moment.'); }
+  const lk = checkLock(today()); if (lk) return toast(lk);
+  saveVoucher(Object.assign(rcVoucher(r, { amount: r.est, date: today() }), { noOpen: true }));
 }
-function makeRecurringFrom(vid) {
-  const v = S.vouchers[vid], f = v && v.form; if (!f || f.kind !== 'out') return;
-  openSheet({ type: 'recurm', d: { name: vNarr(v).split(' · ')[0].slice(0, 60) || vTitle(v), amount: String(f.amount), day: String(+v.date.slice(8, 10)), mode: f.mode || 'spend', acc: f.acc, cat: f.cat, vendor: f.vendor || '', proj: f.proj || '', party: v.party || '', narr: vNarr(v).split(' · ')[0], active: true } });
+/* the payment that confirms a month: an ordinary money-out entry, tagged with the month it confirms */
+function rcVoucher(r, d) {
+  const c = r.c, ym = r.key.slice(0, 7), amt = r2(+d.amount || 0);
+  const md = { kind: 'out', mode: 'spend', amount: String(amt), acc: d.acc || c.acc, cat: c.cat, vendor: '', proj: c.proj, party: c.payee, tds: '', jvSplit: false };
+  const usage = c.paid === 'post' ? ymAddB(ym, -1) : ym;
+  return { type: 'Payment', date: d.date, party: c.payee || '', narr: `${c.name} · ${c.paid === 'post' ? 'bill for ' : ''}${monthName(usage)}` + (+d.kwh > 0 ? ` · ${+d.kwh} kWh` : ''),
+    ref: c.meter ? 'No. ' + c.meter : '', lines: moneyLines(md), files: d.files || [], inv: '', req: '',
+    form: { kind: 'out', mode: 'spend', vendor: '', amount: amt, acc: md.acc, to: '', cat: c.cat, proj: md.proj || '', jvSplit: false, tds: '', ait: '', vat: '', ref: '' },
+    rc: { id: c.id, month: ym, est: r.est, kwh: +d.kwh > 0 ? +d.kwh : null, note: (d.note || '').trim() } };
 }
-function moreRecurring() {
-  const list = Object.entries(S.recurring).map(([id, r]) => Object.assign({ id }, r)).sort((a, b) => (+a.day || 1) - (+b.day || 1));
-  const out = [pageH('Monthly entries', 'Payments that happen every month. Each month they wait on Home for the Accountant to confirm in one tap.', can.enter() ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openSheet({ type: 'recurm', d: { day: '1', active: true, mode: 'spend' } }), text: '+ New monthly entry' })] : null)];
-  if (!list.length) out.push(emptyBox('No monthly entries yet', 'Add rent, internet, utilities or a consultant retainer. Or open any money-out entry and tap “Repeat every month”.'));
-  else out.push(h('div', { class: 'list' }, list.map(r => h('button', { class: 'row', type: 'button', onclick: () => openSheet({ type: 'recurm', id: r.id, d: Object.assign({}, r, { amount: String(r.amount), day: String(r.day) }) }) }, h('span', { class: 'ico out', 'aria-hidden': 'true', text: '↻' }),
-    h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, h('span', { text: r.name }), r.active === false ? h('span', { class: 'tag', text: 'Paused' }) : null), h('div', { class: 'row-meta', text: `${ordinal(+r.day || 1)} of each month · ${L(r.vendor) || L(r.cat)} · from ${L(r.acc) || '—'}${(r.done || {})[curMonth()] ? ' · done this month' : ''}` })),
-    h('div', { class: 'row-amt' }, h('span', { class: 'a', text: fmt(r.amount) }))))));
+const rcOverBy = (amt, est) => est > 0 && amt > est * (1 + rcVarLimit() / 100);
+function openRcConfirm(key) {
+  const r = rcRows(key.slice(0, 7)).find(x => x.key === key); if (!r) return;
+  openSheet({ type: 'rcconf', key, d: { amount: r.c.kind === 'variable' ? '' : String(r.est), date: today(), acc: r.c.acc, kwh: '', note: '', files: [] } });
+}
+function sheetRcConfirm() {
+  const key = S.sheet.key, ym = key.slice(0, 7), r = rcRows(ym).find(x => x.key === key);
+  if (!r) return [head('Monthly entry', 'Not found'), h('p', { class: 'muted', text: 'This entry is no longer in the list.' })];
+  const c = r.c, d = D(), m = S.sheet.mode, vari = c.kind === 'variable', amt = parseAmt(d.amount) || 0, pct = r.est > 0 && amt > 0 ? Math.round((amt - r.est) / r.est * 100) : null;
+  const over = rcOverBy(amt, r.est), willApprove = startStatus({ type: 'Payment', lines: moneyLines({ kind: 'out', mode: 'spend', amount: String(amt || 1), acc: d.acc || c.acc, cat: c.cat, proj: c.proj, jvSplit: false }) }) === 'approved';
+  const out = [head(monthName(ym) + ' · ' + (r.state === 'skipped' ? 'Skipped' : rcOpen(r) ? 'Amount to confirm' : 'Coming'), c.name)];
+  if (!S.rcLive) out.push(h('div', { class: 'callout' }, h('div', {}, h('b', { text: 'Preview' })), h('div', { class: 'muted', text: 'Confirming opens at go-live, once the database part is run. Nothing here is saved yet.' })));
+  out.push(h('div', { class: 'facts' }, fact('Payee', c.payee || '—'), fact('Account / meter no.', c.meter || '—'), fact('Head of account', L(c.cat) || '—'), fact('Cost centre', c.proj ? projLabel(c.proj) : '—'),
+    fact('Cash point', L(c.acc) || '—'), fact('Due', fmtD(r.due, true), c.paid === 'post' ? 'Postpaid: the bill for ' + monthName(ymAddB(ym, -1)) : 'Prepaid: for ' + monthName(ym)),
+    fact(vari ? 'Estimate' : 'Amount', tk(r.est), rcBasis(c, ym)), fact('Set up', 'Business › Running costs', 'By the Principal or the COO')));
+  if (m === 'skip') {
+    out.push(form('Skip ' + monthName(ym), [field('Why it is skipped this month', ta('skipNote', { rows: 2, required: true, placeholder: 'e.g. Paid with last month’s bill' }))], 'Skip this month', () => {
+      const note = (D().skipNote || '').trim(); if (!note) return fail('Write a short reason.');
+      run(() => Store.patch('rcmonth', key, { status: 'skipped', skipNote: note, skipBy: S.uid, skipAt: new Date().toISOString() }), 'Skipped for ' + monthName(ym)).then(ok => { if (ok) closeSheet(); });
+    }));
+    return out;
+  }
+  if (r.state === 'skipped') {
+    out.push(h('div', { class: 'callout' }, h('div', {}, h('b', { text: 'Skipped this month' })), h('div', { class: 'muted', text: r.m.skipNote || '' })));
+    if (can.check()) out.push(h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: () => run(() => Store.patch('rcmonth', key, { status: 'due', skipNote: '', skipBy: S.uid, skipAt: new Date().toISOString() }), 'Back in the list'), text: 'Put it back to confirm' })));
+    return out;
+  }
+  if (r.state === 'upcoming') { out.push(h('p', { class: 'muted', text: `It appears here to confirm on ${fmtD(r.due, true)}.` })); return out; }
+  if (!can.enter()) return out;
+  const hint = () => { const a = parseAmt(D().amount) || 0, p = r.est > 0 && a > 0 ? Math.round((a - r.est) / r.est * 100) : null;
+    return p == null ? (vari ? `Estimate ${tk(r.est)}.` : '') : `${p === 0 ? 'Same as the estimate' : (p > 0 ? '+' : '') + p + '% against the estimate of ' + tk(r.est)}${rcOverBy(a, r.est) ? ` — more than ${rcVarLimit()}% over: the COO is told and a remark is needed before approval.` : '.'}`; };
+  const fields = [
+    h('div', { class: 'form-row' }, field(vari ? 'Actual bill (Tk) *' : 'Amount (Tk)', inp('amount', { inputmode: 'decimal', class: 'amt-in', placeholder: vari ? '≈ ' + fmt(r.est) : '', autocomplete: 'off' })), field('Date paid', inp('date', { type: 'date', max: today() }))),
+    h('div', { id: 'rc-var', class: 'f-hint', style: over ? 'color:var(--overdue);margin-top:-6px' : 'margin-top:-6px', text: hint() }),
+    c.kwh ? field('Units (kWh)' + (vari ? ' *' : ''), inp('kwh', { inputmode: 'numeric', placeholder: 'from the bill' })) : null,
+    field('Paid from', sel('acc', cashOpts(d.acc)), 'The cash point set up for this cost; change it only if it was paid from somewhere else this time.'),
+    vari ? h('div', {}, h('div', { class: 'lbl', style: 'margin-bottom:4px', text: 'Bill photo *' }), attachBlock('files')) : attachBlock('files'),
+    over || (d.note || '') ? field('Remark' + (over && willApprove ? ' *' : ''), ta('note', { rows: 2, placeholder: 'Why the bill is higher this month' }), over && !willApprove ? 'Optional here: the COO adds one when checking if you don’t.' : null) : null];
+  out.push(form(null, fields, S.rcLive ? 'Confirm' : 'Confirming opens at go-live', () => {
+    if (!S.rcLive) return fail('Confirming opens at go-live, once the database part is run.');
+    if (!r.m) { rcEnsure(true); return fail('It is just being added to the list. Try again in a moment.'); }
+    const dd = D(), a = parseAmt(dd.amount);
+    if (!(a > 0)) return fail(vari ? 'Enter the actual bill.' : 'Enter the amount.');
+    if (!dd.date) return fail('Pick the date paid.'); const lk = checkLock(dd.date); if (lk) return fail(lk);
+    if (vari && !(dd.files || []).length) return fail('Attach the bill photo.');
+    if (c.kwh && vari && !(parseAmt(dd.kwh) > 0)) return fail('Enter the units (kWh) from the bill.');
+    if (rcOverBy(a, r.est) && willApprove && !(dd.note || '').trim()) return fail(`This bill is more than ${rcVarLimit()}% over the estimate. Add a remark.`);
+    if (!c.cat || !(dd.acc || c.acc)) return fail('This cost has no head of account or cash point. Ask the COO to set it in Business › Running costs.');
+    saveVoucher(rcVoucher(r, { amount: a, date: dd.date, acc: dd.acc, kwh: dd.kwh, note: dd.note, files: dd.files }));
+  }, can.check() && r.m ? h('button', { class: 'btn', type: 'button', onclick: () => { S.sheet.mode = 'skip'; S.sheet.d.skipNote = ''; renderSheet(); }, text: 'Skip this month' }) : null));
+  setTimeout(() => { const el = document.getElementById('sh-amount'); if (el && !el.dataset.rc) { el.dataset.rc = '1'; el.addEventListener('input', () => { const t = document.getElementById('rc-var'), a = parseAmt(el.value) || 0, ov = rcOverBy(a, r.est); if (t) { t.textContent = hint(); t.style.color = ov ? 'var(--overdue)' : ''; } if (ov !== over) renderSheet(); }); } }, 0);
   return out;
 }
-function sheetRecur() {
-  const id = S.sheet.id, d = D();
-  const fields = [field('Name', inp('name', { placeholder: 'e.g. Office rent' })), h('div', { class: 'form-row' }, field('Amount (Tk)', inp('amount', { inputmode: 'decimal' })), field('Day of the month', inp('day', { inputmode: 'numeric' }))),
-    field('Paid from', sel('acc', cashOpts(d.acc))),
-    seg('Kind of payment', [['spend', 'Pay for something'], ['bill', 'Pay a bill already recorded']], d.mode || 'spend', m => { d.mode = m; d.cat = ''; renderSheet(); }),
-    d.mode === 'bill' ? field('Paid to', sel('cat', [['', 'Choose…']].concat(oweOpts(d.cat)))) : field('What it is for', sel('cat', [['', 'Choose…']].concat(spendOpts(d.cat)))),
-    d.mode === 'bill' ? null : field('Paid to', sel('vendor', [['', 'Not a consultant or vendor']].concat(vendorOpts(d.vendor)))),
-    d.mode !== 'bill' && !d.vendor ? field('Name of the person or shop', inp('party')) : null,
-    field('Project', sel('proj', projOpts())), field('Note on each entry', inp('narr', { placeholder: 'e.g. Office rent' })), chk('active', 'Active')];
-  const extra = id ? [h('button', { class: 'btn btn-danger', type: 'button', onclick: () => run(() => Store.del('recurring', id), 'Removed').then(ok => { if (ok) closeSheet(); }), text: 'Remove' })] : [];
-  return [head('Monthly entry', id ? S.recurring[id].name : 'New monthly entry'), form(null, fields, 'Save', () => {
-    if (!(d.name || '').trim()) return fail('Give it a name.'); if (!(parseAmt(d.amount) > 0)) return fail('Enter the amount.');
-    const day = Math.max(1, Math.min(28, parseInt(d.day, 10) || 1)); if (!d.acc) return fail('Choose where it is paid from.'); if (!d.cat) return fail(d.mode === 'bill' ? 'Choose who is paid.' : 'Choose what it is for.');
-    const nid = id || 'rc' + uidShort();
-    run(() => Store.put('recurring', nid, Object.assign({}, S.recurring[id] || {}, { name: d.name.trim(), amount: r2(parseAmt(d.amount)), day, acc: d.acc, mode: d.mode || 'spend', cat: d.cat, vendor: d.mode === 'bill' ? '' : (d.vendor || ''), party: (d.party || '').trim(), proj: d.proj || '', narr: (d.narr || '').trim(), active: d.active !== false, by: S.uid, at: new Date().toISOString() })), 'Saved').then(ok => { if (ok) closeSheet(); });
-  }, h('span', { class: 'actions' }, extra))];
+function moreRecurring() {
+  rcEnsure();
+  const tm = curMonth(), ym = S.rcYm || tm, ov = rcOverhead(ym), rows = ov.rows;
+  const out = [pageH('Monthly entries', 'The month’s running costs, ready to confirm. They are set up in SLATE OS › Business › Running costs by the Principal and the COO. Fixed: confirm in one tap. Variable: enter the actual bill and attach its photo. Then the COO checks it and the Principal approves it.')];
+  if (!S.rcLive) out.push(h('div', { class: 'callout' }, h('div', {}, h('b', { text: 'Preview' })), h('div', { class: 'muted', text: 'This is how the list will work. Entries shown as due are worked out here; confirming opens at go-live.' })));
+  out.push(h('div', { class: 'bar' }, h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Previous month', onclick: () => { S.rcYm = ymAddB(ym, -1); render(true); }, text: '‹' }), h('b', { style: 'min-width:120px;text-align:center', text: monthName(ym) }),
+    h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Next month', onclick: () => { S.rcYm = ymAddB(ym, 1); render(true); }, text: '›' }), ym !== tm ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { S.rcYm = tm; render(true); }, text: 'This month' }) : null));
+  const toC = rows.filter(rcOpen), conf = rows.filter(r => r.state === 'confirmed'), soon = rows.filter(r => r.state === 'upcoming'), skip = rows.filter(r => r.state === 'skipped');
+  out.push(h('div', { class: 'kpis' }, kpi(ym > tm ? 'Forecast' : 'Overhead', tkShort(ov.total), ov.est ? 'incl. ' + tkShort(ov.est) + ' by estimate' : 'all confirmed'), kpi('Confirmed', tkShort(ov.act), conf.length + ' of ' + rows.length),
+    kpi('To confirm', String(toC.length), toC.length ? tkShort(toC.reduce((s, r) => s + r.est, 0)) : ''), kpi('Coming', String(soon.length), soon.length ? tkShort(soon.reduce((s, r) => s + r.est, 0)) : '')));
+  if (!rows.length) out.push(emptyBox(ym < RC_FROM ? 'Before monthly entries started' : 'Nothing this month', ym < RC_FROM ? 'Monthly entries start in November 2026.' : 'No running costs are set up for this month. The Principal or the COO adds them in Business › Running costs.'));
+  [['To confirm', toC], ['Coming this month', soon], ['Confirmed', conf], ['Skipped', skip]].forEach(([t, xs]) => {
+    if (xs.length) out.push(h('div', { class: 'sec' }, secH(t, String(xs.length)), h('div', { class: 'list' }, xs.map(r => rcRowEl(r, { quick: t === 'To confirm' }))))); });
+  const costs = rcCosts().sort((a, b) => a.day - b.day);
+  if (costs.length) out.push(h('details', { class: 'sec' }, h('summary', { class: 'sec-h', style: 'cursor:pointer' }, h('h2', { text: 'Set up in Business' }), h('span', { class: 'cnt', text: String(costs.length) })),
+    h('p', { class: 'muted', style: 'margin:0 4px 6px', text: 'Read-only here. To add, change or pause one, the Principal or the COO opens SLATE OS › Business › Running costs.' }),
+    table(['Cost', 'Due', 'Amount', 'Paid from'], costs.map(c => ({ c: [two(c.name + (c.active ? '' : ' (paused)'), [RC_KIND[c.kind], L(c.cat), c.payee].filter(Boolean).join(' · ')), ordinal(c.day), (c.kind === 'variable' ? '≈ ' : '') + fmt(rcEstimate(c, tm)), L(c.acc)] })), [2])));
+  return out;
 }
-Object.assign(SHEETS, { recurm: sheetRecur });
+/* report: the month's running costs, estimate against actual */
+function repRC(r) {
+  const tm = curMonth(), ym = S.rep.rcYm || tm, ov = rcOverhead(ym);
+  const out = [repHead(r), h('div', { class: 'bar' }, h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Previous month', onclick: () => { S.rep.rcYm = ymAddB(ym, -1); render(true); }, text: '‹' }), h('b', { style: 'min-width:120px;text-align:center', text: monthName(ym) }),
+    h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Next month', onclick: () => { S.rep.rcYm = ymAddB(ym, 1); render(true); }, text: '›' }))];
+  out.push(h('div', { class: 'say' }, ym > tm ? ['A future month: every cost at its amount or estimate, ', h('b', { text: tk(ov.total) }), ' in all.']
+    : ['Running the studio in ', monthName(ym), ' cost ', h('b', { text: tk(ov.total) }), ov.est ? [': ', tk(ov.act), ' from confirmed bills and ', tk(ov.est), ' by estimate for bills not confirmed yet. Each estimate is replaced by the actual bill when it is confirmed.'] : ', all from confirmed bills.']));
+  const rows = ov.rows.map(x => { const act = x.state === 'confirmed' ? +x.m.amount || 0 : null, df = act != null ? r2(act - x.est) : null;
+    return { c: [two(x.c.name, [L(x.c.cat), x.c.proj ? projLabel(x.c.proj) : ''].filter(Boolean).join(' · ')), fmt(x.est), act != null ? fmt(act) : '', df != null ? (df > 0 ? '+' : df < 0 ? '−' : '') + fmt(Math.abs(df)) : '',
+      x.state === 'confirmed' ? (x.m.over ? 'Over the estimate' : 'Confirmed') : x.state === 'skipped' ? 'Skipped' : x.state === 'upcoming' ? 'Coming' : x.c.kind === 'variable' ? 'Estimate (bill not in)' : 'Amount (not confirmed)'],
+      click: x.m && x.m.vid && S.vouchers[x.m.vid] ? () => openSheet({ type: 'voucher', id: x.m.vid }) : null }; });
+  rows.push({ cls: 't', c: ['Overhead for ' + monthName(ym), '', fmt(ov.act), '', 'Total ' + fmt(ov.total)] });
+  out.push(table(['Cost', 'Estimate', 'Actual', 'Difference', 'Counted as'], rows, [1, 2, 3]));
+  const ms = [-5, -4, -3, -2, -1, 0].map(n => ymAddB(ym, n)).filter(m => m >= RC_FROM);
+  if (ms.length > 1) out.push(h('div', { class: 'sec' }, secH('Month by month'), table(['Month', 'Confirmed', 'By estimate', 'Overhead'], ms.map(m => { const o = rcOverhead(m); return { c: [monthName(m), fmt(o.act), o.est ? fmt(o.est) : '—', fmt(o.total)], click: () => { S.rep.rcYm = m; render(true); } }; }), [1, 2, 3])));
+  return out;
+}
+function rcSheet() {
+  const ym = S.rep.rcYm || curMonth(), ov = rcOverhead(ym);
+  return [{ name: 'Running costs ' + ym, wide: [0], rows: [['Cost', 'Head of account', 'Cost centre', 'Due', 'Estimate', 'Actual', 'Counted', 'Status']].concat(ov.rows.map(x => [x.c.name, L(x.c.cat), x.c.proj ? projLabel(x.c.proj) : '', x.due, x.est, x.state === 'confirmed' ? +x.m.amount || 0 : '',
+    x.state === 'skipped' ? 0 : x.state === 'confirmed' ? +x.m.amount || 0 : x.est, x.state])).concat([['Overhead for ' + monthName(ym), '', '', '', '', ov.act, ov.total, '']]) }];
+}
+Object.assign(SHEETS, { rcconf: sheetRcConfirm });
 
 /* ---------- settle an advance: money paid earlier becomes a cost once the bill or goods come ---------- */
 function openAdvances() {
@@ -4612,12 +4776,12 @@ function forecastBox() {
   });
   const burn = r2(avg.out - avg.fees - avg.otherIn);
   const pay = Object.values(S.payroll).sort((a, b) => b.month.localeCompare(a.month))[0], sal = pay ? payTotals(payRows(pay)).net : 0;
-  const rec = r2(Object.values(S.recurring).filter(r => r.active !== false).reduce((s, r) => s + (+r.amount || 0), 0)), ow = owes();
+  const cm = curMonth(), nm = ymAddB(cm, 1), rec = r2(rcRows(cm).filter(rcOpen).concat(rcRows(cm).filter(r => r.state === 'upcoming')).reduce((s, r) => s + r.est, 0)), recN = rcOverhead(nm).total, ow = owes();
   const firstNeg = ends.findIndex(x => x < 0);
   const notes = [h('div', { class: 'muted', style: 'font-size:13px' }, hasPlan ? 'Worked out from the plan. ' : 'No plan yet, so this uses the average of the last six months. ',
     firstNeg >= 0 ? ['At this rate cash and bank run out in ', h('b', { text: monthName(ms[firstNeg]) }), burn > 0 ? [', unless more fees come in. Over the last six months SLATE spent about ', h('b', { text: tk(Math.round(burn / 100) * 100) }), ' a month more than it collected.'] : ', unless more fees come in.']
       : 'Cash and bank stay above zero for the next three months.')];
-  const fixed = [sal ? ['Salaries (last salary sheet)', sal] : null, rec ? ['Monthly entries (rent, internet …)', rec] : null, ow.by.pay ? ['Owed to consultants and vendors now', ow.by.pay] : null, ow.by.stat ? ['Tax and VAT to deposit', ow.by.stat] : null, ow.by.accr ? ['Salaries and costs owed', ow.by.accr] : null].filter(Boolean);
+  const fixed = [sal ? ['Salaries (last salary sheet)', sal] : null, rec ? ['Running costs still to confirm in ' + monthName(cm), rec] : null, recN ? ['Running costs in ' + monthName(nm) + ' (amounts and estimates)', recN] : null, ow.by.pay ? ['Owed to consultants and vendors now', ow.by.pay] : null, ow.by.stat ? ['Tax and VAT to deposit', ow.by.stat] : null, ow.by.accr ? ['Salaries and costs owed', ow.by.accr] : null].filter(Boolean);
   return widget('Cash for the next 3 months', hasPlan ? 'From the plan' : 'From the last 6 months', h('div', { style: 'display:grid;gap:10px' }, table(['', 'Start', 'Coming in', 'Going out', 'End'], rows, [1, 2, 3, 4]), notes,
     fixed.length ? h('div', {}, h('div', { class: 'lbl', style: 'margin-bottom:4px', text: 'Already known to go out' }), wlist(fixed.map(([n, v]) => h('button', { type: 'button', onclick: () => go('reports', 'bs') }, h('span', { class: 't', text: n }), h('span', { class: 'd', text: tk(v) }))))) : null), 'span2');
 }
@@ -5385,7 +5549,7 @@ async function holderAutoApprove(key, body) {
 }
 
 /* ---------- start-up: capabilities, roles, live data ---------- */
-const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs'];
+const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'rcmonth', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs'];
 const NEED = ['settings', 'ledgers', 'vouchers', 'projects'];
 let loaded = {}, profTimer = null, catTimer = null, lastProfKey = '';
 function changed() { S.ver++; render(); renderSheet(true); scheduleProfiles(); scheduleCatalog(); }
@@ -5462,6 +5626,7 @@ async function boot() {
     }));
     Object.keys((S.settings && S.settings.team) || {}).forEach(watchRequests);
     watchRequests(S.uid);
+    setTimeout(() => rcEnsure(true), 1500);
   } else {
     Store.watchColl('reqdec', docs => { S.reqdec = docs; changed(); });
     ['shopitems', 'shopvendors', 'shoplists'].forEach(c => Store.watchColl(c, docs => { S[c] = docs; changed(); }));

@@ -6302,7 +6302,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='recPay'?sheetRecPay():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+(S.sheet.type==='propQuick'&&!S.sheet.done?' panel-wide':'')+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   const dock=dockable(); document.body.classList.toggle('sheet-dock',dock);
@@ -9145,7 +9145,7 @@ const HOWDO=[
  ['biz','boss','Schedule a meeting with a lead',['Open the lead › Meetings › + Schedule a meeting.','Add the date, time and who to invite; tap Schedule and invite.'],'It is a Business development meeting linked to the lead; the lead’s next follow-up moves to that day.','On any Business development or Other meeting you can also pick the lead under Lead or proposal. Only you and the COO see the link.'],
  ['biz','boss','Set a project’s fee, costs and site visit terms',['Business › Fees › open the project.','Choose per sft or lump sum, set the payment milestones (they add up to 100%), cost budget lines and site visit terms.','Tap Save.'],'Finance uses the same numbers; they are edited here, not in Finance.','Milestones can be changed until one has been invoiced.'],
  ['biz','boss','Set or change a salary',['Business › HR › open the person (or Add person for someone without a SLATE OS login).','Type the gross and tap Standard split: Basic 60%, House rent 30%, Medical 6%, Conveyance 4%.','Choose when it applies from and how it is paid. Add the month they started working professionally; total experience then grows by itself.','Tap Save.'],'Finance payroll uses it. A change starts a new line in the history; earlier months keep the old salary.','The Eid bonus is one month’s basic. A record made by mistake can be deleted until it is on a salary sheet.'],
- ['biz','boss','Record the studio’s running costs',['Business › Admin › Add running cost (rent, electricity, internet…).','Each month, tap Record payment on each bill.'],'Payments go into Finance as expenses, and the cash forecast uses these amounts.','Rent can carry an advance adjusted each month and a security deposit.'],
+ ['biz','boss','Set up the studio’s running costs',['Business › Running costs › Add running cost (rent, electricity, internet…).','On each due day the month’s entry waits in Books › Monthly entries: the Accountant confirms it, the COO checks it, you approve it.'],'Past months use the confirmed bills; this month and later use the amounts and estimates.','A bill more than 20% over its estimate is flagged to the COO and needs a remark before approval.'],
  ['biz','boss','Make a proposal (the quick way)',['Home › + New proposal (or Business › Proposals › New proposal).','Pick the client from the list (a repeat client fills in their details) or type a new name; add the project name, site, land size and type.','Tap Next: choose the plan →. Not ready? Tap Save draft at any step and continue later from Business › Proposals.','Choose the service plan and the fee tier, enter the built area (from the FAR calculator).','Tap Make the PDFs, then Share copy (letterhead) to send it.'],'Everything else (services, payment stages, site visits, revisions, terms, timeline) is filled in from the plan. Open a folded section only to change it.','Built area: from the FAR calculator; if the case is unusual, ask the POD leader first, then the Principal.'],
  ['biz','boss','Choose the plan and fee tier',['In the proposal builder › Plan and fee.','Service plan: Feasibility, Essentials + Build, Complete (recommended) or Signature; Essentials and Launch are on request.','Fee tier: Competitive, Standard or Premium (Signature is always Premium).','Check the adjustments: developer +10%, Jolshiri or Cantonment +10% on the authority stage, Chittagong 85%.','Tap Fill the proposal from this plan if you changed the plan.'],'The fee is worked out from the rate card and shown step by step. The client sees only the plan and the final fee.','Compare plans in the proposal adds a page with the plan below and above.'],
  ['biz','boss','Send the proposal and follow up',['Make the PDFs › Share copy (letterhead) by WhatsApp or email; Print copy goes on the printed letterhead pad at 100%.','On the proposal › Next steps › I’ve sent it: follow up in 3 days.','After each call or meeting: Log what the client said, with the next follow-up date.'],'You and the COO are reminded on the follow-up date.','Every card in Leads and Proposals shows “Next:” — the one thing to do.'],
@@ -11297,11 +11297,14 @@ async function delSal(st){ if(!canBiz()) return fail('Only the Principal or the 
   if(!confirm(`Delete the salary record for ${st.name}? Use this only for a record made by mistake.`)) return;
   const ok=await run(async()=>{ const {data:o,error}=await sb.from('fin_docs').delete().eq('path','staff/'+st.id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Not deleted'); await loadFeeFin(true); },'Salary record deleted');
   if(ok) closeSheet(); }
-/* ---------- Business › Admin: the studio's monthly running costs ----------
-   Kept in Finance as recurring/<id>; payments are Finance expenses tagged with the cost and month, and Finance's cash forecast
-   uses these amounts. Office rent can carry an advance adjusted each month and a security deposit (held, not a cost). */
-const ADM_CATS=['Office rent','Utilities','Internet & software','Repairs & maintenance','Staff welfare','Office supplies','Transport & site visits','Bank charges','Marketing','Other'];
-const ADM_KIND={fixed:'Same every month',variable:'Changes every month',rent:'Office rent with advance'};
+/* ---------- Business › Running costs: the only place the studio's monthly costs are set up (Principal and COO) ----------
+   Each cost is kept in Books as recurring/<id>. On its due day SLATE OS adds that month's entry to Books › Monthly entries
+   (rcmonth/<YYYY-MM>~<id>, "Amount to confirm"); the Accountant confirms it, which makes an ordinary Books payment
+   (COO check, Principal approval). Past months use what was confirmed; this month and later use amounts and estimates.
+   Office rent can still carry an advance adjusted each month and a security deposit (held, not a cost); that rule is unchanged. */
+const ADM_KIND={fixed:'Fixed',variable:'Variable',rent:'Office rent with advance'};
+const ADM_PAID={pre:'Prepaid',post:'Postpaid'};
+const RC_COST_G=['occ','adm','fin','staff','pc'];
 const ymAdd=(ym,n)=>{ const [y,m]=ym.split('-').map(Number), d=new Date(y,m-1+n,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
 const ymDiff=(a,b)=>{ const [y1,m1]=a.split('-').map(Number),[y2,m2]=b.split('-').map(Number); return (y2-y1)*12+(m2-m1); };
 const recOn=(x,ym)=>x.active!==false&&x.from&&x.from<=ym&&(!x.until||ym<=x.until);
@@ -11309,97 +11312,159 @@ const recOn=(x,ym)=>x.active!==false&&x.from&&x.from<=ym&&(!x.until||ym<=x.until
 function rentPlan(x,ym){ const R=+x.rent||0, A=+x.advance||0, X=+x.adjust||0, st=x.advFrom||x.from; const n=ymDiff(st,ym)+1;
   if(n<1||!A||!X) return {rent:R,adj:0,cash:R,left:A,before:A}; const before=Math.max(0,A-X*(n-1)), adj=Math.min(X,before,R);
   return {rent:R,adj,cash:R-adj,left:before-adj,before,endsIn:ym>=st?Math.ceil(before/X):null}; }
-const recPaid=(x,ym)=>(((S.feeFin||{}).exp)||[]).filter(e=>e.recurringId===x.id&&e.month===ym&&e.status!=='rejected');
-function recHist(x){ return (((S.feeFin||{}).exp)||[]).filter(e=>e.recurringId===x.id&&e.status!=='rejected').sort((a,b)=>(b.month||'').localeCompare(a.month||'')); }
-function recExpect(x,ym){ if(x.kind==='rent') return rentPlan(x,ym).cash; if(x.kind==='variable'){ const h=recHist(x).filter(e=>e.month<ym).slice(0,3); return h.length?Math.round(h.reduce((a,e)=>a+(+e.amount||0),0)/h.length):+x.amount||0; } return +x.amount||0; }
+const RC=()=>((S.feeFin||{}).rc)||{costs:[],months:{},L:{},P:{},V:{},ok:false,live:false};
+const rcMonth=(x,ym)=>RC().months[ym+'~'+x.id]||null;
+/* actuals: months confirmed in Books, newest first */
+function recHist(x){ return Object.values(RC().months).filter(m=>m.cost===x.id&&m.status==='confirmed').sort((a,b)=>b.month.localeCompare(a.month)); }
+const recPaid=(x,ym)=>{ const m=rcMonth(x,ym); return m&&m.status==='confirmed'?[m]:[]; };
+/* the estimate rule (same as the database's private.rc_estimate) */
+function recCalc(x,ym){ if(x.kind==='rent') return rentPlan(x,ym).cash; if(x.kind!=='variable') return +x.amount||0;
+  const h=recHist(x).filter(m=>m.month<ym);
+  if(x.seasonal&&h.length>=12){ const s=h.find(m=>m.month===ymAdd(ym,-12)); if(s) return Math.round(+s.amount||0); }
+  return h.length?Math.round(h.slice(0,3).reduce((a,m)=>a+(+m.amount||0),0)/Math.min(3,h.length)):+x.est||0; }
+/* what was expected on the due day: kept on the month's entry once it exists */
+const recExpect=(x,ym)=>{ const m=rcMonth(x,ym); return m&&m.est!=null?+m.est:recCalc(x,ym); };
+/* a cost's share of a month's overhead: past and confirmed months use the actual; skipped months nothing; the rest the estimate.
+   Office rent with an advance counts the full rent (the advance part is rent too). */
+function rcCostFor(x,ym){ if(x.kind==='rent') return rentPlan(x,ym).rent; const m=rcMonth(x,ym);
+  if(m&&m.status==='confirmed') return +m.amount||0; if(m&&m.status==='skipped') return 0; return recExpect(x,ym); }
+const rcMonthTotal=ym=>(RC().costs||[]).filter(x=>recOn(x,ym)).reduce((a,x)=>a+rcCostFor(x,ym),0);
+const rcDue=(x,ym)=>{ const dim=new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate(); return ym+'-'+String(Math.min(+x.dueDay||1,dim)).padStart(2,'0'); };
+const ordN=n=>n+(['th','st','nd','rd'][(n%10>3||[11,12,13].includes(n%100))?0:n%10]);
+const rcL=id=>((RC().L[id]||{}).name)||'';
+const rcP=id=>{ const p=RC().P[id]; return p?(p.overhead?'Studio overhead':[p.code,p.name].filter(Boolean).join(' · ')):''; };
+const rcOverheadId=()=>Object.keys(RC().P).find(k=>RC().P[k].overhead)||'p00';
+/* the month's state of one cost, in plain words */
+function rcState(x,ym){ const m=rcMonth(x,ym), td=today(), tm=td.slice(0,7), due=rcDue(x,ym);
+  if(m&&m.status==='confirmed'){ const v=RC().V[m.vid]||{}, st=v.status||'';
+    return {k:'conf',m,v,pill:st==='approved'||st==='tally'?['s-ontime','Paid'+(v.date?' '+fmtD(v.date):'')]:st==='checked'?['s-late','With the Principal']:st==='returned'?['s-overdue','Sent back']:['s-late','With the COO'],
+      sub:`Confirmed${m.vno?' · '+m.vno:''}`}; }
+  if(m&&m.status==='skipped') return {k:'skip',m,pill:['s-open','Skipped'],sub:m.skipNote||''};
+  if(ym<tm||(ym===tm&&due<=td)) return {k:'due',m,pill:['s-overdue','Amount to confirm'],sub:'With the Accountant in Books'};
+  if(ym===tm) return {k:'soon',pill:['s-open','Due on the '+ordN(+due.slice(8))],sub:''};
+  return {k:'est',pill:['s-open',x.kind==='variable'?'Estimate':'Planned'],sub:''}; }
 function viewAdmin(){
-  const B=S.biz, out=[...bizHead('The studio’s monthly running costs, set here. Payments go into Finance as expenses, and Finance’s cash forecast uses these amounts.',S.canWrite?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openRec(null),text:'Add running cost'})):null)];
-  if(!finOn()){ out.push(h('p',{class:'muted',text:'Admin costs need Finance access.'})); return out; }
+  const B=S.biz, R=()=>RC(), out=[...bizHead('The studio’s monthly running costs, set up here only. On each due day the month’s entry waits in Books › Monthly entries for the Accountant to confirm; then the COO checks it and you approve it.',S.canWrite&&canBiz()?h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',onclick:()=>openRec(null),text:'Add running cost'})):null)];
+  if(!finOn()){ out.push(h('p',{class:'muted',text:'Running costs need Finance access.'})); return out; }
   loadFeeFin(); const F=S.feeFin;
   if(!F||F.state==='loading'||F.state==='idle'){ out.push(h('p',{class:'muted',text:'Loading…'})); return out; }
-  if(F.state==='err'){ out.push(h('p',{class:'err',text:'Couldn’t load Finance: '+F.err}),h('button',{class:'btn',type:'button',onclick:()=>loadFeeFin(true),text:'Try again'})); return out; }
-  const ym=B.am||(B.am=today().slice(0,7)), all=(F.rec2||[]), on=all.filter(x=>recOn(x,ym));
-  const exp=on.reduce((a,x)=>a+recExpect(x,ym),0), paid=on.reduce((a,x)=>a+recPaid(x,ym).reduce((u,e)=>u+(+e.amount||0),0),0);
+  if(F.state==='err'){ out.push(h('p',{class:'err',text:'Couldn’t load: '+F.err}),h('button',{class:'btn',type:'button',onclick:()=>loadFeeFin(true),text:'Try again'})); return out; }
+  if(!R().ok){ out.push(h('p',{class:'err',text:'Couldn’t read Books. You need a Books role (Principal or COO).'})); return out; }
+  if(!R().live) out.push(h('div',{class:'card',style:'border-left:3px solid var(--late);margin-bottom:10px'},h('b',{text:'Preview'}),h('p',{class:'f-hint',style:'margin:2px 0 0',text:'This is how Running costs will work. Saving opens at go-live, once the database part is run; until then nothing here is saved.'})));
+  const tm=today().slice(0,7), ym=B.am||(B.am=tm), all=R().costs, on=all.filter(x=>recOn(x,ym)), past=ym<tm, fut=ym>tm;
+  const st=on.map(x=>({x,s:rcState(x,ym)}));
+  const tot=on.reduce((a,x)=>a+rcCostFor(x,ym),0), conf=st.filter(r=>r.s.k==='conf').reduce((a,r)=>a+(+r.s.m.amount||0),0);
+  const open=st.filter(r=>['due','soon','est'].includes(r.s.k)), openAmt=open.reduce((a,r)=>a+recExpect(r.x,ym),0), estPart=st.filter(r=>r.x.kind==='variable'&&r.s.k!=='conf'&&r.s.k!=='skip').length;
+  const over=st.filter(r=>r.s.k==='conf'&&r.s.m.over);
   const rents=all.filter(x=>x.kind==='rent'&&x.active!==false), advLeft=rents.reduce((a,x)=>a+rentPlan(x,ym).left,0), dep=rents.reduce((a,x)=>a+(+x.deposit||0),0);
-  const full=on.reduce((a,x)=>a+(x.kind==='rent'?rentPlan(x,ym).rent:recExpect(x,ym)),0);
   out.push(h('div',{class:'bar'},h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous month',onclick:()=>{ B.am=ymAdd(ym,-1); render(true); },text:'‹'}),h('b',{style:'min-width:110px;text-align:center',text:ymLabel(ym)}),h('button',{class:'btn btn-sm',type:'button','aria-label':'Next month',onclick:()=>{ B.am=ymAdd(ym,1); render(true); },text:'›'}),
-    ym!==today().slice(0,7)?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ B.am=today().slice(0,7); render(true); },text:'This month'}):null),
-    h('div',{class:'kpis kpis5'},kpi('Monthly cost',bdt(full)),kpi('Cash to pay',bdt(exp)),kpi('Paid',bdt(paid),'early'),kpi('Still to pay',bdt(Math.max(0,exp-paid)),exp-paid>1?'late':''),kpi('Rent advance left',advLeft?bdt(advLeft):'—')));
+    ym!==tm?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ B.am=tm; render(true); },text:'This month'}):null),
+    h('div',{class:'kpis kpis4'},kpi(fut?'Forecast':'Overhead this month',bdt(tot),null,estPart?h('div',{class:'f-hint',text:estPart+' by estimate'}):null),kpi('Confirmed',bdt(conf),'early'),kpi(fut?'Estimated':'Still to confirm',bdt(openAmt),!fut&&open.some(r=>r.s.k==='due')?'late':''),
+      advLeft?kpi('Rent advance left',bdt(advLeft)):kpi('Over the estimate',String(over.length),over.length?'overdue':'')));
+  out.push(h('p',{class:'f-hint',style:'margin:-6px 2px 10px',text:fut?'A future month: Fixed costs at their amount, Variable costs at their estimate.':past?'A past month: confirmed bills count at the actual amount; a Variable bill not confirmed by the month end counts at its estimate until it is.':'Confirmed bills count at the actual amount; the rest at their amount or estimate until the Accountant confirms them.'}));
   if(dep) out.push(h('p',{class:'f-hint',style:'margin:-6px 2px 10px',text:`Security deposit held by the landlord: ${taka(dep)}. It is refundable, so it is not counted as a cost.`}));
   if(!all.length){ out.push(h('p',{class:'muted',text:'No running costs yet. Add office rent, electricity, internet, cleaning and the other monthly bills.'})); return out; }
   const offL=all.filter(x=>!recOn(x,ym));
-  out.push(h('div',{class:'pgrid'},on.sort((a,b)=>(+a.dueDay||31)-(+b.dueDay||31)).map(x=>{ const ps=recPaid(x,ym), pd=ps.reduce((u,e)=>u+(+e.amount||0),0), ex=recExpect(x,ym), rp=x.kind==='rent'?rentPlan(x,ym):null;
-    const late=!ps.length&&x.dueDay&&ym===today().slice(0,7)&&+today().slice(8,10)>+x.dueDay;
+  out.push(h('div',{class:'pgrid'},st.sort((a,b)=>(+a.x.dueDay||31)-(+b.x.dueDay||31)).map(({x,s})=>{ const ex=recExpect(x,ym), rp=x.kind==='rent'?rentPlan(x,ym):null, act=s.k==='conf'?+s.m.amount||0:null;
+    const diff=act!=null&&ex>0&&x.kind==='variable'?Math.round((act-ex)/ex*100):null;
     return h('div',{class:'pcard',style:'cursor:default'},
-      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:x.category||''}),ps.length?h('span',{class:'pill s-ontime',text:'Paid '+fmtD(ps[0].paidOn||ps[0].date)}):h('span',{class:'pill s-'+(late?'overdue':'open'),text:x.dueDay?`Due on the ${x.dueDay}${['th','st','nd','rd'][(+x.dueDay%10>3||[11,12,13].includes(+x.dueDay))?0:+x.dueDay%10]}`:'To pay'})),
+      h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:rcL(x.cat)||''}),h('span',{class:'pill '+s.pill[0],text:s.pill[1]})),
       h('div',{class:'pc-name',text:x.name}),
-      h('div',{class:'pc-meta',text:[ADM_KIND[x.kind],x.payee].filter(Boolean).join(' · ')}),
+      h('div',{class:'pc-meta',text:[ADM_KIND[x.kind],x.payee,x.meter?'No. '+x.meter:'',`due ${ordN(+x.dueDay||1)}`,rcL(x.acc)].filter(Boolean).join(' · ')}),
       rp?h('div',{class:'f-hint',style:'margin:0',text:rp.adj?`Rent ${taka(rp.rent)} − ${taka(rp.adj)} from the advance = ${taka(rp.cash)} in cash · advance left ${taka(rp.left)}`:`Rent ${taka(rp.rent)}`+(+x.advance?' · advance fully adjusted':'')}):null,
-      h('div',{class:'pc-row'},h('b',{text:ps.length?taka(pd):(x.kind==='variable'?'≈ ':'')+taka(ex)}),h('span',{class:'muted',text:ps.length&&pd!==ex?(x.kind==='variable'?`estimate ${taka(ex)}`:`expected ${taka(ex)}`):x.kind==='variable'&&!ps.length?'estimate from recent bills':''})),
-      S.canWrite?h('div',{class:'actions',style:'margin:0'},ps.length?null:h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openRecPay(x.id,ym),text:'Record payment'}),h('button',{class:'btn btn-sm',type:'button',onclick:()=>openRec(x.id),text:'Edit'})):null); })));
-  if(offL.length) out.push(h('p',{class:'f-hint',style:'margin:10px 2px 0',text:'Not running in '+ymLabel(ym)+': '+offL.map(x=>x.name).join(', ')+'.'}),h('div',{class:'chips'},offL.map(x=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>openRec(x.id),text:'Edit '+x.name}))));
+      h('div',{class:'pc-row'},h('b',{text:act!=null?taka(act):(x.kind==='variable'?'≈ ':'')+taka(ex)}),
+        h('span',{class:'muted',style:diff!=null&&s.m.over?'color:var(--overdue)':null,text:act!=null?(x.kind==='variable'?`estimate ${taka(ex)}`+(diff!=null?` · ${diff>0?'+':''}${diff}%`:''):act!==ex?`expected ${taka(ex)}`:''):x.kind==='variable'?(recHist(x).filter(m=>m.month<ym).length?'estimate from recent bills':'first estimate'):''})),
+      s.k==='conf'&&s.m.kwh?h('div',{class:'f-hint',style:'margin:0',text:`${s.m.kwh} kWh · Tk ${(act/s.m.kwh).toFixed(2)} a unit`}):null,
+      s.sub?h('div',{class:'f-hint',style:'margin:0',text:s.sub}):null,
+      S.canWrite&&canBiz()?h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>openRec(x.id),text:'Edit'})):null); })));
+  if(offL.length) out.push(h('p',{class:'f-hint',style:'margin:10px 2px 0',text:'Not running in '+ymLabel(ym)+': '+offL.map(x=>x.name+(x.active===false?' (paused)':'')).join(', ')+'.'}),h('div',{class:'chips'},offL.map(x=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px',onclick:()=>openRec(x.id),text:'Edit '+x.name}))));
   return out; }
-function openRec(id){ const x=id?((S.feeFin||{}).rec2||[]).find(r=>r.id===id):null;
-  const d={name:'',category:'Utilities',kind:'fixed',amount:'',payee:'',dueDay:'',from:today().slice(0,7),until:'',rent:'',advance:'',adjust:'',advFrom:'',deposit:'',note:'',active:true,...(x?JSON.parse(JSON.stringify(x)):{})};
-  ['amount','rent','advance','adjust','deposit','dueDay'].forEach(k=>{ d[k]=d[k]?String(d[k]):''; });
+function openRec(id){ const x=id?RC().costs.find(r=>r.id===id):null;
+  const d={name:'',kind:'fixed',amount:'',est:'',payee:'',meter:'',cat:'',proj:rcOverheadId(),dueDay:'',acc:'',paid:'post',kwh:false,seasonal:false,from:today().slice(0,7),until:'',rent:'',advance:'',adjust:'',advFrom:'',deposit:'',note:'',active:true,...(x?JSON.parse(JSON.stringify(x)):{})};
+  ['amount','est','rent','advance','adjust','deposit','dueDay'].forEach(k=>{ d[k]=d[k]?String(d[k]):''; });
   S.sheet={type:'rec',id:id||null,d,err:''}; renderSheet(); }
+/* a select with option groups: [[label,[[value,text],…]],…] */
+function rcSel(d,key,groups,first){ const el=h('select',{id:'sh-'+key,onchange:e=>{d[key]=e.target.value}},first?h('option',{value:'',text:first}):null,
+    groups.map(([g,opts])=>g?h('optgroup',{label:g},opts.map(([v,l])=>h('option',{value:v,text:l}))):opts.map(([v,l])=>h('option',{value:v,text:l})))); el.value=d[key]||''; return el; }
 function sheetRec(){
-  const d=S.sheet.d, id=S.sheet.id, rent=d.kind==='rent';
+  const d=S.sheet.d, id=S.sheet.id, R=RC(), rent=d.kind==='rent', vari=d.kind==='variable', x=id?R.costs.find(r=>r.id===id):null;
   const n=(k,ph)=>h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d[k],placeholder:ph||'',oninput:e=>{ d[k]=e.target.value; const t=document.getElementById('rent-sum'); if(t) t.textContent=rentTxt(); }});
   const rentTxt=()=>{ if(!+d.rent) return ''; const p=rentPlan({rent:+d.rent,advance:+d.advance,adjust:+d.adjust,advFrom:d.advFrom||d.from,from:d.from},today().slice(0,7));
     return +d.advance&&+d.adjust?`This month: ${taka(p.adj)} from the advance, ${taka(p.cash)} in cash. Advance left after this month ${taka(p.left)}`+(p.left>0?`, used up in about ${Math.ceil(p.left/(+d.adjust))} more months.`:'.'):`Paid in full in cash: ${taka(+d.rent)} a month.`; };
-  const save=async e=>{ e.preventDefault(); if(!canBiz()) return fail('Only the Principal or the COO sets running costs.');
+  const heads=Object.entries(R.L).filter(([k,l])=>RC_COST_G.includes(l.group)&&(l.active!==false||k===d.cat)).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
+  const headG=RC_COST_G.map(g=>[(MONEY_G[g]||[])[1]||g,heads.filter(([,l])=>l.group===g).map(([k,l])=>[k,l.name])]).filter(([,o])=>o.length);
+  const cashG=[['Cash',Object.entries(R.L).filter(([k,l])=>l.group==='cash'&&(l.active!==false||k===d.acc)).map(([k,l])=>[k,l.name])],['Bank',Object.entries(R.L).filter(([k,l])=>l.group==='bank'&&(l.active!==false||k===d.acc)).map(([k,l])=>[k,l.name])]].filter(([,o])=>o.length);
+  const projs=Object.entries(R.P).filter(([k,p])=>p.overhead||k===d.proj||!['Closed','Cancelled','Completed'].includes(p.status)).sort((a,b)=>(b[1].overhead?1:0)-(a[1].overhead?1:0)||(a[1].code||a[1].name||'').localeCompare(b[1].code||b[1].name||''));
+  const projG=[['',projs.filter(([,p])=>p.overhead).map(([k])=>[k,'Studio overhead'])],['Projects',projs.filter(([,p])=>!p.overhead).map(([k,p])=>[k,[p.code,p.name].filter(Boolean).join(' · ')])]].filter(([,o])=>o.length);
+  const save=async e=>{ e.preventDefault(); if(!canBiz()) return fail('Only the Principal or the COO sets up running costs.');
+    if(!R.live) return fail('Saving opens at go-live, once the database part is run.');
     if(!(d.name||'').trim()) return fail('Give it a name, e.g. Electricity.');
+    if(!d.cat) return fail('Choose the head of account.'); if(!d.acc) return fail('Choose the cash point it is paid from.');
+    if(!(+d.dueDay>=1&&+d.dueDay<=31)) return fail('Due day is a day of the month, 1 to 31.');
     if(!/^\d{4}-\d{2}$/.test(d.from||'')) return fail('Choose the month it starts.');
+    if(d.until&&d.until<d.from) return fail('The end month is before the start month.');
     if(rent&&!(+d.rent>0)) return fail('Enter the monthly rent.');
-    if(!rent&&d.kind==='fixed'&&!(+d.amount>0)) return fail('Enter the monthly amount.');
+    if(d.kind==='fixed'&&!(+d.amount>0)) return fail('Enter the monthly amount.');
+    if(vari&&!(+d.est>0)&&!(x&&recHist(x).length)) return fail('Set the first estimate. After that it follows the last three bills.');
     if(rent&&+d.advance&&!(+d.adjust>0)) return fail('How much of the advance is adjusted each month?');
     if(rent&&+d.adjust>+d.rent) return fail('The monthly adjustment can’t be more than the rent.');
-    if(d.until&&d.until<d.from) return fail('The end month is before the start month.');
-    if(d.dueDay&&!(+d.dueDay>=1&&+d.dueDay<=31)) return fail('Due day is a day of the month, 1 to 31.');
-    const data={name:d.name.trim(),category:rent?'Office rent':d.category,kind:d.kind,amount:rent?0:+d.amount||0,payee:(d.payee||'').trim(),dueDay:d.dueDay?+d.dueDay:'',from:d.from,until:d.until||'',
-      rent:rent?+d.rent:0,advance:rent?+d.advance||0:0,adjust:rent?+d.adjust||0:0,advFrom:rent?(d.advFrom||d.from):'',deposit:rent?+d.deposit||0:0,note:(d.note||'').trim(),active:!!d.active,setBy:S.uid};
+    const raw=x?(R.raw[id]||{}):{};
+    const data={...raw,name:d.name.trim(),kind:d.kind,amount:d.kind==='fixed'?+d.amount:0,est:vari?+d.est||0:0,payee:(d.payee||'').trim(),meter:(d.meter||'').trim(),cat:d.cat,proj:d.proj||rcOverheadId(),
+      day:+d.dueDay,acc:d.acc,paid:d.paid==='pre'?'pre':'post',kwh:!!d.kwh,seasonal:vari&&!!d.seasonal,from:d.from,until:d.until||'',
+      rent:rent?+d.rent:0,advance:rent?+d.advance||0:0,adjust:rent?+d.adjust||0:0,advFrom:rent?(d.advFrom||d.from):'',deposit:rent?+d.deposit||0:0,
+      note:(d.note||'').trim(),active:!!d.active,mode:'spend',by:S.uid,at:new Date().toISOString()};
     const sb=window.slateSupabase; const ok=await run(async()=>{
-      if(id){ const {data:o,error}=await sb.from('fin_docs').update({data}).eq('path','recurring/'+id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Run m_admin_costs.sql first.'); }
-      else { const nid=finId(); const {error}=await sb.from('fin_docs').insert({path:'recurring/'+nid,coll:'recurring',doc_id:nid,data}); if(error) throw /Unknown finance record type/.test(error.message||'')?new Error('Run m_admin_costs.sql in Supabase first.'):error; }
+      if(id){ const {data:o,error}=await sb.from('books_docs').update({data}).eq('path','recurring/'+id).select('path'); if(error) throw error; if(!o||!o.length) throw new Error('Not saved. Check your Books role.'); }
+      else { const nid='rc'+finId().slice(0,14); const {error}=await sb.from('books_docs').insert({path:'recurring/'+nid,coll:'recurring',doc_id:nid,data}); if(error) throw error; }
     },'Saved'); if(ok){ await loadFeeFin(true); closeSheet(); } };
-  const x=id?((S.feeFin||{}).rec2||[]).find(r=>r.id===id):null, hist=x?recHist(x).slice(0,12):[];
+  const hist=x?recHist(x).slice(0,12):[];
   return [head(id?'Running cost':'New running cost',id?d.name:'Monthly cost of running the studio'),
+    R.live?null:h('p',{class:'f-hint',style:'margin:0;color:var(--late)',text:'Preview: saving opens at go-live.'}),
     h('form',{class:'form',onsubmit:save},
-      field('Type',seg('Type',Object.entries(ADM_KIND),d.kind,v=>{ d.kind=v; if(v==='rent'){ d.category='Office rent'; if(!d.name) d.name='Office rent'; } renderSheet(); })),
-      h('div',{class:'form-row'},field('Name *',inp('name',{maxlength:80,placeholder:rent?'Office rent':'e.g. Electricity (DESCO)'})),rent?field('Category',h('input',{value:'Office rent',readonly:true,style:'color:var(--muted)'})):field('Category',sel('category',ADM_CATS.map(c=>[c,c])))),
+      field('Type',seg('Type',Object.entries(ADM_KIND),d.kind,v=>{ d.kind=v; if(v==='rent'&&!d.name) d.name='Office rent'; if(v==='variable'&&/electric/i.test(d.name||'')) d.kwh=d.seasonal=true; renderSheet(); }),
+        d.kind==='fixed'?'The same amount every month: the Accountant confirms it in one tap.':vari?'Changes every month: the Accountant enters the actual bill and attaches its photo.':'Rent with an advance adjusted each month: the cash part is confirmed each month.'),
+      h('div',{class:'form-row'},field('Name *',inp('name',{maxlength:80,placeholder:rent?'Office rent':'e.g. Electricity (DESCO)'})),field(rent?'Landlord':'Payee',inp('payee',{maxlength:80,placeholder:rent?'Landlord':'e.g. DESCO, Link3'}))),
+      h('div',{class:'form-row'},field('Account / meter no.',inp('meter',{maxlength:40,placeholder:'e.g. customer or meter number'})),field('Head of account *',rcSel(d,'cat',headG,'Choose…'))),
+      h('div',{class:'form-row'},field('Cost centre',rcSel(d,'proj',projG)),field('Cash point *',rcSel(d,'acc',cashG,'Choose…'),'Where it is paid from')),
+      h('div',{class:'form-row'},field('Due day of the month *',n('dueDay','e.g. 10'),'The month’s entry appears in Books on this day'),field('Paid',seg('Paid',Object.entries(ADM_PAID),d.paid==='pre'?'pre':'post',v=>{ d.paid=v; renderSheet(); }),d.paid==='pre'?'Paid before the month it covers':'Paid after use: the bill is for last month')),
       rent?[h('div',{class:'form-row'},field('Monthly rent (Tk) *',n('rent')),field('Advance paid (Tk)',n('advance'),'Paid up front, adjusted against rent')),
           h('div',{class:'form-row',style:'align-items:start'},field('Adjusted from the advance each month (Tk)',n('adjust')),field('Adjustment starts',h('input',{type:'month',value:d.advFrom||d.from,oninput:e=>{d.advFrom=e.target.value; const t=document.getElementById('rent-sum'); if(t) t.textContent=rentTxt();}}))),
           field('Security deposit (Tk)',n('deposit'),'Refundable when you leave: shown, not counted as a cost'),
           h('div',{id:'rent-sum',style:'font-weight:600;font-size:14px',text:rentTxt()})]
-        :field(d.kind==='variable'?'Usual amount (Tk), as an estimate':'Amount every month (Tk) *',n('amount'),d.kind==='variable'?'Each month you enter the actual bill; the estimate then follows the last three bills.':null),
-      h('div',{class:'form-row'},field(rent?'Landlord':'Paid to',inp('payee',{maxlength:80,placeholder:rent?'Landlord':'e.g. DESCO, Link3'})),field('Due day of the month',n('dueDay','e.g. 10'))),
+        :vari?field('First estimate (Tk)'+(x&&recHist(x).length?'':' *'),n('est'),x&&recHist(x).length?`Now worked out from the bills: ${taka(recCalc(x,today().slice(0,7)))} this month (`+(d.seasonal&&recHist(x).length>=12?'same month last year':'average of the last '+Math.min(3,recHist(x).length)+' bills')+').':'Used until the first bill is confirmed; then the average of the last three bills.')
+        :field('Amount every month (Tk) *',n('amount')),
+      vari||d.kwh?h('div',{style:'display:grid;gap:8px'},
+        h('div',{style:'display:flex;gap:10px;align-items:center'},h('input',{type:'checkbox',id:'rc-kwh',checked:!!d.kwh,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.kwh=e.target.checked; if(d.kwh&&vari) d.seasonal=true; renderSheet();}}),h('label',{for:'rc-kwh',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:'Track units (kWh): the Accountant enters the units with each bill'})),
+        vari?h('div',{style:'display:flex;gap:10px;align-items:center'},h('input',{type:'checkbox',id:'rc-sea',checked:!!d.seasonal,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.seasonal=e.target.checked;}}),h('label',{for:'rc-sea',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:'Seasonal: once there are 12 months of bills, estimate from the same month last year'})):null):null,
       h('div',{class:'form-row'},field('Starts *',inp('from',{type:'month'})),field('Ends (optional)',inp('until',{type:'month'}),'e.g. when the lease ends')),
       field('Note',ta('note',{rows:2})),
-      id?h('div',{style:'display:flex;gap:10px;align-items:center'},h('input',{type:'checkbox',id:'rec-act',checked:d.active,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.active=e.target.checked}}),h('label',{for:'rec-act',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:'Running (untick to stop it; past payments stay)'})):null,
-      hist.length?h('div',{},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px',text:'Payments'}),
-        h('div',{class:'list'},hist.map(e=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},h('div',{},h('b',{text:ymLabel(e.month)}),h('div',{class:'f-hint',style:'margin:0',text:[e.paidOn?'paid '+fmtD(e.paidOn):'not paid yet',e.status==='pending'?'waiting for the Principal':''].filter(Boolean).join(' · ')})),h('span',{class:'mono',text:taka(e.amount)}))))):null,
-      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
-function openRecPay(id,ym){ const x=((S.feeFin||{}).rec2||[]).find(r=>r.id===id); if(!x) return; const accts=((S.feeFin||{}).accts||[]).filter(a=>a.active!==false);
-  S.sheet={type:'recPay',id,ym,d:{amount:x.kind==='variable'?'':String(recExpect(x,ym)),paidOn:today(),acct:(accts.find(a=>a.kind==='bank')||accts[0]||{}).id||'',note:''},err:''}; renderSheet(); }
-function sheetRecPay(){
-  const {id,ym,d}=S.sheet, x=((S.feeFin||{}).rec2||[]).find(r=>r.id===id); if(!x) return [head('Payment','Not found')];
-  const accts=((S.feeFin||{}).accts||[]).filter(a=>a.active!==false), rp=x.kind==='rent'?rentPlan(x,ym):null;
-  const save=async e=>{ e.preventDefault(); if(!(+d.amount>0)) return fail(x.kind==='variable'?'Enter this month’s bill.':'Enter the amount paid.');
-    if(!accts.length) return fail('Add the cash and bank accounts in Finance first.'); if(!d.acct) return fail('Choose the account it was paid from.');
-    const own=S.isOwner, desc=`${x.name} · ${ymLabel(ym)}`+(rp&&rp.adj?` (rent ${rp.rent}, ${rp.adj} adjusted from the advance)`:'');
-    const data={date:d.paidOn,category:x.category||'Other',desc,amount:+d.amount,accountId:d.acct,paidOn:d.paidOn,method:'',ref:'',note:(d.note||'').trim(),recurringId:x.id,month:ym,status:own?'approved':'pending',...(own?{decidedBy:S.uid,decidedOn:today()}:{})};
-    const sb=window.slateSupabase, nid=finId();
-    const ok=await run(async()=>{ const {error}=await sb.from('fin_docs').insert({path:'expenses/'+nid,coll:'expenses',doc_id:nid,data}); if(error) throw error; },own?'Payment recorded in Finance':'Recorded in Finance; the Principal approves it');
-    if(ok){ await loadFeeFin(true); closeSheet(); } };
-  return [head(`${x.name} · ${ymLabel(ym)}`,'Record payment'),
-    rp?h('p',{class:'f-hint',style:'margin:0',text:rp.adj?`Rent ${taka(rp.rent)}: ${taka(rp.adj)} is adjusted from the advance, so ${taka(rp.cash)} is paid in cash. Advance left after this month: ${taka(rp.left)}.`:`Rent ${taka(rp.rent)}, paid in full.`}):null,
-    h('form',{class:'form',onsubmit:save},
-      h('div',{class:'form-row'},field(x.kind==='variable'?'This month’s bill (Tk) *':'Amount paid (Tk) *',h('input',{type:'number',min:0,step:'1',inputmode:'numeric',value:d.amount,placeholder:x.kind==='variable'?'≈ '+recExpect(x,ym):'',oninput:e=>{d.amount=e.target.value}})),field('Paid on',h('input',{type:'date',value:d.paidOn,max:today(),oninput:e=>{d.paidOn=e.target.value}}))),
-      field('Paid from',(()=>{ const s2=h('select',{onchange:e=>{d.acct=e.target.value}},accts.length?accts.map(a=>h('option',{value:a.id,text:a.name})):[h('option',{value:'',text:'No accounts in Finance yet'})]); s2.value=d.acct; return s2; })()),
-      field('Note',h('input',{value:d.note,placeholder:'e.g. meter reading, bill no.',oninput:e=>{d.note=e.target.value}})),
-      h('p',{class:'f-hint',style:'margin:0',text:S.isOwner?'Saved in Finance as an approved expense.':'Saved in Finance as an expense waiting for the Principal’s approval.'}),
-      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Record payment'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+      h('div',{style:'display:flex;gap:10px;align-items:center'},h('input',{type:'checkbox',id:'rec-act',checked:d.active!==false,style:'width:20px;height:20px;flex:none;margin:0',onchange:e=>{d.active=e.target.checked}}),h('label',{for:'rec-act',style:'flex:1;min-width:0;font-size:14px;cursor:pointer',text:'Active (untick to pause it; past months stay)'})),
+      hist.length?h('div',{},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px',text:'Bills confirmed'}),
+        h('div',{class:'list'},hist.map(m=>{ const pc=+m.est>0?Math.round((m.amount-m.est)/m.est*100):null, v=R.V[m.vid]||{};
+          return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr) auto;gap:4px'},
+            h('div',{},h('b',{text:ymLabel(m.month)}),h('div',{class:'f-hint',style:'margin:0',text:[`estimate ${taka(m.est)}`+(pc!=null&&x.kind==='variable'?` (${pc>0?'+':''}${pc}%)`:''),m.kwh?`${m.kwh} kWh`:'',v.status==='approved'?'paid':v.status==='checked'?'with the Principal':'with the COO'].filter(Boolean).join(' · ')})),
+            h('span',{class:'mono',style:m.over?'color:var(--overdue)':null,text:taka(m.amount)})); }))):null,
+      h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy||!R.live,text:R.live?'Save':'Saving opens at go-live'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+/* Books › Running costs, read for Business: costs, each month's entries, the accounts and projects they use, and the
+   status of the payments that confirmed them */
+async function loadRunCosts(sb){
+  const R={costs:[],raw:{},months:{},L:{},P:{},V:{},ok:false,live:false};
+  try{ const {data,error}=await sb.from('books_docs').select('coll,doc_id,data').in('coll',['recurring','rcmonth','ledgers','projects']); if(error) throw error;
+    (data||[]).forEach(r=>{ const d=r.data||{};
+      if(r.coll==='ledgers') R.L[r.doc_id]={name:d.name,group:d.group,active:d.active};
+      else if(r.coll==='projects') R.P[r.doc_id]={code:d.code||'',name:d.name||'',overhead:!!d.overhead,status:d.status||''};
+      else if(r.coll==='rcmonth') R.months[r.doc_id]=d;
+      else { R.raw[r.doc_id]=d; R.costs.push({id:r.doc_id,name:d.name||'',kind:['fixed','variable','rent'].includes(d.kind)?d.kind:'fixed',amount:+d.amount||0,est:+d.est||0,payee:d.payee||d.party||'',meter:d.meter||'',
+        cat:d.cat||'',acc:d.acc||'',proj:d.proj||'',dueDay:+d.day||1,paid:d.paid==='post'?'post':'pre',kwh:!!d.kwh,seasonal:!!d.seasonal,from:d.from||'2026-11',until:d.until||'',
+        rent:+d.rent||0,advance:+d.advance||0,adjust:+d.adjust||0,advFrom:d.advFrom||'',deposit:+d.deposit||0,note:d.note||'',active:d.active!==false}); } });
+    R.ok=true;
+    /* live once m_running_costs.sql is run: Books then adds the month's entries (and this call adds any due today) */
+    try{ const r=await sb.rpc('books_rc_due'); R.live=!r.error; if(R.live&&r.data>0){ const {data:m2}=await sb.from('books_docs').select('doc_id,data').eq('coll','rcmonth'); (m2||[]).forEach(x=>{ R.months[x.doc_id]=x.data||{}; }); } }catch(e){}
+    const vids=Object.values(R.months).map(m=>m.vid).filter(Boolean);
+    if(vids.length){ const {data:vd}=await sb.from('books_docs').select('doc_id,data').in('path',vids.map(v=>'vouchers/'+v));
+      (vd||[]).forEach(v=>{ const d=v.data||{}; R.V[v.doc_id]={status:d.status||'approved',date:d.date||'',no:d.no||''}; }); }
+  }catch(e){ R.err=(e&&e.message)||String(e); }
+  return R; }
 const cooId=()=>people().find(id=>isCOO(id)&&isPriv(id))||'';
 /* Studio tasks (Principal, 1 Nov 2026): all studio jobs for the team live in one list, STUDIO TASKS (the former Studio Operation area).
    The other areas stay underneath for the Principal and the COO only (their privacy rules differ); they never show as projects. */
@@ -11486,13 +11551,15 @@ async function loadFeeFin(force){
   try{ const sb=window.slateSupabase; if(!sb) throw new Error('Not signed in');
     const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts','workorders','wopays','staff','recurring','expenses','accounts']);
     if(error) throw error;
-    const fp={},inv=[],rec=[],wo=[],wp=[],staff=[],rec2=[],exp=[],accts=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else if(r.coll==='staff') staff.push(d); else if(r.coll==='recurring') rec2.push(d); else if(r.coll==='expenses'){ if(d.recurringId) exp.push(d); } else if(r.coll==='accounts') accts.push(d); else wp.push(d); });
+    const fp={},inv=[],rec=[],wo=[],wp=[],staff=[],exp=[],accts=[]; let rec2=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else if(r.coll==='staff') staff.push(d); else if(r.coll==='recurring') {} else if(r.coll==='expenses'){ if(d.recurringId) exp.push(d); } else if(r.coll==='accounts') accts.push(d); else wp.push(d); });
     let priv=[]; try{ const pr=await sb.rpc('fin_private_people'); if(!pr.error&&Array.isArray(pr.data)) priv=pr.data; }catch(e){}
     /* money received and invoiced per project comes from Books (m_books_status.sql) */
     let bk={}, bkOk=false; try{ const r=await sb.rpc('biz_books_money'); if(!r.error&&r.data){ bk=r.data; bkOk=true; } }catch(e){}
-    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,rec2,exp,accts,bk,bkOk,at:Date.now(),err:''});
+    /* running costs live in Books (Business › Running costs sets them up; Books › Monthly entries confirms each month) */
+    const rc=await loadRunCosts(sb); rec2=rc.costs;
+    Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,rec2,exp,accts,bk,bkOk,rc,at:Date.now(),err:''});
   }catch(e){ F.state='err'; F.err=(e&&e.message)||String(e); }
-  if(S.view==='biz') render(true); if(S.sheet&&['fee','sal','rec','recPay'].includes(S.sheet.type)) renderSheet(); }
+  if(S.view==='biz') render(true); if(S.sheet&&['fee','sal','rec'].includes(S.sheet.type)) renderSheet(); }
 /* the Finance record for an OS project: linked by osId, else by the same code */
 function feeRecOf(p){ const F=S.feeFin; if(!F||F.state!=='ok') return null; const all=Object.values(F.fp);
   return all.find(x=>x.osId===p.id)||(p.code?all.find(x=>!x.osId&&(x.code||'').toUpperCase()===p.code.toUpperCase()):null)||null; }
@@ -11536,13 +11603,13 @@ function viewBizOver(){
       const toCol=rows.filter(r=>r.s.due>1);
       const hr=hrRows(), act=hr.filter(r=>r.st&&r.active&&r.gross), pay=act.reduce((a,r)=>a+r.gross,0), noSal=hr.filter(r=>r.uid&&r.uid!==ownerId()&&!r.gross&&!r.hid);
       const in30=addDays(td,30), hrDue=hr.filter(r=>r.st&&r.active&&((r.st.incrementDue&&r.st.incrementDue<=ym)||(r.st.probationEnd&&r.st.probationEnd<=in30&&!r.st.confirmedOn)));
-      const on=(F.rec2||[]).filter(x=>recOn(x,ym)), run=on.reduce((a,x)=>a+(x.kind==='rent'?rentPlan(x,ym).rent:recExpect(x,ym)),0);
+      const on=(F.rec2||[]).filter(x=>recOn(x,ym)), run=rcMonthTotal(ym);
       const cash=on.reduce((a,x)=>a+recExpect(x,ym),0), paid=on.reduce((a,x)=>a+recPaid(x,ym).reduce((u,e)=>u+(+e.amount||0),0),0);
-      const lateBills=on.filter(x=>!recPaid(x,ym).length&&x.dueDay&&+td.slice(8,10)>+x.dueDay);
+      const lateBills=on.filter(x=>rcState(x,ym).k==='due'&&rcDue(x,ym)<td);
       money=[sec('Coming in','fees',go('fees')),h('div',{class:'kpis kpis4'},kpi('Collected in '+ymLabel(ym).split(' ')[0],bdt(col),'early'),kpi('Unpaid',bdt(sum('due')),sum('due')>1?'overdue':''),kpi('Not yet billed',bdt(sum('unb')),'late'),kpi('Total fees',bdt(sum('fee')))),
-        sec('Going out','every month',null),pay?h('p',{class:'f-hint',style:'margin:-4px 4px 8px',text:'Payroll: '+payGroups(act).map(G=>`${G.name} ${Math.round(G.g/pay*100)}%`).join(' · ')}):null,h('div',{class:'kpis kpis4'},kpi('Payroll',bdt(pay)),kpi('Running costs',bdt(run)),kpi('Monthly spend',bdt(pay+run)),kpi('Bills still to pay',bdt(Math.max(0,cash-paid)),cash-paid>1?'late':''))];
+        sec('Going out','every month',null),pay?h('p',{class:'f-hint',style:'margin:-4px 4px 8px',text:'Payroll: '+payGroups(act).map(G=>`${G.name} ${Math.round(G.g/pay*100)}%`).join(' · ')}):null,h('div',{class:'kpis kpis4'},kpi('Payroll',bdt(pay)),kpi('Running costs',bdt(run)),kpi('Monthly spend',bdt(pay+run)),kpi('Bills still to confirm',bdt(Math.max(0,cash-paid)),cash-paid>1?'late':''))];
       if(toCol.length) needs.push(['overdue',toCol.length+' project'+(toCol.length>1?'s':'')+' with fees to collect',bdt(sum('due'))+' unpaid',go('fees',()=>{B.st='due';})]);
-      if(lateBills.length) needs.push(['overdue',lateBills.length+' bill'+(lateBills.length>1?'s':'')+' past the due day',lateBills.map(x=>x.name).join(', '),go('admin',()=>{B.am=ym;})]);
+      if(lateBills.length) needs.push(['overdue',lateBills.length+' running cost'+(lateBills.length>1?'s':'')+' past the due day, not confirmed in Books',lateBills.map(x=>x.name).join(', '),go('admin',()=>{B.am=ym;})]);
       if(noFee.length) needs.push(['late',noFee.length+' project'+(noFee.length>1?'s':'')+' with no fee set',noFee.slice(0,3).map(r=>r.p.name).join(', '),go('fees',()=>{B.st='nofee';})]);
       if(tbaRows.length) needs.push(['late',tbaRows.length+' project'+(tbaRows.length>1?'s':'')+' with the fee still to be agreed',tbaRows.slice(0,3).map(r=>r.p.name).join(', '),go('fees',()=>{B.st='tba';})]);
       if(noSal.length) needs.push(['late',noSal.length+' '+(noSal.length>1?'people':'person')+' with no salary set',noSal.slice(0,3).map(r=>r.name).join(', '),go('hr',()=>{B.hs='nosal';})]);
@@ -11600,7 +11667,7 @@ function pvCalc(per,R){
   const ids=people().filter(inTeam), outIds=people().filter(id=>pvBase(id)&&!pvIn(id,R));
   /* cost */
   const stOf=id=>(F.staff||[]).find(x=>x.userId===id)||null;
-  const runOf=ym=>(F.rec2||[]).filter(x=>recOn(x,ym)).reduce((a,x)=>a+(x.kind==='rent'?rentPlan(x,ym).rent:recExpect(x,ym)),0);
+  const runOf=ym=>rcMonthTotal(ym);
   let supTot=0, payTot=0; const P={}; ids.forEach(id=>{ P[id]={id,name:nameOf(id),team:teamOf(id),role:roleOf(id),coo:id===coo,ctc:0,sal:0,bonus:0,oh:0,noSal:!stOf(id),pts:0,ptsC:0,ptsS:0,feeW:0,feeL:0,feeM:0,due:[]}; });
   for(const ym of months){ const on=ids.filter(id=>{ const st=stOf(id); if(!st||st.active===false) return false; if(st.joinDate&&st.joinDate.slice(0,7)>ym) return false; return salGross(salRate(st,ym))>0; });
     /* support staff left out of the matrix are a studio overhead: their cost is shared like running costs */
