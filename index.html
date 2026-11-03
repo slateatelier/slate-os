@@ -6012,7 +6012,7 @@ function renderFloatBell(){
   const n=newCount()+msgCount();
   b.hidden=false; b.classList.toggle('has',!!n); b.classList.toggle('on',!!S.fbell);
   b.setAttribute('aria-label',n?`Notifications, ${n} new`:'Notifications'); b.title=n?`${n} new notification${n===1?'':'s'}`:'Notifications';
-  b.replaceChildren(FB_ICO(),n?h('span',{class:'fb-n',text:n>99?'99+':String(n)}):null);
+  b.replaceChildren(...[FB_ICO(),n?h('span',{class:'fb-n',text:n>99?'99+':String(n)}):null].filter(Boolean));
   if(S.fbell) fbellPaint();
 }
 function fbellToggle(){ if(S.fbell) return fbellClose(); if(S.fabOpen) fabClose();
