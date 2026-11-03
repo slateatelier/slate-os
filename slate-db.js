@@ -247,6 +247,11 @@
     store.set(path, mode === 'set' ? clone(data) : deepMerge(cur || {}, data));
     touch(path);
     // The database fills some fields itself (project codes); show its version straight away.
+    // … and a party's ID, and the client a project or proposal is linked to
+    if (/^(clients|proposals)\/[^/]+$/.test(path)) {
+      const { data: row } = await sb.from('docs').select('data').eq('path', path).maybeSingle();
+      if (row) { store.set(path, row.data); touch(path); }
+    }
     if (/^projects\/[^/]+$/.test(path)) {
       const { data: row } = await sb.from('docs').select('data').eq('path', path).maybeSingle();
       if (row) { store.set(path, row.data); touch(path); }

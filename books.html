@@ -1283,7 +1283,7 @@ const uidShort = () => Date.now().toString(36) + Math.random().toString(36).slic
 const S = {
   state: 'loading', uid: null, me: null, isOwner: false, admin: false, canWriteShared: null, readonly: false,
   settings: {}, catalog: {}, ledgers: {}, projects: {}, assets: {}, vouchers: {}, invoices: {}, files: {}, members: {}, signs: {},
-  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, staff: {}, payroll: {}, recurring: {}, rcmonth: {}, rcLive: false, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
+  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, parties: {}, staff: {}, payroll: {}, recurring: {}, rcmonth: {}, rcLive: false, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
   view: 'home', sub: '', f: { period: 'fy', kind: 'all', acc: '', proj: '', q: '', month: '' },
   rep: { id: '', from: '', to: '', asAt: '', ledger: '', fy: '' }, reqTab: 'mine', invTab: 'open', docKind: '', docQ: '',
   sheet: null, fabOpen: false, busy: false, pendingRender: false, pendingSheet: false
@@ -1336,6 +1336,12 @@ const L = id => (S.ledgers[id] || {}).name || (id ? '(deleted account)' : '');
 const groupOf = id => (S.ledgers[id] || {}).group;
 const isCashL = id => ['cash', 'bank'].includes(groupOf(id));
 const proj = id => S.projects[id];
+/* parties (3 Nov 2026): every client, consultant and supplier has a Party ID (PTY-0001 …) kept in SLATE OS › Business › Clients.
+   Books holds a read-only copy (parties/<id>). A project carries its client's partyId; a payable or loan account its own party. */
+const partyOf = pid => { const p = S.projects[pid]; return p && p.partyId ? p.partyId : ''; };
+const partyOfL = k => { const l = S.ledgers[k]; if (!l) return ''; return l.party || (l.project ? partyOf(l.project) : ''); };
+function partyName(id, formal) { const x = S.parties[id]; if (!x) return id || ''; return formal ? (x.legal || x.name) : x.name; }
+const partyLabel = id => id ? id + ' · ' + partyName(id) : '';
 function projLabel(id) { const p = S.projects[id]; if (!p) return id ? '(deleted project)' : ''; return p.code ? p.code + ' · ' + p.name : p.name; }
 const fyStart = () => +S.settings.fyStart || 7;
 function fyOf(d) { return SB.fyOfRule(d, S.settings.fyRule, fyStart()); }
@@ -1947,6 +1953,10 @@ function invoicePDF(id, plain, unsaved) {
   /* bill to */
   y += 26; doc.text(M, y, 'BILL TO', { size: 7.5, bold: true, color: GREY, spacing: 0.9 });
   y += 15; doc.text(M, y, cliN(inv), { size: 11, bold: true });
+  /* the client's Party ID, address and BIN from Business › Clients */
+  const pty = inv.project ? partyOf(inv.project) : partyOfL(inv.client), px = pty ? S.parties[pty] || {} : {};
+  String(px.address || '').split('\n').map(t => t.trim()).filter(Boolean).slice(0, 2).forEach(t => { y += 13; doc.text(M, y, t, { size: 9, color: GREY }); });
+  if (pty) { y += 13; const lw = doc.text(M, y, 'Client ID ', { size: 9, color: GREY }); const vw = doc.text(M + lw, y, pty, { size: 9, bold: true }); if (px.bin) { const l2 = doc.text(M + lw + vw + 18, y, 'BIN ', { size: 9, color: GREY }); doc.text(M + lw + vw + 18 + l2, y, String(px.bin), { size: 9, bold: true }); } }
   if (inv.project) { y += 14; doc.text(M, y, projLabel(inv.project), { size: 9.5, color: GREY }); }
 
   /* what is billed */
@@ -2686,7 +2696,9 @@ function fdSec() {
 const activeL = k => S.ledgers[k] && S.ledgers[k].active !== false;
 function ledgerOpts(groups, keep) {
   const by = {};
-  Object.keys(S.ledgers).filter(k => groups.includes(groupOf(k)) && (activeL(k) || k === keep)).forEach(k => { const g = SB.friendly(P(), k); (by[g] = by[g] || []).push([k, L(k)]); });
+  Object.keys(S.ledgers).filter(k => groups.includes(groupOf(k)) && (activeL(k) || k === keep)).forEach(k => {
+    /* fee accounts sit under their client (name and Party ID, so either can be searched) */
+    const pt = groupOf(k) === 'inc' ? partyOfL(k) : '', g = pt ? 'Fees · ' + partyName(pt) + ' · ' + pt : SB.friendly(P(), k); (by[g] = by[g] || []).push([k, L(k)]); });
   return Object.keys(by).sort().map(g => ({ group: g, items: by[g].sort((a, b) => a[1].localeCompare(b[1])) }));
 }
 /* money out: spending categories, and the accounts SLATE owes */
@@ -3444,6 +3456,7 @@ const REPORTS = [
   { id: 'cf', t: 'Cash flow', q: 'Where cash and bank money came from and where it went.', who: 'all' },
   { id: 'bs', t: 'What SLATE owns and owes', q: 'The balance sheet on any date.', who: 'all' },
   { id: 'projects', t: 'Projects', q: 'Fees, costs and profit for each project.', who: 'all' },
+  { id: 'clients', t: 'Clients and parties', q: 'Each client by Party ID: fees agreed, billed, received and due across all its projects, and what SLATE owes each party.', who: 'all' },
   { id: 'spend', t: 'Spending by project', q: 'How much went to each project, and to whom: consultants, suppliers and direct costs.', who: 'all' },
   { id: 'rc', t: 'Running costs', q: 'The studio’s monthly running costs: each bill against its estimate, month by month.', who: 'all' },
   { id: 'counts', t: 'Cash counts', q: 'Note-by-note counts of the vault, office cash and petty cash.', who: 'all' },
@@ -3489,10 +3502,10 @@ const openLedger = (lid, from, to) => { Object.assign(S.rep, { ledger: lid }); i
 function viewReports() {
   if (S.sub) {
     const r = REPORTS.find(x => x.id === S.sub); if (!r) { S.sub = ''; return viewReports(); }
-    const fn = { company: repCompany, pl: repPL, cf: repCF, bs: repBS, projects: repProjects, spend: repSpend, combined: repCombined, counts: repCounts, rc: repRC, ledger: repLedger, daybook: repDaybook, tb: repTB, tax: repTax, assets: repAssets, checks: repChecks }[r.id];
+    const fn = { company: repCompany, pl: repPL, cf: repCF, bs: repBS, projects: repProjects, clients: repClients, spend: repSpend, combined: repCombined, counts: repCounts, rc: repRC, ledger: repLedger, daybook: repDaybook, tb: repTB, tax: repTax, assets: repAssets, checks: repChecks }[r.id];
     const out = fn(r); let ds = null; if (r.id !== 'company') try { ds = dashEl(repDash(r.id, reportData(r.id))); } catch (e) { ds = null; }
     if (ds) { const i = out.findIndex(el => el && el.classList && (el.classList.contains('say') || el.classList.contains('callout'))); out.splice(i >= 0 ? i + 1 : Math.min(out.length, 2), 0, ds); }
-    return [backBtn('Reports', () => { S.rep.proj = ''; S.rep.spendKey = ''; go('reports'); })].concat(out);
+    return [backBtn('Reports', () => { S.rep.proj = ''; S.rep.spendKey = ''; S.rep.party = ''; go('reports'); })].concat(out);
   }
   const card = r => h('button', { class: 'rcard', type: 'button', onclick: () => go('reports', r.id) }, h('span', { class: 'rc-t', text: r.t }), h('span', { class: 'rc-q', text: r.q }));
   return [pageH('Reports', 'Plain-language reports from the books, each with its key figures and charts. Each one downloads as PDF and Excel.'),
@@ -3615,6 +3628,86 @@ function repProjectOne(r, pr) {
   const spSec = sp.length ? h('div', { class: 'sec' }, secH('Spent on', tk(sp.reduce((t, x) => t + x.billed, 0))), table(['Who', 'Spent', 'Paid'], sp.map(x => ({ c: [two(L(x.who), howText(x)), fmt(x.billed), fmt(x.paid)], click: () => { S.rep.spendKey = (x.p || '_none') + '|' + x.who; go('reports', 'spend'); } })), [1, 2])) : null;
   return [backBtn('All projects', () => { S.rep.proj = ''; render(true); }), pageH(name, `${pr.label}: fees ${tk(sum('Income'))}, costs ${tk(sum('Project cost') + sum('Other cost'))}, profit ${(sum('Income') - sum('Project cost') - sum('Other cost') < 0 ? '−' : '') + tk(sum('Income') - sum('Project cost') - sum('Other cost'))}.`), periodBar(),
     spSec, rows.length ? h('div', { class: 'sec' }, secH('Every entry'), table(['Date', 'Account', 'Kind', 'Income', 'Cost'], rows, [3, 4])) : emptyBox('Nothing in this period', 'Try a longer period.')];
+}
+/* ---------- clients and parties (3 Nov 2026): every party by its Party ID, to date. For a client: each project's fee, what has been
+   billed (stage invoices, other invoices, and fee money received without an invoice), received and still due; for any party: the
+   balance of its own Books accounts (what SLATE owes it, or an advance it holds). ---------- */
+const PROLE = { client: 'Client', consultant: 'Consultant', supplier: 'Supplier', viz: '3D visualisation', referral: 'Referral', service: 'Service', jv: 'Joint venture', related: 'Related party' };
+const roleText = x => ((x && x.roles) || []).map(r => PROLE[r] || r).join(', ');
+function clientRows() {
+  return memo('clients:' + today(), () => {
+    const B = SB.balances(P(), null, today()), by = {}, invs = invList();
+    const get = id => by[id] || (by[id] = { id, projects: [], fee: 0, billed: 0, received: 0, due: 0, toBill: 0, owe: 0, accounts: [], tba: 0 });
+    Object.entries(S.projects).forEach(([pid, p]) => {
+      if (!p || p.overhead || p.osRemoved && !projFeeIn(pid).all) return;
+      const id = p.partyId || '_none', fin = projFeeIn(pid), sb = stageBook(pid);
+      let billed, toBill; const fee = r2(+p.contract || (sb ? sb.fee : 0));
+      if (sb) { billed = sb.billed; toBill = sb.toBill; }
+      else { const inv = r2(invs.filter(x => x.project === pid && !['draft', 'cancelled'].includes(x.status)).reduce((t, x) => t + invTotals(x).sub, 0)); billed = r2(Math.max(inv, fin.all)); toBill = fee ? r2(Math.max(0, fee - billed)) : 0; }
+      if (!fee && !billed && !fin.all && p.status === 'Closed') return;
+      const row = { pid, code: p.code || '', name: p.name || '', status: p.status || '', fee, tba: !!p.feeTba, free: !!p.free, billed, received: fin.all, due: r2(Math.max(0, billed - fin.all)), toBill };
+      const c = get(id); c.projects.push(row); c.fee += fee; c.billed += billed; c.received += fin.all; c.due += row.due; c.toBill += toBill; if (row.tba) c.tba++;
+    });
+    Object.keys(S.ledgers).forEach(k => { const l = S.ledgers[k]; if (!l || !l.party) return; const b = r2((B[k] || {}).close || 0); const c = get(l.party); c.accounts.push({ k, bal: b }); c.owe -= b; });
+    Object.keys(S.parties).forEach(id => { if (!S.parties[id].deleted) get(id); });
+    return Object.values(by).map(c => Object.assign(c, { fee: r2(c.fee), billed: r2(c.billed), received: r2(c.received), due: r2(c.due), toBill: r2(c.toBill), owe: r2(c.owe),
+      name: c.id === '_none' ? 'No client recorded' : partyName(c.id), legal: c.id === '_none' ? '' : partyName(c.id, true), roles: roleText(S.parties[c.id]) }))
+      .sort((a, b) => (a.id === '_none') - (b.id === '_none') || (b.projects.length > 0) - (a.projects.length > 0) || b.due - a.due || b.received - a.received || a.id.localeCompare(b.id));
+  });
+}
+const oweText = n => Math.abs(n) < 0.5 ? '' : n > 0 ? fmt(n) : 'advance ' + fmt(-n);
+function repClients(r) {
+  if (!Object.keys(S.parties).length) return [repHead(r), emptyBox('Party IDs aren’t set up yet', 'Once the client list is set up in SLATE OS › Business › Clients, every client shows here by its Party ID.')];
+  if (S.rep.party) return repClientOne(r);
+  const all = clientRows(), cl = all.filter(c => c.projects.length), others = all.filter(c => !c.projects.length && (c.accounts.length || c.id !== '_none'));
+  const tot = k => r2(cl.reduce((t, c) => t + c[k], 0)), top = cl.filter(c => c.due > 0.5).sort((a, b) => b.due - a.due)[0];
+  const say = [`To today, ${cl.filter(c => c.id !== '_none').length} clients have `, h('b', { text: tk(tot('received')) }), ' paid in fees against ', h('b', { text: tk(tot('billed')) }), ' billed. ',
+    tot('due') > 0.5 ? ['Clients owe ', h('b', { text: tk(tot('due')) }), ' on bills already raised', top ? [', most of it ', h('b', { text: top.name }), ` (${tk(top.due)})`] : '', '. '] : 'Nothing billed is unpaid. ',
+    tot('toBill') > 0.5 ? [h('b', { text: tk(tot('toBill')) }), ' of agreed fees is still to be billed.'] : ''];
+  const rows = cl.map(c => ({ c: [c.id === '_none' ? '—' : c.id, two(c.name, [c.legal && c.legal !== c.name ? c.legal : '', c.roles && c.roles !== 'Client' ? c.roles : ''].filter(Boolean).join(' · ')), String(c.projects.length), fmt(c.fee) + (c.tba ? ' +' : ''), fmt(c.billed), fmt(c.received), c.due ? fmt(c.due) : '', c.toBill ? fmt(c.toBill) : '', oweText(c.owe)], click: () => { S.rep.party = c.id; render(true); } }));
+  rows.push({ cls: 'gt', c: ['', 'Total', String(cl.reduce((t, c) => t + c.projects.length, 0)), fmt(tot('fee')), fmt(tot('billed')), fmt(tot('received')), fmt(tot('due')), fmt(tot('toBill')), oweText(r2(cl.reduce((t, c) => t + c.owe, 0)))] });
+  const oRows = others.filter(c => c.accounts.length).map(c => ({ c: [c.id, two(c.name, c.roles), oweText(c.owe)], click: () => { S.rep.party = c.id; render(true); } }));
+  return [repHead(r), h('div', { class: 'say' }, say),
+    table(['Party ID', 'Client', 'Projects', 'Fee agreed', 'Billed', 'Received', 'Due now', 'Still to bill', 'SLATE owes them'], rows, [2, 3, 4, 5, 6, 7, 8]),
+    h('p', { class: 'f-hint', text: 'To date, whatever the period. “Billed” counts issued invoices and fee money received without an invoice. “+” marks a fee still to be agreed. Clients and their Party IDs are kept in SLATE OS › Business › Clients.' }),
+    oRows.length ? h('div', { class: 'sec' }, secH('Consultants, suppliers and other parties', String(oRows.length)), table(['Party ID', 'Party', 'SLATE owes them'], oRows, [2])) : null];
+}
+function repClientOne(r) {
+  const c = clientRows().find(x => x.id === S.rep.party); if (!c) { S.rep.party = ''; return repClients(r); }
+  const x = S.parties[c.id] || {}, pids = c.projects.map(p => p.pid);
+  const invs = invList().filter(v => pids.includes(v.project) && !['draft', 'cancelled'].includes(v.status));
+  const contact = [x.contact, x.title, x.phone, x.email].filter(Boolean).join(' · ');
+  const out = [backBtn('All clients and parties', () => { S.rep.party = ''; render(true); }),
+    pageH(c.id === '_none' ? c.name : c.id + ' · ' + c.name, [c.legal && c.legal !== c.name ? 'Billed as ' + c.legal : '', c.roles, contact].filter(Boolean).join(' · ') || null,
+      downloadsCap ? [h('button', { class: 'btn', type: 'button', onclick: () => { const d = reportData('clients'); savePDF(() => reportPDF('clients'), d.name + '.pdf'); }, text: 'Download PDF' }), h('button', { class: 'btn', type: 'button', onclick: () => exportReport('clients'), text: 'Download Excel' })] : null),
+    h('div', { class: 'facts' }, fact('Due now', tk(c.due), 'billed, not yet paid'), fact('Received to date', tk(c.received)), fact('Billed to date', tk(c.billed)), fact('Still to bill', tk(c.toBill)), fact('Fee agreed', tk(c.fee) + (c.tba ? ' + fee to agree' : '')),
+      c.accounts.length ? fact(c.owe >= 0 ? 'SLATE owes them' : 'Advance with them', tk(Math.abs(c.owe)), c.projects.length && c.owe > 0.5 ? 'net ' + (c.due - c.owe < 0 ? 'SLATE owes ' : 'they owe ') + tk(Math.abs(c.due - c.owe)) : null) : null)];
+  if (c.projects.length) out.push(h('div', { class: 'sec' }, secH('Projects', String(c.projects.length)), table(['Project', 'Status', 'Fee agreed', 'Billed', 'Received', 'Due now', 'Still to bill'],
+    c.projects.map(p => ({ c: [two(p.code || p.name, p.code ? p.name : ''), p.free ? 'Pro bono' : p.status, p.tba ? 'to agree' : fmt(p.fee), fmt(p.billed), fmt(p.received), p.due ? fmt(p.due) : '', p.toBill ? fmt(p.toBill) : ''], click: () => { S.rep.proj = p.pid; S.rep.party = ''; go('reports', 'projects'); } })), [2, 3, 4, 5, 6])));
+  if (invs.length) out.push(h('div', { class: 'sec' }, secH('Invoices', String(invs.length)), table(['Invoice', 'Date', 'Project', 'Amount', 'Received', 'Due'],
+    invs.map(v => { const t = invTotals(v); return { c: [v.no || 'Draft', fmtD(v.date), projLabel(v.project), fmt(t.total), fmt(t.received), t.due > 0.5 ? fmt(t.due) : ''], click: () => openSheet({ type: 'invoice', id: v._id }) }; }), [3, 4, 5])));
+  if (c.accounts.length) out.push(h('div', { class: 'sec' }, secH('Their accounts in Books'), table(['Account', 'Group', 'Balance'],
+    c.accounts.map(a => ({ c: [L(a.k), SB.friendly(P(), a.k), a.bal < 0 ? 'SLATE owes ' + fmt(-a.bal) : a.bal > 0 ? 'they owe ' + fmt(a.bal) : '0'], click: () => openLedger(a.k) })), [2])));
+  if (!c.projects.length && !c.accounts.length) out.push(emptyBox('Nothing in the books yet', 'Projects and accounts linked to this party show here.'));
+  return out;
+}
+function clientsSheet() {
+  const all = clientRows();
+  if (S.rep.party) {
+    const c = all.find(x => x.id === S.rep.party); if (!c) return [];
+    const x = S.parties[c.id] || {}, pids = c.projects.map(p => p.pid), invs = invList().filter(v => pids.includes(v.project) && !['draft', 'cancelled'].includes(v.status));
+    const sh = [{ name: 'Statement', wide: [1], rows: [['Item', 'Detail'], ['Party ID', c.id === '_none' ? '' : c.id], ['Client', c.name], ['Billed as', c.legal || c.name], ['Role', c.roles || ''], ['Contact', [x.contact, x.phone, x.email].filter(Boolean).join(', ')],
+      ['Fee agreed', c.fee], ['Billed to date', c.billed], ['Received to date', c.received], ['Due now', c.due], ['Still to bill', c.toBill], ['SLATE owes them', r2(Math.max(0, c.owe))], ['Advance with them', r2(Math.max(0, -c.owe))]] }];
+    if (c.projects.length) sh.push({ name: 'Projects', wide: [1], rows: [['Code', 'Project', 'Status', 'Fee agreed', 'Billed', 'Received', 'Due now', 'Still to bill']].concat(c.projects.map(p => [p.code, p.name, p.free ? 'Pro bono' : p.status, p.tba ? '' : p.fee, p.billed, p.received, p.due, p.toBill]),
+      [['Total', '', '', c.fee, c.billed, c.received, c.due, c.toBill]]) });
+    if (invs.length) sh.push({ name: 'Invoices', wide: [2], rows: [['Invoice', 'Date', 'Project', 'Amount', 'Received', 'Due']].concat(invs.map(v => { const t = invTotals(v); return [v.no || '', v.date || '', projLabel(v.project), t.total, t.received, r2(Math.max(0, t.due))]; })) });
+    if (c.accounts.length) sh.push({ name: 'Accounts', wide: [0], rows: [['Account', 'Group', 'SLATE owes them', 'They owe SLATE']].concat(c.accounts.map(a => [L(a.k), SB.friendly(P(), a.k), r2(Math.max(0, -a.bal)), r2(Math.max(0, a.bal))])) });
+    return sh;
+  }
+  const cl = all.filter(c => c.projects.length), others = all.filter(c => !c.projects.length && c.accounts.length);
+  return [{ name: 'Clients', wide: [1, 2], rows: [['Party ID', 'Client', 'Billed as', 'Projects', 'Fee agreed', 'Billed', 'Received', 'Due now', 'Still to bill', 'SLATE owes them']].concat(cl.map(c => [c.id === '_none' ? '' : c.id, c.name, c.legal || '', c.projects.length, c.fee, c.billed, c.received, c.due, c.toBill, r2(c.owe)]),
+      [['Total', '', '', cl.reduce((t, c) => t + c.projects.length, 0), r2(cl.reduce((t, c) => t + c.fee, 0)), r2(cl.reduce((t, c) => t + c.billed, 0)), r2(cl.reduce((t, c) => t + c.received, 0)), r2(cl.reduce((t, c) => t + c.due, 0)), r2(cl.reduce((t, c) => t + c.toBill, 0)), r2(cl.reduce((t, c) => t + c.owe, 0))]]) },
+    { name: 'Other parties', wide: [1], rows: [['Party ID', 'Party', 'Role', 'SLATE owes them']].concat(others.map(c => [c.id, c.name, c.roles, r2(c.owe)])) }];
 }
 function projSheet(pr) {
   const list = SB.projectReport(P(), pr.from, pr.to);
@@ -3930,11 +4023,11 @@ async function saveXlsx(filename, sheets) {
 }
 function reportData(id) {
   if (id === 'company') return companyData();
-  const pr = repRange(), tag = id === 'bs' ? (S.rep.asAt || today()) : id === 'rc' ? (S.rep.rcYm || curMonth()) : ['counts', 'checks'].includes(id) ? today() : pr.from + ' to ' + pr.to;
-  const r = REPORTS.find(x => x.id === id);
-  const sheets = { pl: plSheet, cf: cfSheet, bs: bsSheet, projects: projSheet, spend: spendSheet, combined: combinedSheet, counts: countsSheet, rc: rcSheet, ledger: ledgerSheet, daybook: daybookSheet, tb: tbSheet, tax: taxSheet, assets: assetsSheet, checks: checksSheet }[id](pr);
-  const name = safeName(`SLATE ${r.t} ${id === 'ledger' && S.rep.ledger ? L(S.rep.ledger) + ' ' : ''}${tag}`);
-  const period = id === 'bs' ? 'As at ' + fmtD(tag, true) : id === 'rc' ? monthName(tag) : ['counts', 'checks'].includes(id) ? 'As at ' + fmtD(tag, true) : `${pr.label ? pr.label + ': ' : ''}${fmtD(pr.from, true)} to ${fmtD(pr.to, true)}`;
+  const pr = repRange(), tag = id === 'bs' ? (S.rep.asAt || today()) : id === 'rc' ? (S.rep.rcYm || curMonth()) : ['counts', 'checks', 'clients'].includes(id) ? today() : pr.from + ' to ' + pr.to;
+  const r0 = REPORTS.find(x => x.id === id), r = id === 'clients' && S.rep.party && S.parties[S.rep.party] ? Object.assign({}, r0, { t: 'Client statement · ' + partyLabel(S.rep.party) }) : r0;
+  const sheets = { pl: plSheet, cf: cfSheet, bs: bsSheet, projects: projSheet, clients: clientsSheet, spend: spendSheet, combined: combinedSheet, counts: countsSheet, rc: rcSheet, ledger: ledgerSheet, daybook: daybookSheet, tb: tbSheet, tax: taxSheet, assets: assetsSheet, checks: checksSheet }[id](pr);
+  const name = safeName(`SLATE ${id === 'clients' && S.rep.party && S.parties[S.rep.party] ? 'Client statement ' + S.rep.party + ' ' + partyName(S.rep.party) : r.t} ${id === 'ledger' && S.rep.ledger ? L(S.rep.ledger) + ' ' : ''}${tag}`);
+  const period = id === 'bs' ? 'As at ' + fmtD(tag, true) : id === 'rc' ? monthName(tag) : ['counts', 'checks', 'clients'].includes(id) ? 'As at ' + fmtD(tag, true) : `${pr.label ? pr.label + ': ' : ''}${fmtD(pr.from, true)} to ${fmtD(pr.to, true)}`;
   return { r, sheets, name, period };
 }
 function exportReport(id) {
@@ -4026,7 +4119,11 @@ function repDash(id, d) {
   const money = (l, v, o) => Object.assign({ l, v, money: true }, o || {});
   const pctOf = (a, b) => b ? Math.round(a / b * 1000) / 10 + '%' : '—';
   let tiles = [], charts = [];
-  if (id === 'projects') {
+  if (id === 'clients' && d.sheets[0] && d.sheets[0].name === 'Clients') {
+    const t = sh(0), real = x => x[t.c('Client')] && !isTot(x);
+    tiles = [money('Received to date', sum(t, 'Received', real), { good: true }), money('Due now', sum(t, 'Due now', real), { bad: sum(t, 'Due now', real) > 0.5 }), money('Still to bill', sum(t, 'Still to bill', real)), money('SLATE owes clients', sum(t, 'SLATE owes them', x => real(x) && t.num(x, 'SLATE owes them') > 0)), { l: 'Clients', v: String(t.body.filter(x => real(x) && x[0]).length) }];
+    charts = [{ t: 'Received by client', items: top(t.body.filter(real).map(x => ({ l: x[t.c('Client')], v: t.num(x, 'Received') })), 10) }, { t: 'Due now by client', items: top(t.body.filter(real).map(x => ({ l: x[t.c('Client')], v: t.num(x, 'Due now') })), 10) }];
+  } else if (id === 'projects') {
     const t = sh(0), real = x => x[t.c('Code')] && !isTot(x);
     const fees = sum(t, 'Fees'), costs = sum(t, 'Project costs'), prof = sum(t, 'Profit'), owed = sum(t, 'Still to collect');
     tiles = [money('Fees earned', fees, { good: true }), money('Project costs', costs), money('Profit', prof, { sign: true }), { l: 'Margin', v: pctOf(prof, fees) }, money('Still to collect', owed), { l: 'Projects', v: String(t.body.filter(real).length) }];
@@ -5992,7 +6089,7 @@ async function holderAutoApprove(key, body) {
 }
 
 /* ---------- start-up: capabilities, roles, live data ---------- */
-const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'rcmonth', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs'];
+const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'rcmonth', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs', 'parties'];
 const NEED = ['settings', 'ledgers', 'vouchers', 'projects'];
 let loaded = {}, profTimer = null, catTimer = null, lastProfKey = '';
 function changed() { S.ver++; render(); renderSheet(true); scheduleProfiles(); scheduleCatalog(); }

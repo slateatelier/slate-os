@@ -3854,6 +3854,8 @@ function gsearchFind(q){
   const out=[], has=x=>String(x||'').toLowerCase().includes(q), leave=()=>{ if(S.books) S.books=false; };
   projects().filter(p=>(fullView()||canSeeProjectDetail(p))&&(has(p.name)||has(p.code)||has(p.client))).slice(0,5)
     .forEach(p=>out.push({g:'Projects',l:p.name,c:p.code||'',s:[podLabel(p.pod||''),p.client||''].filter(Boolean).join(' · '),go:()=>{ leave(); openProjectView(p.id); }}));
+  if(canProps()) partyList().filter(c=>has(c.name)||has(c.pid)||has(c.legal)||(c.aka||[]).some(has)).slice(0,4)
+    .forEach(c=>out.push({g:'Clients and parties',l:c.name,c:c.pid||'',s:[(c.roles||[]).map(pRoleL).join(', '),c.contact,c.phone].filter(Boolean).join(' · '),go:async()=>{ leave(); if(window.SlatePin&&!(await SlatePin.ensure())) return; S.books=false; S.view='biz'; S.biz={...(S.biz||{q:'',st:'active'}),tab:'clients'}; render(true); openClient(c.id); }}));
   activeTasks().filter(t=>{ const p=S.projects[t.projectId]; return has(t.title)||(p&&(has(p.name)||has(p.code))); })
     .sort((a,b)=>(!!a.doneAt-!!b.doneAt)||byTarget(a,b)).slice(0,6)
     .forEach(t=>{ const p=S.projects[t.projectId]; out.push({g:'Tasks',l:t.title,s:[p?p.name:'',nameOf(t.assignee),t.doneAt?'done':t.target?fmtD(t.target):''].filter(Boolean).join(' · '),go:()=>{ leave(); openTask(t.id); }}); });
@@ -9844,7 +9846,20 @@ function openProp(id,convert){ if(window.SlatePin&&SlatePin.required()&&!SlatePi
    Every project and proposal form suggests from it and fills the details; anything changed there can be saved back.
    Clients only found on projects and proposals (before the database) are listed too and saved with one tap. */
 const cNorm=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
-const CLIENT_F=['contact','title','phone','email','address','type','note'];
+const CLIENT_F=['contact','title','phone','email','address','type','note','legal','bin','tin'];
+/* parties (Principal, 3 Nov 2026): one list for clients, consultants, suppliers and other parties. Each has a Party ID (PTY-0001 …)
+   given by the database, never typed or changed. Projects and proposals carry clientId (found from the client name); Books gets a copy. */
+const P_ROLES=[['client','Client'],['consultant','Consultant'],['supplier','Supplier'],['viz','3D visualisation'],['referral','Referral'],['service','Service'],['jv','Joint venture'],['related','Related party']];
+const pRoleL=r=>(P_ROLES.find(x=>x[0]===r)||[r,r])[1];
+const isClientP=c=>!c||!Array.isArray(c.roles)||!c.roles.length||c.roles.includes('client');
+const partyById=pid=>{ if(!pid) return null; for(const [id,c] of Object.entries(S.clients||{})) if(c&&c.pid===pid) return {...c,id}; return null; };
+function partyList(){ return Object.entries(S.clients||{}).filter(([,c])=>c&&!c.deleted&&c.name).map(([id,c])=>({...c,id})).sort((a,b)=>String(a.pid||'~').localeCompare(String(b.pid||'~'))||a.name.localeCompare(b.name)); }
+/* Books accounts a party can own (payable and loan), read for linking in the party sheet */
+async function loadBkLed(force){ const B=S.bkLed||(S.bkLed={state:'idle',L:{}}); if(B.state==='loading'||(!force&&B.state==='ok'&&Date.now()-B.at<120000)) return;
+  B.state='loading'; try{ const {data,error}=await window.slateSupabase.from('books_docs').select('doc_id,data').eq('coll','ledgers'); if(error) throw error;
+    const L={}; (data||[]).forEach(r=>{ const d=r.data||{}; if(['pay','loan'].includes(d.group)&&d.active!==false&&!d.mergedInto) L[r.doc_id]={name:d.name||r.doc_id,group:d.group,vk:d.vk||'',party:d.party||''}; });
+    Object.assign(B,{state:'ok',L,at:Date.now()}); }catch(e){ B.state='err'; }
+  if(S.sheet&&S.sheet.type==='client') renderSheet(); else if(S.view==='biz') render(true); }
 function clientRec(name){ const k=cNorm(name); if(!k) return null; for(const [id,c] of Object.entries(S.clients||{})) if(c&&!c.deleted&&(cNorm(c.name)===k||(c.aka||[]).some(a=>cNorm(a)===k))) return {...c,id}; return null; }
 /* phone numbers (Principal, 2 Nov 2026): copied from a PC, Android or iPhone they bring spaces, dashes, brackets and invisible
    direction marks. Kept as digits with one leading + only, whatever is typed or pasted into a phone box. */
@@ -9862,18 +9877,18 @@ function clientDir(){ const M={}, AL={}; Object.values(S.clients||{}).forEach(c=
   Object.values(S.projects||{}).forEach(x=>{ if(!x||!x.client||isInternalP(x)||x.pod==='Studio') return; add(x.client,{contact:x.contact,phone:x.phone,type:x.type},x.createdAt||''); const m=M[norm(x.client)]; if(!m) return; m.projects++; if(!x.closed) m.live++; });
   Object.values(S.props||{}).forEach(x=>{ if(!x||!x.client) return; const dd=x.doc||{}; add(x.client,{contact:x.contact||dd.toName,phone:x.phone,email:x.email,title:dd.toTitle,address:dd.toAddress,type:x.type,src:x.src},x.createdAt||''); const m=M[norm(x.client)]; if(m) m.props++; });
   /* saved client records win: their details are the ones to use */
-  Object.entries(S.clients||{}).forEach(([id,c])=>{ if(!c||c.deleted||!c.name) return; const k=norm(c.name); const x=M[k]||(M[k]={name:c.name,projects:0,live:0,props:0,at:'',last:c.updatedAt||c.createdAt||''});
-    x.id=id; x.name=c.name; x.delReq=c.delReq||null; CLIENT_F.forEach(f=>{ if(c[f]) x[f]=c[f]; }); if(c.title) x.title=c.title; if(c.address) x.address=c.address; });
+  Object.entries(S.clients||{}).forEach(([id,c])=>{ if(!c||c.deleted||!c.name||!isClientP(c)) return; const k=norm(c.name); const x=M[k]||(M[k]={name:c.name,projects:0,live:0,props:0,at:'',last:c.updatedAt||c.createdAt||''});
+    x.id=id; x.name=c.name; x.pid=c.pid||''; x.roles=c.roles||['client']; x.legal=c.legal||''; x.ledgers=c.ledgers||[]; x.delReq=c.delReq||null; CLIENT_F.forEach(f=>{ if(c[f]) x[f]=c[f]; }); if(c.title) x.title=c.title; if(c.address) x.address=c.address; });
   /* running work first, then most recent: a client with only closed or one-off placeholder projects drops down */
   return Object.values(M).sort((a,b)=>(b.live+b.props)-(a.live+a.props)||(b.last||'').localeCompare(a.last||'')||a.name.localeCompare(b.name)); }
 /* the client box: type to search known clients, tap one to fill the details */
 function clientPick(d,opt){ const box=h('div',{style:'display:grid;gap:6px'}), list=h('div',{style:'display:grid;gap:4px'});
   const show=()=>{ list.textContent=''; const q=String(d.client||'').trim().toLowerCase(); if(d._picked&&d._picked===d.client) return;
-    const xs=clientDir().filter(c=>!q||c.name.toLowerCase().includes(q)).slice(0,q?6:4); if(!xs.length) return;
+    const xs=clientDir().filter(c=>!q||(c.name+' '+(c.pid||'')+' '+(c.legal||'')).toLowerCase().includes(q)).slice(0,q?6:4); if(!xs.length) return;
     xs.forEach(c=>list.append(h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:8px 12px;text-align:left;justify-content:flex-start;border-radius:10px',onclick:()=>{
       d.client=String(c.name||'').toUpperCase(); d._picked=d.client; ['contact','phone','email'].forEach(f=>{ if(c[f]) d[f]=c[f]; }); if(c.title) d._title=c.title; if(c.address) d._addr=c.address; if(c.type&&d.clientType==null) d.clientType=c.type;
       if(c.type&&!d.type) d.type=c.type; if(!d.src) d.src=c.projects?'client':(c.src||''); renderSheet(); }},
-      h('span',{},h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?(c.live?c.live+' running':'')+(c.live&&c.projects>c.live?', ':'')+(c.projects>c.live?(c.projects-c.live)+' closed':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact,c.phone].filter(Boolean).join(' · ')}),c.id?null:h('span',{class:'muted',style:'font-size:11.5px',text:' · not in Clients yet'})))));
+      h('span',{},c.pid?h('span',{class:'mono muted',style:'font-size:12px',text:c.pid+' '}):null,h('b',{text:c.name}),h('span',{class:'muted',style:'font-size:12.5px',text:' · '+[c.projects?(c.live?c.live+' running':'')+(c.live&&c.projects>c.live?', ':'')+(c.projects>c.live?(c.projects-c.live)+' closed':''):'',c.props?c.props+' proposal'+(c.props>1?'s':''):'',c.contact,c.phone].filter(Boolean).join(' · ')}),c.id?null:h('span',{class:'muted',style:'font-size:11.5px',text:' · not in Clients yet'})))));
     list.prepend(h('div',{class:'f-hint',style:'margin:0',text:q?'Existing clients · tap to fill their details':'Your main clients · tap one, or type a new name'})); };
   const inpEl=h('input',{id:'sh-client',maxlength:120,placeholder:opt&&opt.ph||'Company or person',value:d.client||'',autocomplete:'off',style:'text-transform:uppercase',autocapitalize:'characters',oninput:e=>{ d.client=e.target.value.toUpperCase(); d._picked=''; show(); }});
   box.append(inpEl,list); show();
@@ -12228,45 +12243,82 @@ function viewMoney(){
     h('p',{class:'f-hint',style:'margin:6px 4px 0',text:'Fees clients still owe are not in Books until they are invoiced; see “Fees still to come” above. Balances are to be confirmed with Accounts.'})));
   return out; }
 function viewClients(){
-  const F=S.cf||(S.cf={q:''}), q=cNorm(F.q), all=clientDir(), xs=all.filter(c=>!q||[c.name,c.contact,c.phone,c.email,c.address].some(v=>cNorm(v).includes(q)));
-  const saved=all.filter(c=>c.id).length, unsaved=all.filter(c=>!c.id);
-  const out=[...bizHead('Every client in one place. New projects and proposals suggest from this list and fill in the details.',S.canWrite?h('div',{class:'actions'},
+  const F=S.cf||(S.cf={q:'',k:'client'}); if(!F.k) F.k='client';
+  const q=cNorm(F.q), all=clientDir(), hit=c=>!q||[c.name,c.contact,c.phone,c.email,c.address,c.pid,c.legal].some(v=>cNorm(v).includes(q));
+  const payees=partyList().filter(c=>!isClientP(c)), unsaved=all.filter(c=>!c.id);
+  const B=S.bkLed; if(S.canWrite&&(!B||B.state==='idle')) loadBkLed();
+  const linked=new Set(); partyList().forEach(c=>(c.ledgers||[]).forEach(l=>linked.add(l)));
+  const loose=B&&B.state==='ok'?Object.entries(B.L).filter(([k,l])=>!l.party&&!linked.has(k)&&l.group==='pay'):[];
+  const out=[...bizHead('Every client, consultant and supplier in one list, each with a Party ID that never changes. Projects and proposals link to their client by it, and Books bills and reports by it.',S.canWrite?h('div',{class:'actions'},
       unsaved.length?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:()=>{ run(async()=>{ for(const c of unsaved) await clientUpsert({name:c.name,contact:c.contact,title:c.title,phone:c.phone,email:c.email,address:c.address,type:c.type}); },`${unsaved.length} client${unsaved.length===1?'':'s'} saved`).then(()=>render(true)); },text:`Save ${unsaved.length} from projects`}):null,
-      h('button',{class:'btn btn-primary',type:'button',onclick:()=>openClient(null),text:'+ New client'})):null)];
-  out.push(h('div',{class:'kpis kpis4'},kpi('Clients',all.length),kpi('In the database',saved),kpi('With live projects',all.filter(c=>c.live).length,'early'),kpi('With open proposals',all.filter(c=>c.props).length,'late')));
-  out.push(h('div',{class:'bar'},h('input',{id:'cl-q',type:'search',placeholder:'Search name, contact, phone or email',value:F.q,oninput:e=>{ F.q=e.target.value; render(true); setTimeout(()=>{ const el=document.getElementById('cl-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } },0); }})));
-  if(!xs.length){ out.push(h('div',{class:'empty'},h('h3',{text:all.length?'No client matches':'No clients yet'}),h('p',{class:'muted',style:'margin:0',text:all.length?'Try another name or number.':'Add the first one with + New client.'}))); return out; }
-  out.push(h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'cl-tbl'},
-    h('thead',{},h('tr',{},h('th',{text:'Client'}),h('th',{text:'Contact'}),h('th',{text:'Phone'}),h('th',{text:'Email'}),h('th',{class:'n',text:'Projects'}),h('th',{class:'n',text:'Proposals'}),h('th',{text:''}))),
-    h('tbody',{},xs.map(c=>h('tr',{style:'cursor:pointer',onclick:()=>openClient(c.id||null,c)},
-      h('td',{},h('b',{text:c.name}),c.address?h('div',{class:'sub2',text:c.address.split('\n')[0]}):null),
-      h('td',{},h('div',{text:c.contact||'—'}),c.title?h('div',{class:'sub2',text:c.title}):null),
-      h('td',{class:'mono',text:c.phone||'—'}),h('td',{text:c.email||'—'}),
-      h('td',{class:'n',text:c.projects?`${c.projects}${c.live?' ('+c.live+' live)':''}`:'—'}),h('td',{class:'n',text:c.props?String(c.props):'—'}),
-      h('td',{},c.delReq&&!c.delReq.ok?h('span',{class:'pill s-overdue',text:'deletion asked'}):c.id?null:h('span',{class:'pill s-open',text:'not saved'}))))))));
+      loose.length?h('button',{class:'btn',type:'button',disabled:S.busy,title:loose.map(([,l])=>l.name).join(', '),onclick:()=>{ run(async()=>{ const now=new Date().toISOString(); for(const [k,l] of loose) await S.db.collection('clients').doc().set({name:l.name.toUpperCase(),legal:l.name,roles:[l.vk==='staff'?'service':(l.vk||'supplier')],ledgers:[k],createdAt:now,createdBy:S.uid}); },`${loose.length} added from Books`).then(()=>{ loadBkLed(true); render(true); }); },text:`Add ${loose.length} from Books`}):null,
+      h('button',{class:'btn btn-primary',type:'button',onclick:()=>openClient(null,F.k==='payee'?{roles:['consultant']}:null),text:F.k==='payee'?'+ New consultant or supplier':'+ New client'})):null)];
+  out.push(h('div',{class:'kpis kpis4'},kpi('Clients',all.length),kpi('With live projects',all.filter(c=>c.live).length,'early'),kpi('With open proposals',all.filter(c=>c.props).length,'late'),kpi('Consultants and suppliers',payees.length)));
+  out.push(h('div',{class:'bar'},seg('Show',[['client','Clients'],['payee','Consultants and suppliers'],['all','All parties']],F.k,v=>{ F.k=v; render(true); }),
+    h('input',{id:'cl-q',type:'search',placeholder:'Search name, Party ID, contact or phone',value:F.q,oninput:e=>{ F.q=e.target.value; render(true); setTimeout(()=>{ const el=document.getElementById('cl-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } },0); }})));
+  const idCell=c=>h('td',{class:'mono',style:'white-space:nowrap',text:c.pid||'—'});
+  const pend=c=>c.delReq&&!c.delReq.ok?h('span',{class:'pill s-overdue',text:'deletion asked'}):c.id?null:h('span',{class:'pill s-open',text:'not saved'});
+  if(F.k!=='payee'){
+    const xs=all.filter(hit);
+    if(!xs.length&&F.k==='client'){ out.push(h('div',{class:'empty'},h('h3',{text:all.length?'No client matches':'No clients yet'}),h('p',{class:'muted',style:'margin:0',text:all.length?'Try another name, Party ID or number.':'Add the first one with + New client.'}))); return out; }
+    if(xs.length) out.push(...(F.k==='all'?[h('div',{class:'lbl',style:'margin:6px 2px',text:'Clients'})]:[]),h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'cl-tbl'},
+      h('thead',{},h('tr',{},h('th',{text:'Party ID'}),h('th',{text:'Client'}),h('th',{text:'Contact'}),h('th',{text:'Phone'}),h('th',{class:'n',text:'Projects'}),h('th',{class:'n',text:'Proposals'}),h('th',{text:''}))),
+      h('tbody',{},xs.map(c=>h('tr',{style:'cursor:pointer',onclick:()=>openClient(c.id||null,c)},idCell(c),
+        h('td',{},h('b',{text:c.name}),c.legal&&cNorm(c.legal)!==cNorm(c.name)?h('div',{class:'sub2',text:'Billed as '+c.legal}):c.address?h('div',{class:'sub2',text:c.address.split('\n')[0]}):null,(c.roles||[]).length>1?h('div',{class:'sub2',text:c.roles.map(pRoleL).join(' · ')}):null),
+        h('td',{},h('div',{text:c.contact||'—'}),c.title?h('div',{class:'sub2',text:c.title}):null),
+        h('td',{class:'mono',text:c.phone||'—'}),
+        h('td',{class:'n',text:c.projects?`${c.projects}${c.live?' ('+c.live+' live)':''}`:'—'}),h('td',{class:'n',text:c.props?String(c.props):'—'}),
+        h('td',{},pend(c))))))));
+  }
+  if(F.k!=='client'){
+    const ys=payees.filter(hit), led=B&&B.state==='ok'?B.L:{};
+    if(!ys.length&&F.k==='payee'){ out.push(h('div',{class:'empty'},h('h3',{text:payees.length?'Nothing matches':'No consultants or suppliers yet'}),h('p',{class:'muted',style:'margin:0',text:payees.length?'Try another name or Party ID.':'Add one, or add the ones Books already pays.'}))); return out; }
+    if(ys.length) out.push(...(F.k==='all'?[h('div',{class:'lbl',style:'margin:14px 2px 6px',text:'Consultants, suppliers and other parties'})]:[]),h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{class:'cl-tbl'},
+      h('thead',{},h('tr',{},h('th',{text:'Party ID'}),h('th',{text:'Name'}),h('th',{text:'Role'}),h('th',{text:'Contact'}),h('th',{text:'Books account'}),h('th',{text:''}))),
+      h('tbody',{},ys.map(c=>h('tr',{style:'cursor:pointer',onclick:()=>openClient(c.id,c)},idCell(c),h('td',{},h('b',{text:c.name}),c.legal&&cNorm(c.legal)!==cNorm(c.name)?h('div',{class:'sub2',text:c.legal}):null),
+        h('td',{text:(c.roles||[]).map(pRoleL).join(', ')||'—'}),h('td',{},h('div',{text:c.contact||'—'}),c.phone?h('div',{class:'sub2 mono',text:c.phone}):null),
+        h('td',{class:'muted',text:(c.ledgers||[]).map(k=>(led[k]||{}).name||k).join(', ')||'—'}),h('td',{},pend(c))))))));
+  }
   return out; }
-function openClient(id,seed){ const c=id?{...(S.clients||{})[id]}:{...(seed||{})}; const d={name:c.name||'',aka:(c.aka||[]).join(', ')}; CLIENT_F.forEach(f=>{ d[f]=c[f]||''; });
-  S.sheet={type:'client',id,d,err:''}; renderSheet(); }
+function openClient(id,seed){ const c=id?{...(S.clients||{})[id]}:{...(seed||{})};
+  const d={name:c.name||'',aka:(c.aka||[]).join(', '),roles:Array.isArray(c.roles)&&c.roles.length?c.roles.slice():['client'],ledgers:Array.isArray(c.ledgers)?c.ledgers.slice():[]}; CLIENT_F.forEach(f=>{ d[f]=c[f]||''; });
+  S.sheet={type:'client',id,d,err:'',pid:id?c.pid||'':''}; if(!S.bkLed||S.bkLed.state!=='ok') loadBkLed(); renderSheet(); }
 function sheetClient(){ const sh=S.sheet, d=sh.d, id=sh.id, k=cNorm(d.name);
-  const projs=projects().filter(p=>cNorm(p.client)===k||((d.aka||'').split(',').some(a=>cNorm(a)&&cNorm(a)===cNorm(p.client)))), props=propList().filter(p=>cNorm(p.client)===k);
+  const mine=p=>(sh.pid&&p.clientId===sh.pid)||(!p.clientId&&(cNorm(p.client)===k||(d.aka||'').split(',').some(a=>cNorm(a)&&cNorm(a)===cNorm(p.client))));
+  const projs=projects().filter(mine), props=propList().filter(mine);
   const save=()=>{ const name=d.name.trim().toUpperCase(); if(!name) return fail('Give the client’s name.'); const dup=clientRec(name); if(dup&&dup.id!==id) return fail('A client with this name is already saved. Open it from the list.');
-    const now=new Date().toISOString(), v={name,aka:d.aka.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean)}; CLIENT_F.forEach(f=>{ v[f]=String(d[f]||'').trim(); });
+    if(!d.roles.length) return fail('Tick at least one role, e.g. Client or Consultant.');
+    const now=new Date().toISOString(), v={name,aka:d.aka.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean),roles:d.roles.slice(),ledgers:d.ledgers.slice()}; CLIENT_F.forEach(f=>{ v[f]=String(d[f]||'').trim(); });
     run(()=>id?S.db.doc('clients/'+id).update({...v,updatedAt:now,updatedBy:S.uid}):S.db.collection('clients').doc().set({...v,createdAt:now,createdBy:S.uid}),id?'Client updated':'Client saved').then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const rec=id?(S.clients||{})[id]:null, pend=rec&&rec.delReq;
   const del=()=>{ if(!sh.delAsk){ sh.delAsk={why:'',props:false}; renderSheet(); return; } };
   const tx=(k2,o)=>h('input',{id:'cl-'+k2,class:'tl-num qs-in',value:d[k2]||'',...(o||{}),oninput:e=>{ d[k2]=e.target.value; }});
   const kv=(l,v,top)=>h('div',{class:'qs-kv'+(top?' qs-top':'')},h('span',{class:'qs-k',text:l}),h('div',{class:'qs-v'},v));
-  return [head('Business › Clients',id?d.name||'Client':'New client'),
+  const B=S.bkLed||{}, LL=B.L||{}, taken=new Set(); partyList().forEach(c=>{ if(c.id!==id) (c.ledgers||[]).forEach(l=>taken.add(l)); });
+  const roleBox=h('div',{class:'chips'},P_ROLES.map(([r,l])=>h('button',{type:'button',class:'chip'+(d.roles.includes(r)?' on':''),style:'border:0;cursor:pointer','aria-pressed':String(d.roles.includes(r)),onclick:()=>{ d.roles=d.roles.includes(r)?d.roles.filter(x=>x!==r):[...d.roles,r]; renderSheet(); },text:(d.roles.includes(r)?'✓ ':'')+l})));
+  const accBox=h('div',{style:'display:grid;gap:6px'},
+    d.ledgers.length?h('div',{class:'chips'},d.ledgers.map(k2=>h('span',{class:'chip'},(LL[k2]||{}).name||k2,S.canWrite?h('button',{type:'button','aria-label':'Unlink '+((LL[k2]||{}).name||k2),style:'border:0;background:none;cursor:pointer;padding:0 0 0 6px;font:inherit',onclick:()=>{ d.ledgers=d.ledgers.filter(x=>x!==k2); renderSheet(); },text:'×'}):null))):h('span',{class:'muted',style:'font-size:13.5px',text:'None linked'}),
+    !S.canWrite?null:B.state==='ok'?(()=>{ const opts=Object.entries(LL).filter(([k2])=>!d.ledgers.includes(k2)&&!taken.has(k2)).sort((a,b)=>a[1].name.localeCompare(b[1].name)); if(!opts.length) return null;
+      return h('select',{id:'cl-led',class:'tl-num qs-in','data-pick':'off','aria-label':'Link a Books account',onchange:e=>{ if(e.target.value){ d.ledgers.push(e.target.value); renderSheet(); } }},h('option',{value:'',text:'+ Link a Books account…'}),opts.map(([k2,l])=>h('option',{value:k2,text:l.name+(l.group==='loan'?' (loan)':'')}))); })()
+      :h('span',{class:'f-hint',style:'margin:0',text:B.state==='err'?'Books accounts couldn’t be read just now.':'Reading Books accounts…'}));
+  const isCl=d.roles.includes('client');
+  return [head('Business › Clients',id?(sh.pid?sh.pid+' · ':'')+(d.name||'Party'):d.roles.includes('client')?'New client':'New party'),
     h('div',{class:'qs-box qs-wide'},
-      kv('Client',tx('name',{maxlength:120,placeholder:'Company or person',style:'text-transform:uppercase',autocapitalize:'characters'})),
+      kv('Party ID',h('span',{class:'qs-t mono',text:sh.pid||'Given when saved'})),
+      kv(isCl?'Client':'Name',tx('name',{maxlength:120,placeholder:'Company or person',style:'text-transform:uppercase',autocapitalize:'characters'})),
+      kv('Formal name',tx('legal',{maxlength:160,placeholder:isCl?'As on invoices, e.g. EDISON REAL ESTATE LTD. (EREL)':'As on their bills'})),
+      kv('Role',roleBox),
       kv('Contact person',tx('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin'})),
       kv('Designation',tx('title',{maxlength:80,placeholder:'e.g. Chairman'})),
       kv('Phone',tx('phone',{type:'tel',maxlength:40})),
       kv('Email',tx('email',{type:'email',maxlength:120})),
       kv('Address',h('textarea',{id:'cl-address',class:'tl-num qs-in pq-ta',rows:3,maxlength:240,value:d.address||'',oninput:e=>{ d.address=e.target.value; }}),true),
       kv('Client type',(()=>{ const el=h('select',{id:'cl-type',class:'tl-num qs-in',onchange:e=>{ d.type=e.target.value; }},h('option',{value:'',text:'Not set'}),Object.entries(STD_DEF).filter(([x])=>x!=='proposal'&&x!=='interior').map(([x,t])=>h('option',{value:x,text:t.name}))); el.value=d.type||''; return el; })()),
+      kv('BIN / TIN',h('div',{class:'form-row',style:'gap:8px'},tx('bin',{maxlength:40,placeholder:'BIN (VAT)',inputmode:'numeric'}),tx('tin',{maxlength:40,placeholder:'TIN (tax)',inputmode:'numeric'}))),
+      kv('Books accounts',accBox,true),
       kv('Other names',tx('aka',{maxlength:200,placeholder:'e.g. FORTRESS, FORTRESS RE (comma separated)',style:'text-transform:uppercase',autocapitalize:'characters'})),
       kv('Note',h('textarea',{id:'cl-note',class:'tl-num qs-in pq-ta',rows:2,maxlength:400,value:d.note||'',oninput:e=>{ d.note=e.target.value; }}),true)),
+    sh.pid?h('p',{class:'f-hint',style:'margin:0 2px',text:`Projects and proposals link to ${sh.pid}. Renaming here renames it on all of them; the formal name goes on Books invoices. Statement: Books › Reports › Clients and parties.`}):null,
     projs.length||props.length?h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',text:'Work with this client'}),
       ...projs.map(p=>h('button',{class:'linkish',type:'button',style:'justify-self:start;text-decoration:none',onclick:()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); },text:`${projLabel(p)}${p.closed?' · closed':''}`})),
       ...props.map(p=>h('div',{class:'f-hint',style:'margin:0',text:`Proposal · ${p.name||'—'}${p.status&&p.status!=='open'?' · '+p.status:''}`}))):null,
