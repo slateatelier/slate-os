@@ -1521,7 +1521,6 @@ function projFeeIn(pid) {
   });
   return { all: r2(all), unl: r2(unl) };
 }
-const feeVatDefault = p => /VAT[^.]{0,40}(payable|paid|borne)\s+by\s+(the\s+)?client|VAT[^.]{0,20}(extra|not included|excluded)/i.test((p && p.feeTerms) || '') ? 'add' : 'none';
 /* every stage of a project with its tag; cur = the invoice being made or printed ({ _id, items }) */
 function stageBook(pid, cur) {
   const p = S.projects[pid]; if (!p || !(p.stages || []).length) return null;
@@ -1624,43 +1623,69 @@ function winBytes(s) {
   return out;
 }
 function pdfStr(s) { return '(' + winBytes(s).map(c => c === 40 || c === 41 || c === 92 ? '\\' + String.fromCharCode(c) : (c > 126 ? '\\' + c.toString(8).padStart(3, '0') : String.fromCharCode(c))).join('') + ')'; }
+/* the SLATE letterhead pad (same geometry as the proposal and agreement pad in SLATE OS), in points.
+   Fonts: Didact Gothic for text, Jost for headings and the pad (both SIL OFL, in /fonts), embedded in each PDF.
+   If the fonts can't load (offline), the PDF falls back to Helvetica with the same layout. */
+const MM = 72 / 25.4, PAD = { l: 12.6 * MM, r: 14 * MM, t: 53.5 * MM, b: 236 * MM };
+const PAD_ADDR = ['SLATE, Flat: B2, Level - 02, House: SW (I) 3/A', 'Road: 02, Gulshan 01, Dhaka -1212', '+88 01749 390 284', 'slate-atelier.com', 'team@slate-atelier.com'];
+const PAD_MARK = [[0, 0, 106, 7], [0, 0, 8, 44], [98, 0, 8, 44], [74, 37, 32, 7], [0, 63, 32, 7], [0, 63, 8, 45], [98, 63, 8, 45], [0, 101, 106, 7]];
+let PDF_FONTS = null;
+const pdfFontsReady = (async () => {
+  try {
+    const get = k => fetch('/fonts/' + k + '.ttf').then(r => { if (!r.ok) throw new Error('font'); return r.arrayBuffer(); });
+    const [m, a, b, c] = await Promise.all([fetch('/fonts/pdf-fonts.json').then(r => { if (!r.ok) throw new Error('font'); return r.json(); }), get('didact-400'), get('jost-600'), get('jost-400')]);
+    const bin = buf => { const u = new Uint8Array(buf); let x = ''; for (let i = 0; i < u.length; i += 8192) x += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return x; };
+    PDF_FONTS = { F1: Object.assign({ bin: bin(a) }, m['didact-400']), F2: Object.assign({ bin: bin(b) }, m['jost-600']), F3: Object.assign({ bin: bin(c) }, m['jost-400']) };
+  } catch (e) { PDF_FONTS = null; }
+})();
 function PDFDoc(landscape) {
   const W = landscape ? 841.89 : 595.28, H = landscape ? 595.28 : 841.89, pages = []; let ops = [];
   const rgb = c => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c || '#000000'); return m ? [1, 2, 3].map(i => (parseInt(m[i], 16) / 255).toFixed(3)).join(' ') : '0 0 0'; };
   const doc = {
     W, H,
-    width(s, size, bold) { const w = bold ? PDF_W.b : PDF_W.r; return winBytes(s).reduce((t, c) => t + (w[c - 32] || 556), 0) * size / 1000; },
+    fontKey(bold, font) { return bold ? 'F2' : font === 'jost' ? 'F3' : 'F1'; },
+    width(s, size, bold, font, spacing) {
+      const k = doc.fontKey(bold, font), b = winBytes(s);
+      const w = PDF_FONTS ? PDF_FONTS[k].w : (k === 'F2' ? PDF_W.b : PDF_W.r);
+      return b.reduce((t, c) => t + (w[c - 32] || 556), 0) * size / 1000 + (spacing ? spacing * Math.max(0, b.length - 1) : 0);
+    },
     text(x, y, s, o = {}) {
-      const size = o.size || 10, bold = !!o.bold; let tx = x; const w = doc.width(s, size, bold);
+      const size = o.size || 10, bold = !!o.bold; let tx = x; const w = doc.width(s, size, bold, o.font, o.spacing);
       if (o.align === 'right') tx = x - w; else if (o.align === 'center') tx = x - w / 2;
-      ops.push(`BT /${bold ? 'F2' : 'F1'} ${size} Tf ${rgb(o.color || '#231f20')} rg ${tx.toFixed(2)} ${(H - y).toFixed(2)} Td ${o.spacing ? o.spacing + ' Tc ' : ''}${pdfStr(s)} Tj ${o.spacing ? '0 Tc ' : ''}ET`);
+      ops.push(`BT /${doc.fontKey(bold, o.font)} ${size} Tf ${rgb(o.color || '#231f20')} rg ${tx.toFixed(2)} ${(H - y).toFixed(2)} Td ${o.spacing ? o.spacing + ' Tc ' : ''}${pdfStr(s)} Tj ${o.spacing ? '0 Tc ' : ''}ET`);
       return w;
     },
-    wrap(s, maxW, size, bold) {
+    wrap(s, maxW, size, bold, o2 = {}) {
       const out = []; String(s || '').split(/\n/).forEach(par => {
         let line = ''; par.split(/\s+/).forEach(word => {
           const t = line ? line + ' ' + word : word;
-          if (doc.width(t, size, bold) <= maxW || !line) line = t; else { out.push(line); line = word; }
+          if (doc.width(t, size, bold, o2.font) <= maxW || !line) line = t; else { out.push(line); line = word; }
         }); out.push(line);
       }); return out;
     },
-    para(x, y, s, maxW, o = {}) { const lh = o.lh || (o.size || 10) * 1.35; doc.wrap(s, maxW, o.size || 10, o.bold).forEach((ln, i) => doc.text(x, y + i * lh, ln, o)); return doc.wrap(s, maxW, o.size || 10, o.bold).length * lh; },
+    para(x, y, s, maxW, o = {}) { const lh = o.lh || (o.size || 10) * 1.35, ls = doc.wrap(s, maxW, o.size || 10, o.bold, o); ls.forEach((ln, i) => doc.text(x, y + i * lh, ln, o)); return ls.length * lh; },
     line(x1, y1, x2, y2, o = {}) { ops.push(`${rgb(o.color || '#231f20')} RG ${o.w || 0.6} w ${x1.toFixed(2)} ${(H - y1).toFixed(2)} m ${x2.toFixed(2)} ${(H - y2).toFixed(2)} l S`); },
     rect(x, y, w, h, o = {}) { ops.push(`${rgb(o.fill || '#EFF2F4')} rg ${x.toFixed(2)} ${(H - y - h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); },
-    logo(x, y, w) { const h = w * 596 / 420; ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${(H - y - h).toFixed(2)} cm /Im1 Do Q`); return h; },
+    frame(x, y, w, h, o = {}) { ops.push(`${rgb(o.color || '#000000')} RG ${o.w || 0.75} w ${x.toFixed(2)} ${(H - y - h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S`); },
+    logo(x, y, w) { doc.usedLogo = true; const h = w * 596 / 420; ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${(H - y - h).toFixed(2)} cm /Im1 Do Q`); return h; },
     page() { if (ops.length) pages.push(ops.join('\n')); ops = []; },
     output() {
       doc.page();
       const logoBin = atob(PDF_LOGO), objs = [];
       const add = s => { objs.push(s); return objs.length; };
       const cat = add('<< /Type /Catalog /Pages 2 0 R >>'); add('PAGES');
-      const f1 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
-      const f2 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
-      const im = add({ img: true });
+      const ttf = k => { const F = PDF_FONTS[k];
+        const ff = add({ stream: F.bin, dict: `/Length1 ${F.bin.length}` });
+        const fd = add(`<< /Type /FontDescriptor /FontName /${F.name} /Flags 32 /FontBBox [${F.bbox.join(' ')}] /ItalicAngle 0 /Ascent ${F.asc} /Descent ${F.desc} /CapHeight ${F.cap} /StemV ${k === 'F2' ? 120 : 80} /FontFile2 ${ff} 0 R >>`);
+        return add(`<< /Type /Font /Subtype /TrueType /BaseFont /${F.name} /FirstChar 32 /LastChar 255 /Widths [${F.w.join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${fd} 0 R >>`); };
+      const f1 = PDF_FONTS ? ttf('F1') : add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+      const f2 = PDF_FONTS ? ttf('F2') : add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+      const f3 = PDF_FONTS ? ttf('F3') : f1;
+      const im = doc.usedLogo ? add({ img: true }) : 0;
       const kids = [];
       pages.forEach(content => {
         const c = add({ stream: content });
-        kids.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> /XObject << /Im1 ${im} 0 R >> >> /Contents ${c} 0 R >>`));
+        kids.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R /F3 ${f3} 0 R >>${im ? ` /XObject << /Im1 ${im} 0 R >>` : ''} >> /Contents ${c} 0 R >>`));
       });
       objs[1] = `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;
       const parts = [], offs = []; let len = 0;
@@ -1669,7 +1694,7 @@ function PDFDoc(landscape) {
       objs.forEach((o, i) => {
         offs.push(len);
         if (o && o.img) push(`${i + 1} 0 obj\n<< /Type /XObject /Subtype /Image /Width 420 /Height 596 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoBin.length} >>\nstream\n${logoBin}\nendstream\nendobj\n`);
-        else if (o && o.stream != null) push(`${i + 1} 0 obj\n<< /Length ${o.stream.length} >>\nstream\n${o.stream}\nendstream\nendobj\n`);
+        else if (o && o.stream != null) push(`${i + 1} 0 obj\n<< /Length ${o.stream.length}${o.dict ? ' ' + o.dict : ''} >>\nstream\n${o.stream}\nendstream\nendobj\n`);
         else push(`${i + 1} 0 obj\n${o}\nendobj\n`);
       });
       const xref = len;
@@ -1683,18 +1708,25 @@ function PDFDoc(landscape) {
   return doc;
 }
 /* letterhead: contact lines top-left, logomark on an ink block top-right, tagline bottom-left */
+/* the SLATE letterhead pad: address top left, the black tab with the mark at the top right, DESIGN WITH PURPOSE at the foot.
+   doc.plain = a print copy for the printed pad: the same layout with the pad left off. Returns where the content starts. */
 function letterhead(doc) {
-  const st = S.settings, M = 56;
-  const lines = [st.company || 'SLATE', st.address || 'House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212', [st.phone || '01749-390284', st.email || 'info@slate-atelier.com'].filter(Boolean).join('  ·  ')];
-  doc.text(M, 62, lines[0], { size: 11, bold: true });
-  doc.text(M, 77, lines[1], { size: 8.5, color: '#55565a' });
-  doc.text(M, 89, lines[2], { size: 8.5, color: '#55565a' });
-  doc.logo(doc.W - M - 46, 40, 46);
-  doc.text(M, doc.H - 34, 'DESIGN WITH PURPOSE', { size: 7.5, color: '#939598', spacing: 2.2 });
-  return 120;
+  const land = doc.W > doc.H;
+  if (!doc.plain) {
+    const tabX = doc.W - 32.4 * MM, tabW = 19.7 * MM, tabH = (land ? 30 : 37.9) * MM;
+    PAD_ADDR.forEach((ln, i) => doc.text(PAD.l, 22.9 * MM + 7.6 * 0.78 + i * 3.07 * MM, ln, { size: 7.6, color: '#545454', font: 'jost' }));
+    doc.rect(tabX, 0, tabW, tabH, { fill: '#231f20' });
+    const mw = 10.6 * MM, k = mw / 106, mx = tabX + 4.7 * MM, my = tabH - 17.3 * MM;
+    PAD_MARK.forEach(([x, y, w, h]) => doc.rect(mx + x * k, my + y * k, w * k, h * k, { fill: '#FFFFFF' }));
+    doc.text(tabX + tabW / 2 + 0.9, tabH - 5.75 * MM + 5.6 * 0.72, 'SLATE', { size: 5.6, color: '#FFFFFF', font: 'jost', align: 'center', spacing: 1.8 });
+    if (!land) ['DESIGN', 'WITH', 'PURPOSE'].forEach((w, i) => doc.text(12.2 * MM, 239.6 * MM + 32 * 0.8 + i * 12.35 * MM, w, { size: 32, color: '#F0F0F0', font: 'jost', spacing: 0.64 }));
+  }
+  return land ? 42 * MM : PAD.t;
 }
+/* the reference footer every page carries, as on the proposals */
+function padFoot(doc, txt) { doc.text(doc.W - PAD.r, doc.H - 7 * MM, txt, { size: 7, color: '#545454', align: 'right' }); }
 function sigBlock(doc, y, trail, labels) {
-  const M = 56, colW = (doc.W - M * 2) / 3;
+  const M = PAD.l, colW = (doc.W - PAD.l - PAD.r) / 3;
   labels.forEach((lab, i) => {
     const x = M + i * colW, ev = trail[i];
     doc.line(x, y, x + colW - 18, y, { color: '#939598', w: 0.5 });
@@ -1711,7 +1743,7 @@ function signatures(trail) {
 }
 function voucherPDF(id) {
   const v = S.vouchers[id]; if (!v) return null;
-  const doc = PDFDoc(), M = 56, R = doc.W - M, s = vSummary(v);
+  const doc = PDFDoc(), M = PAD.l, R = doc.W - PAD.r, s = vSummary(v);
   let y = letterhead(doc);
   const title = { in: 'MONEY RECEIPT', out: 'PAYMENT VOUCHER', tr: 'CONTRA VOUCHER', jv: 'JOURNAL VOUCHER' }[s.kind] || 'VOUCHER';
   doc.text(M, y + 10, title, { size: 16, bold: true, spacing: 1.2 });
@@ -1736,7 +1768,7 @@ function voucherPDF(id) {
   v.lines.forEach(x => {
     const parts = (x.cc || []).length ? SB.lineShares(x) : [{ p: null, f: 1 }];
     parts.forEach((pt, j) => {
-      if (y > doc.H - 200) { doc.page(); letterhead(doc); y = 130; }
+      if (y > PAD.b - 90) { doc.page(); y = letterhead(doc); }
       const pr = pt.p ? S.projects[pt.p] : null;
       y += 15; if (!j) doc.text(M + 8, y, L(x.l).slice(0, 44), { size: 9.5 });
       if (pr) doc.text(M + 250, y, (pr.code || pr.name).slice(0, 30), { size: 8.5, color: '#55565a' });
@@ -1752,71 +1784,94 @@ function voucherPDF(id) {
   y += 6; doc.line(M, y, R, y, { w: 0.8 });
   if (vNarr(v)) { y += 22; doc.text(M, y, 'Narration', { size: 8.5, color: '#55565a' }); y += 13; y += doc.para(M, y, vNarr(v), R - M, { size: 9.5 }); }
   const st = vStatus(v);
-  y = Math.max(y + 40, doc.H - 170);
+  if (y + 100 > PAD.b) { doc.page(); y = letterhead(doc); }
+  y = Math.max(y + 40, PAD.b - 52);
   doc.text(M, y - 18, st === 'tally' ? 'Imported from Tally. No digital sign-off on record.' : st === 'approved' ? 'Approved in SLATE Books.' : 'Status: ' + (ST_LABEL[st] || st) + '. Not yet approved.', { size: 8.5, color: st === 'approved' || st === 'tally' ? '#55565a' : '#c1272d' });
   sigBlock(doc, y, signatures(v.trail), ['Prepared by', 'Checked by', 'Approved by']);
   return doc.output();
 }
-function invoicePDF(id) {
-  const inv = Object.assign({ _id: id }, S.invoices[id]); if (!inv) return null;
-  const doc = PDFDoc(), M = 56, R = doc.W - M, t = invTotals(inv);
+/* the invoice on the SLATE letterhead pad. plain = the print copy for the printed pad (no pad drawn) */
+function invoicePDF(id, plain) {
+  if (!S.invoices[id]) return null;
+  const inv = Object.assign({ _id: id }, S.invoices[id]);
+  const doc = PDFDoc(), M = PAD.l, R = doc.W - PAD.r, t = invTotals(inv), RED = '#C41E29', GREY = '#545454';
+  doc.plain = !!plain;
+  const ref = `${inv.no || ''}  ·  ${cliN(inv)}`;
+  const newPage = () => { padFoot(doc, ref); doc.page(); return letterhead(doc); };
   let y = letterhead(doc);
-  doc.text(M, y + 10, 'INVOICE', { size: 18, bold: true, spacing: 1.5 });
-  doc.text(R, y, 'No. ' + (inv.no || '—'), { size: 10, bold: true, align: 'right' });
-  doc.text(R, y + 14, 'Date ' + fmtD(inv.date, true), { size: 10, align: 'right' });
-  if (inv.due) doc.text(R, y + 28, 'Due ' + fmtD(inv.due, true), { size: 10, align: 'right' });
-  y += 44; doc.line(M, y, R, y, { w: 1.2 }); y += 22;
-  doc.text(M, y, 'Bill to', { size: 8.5, color: '#55565a' }); doc.text(M + 90, y, cliN(inv), { size: 11, bold: true }); y += 16;
-  if (inv.project) { doc.text(M, y, 'Project', { size: 8.5, color: '#55565a' }); doc.text(M + 90, y, projLabel(inv.project), { size: 10 }); y += 16; }
-  y += 12; doc.rect(M, y, R - M, 20, { fill: '#EFF2F4' });
-  doc.text(M + 8, y + 13.5, 'Description', { size: 8.5, bold: true }); doc.text(R - 8, y + 13.5, 'Amount (Tk)', { size: 8.5, bold: true, align: 'right' }); y += 20;
-  (inv.items || []).forEach(x => { y += 16; const used = doc.para(M + 8, y, x.desc || '', R - M - 150, { size: 10 }); doc.text(R - 8, y, fmt(x.amount), { size: 10, align: 'right' }); y += used - 12; y += 4; doc.line(M, y, R, y, { color: '#DCDDDE', w: 0.4 }); });
-  const row = (lab, val, b) => { y += 17; doc.text(R - 150, y, lab, { size: 9.5, bold: b, align: 'right' }); doc.text(R - 8, y, val, { size: b ? 11 : 9.5, bold: b, align: 'right' }); };
-  row('Subtotal', fmt(t.sub));
-  if (inv.vatMode === 'add') row('VAT ' + inv.vatPct + '%', fmt(t.vat));
-  if (inv.vatMode === 'incl') row('Includes VAT ' + inv.vatPct + '%', fmt(t.vat));
-  y += 4; doc.line(R - 260, y, R, y, { w: 0.8 }); row('Total', 'Tk ' + fmt(t.total), true);
-  y += 18; y += doc.para(M, y, words(t.total), R - M, { size: 9, color: '#333333' });
-  if (t.received > 0) { y += 8; doc.text(M, y, 'Received so far Tk ' + fmt(t.received) + '  ·  Balance due Tk ' + fmt(t.due), { size: 9.5, bold: true }); y += 14; }
-  const need = hh => { if (y + hh > doc.H - 170) { doc.page(); y = letterhead(doc) + 10; } };
-  /* the project's fee schedule: every stage with what has happened to it, then the running account */
+  const need = hh => { if (y + hh > PAD.b) y = newPage(); };
+  const th = (x, yy, txt, al) => doc.text(x, yy, txt.toUpperCase(), { size: 7.5, bold: true, color: GREY, spacing: 0.9, align: al });
+
+  /* title and reference row */
+  y += 15; doc.text(M, y, 'INVOICE', { size: 15, bold: true, spacing: 1.2 });
+  y += 18;
+  const refs = [['Invoice no.', inv.no || '—'], ['Date', fmtD(inv.date, true)]].concat(inv.due ? [['Due by', fmtD(inv.due, true)]] : []);
+  let rx = M; refs.forEach(([l, v]) => { const lw = doc.text(rx, y, l + ' ', { size: 9, color: GREY }); const vw = doc.text(rx + lw, y, v, { size: 9, bold: true }); rx += lw + vw + 22; });
+
+  /* bill to */
+  y += 26; doc.text(M, y, 'BILL TO', { size: 7.5, bold: true, color: GREY, spacing: 0.9 });
+  y += 15; doc.text(M, y, cliN(inv), { size: 11, bold: true });
+  if (inv.project) { y += 14; doc.text(M, y, projLabel(inv.project), { size: 9.5, color: GREY }); }
+
+  /* what is billed */
+  y += 26; th(M, y, 'Description'); th(R, y, 'Amount (Tk)', 'right'); y += 6; doc.line(M, y, R, y, { w: 0.75, color: '#000000' });
+  (inv.items || []).forEach(x => {
+    need(30); y += 16; const used = doc.para(M, y, x.desc || '', R - M - 130, { size: 10 }); doc.text(R, y, fmt(x.amount), { size: 10, align: 'right' });
+    y += used - 13.5 + 7; doc.line(M, y, R, y, { color: '#D9D9D9', w: 0.5 });
+  });
+  const row = (lab, val, b) => { y += b ? 18 : 15; doc.text(R - 130, y, lab, { size: 9.5, bold: b, color: b ? '#000000' : GREY, align: 'right' }); doc.text(R, y, val, { size: b ? 11 : 9.5, bold: b, align: 'right' }); };
+  need(70);
+  if (inv.vatMode === 'add') { row('Subtotal', fmt(t.sub)); row('VAT ' + inv.vatPct + '%', fmt(t.vat)); }
+  y += 6; doc.line(R - 250, y, R, y, { w: 1, color: '#000000' }); row('Total', 'Tk ' + fmt(t.total), true);
+  if (inv.vatMode === 'incl') { y += 13; doc.text(R, y, 'Includes VAT ' + inv.vatPct + '%: Tk ' + fmt(t.vat), { size: 8.5, color: GREY, align: 'right' }); }
+  y += 18; y += doc.para(M, y, words(t.total), R - M, { size: 9, color: GREY });
+  if (t.received > 0) { y += 4; doc.text(M, y, 'Received against this invoice Tk ' + fmt(t.received) + '  ·  Balance due Tk ' + fmt(t.due), { size: 9.5, bold: true }); y += 12; }
+
+  /* the project's fee schedule: every stage and what has happened to it, then the running account */
   const sb = inv.project ? stageBook(inv.project, inv) : null;
   if (sb) {
-    need(70 + sb.rows.length * 20);
-    y += 22; doc.text(M, y, 'FEE SCHEDULE', { size: 9, bold: true, spacing: 1.2 }); doc.text(R, y, 'Total fee Tk ' + fmt(sb.fee) + ' (before VAT)', { size: 8.5, color: '#55565a', align: 'right' });
-    y += 8; doc.rect(M, y, R - M, 20, { fill: '#EFF2F4' });
-    const cN = M + 8, cS = M + 26, cP = R - 205, cA = R - 120, cT = R - 8;
-    doc.text(cN, y + 13.5, '#', { size: 8.5, bold: true }); doc.text(cS, y + 13.5, 'Stage', { size: 8.5, bold: true });
-    doc.text(cP, y + 13.5, '%', { size: 8.5, bold: true, align: 'right' }); doc.text(cA, y + 13.5, 'Amount (Tk)', { size: 8.5, bold: true, align: 'right' }); doc.text(cT, y + 13.5, 'Status', { size: 8.5, bold: true, align: 'right' });
-    y += 20;
-    const TAGC = { adv: ['#E3F1E8', '#1F6B3F'], rec: ['#E3F1E8', '#1F6B3F'], part: ['#FFF3DC', '#8A5A00'], due: ['#FFF3DC', '#8A5A00'], now: ['#c1272d', '#FFFFFF'], next: ['#F1F2F3', '#55565a'] };
+    need(56 + sb.rows.length * 20);
+    y += 20; doc.text(M, y, 'FEE SCHEDULE', { size: 8.5, bold: true, spacing: 1.36 });
+    y += 16; const cN = M, cS = M + 18, cP = R - 200, cA = R - 112, cT = R;
+    th(cN, y, '#'); th(cS, y, 'Stage'); th(cP, y, '%', 'right'); th(cA, y, 'Amount (Tk)', 'right'); th(cT, y, 'Status', 'right');
+    y += 6; doc.line(M, y, R, y, { w: 0.75, color: '#000000' });
+    const TAGC = { adv: ['#E6F2EA', '#1F6B3F'], rec: ['#E6F2EA', '#1F6B3F'], part: ['#FFF3DC', '#8A5A00'], due: ['#FFF3DC', '#8A5A00'], now: [RED, '#FFFFFF'], next: ['#F2F2F2', GREY] };
     sb.rows.forEach(r => {
       const now = r.st === 'now', tag = STG_TAG[r.st].toUpperCase(), c = TAGC[r.st];
-      if (now) doc.rect(M, y, R - M, 20, { fill: '#FBEDEE' });
-      doc.text(cN, y + 13.5, String(r.n), { size: 9.5, bold: now });
-      let lab = r.label; while (doc.width(lab, 9.5, now) > cP - cS - 40 && lab.length > 8) lab = lab.slice(0, -2);
-      doc.text(cS, y + 13.5, lab === r.label ? lab : lab.trim() + '…', { size: 9.5, bold: now });
-      doc.text(cP, y + 13.5, fmt(r.pct) + '%', { size: 9.5, align: 'right' });
-      doc.text(cA, y + 13.5, fmt(r.amount), { size: 9.5, bold: now, align: 'right' });
-      const tw = doc.width(tag, 7, true) + 12; doc.rect(cT - tw, y + 4, tw, 12, { fill: c[0] }); doc.text(cT - 6, y + 12.8, tag, { size: 7, bold: true, color: c[1], align: 'right' });
-      y += 20; doc.line(M, y, R, y, { color: '#DCDDDE', w: 0.4 });
+      if (now) doc.rect(M, y + 0.5, R - M, 19.5, { fill: '#FBEDEE' });
+      const by = y + 13.5;
+      doc.text(cN + 2, by, String(r.n), { size: 9.5, bold: now });
+      let lab = r.label; while (doc.width(lab, 9.5, now) > cP - cS - 30 && lab.length > 8) lab = lab.slice(0, -2);
+      doc.text(cS, by, lab === r.label ? lab : lab.trim() + '…', { size: 9.5, bold: now });
+      doc.text(cP, by, fmt(r.pct) + '%', { size: 9.5, align: 'right' });
+      doc.text(cA, by, fmt(r.amount), { size: 9.5, bold: now, align: 'right' });
+      const tw = doc.width(tag, 6.8, true, null, 0.4) + 12; doc.rect(cT - tw, y + 4, tw, 12, { fill: c[0] }); doc.text(cT - 6, y + 12.6, tag, { size: 6.8, bold: true, color: c[1], align: 'right', spacing: 0.4 });
+      y += 20; doc.line(M, y, R, y, { color: '#D9D9D9', w: 0.5 });
     });
-    need(80);
-    y += 14; const bw = (R - M) / 4, box = [['Total fee', sb.fee], ['Received to date', sb.received], ['Billed to date', sb.billed], ['Still to bill', sb.toBill]];
-    doc.rect(M, y, R - M, 46, { fill: '#F6F7F8' });
-    box.forEach(([l, v], i) => { const x = M + i * bw + 10; doc.text(x, y + 16, l, { size: 8, color: '#55565a' }); doc.text(x, y + 34, 'Tk ' + fmt(v), { size: 11.5, bold: true, color: i === 2 ? '#c1272d' : '#231f20' }); });
-    y += 46 + 14;
-    doc.para(M, y, `Billed to date includes this invoice and the advance received. Outstanding on billed stages: Tk ${fmt(sb.outstanding)} before VAT. Upcoming stages are billed when each stage is reached.`, R - M, { size: 8, color: '#55565a' }); y += 22;
+
+    /* the running account */
+    need(70);
+    y += 12; const bh = 46, bw = (R - M) / 4, box = [['Total fee', sb.fee], ['Received to date', sb.received], ['Billed to date', sb.billed], ['Still to bill', sb.toBill]];
+    doc.rect(M, y, R - M, bh, { fill: '#F2F2F2' }); doc.frame(M, y, R - M, bh, { w: 1 });
+    box.forEach(([l, v], i) => { const x = M + i * bw + 12; if (i) doc.line(M + i * bw, y + 9, M + i * bw, y + bh - 9, { color: '#BDBDBD', w: 0.5 });
+      doc.text(x, y + 17, l.toUpperCase(), { size: 6.8, bold: true, color: GREY, spacing: 0.7 }); doc.text(x, y + 35, 'Tk ' + fmt(v), { size: 12, bold: true, color: i === 2 ? RED : '#000000' }); });
+    y += bh + 13;
+    y += doc.para(M, y, `Billed to date includes this invoice and the advance received. Outstanding on billed stages: Tk ${fmt(sb.outstanding)}. Each upcoming stage is billed when it is reached.`, R - M, { size: 8.5, color: GREY });
   }
   const note = inv.note || S.settings.invNote || '';
-  if (note) { need(40); y += 14; doc.text(M, y, 'Notes', { size: 8.5, color: '#55565a' }); y += 13; doc.para(M, y, note, R - M, { size: 9 }); }
-  const sy = doc.H - 150; doc.line(M, sy, M + 170, sy, { color: '#939598', w: 0.5 }); doc.text(M, sy + 13, 'For ' + (S.settings.company || 'SLATE'), { size: 8.5, color: '#55565a' });
+  if (note) { need(46); y += 12; doc.text(M, y, 'NOTES', { size: 7.5, bold: true, color: GREY, spacing: 0.9 }); y += 13; y += doc.para(M, y, note, R - M, { size: 9 }); }
+
+  /* signature */
+  need(46); const sy = y + 34;
+  doc.line(M, sy, M + 60 * MM, sy, { w: 0.75, color: '#000000' });
+  doc.text(M, sy + 13, 'For SLATE', { size: 9, bold: true }); doc.text(M, sy + 25, 'Authorised signature', { size: 8.5, color: GREY });
+  padFoot(doc, ref);
   return doc.output();
 }
 function countPDF(id) {
   const c = S.cashcounts[id]; if (!c) return null;
-  const doc = PDFDoc(), M = 56, R = doc.W - M;
-  let y = letterhead(doc);
+  const doc = PDFDoc(), M = PAD.l, R = doc.W - PAD.r;
+  let y = letterhead(doc) - 18;
   doc.text(M, y + 10, 'CASH COUNT', { size: 16, bold: true, spacing: 1.2 });
   doc.text(R, y, L(c.ledger), { size: 10, bold: true, align: 'right' });
   doc.text(R, y + 14, 'Date ' + fmtD(c.date, true), { size: 10, align: 'right' });
@@ -1830,7 +1885,7 @@ function countPDF(id) {
   y += 10; doc.text(M + 8, y, 'Balance by the books', { size: 10 }); doc.text(R - 8, y, fmt(c.book), { size: 10, align: 'right' });
   y += 16; doc.text(M + 8, y, 'Difference', { size: 10, bold: true }); doc.text(R - 8, y, Math.abs(c.diff) < 0.5 ? 'Matches' : (c.diff > 0 ? '+' : '-') + fmt(Math.abs(c.diff)), { size: 10, bold: true, align: 'right', color: Math.abs(c.diff) < 0.5 ? '#231f20' : '#c1272d' });
   if (c.note) { y += 24; doc.text(M, y, 'Note', { size: 8.5, color: '#55565a' }); y += 13; doc.para(M, y, c.note, R - M, { size: 9.5 }); }
-  const sy = doc.H - 170, colW = (R - M) / 2;
+  const sy = Math.max(y + 46, PAD.b - 52), colW = (R - M) / 2;
   [['Counted by', c.byName || nameOf(c.by, c.at), 'Signed digitally, ' + fmtTs(c.at)], ['Counted with', c.witness || '-', 'Named by the person who counted']].forEach((s, i) => {
     const x = M + i * colW; doc.line(x, sy, x + colW - 24, sy, { color: '#939598', w: 0.5 });
     doc.text(x, sy + 13, s[0], { size: 8.5, color: '#55565a' }); doc.text(x, sy + 26, s[1], { size: 9.5, bold: true }); doc.text(x, sy + 38, s[2], { size: 7.5, color: '#55565a' });
@@ -1839,6 +1894,7 @@ function countPDF(id) {
 }
 async function savePDF(bytes, filename) {
   if (!downloadsCap) return toast('Downloads aren’t available in this view.');
+  if (typeof bytes === 'function') { await pdfFontsReady; bytes = bytes(); }
   try { const r = await downloadsCap.save({ filename, data: bytes }); if (r && r.status === 'saved') toast('Saved ' + filename); }
   catch (e) { toast(e && e.code === 'declined' ? 'Download cancelled' : 'Couldn’t save the file.'); }
 }
@@ -2662,7 +2718,7 @@ function sheetVoucher() {
     if (plan && can.enter()) acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { S.sheet.mode = 'split'; renderSheet(); }, text: 'Split by consultant' }));
     if (can.enter() && v.form && v.form.kind === 'out' && st !== 'void') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => makeRecurringFrom(v.id), text: 'Repeat every month' }));
     if (canEdit) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => editVoucher(v.id), text: (st === 'approved' || st === 'tally') && myRole() !== 'Principal' ? 'Edit (needs approval again)' : 'Edit' }));
-    if (downloadsCap) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(voucherPDF(v.id), safeName(`${v.no || v.type} ${vTitle(v)}`) + '.pdf'), text: s.kind === 'in' ? 'Money receipt (PDF)' : 'Voucher (PDF)' }));
+    if (downloadsCap) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => voucherPDF(v.id), safeName(`${v.no || v.type} ${vTitle(v)}`) + '.pdf'), text: s.kind === 'in' ? 'Money receipt (PDF)' : 'Voucher (PDF)' }));
     if (st !== 'void' && (myRole() === 'Principal' || (v.madeBy === S.uid && ['pending', 'returned'].includes(st)))) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => { S.sheet.mode = 'void'; S.sheet.d = {}; renderSheet(); }, text: 'Cancel entry' }));
     if (st === 'void' && myRole() === 'Principal') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => run(() => Store.patch('vouchers', v.id, { status: 'pending', trail: trailAdd(raw.trail, 'edited', 'Restored') }), 'Restored'), text: 'Restore' }));
     if (acts.length) out.push(h('div', { class: 'actions' }, acts));
@@ -2873,7 +2929,6 @@ function invPickProject(d, pid) {
   if (!d.clientName && p.client) d.clientName = String(p.client).toUpperCase();
   const ids = (p.stages || []).map(x => x.id);
   d.items = d.items.filter(i => i.stage ? ids.includes(i.stage) : (i.desc || '').trim() || parseAmt(i.amount));
-  if (ids.length) d.vatMode = feeVatDefault(p);
   if (!d.items.length) d.items.push({ desc: '', amount: '' });
 }
 function stageLine(r) { return { desc: `Stage ${r.n}: ${r.label} (${r.pct}% of the fee)`, amount: String(r.amount), stage: r.id }; }
@@ -2926,7 +2981,8 @@ function sheetInvoice() {
   const acts = [];
   if (can.enter() && ['unpaid', 'part', 'overdue'].includes(st)) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openMoney('in', { cat: x.client, proj: x.project, inv: x._id, amount: String(t.due), party: x.clientName || '', narr: 'Against invoice ' + x.no }), text: 'Record a payment' }));
   if (can.enter() && st === 'draft') acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'issued', trail: trailAdd(raw.trail, 'issued') }), 'Issued'), text: 'Issue' }));
-  if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(invoicePDF(x._id), safeName(`${x.no} ${cliN(x)}`) + '.pdf'), text: 'Invoice (PDF)' }));
+  if (downloadsCap && st !== 'draft') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id), safeName(`${x.no} ${cliN(x)}`) + '.pdf'), text: 'Invoice (PDF)', title: 'On the SLATE letterhead, to send by email or WhatsApp' }),
+    h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => invoicePDF(x._id, true), safeName(`${x.no} ${cliN(x)} - print on letterhead pad`) + '.pdf'), text: 'Print copy (pad)', title: 'The same invoice without the letterhead, to print on the SLATE pad at 100%' }));
   if (can.enter() && st !== 'cancelled') acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openInvoice(x._id), text: 'Edit' }));
   if (can.enter() && st !== 'cancelled' && !t.pays.length) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: 'cancelled', trail: trailAdd(raw.trail, 'cancelled') }), 'Cancelled'), text: 'Cancel invoice' }));
   if (acts.length) out.push(h('div', { class: 'actions' }, acts));
@@ -3000,7 +3056,7 @@ function sheetCountView() {
   out.push(h('div', { class: 'callout' + (Math.abs(c.diff) < 0.5 ? ' ok' : ' bad') }, h('div', { class: 'big-amt', text: tk(c.total) }), h('div', { text: 'Books showed ' + tk(c.book) + '. ' + diffText(c.diff) })));
   out.push(h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {}, NOTES.filter(n => c.counts[n]).map(n => h('tr', {}, h('td', { text: 'Tk ' + n }), h('td', { class: 'n', text: c.counts[n] + ' ×' }), h('td', { class: 'n', text: fmt(n * c.counts[n]) })))))));
   out.push(h('div', { class: 'facts' }, fact('Counted by', c.byName || nameOf(c.by, c.at), fmtTs(c.at)), fact('With', c.witness || '—')));
-  if (downloadsCap) out.push(h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: () => savePDF(countPDF(S.sheet.id), safeName(`Cash count ${L(c.ledger)} ${c.date}`) + '.pdf'), text: 'Count sheet (PDF)' })));
+  if (downloadsCap) out.push(h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => countPDF(S.sheet.id), safeName(`Cash count ${L(c.ledger)} ${c.date}`) + '.pdf'), text: 'Count sheet (PDF)' })));
   if (c.note) out.push(h('p', { class: 'muted', style: 'margin:0', text: c.note }));
   return out;
 }
@@ -3967,7 +4023,7 @@ function morePayMonth() {
   if (['prepared', 'checked'].includes(p.status) && (can.check())) acts.push(h('button', { class: 'btn btn-danger', type: 'button', onclick: () => openSheet({ type: 'payreturn', id: p.month, d: {} }), text: 'Send back' }));
   if (p.status === 'approved' && can.pay()) acts.push(h('button', { class: 'btn btn-good', type: 'button', onclick: () => openSheet({ type: 'paypost', id: p.month, d: { date: today() > p.month + '-' + String(p.days || daysInMonth(p.month)).padStart(2, '0') ? today() : p.month + '-' + String(p.days || daysInMonth(p.month)).padStart(2, '0'), bankAcc: S.settings.salaryBank || findL(/Mercantile/i) || '', cashAcc: S.settings.salaryCash || S.settings.defaultCash || findL(/Cash-Head/i) || '' } }), text: 'Record the payment in the books' }));
   if (p.status === 'posted' && p.voucherId && S.vouchers[p.voucherId]) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => openSheet({ type: 'voucher', id: p.voucherId }), text: 'Open the salary voucher' }));
-  if (downloadsCap) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(salaryPDF(p.month), safeName('SLATE salary ' + monthName(p.month)) + '.pdf'), text: 'Salary sheet (PDF)' }));
+  if (downloadsCap) acts.push(h('button', { class: 'btn', type: 'button', onclick: () => savePDF(() => salaryPDF(p.month), safeName('SLATE salary ' + monthName(p.month)) + '.pdf'), text: 'Salary sheet (PDF)' }));
   const num = (r, i, k) => editable ? h('input', { inputmode: 'decimal', 'aria-label': k + ' for ' + r.name, id: `pr-${k}-${i}`, value: dr.rows[i][k] === 0 ? '' : String(dr.rows[i][k] == null ? '' : dr.rows[i][k]), style: 'min-width:70px;max-width:96px;text-align:right', oninput: e => { dr.rows[i][k] = e.target.value === '' ? 0 : parseAmt(e.target.value) || 0; dr.dirty = true; } , onchange: () => render(true) }) : fmt(r[k]);
   const head2 = ['#', 'Name', 'Gross', 'Pay days', 'For the days', 'Basic', 'House rent', 'Medical', 'Conveyance', 'Arrear', 'Other allowance', 'Gross payable', 'Other deduction', 'Tax', 'Net pay', 'Bank', 'Cash', 'Remarks'];
   const trs = rows.map((r, i) => ({ c: [String(i + 1), two(r.name, [r.empId, r.designation].filter(Boolean).join(' · ')), fmt(r.gross), num(r, i, 'payDays'), fmt(r.att), fmt(r.basic), fmt(r.hr), fmt(r.med), fmt(r.conv), num(r, i, 'arrear'), num(r, i, 'other'), fmt(r.grossPay), num(r, i, 'otherDed'), num(r, i, 'tax'), h('b', { text: fmt(r.net) }), num(r, i, 'bank'), fmt(r.cash), r.remarks || ''] }));
