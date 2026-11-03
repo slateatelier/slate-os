@@ -1485,6 +1485,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/config.js"></script>
 <script src="/pin.js"></script>
+<script src="/pick.js"></script>
 <script src="/slate-db.js"></script>
 <script>
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -5610,7 +5611,7 @@ function sheetMeeting(){
     const own=h('div',{style:'display:grid;gap:6px'},
       a.owners.length?h('div',{class:'chips'},a.owners.map((o,j)=>h('span',{class:'chip who',style:'padding-right:6px;background:var(--group)'},avaEl(o,false,'sm'),nameOf(o),a.taskIds[j]?null:h('button',{class:'icon-btn',type:'button','aria-label':'Remove '+nameOf(o),style:'width:22px;height:22px;font-size:14px',onclick:()=>{ a.owners.splice(j,1); a.taskIds.splice(j,1); saveMeetDraft(); renderSheet(); },text:'×'})))):null,
       h('select',{id:'ma-o-'+i,'aria-label':'Add a person',style:'background:var(--group)',onchange:e=>{ const v=e.target.value; if(v&&!a.owners.includes(v)) a.owners.push(v); saveMeetDraft(); renderSheet(); }},meetOwnerOpts().filter(([v])=>!a.owners.includes(v)).map(([v,l])=>h('option',{value:v,text:v?l:(a.owners.length?'+ Add another person…':'Responsible: choose one or more…')}))));
-    const pj=h('select',{id:'ma-p-'+i,'aria-label':'Area',style:'background:var(--group)',onchange:e=>{ const v=e.target.value; if(v.startsWith('p:')){ a.project=v.slice(2); a.area=''; } else { a.area=v; a.project=''; } saveMeetDraft(); }},
+    const pj=h('select',{id:'ma-p-'+i,'aria-label':'Area','data-pick':'1',style:'background:var(--group)',onchange:e=>{ const v=e.target.value; if(v.startsWith('p:')){ a.project=v.slice(2); a.area=''; } else { a.area=v; a.project=''; } saveMeetDraft(); }},
       h('option',{value:'',text:'Area: choose…'}),STUDIO_AREAS.map(([k,l])=>h('option',{value:k,text:'Area: '+l})),
       a.project&&!a.area&&S.projects[a.project]?h('option',{value:'p:'+a.project,text:projLabel(S.projects[a.project])}):null); pj.value=a.area||(a.project?'p:'+a.project:'');
     return h('div',{class:'card',style:'background:#fff;gap:8px'},

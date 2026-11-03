@@ -54,3 +54,5 @@
   Cache-Control: no-cache
 /pin.js
   Cache-Control: no-cache
+/pick.js
+  Cache-Control: no-cache
