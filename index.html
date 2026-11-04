@@ -233,7 +233,11 @@ main.wrap.wrap-desk{max-width:1480px}
 .wlf-k{grid-area:k;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:3px 6px;border-radius:6px;background:#fff;color:#2F6FDB;white-space:nowrap}
 .wlf-s.k-deliverable .wlf-k{color:#B26A00}.wlf-s.k-step .wlf-k{color:#1F8A44}
 .wlf-pa{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13.5px}
-.wlf-new{display:grid;gap:6px}.wlf-nt{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:8px 11px;font:inherit;font-size:14.5px;background:#fff}
+.wlf-new{display:grid;gap:6px}
+.sim{display:grid;gap:4px;background:#FFFBF2;border:1px solid #F0D9A8;border-radius:10px;padding:8px 10px}
+.sim-h{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B26A00}
+.sim-r{display:flex;align-items:center;gap:10px;justify-content:space-between}.sim-r.done .sim-t b{color:var(--muted);font-weight:500}
+.sim-t{display:grid;gap:1px;min-width:0}.sim-t b{font-size:13.5px;font-weight:600}.sim-t span{font-size:12px;color:var(--muted)}.wlf-nt{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:8px 11px;font:inherit;font-size:14.5px;background:#fff}
 .wlf-kind{grid-template-columns:repeat(2,1fr);max-width:280px;background:#fff}
 .wl-sub.late{color:var(--late)}
 .wl-y .ci-seg{grid-template-columns:repeat(4,1fr)}
@@ -2510,6 +2514,24 @@ const isStudioProj=pid=>{ const p=S.projects[pid]; return !!p&&p.pod==='Studio';
 const canWriteTitle=pid=>amApprover()||isStudioProj(pid);
 const inLib=title=>taskLib().some(x=>x.title.toLowerCase()===(title||'').trim().toLowerCase());
 /* task title: typed freely, with suggestions from earlier tasks and the standard lists */
+/* tasks already on a project that look like a name being typed (4 Nov 2026): shown under a new task's name so the same
+   work isn't listed twice. Open ones can be used instead; done ones show when and by whom (a revision is a new task). */
+const SIM_STOP=new Set(['the','and','for','with','from','into','per','all','new','task','work','as','to','of','in','on','by']);
+const simWords=q=>String(q||'').toLowerCase().split(/[^a-z0-9\u0980-\u09ff]+/).filter(w=>w.length>=3&&!SIM_STOP.has(w));
+function projSimilar(pid,q,n=5){ const ws=simWords(q); if(!pid||!ws.length) return [];
+  const need=Math.min(2,ws.length), qq=String(q).trim().toLowerCase();
+  return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.projectId===pid&&!t.archived&&t.title)
+    .map(t=>{ const tl=t.title.toLowerCase(), tw=simWords(tl); let k=0; ws.forEach(w=>{ if(tw.some(x=>x.startsWith(w)||w.startsWith(x))) k++; }); return {t,k,same:tl===qq}; })
+    .filter(x=>x.same||x.k>=need).sort((a,b)=>b.same-a.same||b.k-a.k||(a.t.doneAt?1:0)-(b.t.doneAt?1:0)||String(b.t.createdAt||'').localeCompare(String(a.t.createdAt||''))).slice(0,n).map(x=>x.t); }
+const simDesc=t=>{ const td=today(); return [t.kind==='Deliverable'?'Deliverable':'Task',t.phase||'',t.assignee?(t.assignee===S.uid?'you':shortName(t.assignee)):'',
+  t.doneAt?'done '+fmtD(String(t.doneAt).slice(0,10)):t.verify||stageOf(t)==='review'?'sent for checking':stageOf(t)==='doing'?'in progress':t.target?(t.target<td?`${diff(t.target,td)}d late`:'due '+fmtD(t.target)):'not started'].filter(Boolean).join(' · '); };
+/* the list under a name field; use(t) for an open task, or null to only show it */
+function simBox(pid,get,use){ const box=h('div',{class:'sim',hidden:true});
+  const fill=()=>{ const xs=projSimilar(pid,get()); box.hidden=!xs.length; if(!xs.length){ box.replaceChildren(); return; }
+    box.replaceChildren(h('div',{class:'sim-h',text:`Already on this project (${xs.length})`}),...xs.map(t=>h('div',{class:'sim-r'+(t.doneAt?' done':'')},
+      h('div',{class:'sim-t'},h('b',{text:t.title}),h('span',{text:simDesc(t)})),
+      !t.doneAt&&use?h('button',{type:'button',class:'btn btn-sm',onmousedown:e=>e.preventDefault(),onclick:()=>use(t),text:t.assignee===S.uid||!t.assignee?'Use this':'Open'}):null))); };
+  return {box,fill}; }
 function titleSuggestions(){
   const m=new Map(), add=(title,cat,del,at,w)=>{ title=(title||'').trim(); if(!title) return; const k=title.toLowerCase(); const x=m.get(k)||{title,cat:'',del:false,n:0,at:''}; x.n+=w; if(cat&&!x.cat) x.cat=cat; if(del) x.del=true; if(at&&at>x.at){ x.at=at; if(cat) x.cat=cat; } m.set(k,x); };
   Object.values(S.tasks).forEach(t=>add(t.title,t.phase,t.kind==='Deliverable',t.createdAt||'',3));
@@ -2525,10 +2547,12 @@ function titleField(d){
     list=list.slice(0,7);
     box.replaceChildren(...list.map(x=>h('button',{type:'button',class:'sg',onmousedown:e=>e.preventDefault(),onclick:()=>pick(x)},h('span',{text:x.title}),h('span',{class:'sg-c',text:[x.cat,x.del?'deliverable':''].filter(Boolean).join(' · ')}))));
     box.hidden=!list.length; };
+  const sim=simBox(d.projectId,()=>d.title,t=>{ closeSheet(); openTask(t.id); });
   const input=h('input',{id:'sh-title',maxlength:160,autocomplete:'off',placeholder:'Type the task, e.g. Site visit',value:d.title||'',
-    oninput:e=>{ d.title=e.target.value; fill(); },onfocus:fill,onblur:()=>setTimeout(()=>{box.hidden=true},150),
+    oninput:e=>{ d.title=e.target.value; fill(); sim.fill(); },onfocus:fill,onblur:()=>setTimeout(()=>{box.hidden=true},150),
     onkeydown:e=>{ if(e.key==='Escape') box.hidden=true; }});
-  return [h('label',{class:'field',style:'position:relative'},h('span',{class:'lbl',text:'Task or deliverable'}),input,box),
+  sim.fill();
+  return [h('label',{class:'field',style:'position:relative'},h('span',{class:'lbl',text:'Task or deliverable'}),input,box),sim.box,
     field('Category (optional)',inp('phase',{maxlength:40,list:'cat-list',placeholder:'e.g. Design development'})),
     h('datalist',{id:'cat-list'},cats.map(c=>h('option',{value:c})))]; }
 function libRequestBox(){
@@ -4132,9 +4156,10 @@ function sheetWlog(){
     return h('div',{class:'wl-line'+(l.ask?' wlf-ask':'')},
       h('div',{class:'wl-sel'},pSel,tBtn,sh.lines.length>1?h('button',{class:'icon-btn',type:'button','aria-label':'Remove this line',title:'Remove',onclick:()=>{ sh.lines.splice(i,1); if(l.from) sh.y[l.from]=''; if(!sh.lines.length) sh.lines=[wlNewLine()]; renderSheet(); },text:'×'}):null),
       open?wlPicker(l,sh):null,
-      l.newTitle!=null?h('div',{class:'wlf-new'},h('input',{type:'text',maxlength:120,class:'wlf-nt',placeholder:'Name of the new task, e.g. 4th floor kitchen layout',value:l.newTitle,oninput:e=>{ l.newTitle=e.target.value; }}),
+      l.newTitle!=null?(()=>{ const sim=simBox(l.projectId,()=>l.newTitle,t=>{ wlClearPick(l); l.taskId=t.id; sh.err=''; renderSheet(); }); sim.fill();
+        return h('div',{class:'wlf-new'},h('input',{type:'text',maxlength:120,class:'wlf-nt',placeholder:'Name of the new task, e.g. 4th floor kitchen layout',value:l.newTitle,oninput:e=>{ l.newTitle=e.target.value; sim.fill(); }}),sim.box,
         h('div',{class:'ci-seg wlf-kind',role:'radiogroup','aria-label':'Task or deliverable'},[['Task','Task'],['Deliverable','Deliverable']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String((l.newKind||'Task')===k),class:'ci-opt'+((l.newKind||'Task')===k?' on doing':''),onclick:()=>{ l.newKind=k; renderSheet(); },text:lb}))),
-        h('span',{class:'wl-sub',text:WL_KIND[(l.newKind||'Task')==='Deliverable'?'deliverable':'task'][1]+' '+wlNewWhere(l)})):null,
+        h('span',{class:'wl-sub',text:WL_KIND[(l.newKind||'Task')==='Deliverable'?'deliverable':'task'][1]+' '+wlNewWhere(l)})); })():null,
       l.pre&&!ahead?h('span',{class:'wlf-tag',text:'Planned ahead: check it is still right'}):null,
       l.ask?h('span',{class:'wl-sub',text:`Request to ${wlAskWho(S.uid)}${l.ask.at?' · sent '+wlTime(l.ask.at):' · sent when you submit'}`+(l.ask.at&&wlAskDone(S.uid,l.ask.at)?' · a task has been given':'')}):null,
       h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:'What exactly will you do on it today? e.g. 4th floor plan: kitchen and toilet layout, revise after client comments',value:l.text||'',
