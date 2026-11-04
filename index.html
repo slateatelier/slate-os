@@ -197,6 +197,10 @@ main.wrap.wrap-desk{max-width:1480px}
 .who-plan{grid-area:t;display:grid;gap:3px;min-width:0;font-size:13.5px}
 /* the morning's written plan sits in a gray-lined box, so it reads as the person's own words, apart from the task data */
 .wl-mine>.h-list{border:1px solid #C7C7CC}
+.wl-wrap{display:grid;gap:0}.wl-addbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 10px}
+.btn.wl-add{background:#D7262B;border-color:#D7262B;color:#fff;font-weight:600}.btn.wl-add:hover{background:#B3141A;border-color:#B3141A}
+.wl-ahd{font-size:12.5px;color:var(--muted)}.wl-ahd .linkish{font-size:12.5px}
+.wl-mode{margin:0 0 4px;max-width:280px}
 .who-plan:not(.none){border:1px solid #C7C7CC;border-radius:8px;padding:6px 10px;background:#FAFAFB;margin:2px 0}
 .who-pl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.who-pl b{font-weight:600}.who-pl span{color:#3a3a3c}
 .who-plan.none{color:var(--late);font-size:13px}.who-plan.none.late{color:var(--overdue);font-weight:600}
@@ -2776,6 +2780,7 @@ async function boot(){
   db.doc(`data/users/${S.uid}/todo`).onSnapshot(snap=>{ S.todo=(snap.exists&&snap.data().items)||[]; schedule(); },()=>{ S.todo=[]; });
   db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
   db.doc(`data/users/${S.uid}/formDrafts`).onSnapshot(snap=>{ S.fdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.fdrafts={}; });
+  db.doc(`data/users/${S.uid}/planAhead`).onSnapshot(snap=>{ S.ahead=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.ahead={}; });
   db.collection('tasks').onSnapshot(q=>{ S.shared={}; q.docs.forEach(d=>{S.shared[d.id]=d.data()}); mergeTasks(); },onSubErr);
 
   try{ const m=db.doc('members/'+S.uid); const g=await m.get(); if(!g.exists) await m.set({joinedAt:new Date().toISOString()}); }catch(e){}
@@ -3958,14 +3963,21 @@ function wlLive(){ if(WL.on||S.state!=='ready'||!window.slateSupabase) return; W
   wlLoad(addDays(td,-21),td).then(ok=>{ if(!ok) return; render(true); setTimeout(wlMaybePrompt,1500); });
   try{ window.slateSupabase.channel('slate-worklogs').on('postgres_changes',{event:'*',schema:'public',table:'work_logs'},ev=>{ const r=ev.new; if(r&&r.user_id){ WL.rows[wlKey(r.user_id,r.day)]=r; schedule(); } }).subscribe(); }catch(e){}
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ const t=today(); wlLoad(addDays(t,-3),t).then(ok=>{ if(ok){ render(true); wlMaybePrompt(); } }); } }); }
-/* opens the plan once a working morning (after the greeting); closing it without saving waits 30 minutes before asking again */
+/* opens the plan each working morning (after the greeting); until it is submitted it comes back every 15 minutes,
+   however it was closed (Later, ×, or tapping outside) (4 Nov 2026) */
+const WL_NAG=15*60000;
 function wlMaybePrompt(){
   if(!WL.loaded||!S.canWrite||window.slateReview||!needPlan(S.uid)) return; const td=today();
   if(!isWorkDay(td)||wlGet(S.uid,td)) return;
   if(S.sheet||document.getElementById('day-splash')||document.hidden){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,20000); return; }
-  if(pref.planLater&&pref.planLater.d===td&&Date.now()-pref.planLater.at<30*60000){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,Math.max(60000,30*60000-(Date.now()-pref.planLater.at))); return; }
-  savePref('planLater',{d:td,at:Date.now()}); openWlog(); }
-function openWlog(){ S.sheet={type:'wlog'}; renderSheet(); }
+  if(pref.planLater&&pref.planLater.d===td&&Date.now()-pref.planLater.at<WL_NAG){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,Math.max(30000,WL_NAG-(Date.now()-pref.planLater.at))); return; }
+  savePref('planLater',{d:td,at:Date.now()}); openWlog(); clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,WL_NAG); }
+/* mode: 'today' (default) or 'ahead' (lines for a coming working day); add: open today's plan with a new empty line */
+function openWlog(mode,add){ S.sheet={type:'wlog',mode:mode==='ahead'?'ahead':'today',...(add?{addLine:1}:{})}; renderSheet(); }
+/* plan ahead (4 Nov 2026): lines for a coming working day, kept in the person's own data (data/users/<id>/planAhead,
+   items: {day: [lines]}); only they see them. On that morning they come into the day's plan, to check and submit. */
+const wlAheadWrite=items=>S.db.doc(`data/users/${S.uid}/planAhead`).set({items});
+const wlAheadDays=()=>Object.keys(S.ahead||{}).filter(d=>d>today()&&(S.ahead[d]||[]).length).sort();
 /* the POD leader answers a request: New task, already set to that person */
 function wlGiveTask(u){ closeSheet(); const keep=S.f.person; S.f.person=u; openNewTask(); S.f.person=keep; if(S.sheet&&S.sheet.d&&S.sheet.d.assignee!==u) toast(`${nameOf(u)} isn’t someone you can give tasks to here`); }
 /* ---------- Day plan, 4 Nov 2026 ----------
@@ -4072,20 +4084,29 @@ function wlPicker(l,sh){ const all=wlSugg(l), q=(sh.q||'').trim().toLowerCase(),
     h('div',{class:'wlf-pa'},S.canWrite?h('button',{class:'linkish',type:'button',onclick:()=>pick({newTitle:sh.q||''}),text:'+ Write a new task for this project'}):null,
       l.taskId||l.clRef||l.newTitle!=null?h('button',{class:'linkish',type:'button',onclick:()=>{ wlClearPick(l); sh.pick=''; renderSheet(); },text:'No particular task'}):null)); }
 function sheetWlog(){
-  const sh=S.sheet, td=today(), yLog=wlLastLog(S.uid,td), y=yLog?yLog.day:wlPrevDay(td), cur=wlGet(S.uid,td);
+  const sh=S.sheet, td=today(), ahead=sh.mode==='ahead', yLog=ahead?null:wlLastLog(S.uid,td), y=yLog?yLog.day:wlPrevDay(td), cur=ahead?null:wlGet(S.uid,td);
+  if(ahead&&!sh.day) sh.day=wlAheadDays()[0]||wlNextDay(td);
+  const base=ahead?sh.day:td;   /* the day the lines are for */
   const yName=y===wlPrevDay(td)?'yesterday':y===addDays(td,-1)?'yesterday':wd(y);
   const yOpen=yLog?(yLog.lines||[]).filter(l=>(l.status||'planned')==='planned'):[];
+  const aheadLoad=d=>{ const ls=((S.ahead||{})[d]||[]).map(l=>({...l,due:l.due&&l.due>=d?l.due:d})); return ls.length?ls:[wlNewLine({due:d})]; };
   /* carry a line on: same project, task, words and first finish-by date; a passed finish-by date moves to today */
   const carry=(l,due)=>wlNewLine({projectId:l.projectId||'',taskId:l.taskId,clRef:l.clRef,text:l.text,from:l.id,due,due0:l.due0||l.due||y,since:l.since||y,...(l.ask?{ask:l.ask}:{})});
   const place=(l)=>{ sh.lines=sh.lines.filter(x=>x.from!==l.id); const v=sh.y[l.id];
     if(v==='today'||v==='ongoing'){ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
       sh.lines.unshift(carry(l,v==='today'?td:(l.due&&l.due>=td?l.due:td))); }
     if(!sh.lines.length) sh.lines=[wlNewLine()]; };
+  if(!sh.init&&ahead){ sh.init=1; sh.y={}; sh.err=''; sh.lines=aheadLoad(sh.day); }
   if(!sh.init){ sh.init=1; sh.y={}; sh.lines=cur?(cur.lines||[]).map(l=>({...l,due:l.due||td})):[]; sh.err='';
     /* lines still running come back already set to Ongoing; a line whose task was finished on the project list comes back Finished */
     if(!cur) [...yOpen].reverse().forEach(l=>{ sh.y[l.id]=wlTaskDone(l)||(l.ask&&l.ask.at&&wlAskDone(S.uid,l.ask.at))?'done':(l.due&&l.due>=td&&!l.ask)?'ongoing':''; if(sh.y[l.id]==='ongoing') place(l); });
     else yOpen.forEach(l=>{ sh.y[l.id]=wlTaskDone(l)?'done':sh.lines.some(x=>x.from===l.id)?(sh.lines.find(x=>x.from===l.id).due===td?'today':'ongoing'):''; });
-    if(!sh.lines.length) sh.lines=[wlNewLine()]; }
+    /* lines planned ahead for today (or for a day already passed) come in here, marked "Planned ahead" */
+    sh.aheadDays=Object.keys(S.ahead||{}).filter(d=>d<=td);
+    const pre=sh.aheadDays.sort().flatMap(d=>(S.ahead[d]||[]).map(l=>({...l,pre:1,due:l.due&&l.due>=td?l.due:td,since:td})));
+    if(pre.length){ sh.lines=sh.lines.filter(l=>!(l.projectId==null&&!(l.text||'').trim())); pre.forEach(l=>{ if(sh.lines.length<8&&!sh.lines.some(x=>x.id===l.id)) sh.lines.push(l); }); }
+    if(!sh.lines.length) sh.lines=[wlNewLine()];
+    if(sh.addLine&&sh.lines.length<8&&cur) sh.lines.push(wlNewLine()); }
   const ps=wlMyProjects();
   const setY=(l,v)=>{ sh.y[l.id]=sh.y[l.id]===v?'':v; place(l); sh.err=''; renderSheet(); };
   const lineHead=wlLineName;
@@ -4094,10 +4115,10 @@ function sheetWlog(){
         l.ask?h('span',{class:'wlf-tag',text:'You asked for a task'}):l.due?h('span',{class:'wlf-tag'+(past?' late':''),text:past?`Finish-by date passed (${wlBy(l.due,td)})`:run_?`Finish by ${wlBy(l.due,td)}`+(l.since?` · since ${wd(l.since)} ${fmtD(l.since)}`:''):''}):null,
         wlTaskDone(l)?h('span',{class:'wlf-tag ok',text:'Its task is finished on the project list'}):null),
       h('div',{class:'ci-seg',role:'radiogroup','aria-label':'How did it go?'},[['done',y===wlPrevDay(td)?'Finished yesterday':'Finished '+yName],['today','Finish today'],['ongoing','Ongoing'],['stopped','Stopped']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String(sh.y[l.id]===k),class:'ci-opt'+(sh.y[l.id]===k?' on '+(k==='done'?'done':k==='stopped'?'todo':'doing'):''),onclick:()=>setY(l,k),text:lb})))); };
-  const dueRow=l=>{ const nw=wlNextDay(td), custom=l.due&&l.due!==td&&l.due!==nw;
-    const di=h('input',{type:'date',class:'wlf-date','aria-label':'Pick a finish-by date',min:td,max:addDays(td,WL_MAXD),value:custom?l.due:'',onchange:e=>{ if(e.target.value){ l.due=e.target.value<td?td:e.target.value; sh.err=''; renderSheet(); } }});
+  const dueRow=l=>{ const nw=wlNextDay(base), custom=l.due&&l.due!==base&&l.due!==nw;
+    const di=h('input',{type:'date',class:'wlf-date','aria-label':'Pick a finish-by date',min:base,max:addDays(td,WL_MAXD),value:custom?l.due:'',onchange:e=>{ if(e.target.value){ l.due=e.target.value<base?base:e.target.value; sh.err=''; renderSheet(); } }});
     return h('div',{class:'wlf'},h('span',{class:'wlf-l',text:'Finish by'}),
-      h('div',{class:'chips'},[[td,'Today'],[nw,nw===addDays(td,1)?'Tomorrow':'Next working day']].map(([d,lb])=>h('button',{type:'button',class:'chip qd'+(l.due===d?' on':''),onclick:()=>{ l.due=d; renderSheet(); }},h('b',{text:lb}),h('span',{text:`${wd(d)} ${+d.slice(8)}`}))),
+      h('div',{class:'chips'},[[base,ahead?'Same day':'Today'],[nw,nw===addDays(base,1)?(ahead?'Day after':'Tomorrow'):'Next working day']].map(([d,lb])=>h('button',{type:'button',class:'chip qd'+(l.due===d?' on':''),onclick:()=>{ l.due=d; renderSheet(); }},h('b',{text:lb}),h('span',{text:`${wd(d)} ${+d.slice(8)}`}))),
         h('label',{class:'chip qd wlf-pick'+(custom?' on':'')},h('b',{text:custom?`${wd(l.due)} ${fmtD(l.due)}`:'Pick a date'}),di)),
       l.from&&l.due0&&l.due>l.due0?h('span',{class:'wlf-tag late',text:`first set for ${wd(l.due0)} ${fmtD(l.due0)}`}):null); };
   const line=(l,i)=>{
@@ -4114,6 +4135,7 @@ function sheetWlog(){
       l.newTitle!=null?h('div',{class:'wlf-new'},h('input',{type:'text',maxlength:120,class:'wlf-nt',placeholder:'Name of the new task, e.g. 4th floor kitchen layout',value:l.newTitle,oninput:e=>{ l.newTitle=e.target.value; }}),
         h('div',{class:'ci-seg wlf-kind',role:'radiogroup','aria-label':'Task or deliverable'},[['Task','Task'],['Deliverable','Deliverable']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String((l.newKind||'Task')===k),class:'ci-opt'+((l.newKind||'Task')===k?' on doing':''),onclick:()=>{ l.newKind=k; renderSheet(); },text:lb}))),
         h('span',{class:'wl-sub',text:WL_KIND[(l.newKind||'Task')==='Deliverable'?'deliverable':'task'][1]+' '+wlNewWhere(l)})):null,
+      l.pre&&!ahead?h('span',{class:'wlf-tag',text:'Planned ahead: check it is still right'}):null,
       l.ask?h('span',{class:'wl-sub',text:`Request to ${wlAskWho(S.uid)}${l.ask.at?' · sent '+wlTime(l.ask.at):' · sent when you submit'}`+(l.ask.at&&wlAskDone(S.uid,l.ask.at)?' · a task has been given':'')}):null,
       h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:'What exactly will you do on it today? e.g. 4th floor plan: kitchen and toilet layout, revise after client comments',value:l.text||'',
         oninput:e=>{ l.text=e.target.value; const c=e.target.parentNode.querySelector('.wl-cnt'); const k2=e.target.value.trim().length; if(c){ c.textContent=k2<10?`${10-k2} more characters`:'✓'; c.classList.toggle('ok',k2>=10); } }}),
@@ -4123,7 +4145,13 @@ function sheetWlog(){
   const hasAsk=sh.lines.some(l=>l.ask), askTo=wlAskTo(S.uid);
   const addAsk=()=>{ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
     sh.lines.push(wlNewLine({projectId:'',text:'No task for today: please give me one.',ask:{to:askTo},due:td})); sh.err=''; renderSheet(); };
-  const save=()=>{
+  const saveAhead=()=>{
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<base||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (that day or later).':'';
+    if(bad){ sh.err=bad; renderSheet(); return; }
+    const lines=sh.lines.map(l=>{ const x={...l,text:l.text.trim()}; delete x.pre; delete x.ask; return x; });
+    run(()=>wlAheadWrite({...(S.ahead||{}),[base]:lines}),`Planned for ${wd(base)} ${fmtD(base)}. It comes into that morning’s plan`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
+  const dropAhead=()=>{ const it={...(S.ahead||{})}; delete it[base]; run(()=>wlAheadWrite(it),`Plan for ${wd(base)} ${fmtD(base)} removed`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
+  const save=()=>{ if(ahead) return saveAhead();
     const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing or Stopped.`:'';
     if(bad){ sh.err=bad; renderSheet(); return; }
     const sb=window.slateSupabase, nowIso=new Date().toISOString(); let fin=[];
@@ -4137,9 +4165,25 @@ function sheetWlog(){
         const {data,error}=await sb.from('work_logs').update({lines:yl}).eq('user_id',S.uid).eq('day',y).select().maybeSingle(); if(error) throw new Error(error.message); if(data) WL.rows[wlKey(S.uid,y)]=data; }
       const {data,error}=await sb.from('work_logs').upsert({user_id:S.uid,day:td,lines},{onConflict:'user_id,day'}).select().maybeSingle(); if(error) throw new Error(error.message); if(data) WL.rows[wlKey(S.uid,td)]=data;
       await wlStartTasks(lines.filter(l=>(l.status||'planned')==='planned'));
+      if(sh.aheadDays&&sh.aheadDays.length){ const it={...(S.ahead||{})}; sh.aheadDays.forEach(d=>delete it[d]); try{ await wlAheadWrite(it); }catch(e){} }
     },()=>sh.lines.some(l=>l.ask)&&!(cur&&(cur.lines||[]).some(l=>l.ask))?`Plan in. ${wlAskWho(S.uid).replace(/^./,c=>c.toUpperCase())} has been asked for a task`:cur?'Today’s plan updated':'Thanks, your plan is in').then(ok=>{ if(ok){ closeSheet(); render(true); fin.forEach(wlFinishTask); } });
   };
-  return [head(fmtD(td)+' · '+(cur?'update':'every working morning'),cur?'Update today’s plan':'What are you working on today?'),
+  const modeSeg=h('div',{class:'ci-seg wl-mode',role:'radiogroup','aria-label':'Today or a coming day'},[['today','Today'],['ahead','Plan ahead']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String(sh.mode===k||(!sh.mode&&k==='today')),class:'ci-opt'+((sh.mode||'today')===k?' on doing':''),onclick:()=>{ if((sh.mode||'today')!==k) openWlog(k); },text:lb})));
+  if(ahead){ const days=[]; let x=td; for(let i=0;i<5;i++){ x=wlNextDay(x); days.push(x); } const saved=wlAheadDays();
+    const pickDay=d=>{ if(d===sh.day) return; const had=((S.ahead||{})[d]||[]).length; sh.day=d; sh.err='';
+      sh.lines=had?aheadLoad(d):sh.lines.map(l=>({...l,due:l.due&&l.due>=d?l.due:d})); renderSheet(); };
+    const di=h('input',{type:'date',class:'wlf-date','aria-label':'Pick a day',min:addDays(td,1),max:addDays(td,30),value:days.includes(sh.day)?'':sh.day,onchange:e=>{ const v=e.target.value; if(v&&v>td) pickDay(isWorkDay(v)?v:wlNextDay(v)); }});
+    return [head(wd(base)+' '+fmtD(base)+' · plan ahead','Plan ahead'),modeSeg,
+      h('p',{class:'lead',style:'margin:0',text:'Lines for a coming working day. Only you see them until that morning, when they come into the day’s plan for you to check and submit.'}),
+      h('div',{class:'wlf'},h('span',{class:'wlf-l',text:'For'}),h('div',{class:'chips'},days.map(d=>h('button',{type:'button',class:'chip qd'+(sh.day===d?' on':''),onclick:()=>pickDay(d)},h('b',{text:d===addDays(td,1)?'Tomorrow':wd(d)}),h('span',{text:fmtD(d)+(saved.includes(d)?' · planned':'')}))),
+        h('label',{class:'chip qd wlf-pick'+(days.includes(sh.day)?'':' on')},h('b',{text:days.includes(sh.day)?'Pick a day':`${wd(sh.day)} ${fmtD(sh.day)}`}),di))),
+      h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:`${wd(base)} ${fmtD(base)}`}),h('span',{class:'cnt',text:`${sh.lines.length} line${sh.lines.length>1?'s':''}`})),
+        h('div',{class:'wl-lines'},sh.lines.map(line)),
+        sh.lines.length<8?h('div',{class:'wlf-adds'},h('button',{class:'linkish',type:'button',style:'font-size:13.5px',onclick:()=>{ sh.lines.push(wlNewLine({due:base})); renderSheet(); },text:'+ Add another project or task'})):null),
+      sh.err?h('div',{class:'err',text:sh.err}):null,
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:save,text:saved.includes(base)?'Save changes':'Save for '+wd(base)}),
+        saved.includes(base)?h('button',{class:'btn btn-danger',type:'button',disabled:S.busy,onclick:dropAhead,text:'Remove this day’s plan'}):null)]; }
+  return [head(fmtD(td)+' · '+(cur?'update':'every working morning'),cur?'Update today’s plan':'What are you working on today?'),modeSeg,
     h('p',{class:'lead',style:'margin:0',text:'Which projects and which tasks, in your own words, and when each will be finished. '+(myHeadTeam()||amPodLead()?'The COO and the Principal see it.':isDraftMember(S.uid)?'The Design Associate Lead, the COO and the Principal see it.':'Your POD leader, the COO and the Principal see it.')+' It is a work record, not a score.'}),
     yOpen.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:(yName==='yesterday'?'Yesterday':'Last plan')+' · '+fmtD(y)}),h('span',{class:'cnt',text:'how did it go?'})),h('div',{class:'wl-ys'},yOpen.map(yRow))):null,
     h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Today'}),h('span',{class:'cnt',text:`${sh.lines.length} line${sh.lines.length>1?'s':''}`})),
@@ -4156,8 +4200,14 @@ function wlMeta(l,day,td=today()){ const bits=[l.text]; const t=wlTaskOf(l);
   else if(l.due&&l.due!==day) bits.push((l.due<td&&(l.status||'planned')==='planned'?'was due ':'finish by ')+wlBy(l.due,td));
   if(t&&!l.ask) bits.push(t.doneAt?'task done':t.verify||stageOf(t)==='review'?'task sent for checking':stageOf(t)==='doing'?'task in progress':'');
   return bits.filter(Boolean).join(' · '); }
+/* Home: the red Add to plan button (4 Nov 2026): more lines for today, or lines for a coming day; days planned ahead listed */
+function wlAddBar(aheadOnly){ if(!S.canWrite||window.slateReview) return null; const ds=wlAheadDays();
+  return h('div',{class:'wl-addbar'},aheadOnly?null:h('button',{class:'btn btn-sm wl-add',type:'button',onclick:()=>openWlog('today',true),text:'+ Add to today'}),
+    h('button',{class:'btn btn-sm wl-add',type:'button',onclick:()=>openWlog('ahead'),text:'Plan ahead'}),
+    ds.length?h('span',{class:'wl-ahd'},'Planned: ',ds.slice(0,4).map((d,i)=>h('button',{class:'linkish',type:'button',onclick:()=>{ S.sheet={type:'wlog',mode:'ahead',day:d}; renderSheet(); },text:(i?', ':'')+(d===addDays(today(),1)?'tomorrow':wd(d)+' '+fmtD(d))+` (${S.ahead[d].length})`}))):null); }
 /* Home: your own plan for today, or a reminder to write it (with what is still running from before) */
-function wlMyCard(){
+function wlMyCard(){ const c=wlMyCard0(); if(!c) return WL.loaded&&needPlan(S.uid)&&!isWorkDay(today())?wlAddBar(true):null; const b=wlAddBar(); return b?h('div',{class:'wl-wrap'},c,b):c; }
+function wlMyCard0(){
   if(!WL.loaded||!needPlan(S.uid)||!isWorkDay(today())) return null; const td=today(), r=wlGet(S.uid,td);
   if(!r){ const go=wlRunning(S.uid,td);
     return h('div',{class:'wl-due'},h('div',{},h('b',{text:'Write today’s plan'}),h('span',{text:go.length?`${go.length} line${go.length>1?'s carry':' carries'} on from your last plan; check it and add anything new.`:'Which projects and tasks are you working on today? It takes a minute.'})),h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:openWlog,text:'Write now'})); }
