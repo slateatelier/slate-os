@@ -3996,6 +3996,12 @@ const wlNewLine=(x={})=>({id:Math.random().toString(36).slice(2,10),projectId:x.
 function wlMyProjects(){ const dp=isDraftMember(S.uid);   /* the Drafting Pool works for every POD, so it can pick any open project */
   return projects().filter(p=>!p.closed&&(fullView()||dp||inMyPodProject(p)||isMemberOk(p,S.uid)||activeTasks().some(t=>t.projectId===p.id&&t.assignee===S.uid)))
   .sort((a,b)=>String(a.name||a.code).localeCompare(String(b.name||b.code))); }
+/* the project list in the plan: the Drafting Pool sees the projects the pool is working on first */
+function wlProjOpts(ps){ const opt=p=>h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')});
+  if(!isDraftMember(S.uid)) return ps.map(opt);
+  const pool=new Set(activeTasks().filter(t=>!t.doneAt&&!t.archived&&t.assignee&&isDraftMember(t.assignee)).map(t=>t.projectId));
+  const a=ps.filter(p=>pool.has(p.id)), b=ps.filter(p=>!pool.has(p.id));
+  return [a.length?h('optgroup',{label:'Drafting Pool is working on'},a.map(opt)):null,b.length?h('optgroup',{label:a.length?'All other projects':'All projects'},b.map(opt)):null]; }
 /* the project task list follows the plan: a planned task goes In progress */
 async function wlStartTasks(lines){ for(const l of lines){ const t=wlTaskOf(l); if(!t||t.doneAt||t.verify||t.archived||stageOf(t)!=='todo'||!canMove(t)) continue;
     try{ await taskUpdate(l.taskId,{stage:'doing'},[{type:'stage',from:'todo',to:'doing',note:'Started from the day plan'}]); }catch(e){} }
@@ -4035,7 +4041,7 @@ function wlSugg(l){ const p=S.projects[l.projectId]; if(!p) return []; const td=
   ts.filter(t=>t.assignee===S.uid).forEach(t=>out.push({g:'Your tasks on this project',kind:t.kind==='Deliverable'?'deliverable':'task',title:t.title,desc:tdesc(t),taskId:t.id}));
   if(p.std) activePhases(p).forEach(k=>clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(x.done||x.na||it.r==='R'||!canTickCl(p,x)) return;
     out.push({g:'Checklist steps · '+phLabel(k,p),kind:'step',title:it.t,desc:['Checklist step',x.who?(x.who===S.uid?'yours':shortName(x.who)):clRole(it.r)||'',x.st==='doing'?'in progress':x.st==='paused'?'paused':'',it.chk?clRole(it.chk)+' checks':''].filter(Boolean).join(' · '),clRef:{k,id:it.id}}); }));
-  ts.filter(t=>t.assignee!==S.uid).forEach(t=>out.push({g:'Others’ tasks on this project',kind:t.kind==='Deliverable'?'deliverable':'task',title:t.title,desc:tdesc(t),taskId:t.id}));
+  ts.filter(t=>t.assignee!==S.uid).forEach(t=>out.push({g:t.assignee&&isDraftMember(t.assignee)&&isDraftMember(S.uid)?'Drafting Pool tasks':'Others’ tasks on this project',kind:t.kind==='Deliverable'?'deliverable':'task',title:t.title,desc:tdesc(t),taskId:t.id}));
   if(S.canWrite){ const k=p.std?curPhase(p):null, phn=k?phName(k,p).toLowerCase():'', have=new Set(ts.map(t=>t.title.toLowerCase()));
     taskLib().filter(x=>!have.has(x.title.toLowerCase())&&(x.cat==='General'||(phn&&String(x.cat).toLowerCase().includes(phn.split(' ')[0])))).slice(0,30)
       .forEach(x=>out.push({g:'Standard tasks to add',kind:x.del?'deliverable':'task',title:x.title,desc:`New ${x.del?'deliverable':'task'} · ${x.cat}`,newTitle:x.title,newKind:x.del?'Deliverable':'Task'})); }
@@ -4092,7 +4098,7 @@ function sheetWlog(){
       l.from&&l.due0&&l.due>l.due0?h('span',{class:'wlf-tag late',text:`first set for ${wd(l.due0)} ${fmtD(l.due0)}`}):null); };
   const line=(l,i)=>{
     const pSel=h('select',{'aria-label':'Project',disabled:!!l.ask,onchange:e=>{ l.projectId=e.target.value==='~'?null:e.target.value==='studio'?'':e.target.value; wlClearPick(l); sh.pick=l.projectId?l.id:''; sh.err=''; renderSheet(); }},
-      h('option',{value:'~',text:'Choose a project…'}),h('option',{value:'studio',text:'Studio work (not a project)'}),ps.map(p=>h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')})));
+      h('option',{value:'~',text:'Choose a project…'}),h('option',{value:'studio',text:'Studio work (not a project)'}),wlProjOpts(ps));
     pSel.value=l.projectId==null?'~':l.projectId===''?'studio':l.projectId;
     const cur_=wlPicked(l), open=sh.pick===l.id&&!!l.projectId&&!l.ask;
     const tBtn=h('button',{type:'button',class:'wlf-tbtn'+(cur_?' on':''),disabled:!l.projectId||!!l.ask,'aria-expanded':String(open),onclick:()=>{ sh.pick=open?'':l.id; sh.q=''; renderSheet(); }},
