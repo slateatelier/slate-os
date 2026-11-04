@@ -1951,7 +1951,7 @@ async function createTask(d){
   const dReq=d.kind==='Deliverable'&&!d.gate&&!d.legacy&&!canSetDeliv();
   const hist=[{at:now,by:S.uid,type:'created',assignee:ask?'':d.assignee,to:tg,note:d.note||''}]; if(dReq) hist.push({at:now,by:S.uid,type:'delivRequested'}); if(lg) hist.push({at:now,by:S.uid,type:'done',to:d.doneAt,note:'Finished before SLATE OS'+(d.legacyNoDate?' (date not recorded)':'')}); if(ask) hist.push({at:now,by:S.uid,type:'assignRequested',to:d.assignee,cross:isCrossPod(d.assignee,d.projectId)?teamOf(d.assignee):''}); if(pr) hist.push({at:now,by:S.uid,type:'proposed',to:pr}); if(gReq) hist.push({at:now,by:S.uid,type:'guideRequested',to:d.guideTo}); if(gSet) hist.push({at:now,by:S.uid,type:'guideSet',to:d.guideTo});
   fxMark('task:'+ref.id,'in');
-  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:dReq?'Task':(d.kind||'Task'),...(dReq?{delivReq:{by:S.uid,at:now}}:{}),assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:gReq,...(gSet?{checker:d.guideTo,checkerGuide:true}:{}),support:d.support?{...d.support,by:S.uid,at:now}:null,
+  await ref.set({projectId:d.projectId,title:d.title.trim(),kind:dReq?'Task':(d.kind||'Task'),...(dReq?{delivReq:{by:S.uid,at:now}}:{}),assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:gReq,...(gSet?{checker:d.guideTo,checkerGuide:true}:!ask&&d.assignee&&d.assignee!==S.uid&&draftDirect(d.assignee,d.projectId)?{checker:S.uid}:{}),support:d.support?{...d.support,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
     repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),...(d.clRef?{clRef:d.clRef}:{}),...(d.clHelp?{clHelp:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
@@ -1977,7 +1977,9 @@ const isCrossPod=(id,pid)=>{ const tm=teamOf(id); if(!/^pod\b/i.test(tm)) return
    usual capped POD-support bonus. */
 const coverOf=p=>{ const c=(S.settings&&S.settings.cover)||{}; return p?podsOfProject(p).find(pd=>c[pd]&&!c[pd].ended)||null:null; };
 const coverOk=(id,pid)=>{ const p=S.projects[pid]; return !!p&&!!coverOf(p)&&isProjLead(p)&&/^pod\b/i.test(teamOf(id)||'')&&!isLeft(id); };
-const needsAssignApproval=(id,pid)=>!!id&&!coverOk(id,pid)&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(r4on()&&!S.dqAsk&&myHeadTeam()&&teamOf(id)===myHeadTeam());
+/* the project's POD leader gives work to the Drafting Pool directly (4 Nov 2026); the Design Associate Lead and the COO are told */
+const draftDirect=(id,pid)=>!!(S.settings&&S.settings.draftDirect)&&!!id&&isDraftMember(id)&&!isLeft(id)&&isProjLead(S.projects[pid]);
+const needsAssignApproval=(id,pid)=>!!id&&!coverOk(id,pid)&&!draftDirect(id,pid)&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(r4on()&&!S.dqAsk&&myHeadTeam()&&teamOf(id)===myHeadTeam());
 function loadOf(id,excl){
   const td=today(), wk=addDays(td,7);
   const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id))&&(!isChalkTask(t)||isChalkP(id)));
@@ -3682,9 +3684,11 @@ function kFollow(td,ap){ const rows=[];
         meta:`Phase ${PH[f.k].no} ${phName(f.k,p)} · ${x.fu.length?`followed up ${x.fu.length}×, last ${fmtD(x.fu[x.fu.length-1].on)}`:'follow up today'}`,onclick:()=>openProjectView(id)})); }); }); });
   return rows; }
 function giveSel(t){ const team=people().filter(id=>id!==S.uid&&teamOf(id)===myPod()&&(S.members[id]||{}).active!==false);
+  const pool=isProjLead(S.projects[t.projectId])?people().filter(id=>id!==S.uid&&isDraftMember(id)&&!isLeft(id)&&draftDirect(id,t.projectId)):[];
+  const load=id=>`${shortName(id)} · ${activeTasks().filter(x=>x.assignee===id&&!x.doneAt&&x.target&&x.target<=addDays(today(),7)).length} this week`;
   const el=h('select',{class:'h-sel','aria-label':'Give to',style:'width:auto;max-width:100%',onchange:e=>{ const to=e.target.value; if(!to) return;
       run(()=>taskUpdate(t.id,{assignee:to,checker:S.uid,assignReq:null},[{type:'reassigned',from:t.assignee,to,note:`${nameOf(S.uid)} checks it before it goes on`}]),`Given to ${shortName(to)}. It comes back to you to check`); }},
-    h('option',{value:'',text:'Give to…'}),team.map(id=>h('option',{value:id,text:`${shortName(id)} · ${activeTasks().filter(x=>x.assignee===id&&!x.doneAt&&x.target&&x.target<=addDays(today(),7)).length} this week`})));
+    h('option',{value:'',text:'Give to…'}),pool.length?[h('optgroup',{label:podLabel(myPod())||'Your POD'},team.map(id=>h('option',{value:id,text:load(id)}))),h('optgroup',{label:'Drafting Pool'},pool.map(id=>h('option',{value:id,text:load(id)})))]:team.map(id=>h('option',{value:id,text:load(id)})));
   return el; }
 function podGlance(td){
   const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&inMyPodProject(p)); if(!ps.length) return null;
@@ -6086,6 +6090,7 @@ function buildNotifs(){
       else if(toMe&&(e.type==='created'||e.type==='reassigned'||e.type==='assignApproved')) cat='action';
       else if(mineT||(e.type==='approved'||e.type==='declined')&&(e.by!==me)&&(mineT||myReq)) cat='update';
       else if(lead&&podsOf(t).includes(mp)) cat='update';
+      else if(myHeadTeam()&&(e.type==='created'||e.type==='reassigned')&&teamOf(e.type==='created'?(e.assignee||t.assignee):e.to)===myHeadTeam()) cat='update';
       if(!cat) continue;
       if(['stage'].includes(e.type)&&!boss&&!mineT) continue;
       const still=cat==='action'&&boss?((e.type==='request'||e.type==='proposed')?!!t.request:e.type==='assignRequested'?!!t.assignReq:e.type==='delivRequested'?!!t.delivReq:e.type==='submitted'?!!t.verify:false):true;
