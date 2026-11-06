@@ -9879,7 +9879,29 @@ function printFarReport(rd,x){
   <div class="note">Saleable = FAR area × 1.22. Construction adds 25%, 35% or 45% for 0, 1 or 2 basements. A guide for early decisions: confirm with RAJUK and a full design before committing.</div>
   <div class="foot"><div><b>SLATE Architecture &amp; Design</b>House SW (I) 3/A, Road 2, Gulshan 1, Dhaka 1212</div><div style="text-align:right">+88 01749 390 284<br>info@slate-atelier.com · slate-atelier.com</div></div>
   </div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`;
-  const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to make the report.'); w.document.open(); w.document.write(html); w.document.close(); }
+  farOpenReport(html,'FAR report · '+title); }
+/* Opening a FAR report (Principal, 6 Nov 2026): on an iPhone/iPad, or in the Home Screen app, a pop-up window can't be
+   closed after printing or saving, so the person was stuck outside SLATE OS. There the report opens over the app with
+   Print or save as PDF and Close, and the print sheet opens by itself; Close (or the system's back) returns to the calculator.
+   On a computer browser the report still opens in its own tab and prints. */
+const farInApp=()=>pbIOS()||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
+function farOpenReport(html,label){
+  if(!farInApp()){ const w=window.open('','_blank'); if(!w) return toast('Allow pop-ups for SLATE OS to make the report.'); w.document.open(); w.document.write(html); w.document.close(); return; }
+  document.getElementById('far-rep')?.remove();
+  /* no auto-print inside the page itself: SLATE OS starts it once the report has loaded; on screen the A4 page is fitted to the width */
+  const fit='<style>@media screen{html{zoom:var(--fz,1)}}</style><script>(function(){function f(){var w=document.documentElement.clientWidth||innerWidth;document.documentElement.style.setProperty("--fz",Math.min(1,(w-8)/800));}addEventListener("resize",f);f();})();<\/script>';
+  html=html.replace(/<script>window\.onload=\(\)=>setTimeout\(\(\)=>window\.print\(\),300\)<\/script>/,'').replace('</body>',fit+'</body>');
+  const fr=h('iframe',{title:label||'FAR report',style:'flex:1;width:100%;border:0;background:#e6e6e6'});
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',esc); }, esc=e=>{ if(e.key==='Escape') close(); };
+  const doPrint=()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){ toast('Couldn’t open printing. Try Print again.'); } };
+  const ov=h('div',{id:'far-rep',role:'dialog','aria-modal':'true','aria-label':label||'FAR report',style:'position:fixed;inset:0;z-index:10001;display:flex;flex-direction:column;background:#e6e6e6'},
+    h('div',{style:'display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:#231f20'},
+      h('button',{type:'button',class:'btn',style:'background:#C41E29;color:#fff;border:0',onclick:doPrint,text:'Print or save as PDF'}),
+      h('button',{type:'button',class:'btn',onclick:close,text:'Close'}),
+      h('span',{style:'color:#bbb;font-size:13px;flex-basis:100%;text-align:center',text:'Close returns to the FAR calculator'})),
+    fr);
+  let first=true; fr.onload=()=>{ if(!first) return; first=false; setTimeout(doPrint,400); };
+  fr.srcdoc=html; document.body.append(ov); document.addEventListener('keydown',esc); }
 /* The FAR calculator inside SLATE OS is the SLATE FAR Calculator itself (far-tool/, the same engine, cost analysis,
    scenarios, Dhaka and Chittagong, and A4 report as slate-atelier.com/FAR). It runs in a frame that is kept between
    redraws; each calculation is saved to the SLATE OS FAR log, and a project's inputs can be filled in from here. */
@@ -9892,8 +9914,8 @@ function farFillFrom(p){ if(!p) return; const fu=Object.values(p.floorUnits||{})
   window.addEventListener('message',e=>{ if(e.origin!==location.origin||!e.data||e.data.src!=='slate-far') return; const m=e.data, F=farState();
     if(m.type==='height'){ const f=farFrame(); if(f) f.style.height=Math.max(300,m.h+8)+'px'; return; }
     if(m.type==='ready'){ if(F.pendingFill){ farFillFrom(S.projects[F.pendingFill]); F.pendingFill=''; } return; }
-    if(m.type==='print'){ const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups for SLATE OS to make the report.'); return; }
-      w.document.open(); w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${String(m.title||'SLATE FAR report').replace(/</g,'')}</title><style>${m.css||''}</style><style>body{background:#fff!important;margin:0}#printReport{display:block!important}</style></head><body><div id="printReport">${m.html||''}</div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`); w.document.close(); return; }
+    if(m.type==='print'){ const t=String(m.title||'SLATE FAR report').replace(/</g,'');
+      farOpenReport(`<!doctype html><html><head><meta charset="utf-8"><title>${t}</title><style>${m.css||''}</style><style>body{background:#fff!important;margin:0}#printReport{display:block!important}</style></head><body><div id="printReport">${m.html||''}</div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`,t); return; }
     if(m.type==='calc'&&m.result&&S.canWrite&&S.db){ const x=m.result, p=F.d.projectId?S.projects[F.d.projectId]:null, uc=x.unitConfig;
       S.db.collection(`farlog/${S.uid}/items`).doc().set({at:new Date().toISOString(),by:S.uid,site:x.projName&&x.projName!=='Unnamed Project'?x.projName:'',projectId:F.d.projectId||'',project:p?projLabel(p):'',city:x.city||'dhaka',
         input:{katha:x.landKatha,block:x.blockName||(x.city==='ctg'?'Chittagong (CDA 2008)':''),road:x.roadLabel||'',basements:x.basements||0,upf:x.unitsPerFloor||'',floors:x.floors||'',diffFloors:uc&&uc.used?uc.dF:'',diffUnits:uc&&uc.used?uc.dU:'',jv:!!x.isJV,loUnits:x.loUnits!=null?x.loUnits:''},
