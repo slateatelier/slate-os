@@ -241,7 +241,17 @@ main.wrap.wrap-desk{max-width:1480px}
 .sim-t{display:grid;gap:1px;min-width:0}.sim-t b{font-size:13.5px;font-weight:600}.sim-t span{font-size:12px;color:var(--muted)}.wlf-nt{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:8px 11px;font:inherit;font-size:14.5px;background:#fff}
 .wlf-kind{grid-template-columns:repeat(2,1fr);max-width:280px;background:#fff}
 .wl-sub.late{color:var(--late)}
-.wl-y .ci-seg{grid-template-columns:repeat(4,1fr)}
+.wl-y .ci-seg{grid-template-columns:repeat(5,1fr)}
+@media (max-width:560px){.wl-y .ci-seg{grid-template-columns:repeat(3,1fr)}}
+.wl-gate{max-width:560px;margin:48px auto;display:grid;gap:14px;background:#fff;border:1px solid var(--border);border-radius:18px;padding:28px 26px}
+.wl-gate .h1{margin:0}.wl-gate .lead{margin:0}.wl-gate .btn{justify-self:start}
+.wl-gate-steps{margin:0;padding-left:20px;display:grid;gap:10px}.wl-gate-steps li{display:grid;gap:2px}.wl-gate-steps b{font-size:14.5px}.wl-gate-steps span{font-size:13.5px;color:var(--muted)}
+.wl-why{display:grid;gap:6px}.wl-why .lbl{font-size:12.5px;color:var(--muted)}
+.wl-why .chips .chip{font-size:12.5px}.wl-why input{border:1px solid var(--border);border-radius:10px;padding:7px 10px;font:inherit;font-size:14px;background:#fff}
+.wl-part{display:grid;gap:4px}.wl-part .lbl{font-size:12.5px;color:var(--muted)}
+.wl-extra{display:grid;gap:8px;background:var(--group);border-radius:12px;padding:10px 12px}
+.wl-flag{font-size:12px;color:var(--late);font-weight:600}
+.wlf-hint{font-size:12px;color:var(--muted);flex-basis:100%}
 .wl-day{font-weight:600;font-size:14px;white-space:nowrap;padding:0 4px}
 .wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
 .wl-card{background:var(--group);border-radius:14px;padding:12px 14px;display:grid;gap:8px;align-content:start}
@@ -3047,6 +3057,7 @@ function buildView(){
     h('div',{class:'skel-list','aria-hidden':'true'},[78,62,70,54].map(w=>h('div',{class:'skel-row'},h('i',{class:'skel skel-c'}),h('div',{class:'skel-t'},h('i',{class:'skel',style:`width:${w}%`}),h('i',{class:'skel',style:`width:${w-24}%;height:10px`})))))];
   if(S.state==='nohost') return h('div',{class:'state'},h('strong',{text:'SLATE OS can’t reach its database'}),h('span',{text:'Check your internet connection, then reload the page. If it keeps happening, tell the Principal.'}));
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
+  if(wlGated()) return viewPlanGate();
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
   const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,worklog:viewWorklog,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
@@ -3975,6 +3986,20 @@ const wlKey=(u,d)=>u+'|'+d;
 /* who writes the day's plan: everyone in a POD and in the Drafting Pool (3 Nov 2026) */
 const wlTeam=id=>{ const t=teamOf(id)||''; return /^pod\b/i.test(t)||/draft/i.test(t); };
 const needPlan=id=>!!id&&!isLeft(id)&&wlTeam(id)&&!isChalkP(id);
+/* plan before opening (Principal, 7 Nov 2026): on a working day SLATE OS opens only after the day's plan is in
+   (yesterday's lines closed, today's written). Settings planGate {from, off, open:{day:'all'|[ids]}}; the Principal or the COO
+   switches it and can open SLATE OS for everyone or one person for a day (leave, a broken plan screen). Notifications stay open. */
+const wlGateCfg=()=>(S.settings&&S.settings.planGate)||null;
+const wlGateOn=(td=today())=>{ const g=wlGateCfg(); return !!g&&!!g.from&&g.from<=td&&!g.off; };
+const wlGateOpenFor=(id,td=today())=>{ const v=((wlGateCfg()||{}).open||{})[td]; return v==='all'||(Array.isArray(v)&&v.includes(id)); };
+const wlGated=()=>{ const td=today(); return S.state==='ready'&&WL.loaded&&wlGateOn(td)&&S.canWrite&&!window.slateReview&&needPlan(S.uid)&&isWorkDay(td)&&!wlGet(S.uid,td)&&!wlGateOpenFor(S.uid,td); };
+/* working days after a and up to b (b counted, a not) */
+const wlWorkDays=(a,b)=>{ let n=0,x=a; for(let i=0;i<90&&x<b;i++){ x=addDays(x,1); if(isWorkDay(x)) n++; } return n; };
+/* why a finish-by date passed, and who a line is waiting on (7 Nov 2026) */
+const WL_LATE=[['more','More work than planned'],['rev','Revisions or client changes'],['other_work','Other work came first'],['wait','Waited on someone'],['other','Other']];
+const WL_WAIT=[['client','Client','the client'],['consultant','Consultant','a consultant'],['check','POD leader check','the POD leader’s check'],['principal','Principal','the Principal'],['coo','COO','the COO'],['other','Other','someone']];
+const wlLateName=k=>(WL_LATE.find(x=>x[0]===k)||[,''])[1];
+const wlWaitTxt=w=>w?`Waiting on ${(WL_WAIT.find(x=>x[0]===w.on)||[,,'someone'])[2]}`+(w.since?` since ${wd(w.since)} ${fmtD(w.since)}`:''):'';
 const wlGet=(u,d)=>WL.rows[wlKey(u,d)]||null;
 const wlPrevDay=d=>{ let x=addDays(d,-1); for(let i=0;i<14&&!isWorkDay(x);i++) x=addDays(x,-1); return x; };
 const wlTime=ts=>{ try{ return new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}); }catch(e){ return ''; } };
@@ -3998,6 +4023,7 @@ function wlMaybePrompt(){
   if(!WL.loaded||!S.canWrite||window.slateReview||!needPlan(S.uid)) return; const td=today();
   if(!isWorkDay(td)||wlGet(S.uid,td)) return;
   if(S.sheet||document.getElementById('day-splash')||document.hidden){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,20000); return; }
+  if(wlGated()){ openWlog(); clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,WL_NAG); return; }   /* the plan is the way in: no waiting */
   if(pref.planLater&&pref.planLater.d===td&&Date.now()-pref.planLater.at<WL_NAG){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,Math.max(30000,WL_NAG-(Date.now()-pref.planLater.at))); return; }
   savePref('planLater',{d:td,at:Date.now()}); openWlog(); clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,WL_NAG); }
 /* mode: 'today' (default) or 'ahead' (lines for a coming working day); add: open today's plan with a new empty line */
@@ -4036,7 +4062,8 @@ const wlAskWho=u=>{ const to=wlAskTo(u); return !to?'the COO':to===cooId()?'the 
 /* a request is answered once a task reaches the person after it was made */
 const wlAskDone=(u,at)=>Object.values(S.tasks).some(t=>t.assignee===u&&!t.archived&&((t.createdAt||'')>at||(t.history||[]).some(e=>e.at>at&&(e.to===u||e.assignee===u)&&/created|reassigned|assignApproved/.test(e.type))));
 const wlNewLine=(x={})=>({id:Math.random().toString(36).slice(2,10),projectId:x.projectId==null?null:x.projectId,taskId:x.taskId||'',text:x.text||'',status:'planned',due:x.due||today(),
-  ...(x.clRef?{clRef:x.clRef}:{}),...(x.due0?{due0:x.due0}:{}),...(x.since?{since:x.since}:{}),...(x.from?{from:x.from}:{}),...(x.ask?{ask:x.ask}:{}),...(x.newTitle!=null?{newTitle:x.newTitle}:{})});
+  ...(x.clRef?{clRef:x.clRef}:{}),...(x.due0?{due0:x.due0}:{}),...(x.since?{since:x.since}:{}),...(x.from?{from:x.from}:{}),...(x.ask?{ask:x.ask}:{}),...(x.newTitle!=null?{newTitle:x.newTitle}:{}),
+  ...(x.wait?{wait:x.wait}:{}),...(x.moved?{moved:x.moved}:{}),...(x.lateWhy?{lateWhy:x.lateWhy}:{})});
 function wlMyProjects(){ const dp=isDraftMember(S.uid);   /* the Drafting Pool works for every POD, so it can pick any open project */
   return projects().filter(p=>!p.closed&&(fullView()||dp||inMyPodProject(p)||isMemberOk(p,S.uid)||activeTasks().some(t=>t.projectId===p.id&&t.assignee===S.uid)))
   .sort((a,b)=>String(a.name||a.code).localeCompare(String(b.name||b.code))); }
@@ -4119,15 +4146,17 @@ function sheetWlog(){
   const yOpen=yLog?(yLog.lines||[]).filter(l=>(l.status||'planned')==='planned'):[];
   const aheadLoad=d=>{ const ls=((S.ahead||{})[d]||[]).map(l=>({...l,due:l.due&&l.due>=d?l.due:d})); return ls.length?ls:[wlNewLine({due:d})]; };
   /* carry a line on: same project, task, words and first finish-by date; a passed finish-by date moves to today */
-  const carry=(l,due)=>wlNewLine({projectId:l.projectId||'',taskId:l.taskId,clRef:l.clRef,text:l.text,from:l.id,due,due0:l.due0||l.due||y,since:l.since||y,...(l.ask?{ask:l.ask}:{})});
+  const carry=(l,due,x={})=>wlNewLine({projectId:l.projectId||'',taskId:l.taskId,clRef:l.clRef,text:l.text,from:l.id,due,due0:l.due0||l.due||y,since:l.since||y,...(l.ask?{ask:l.ask}:{}),...(l.moved?{moved:l.moved}:{}),...x});
+  /* yesterday's answer decides the line today: Finish today / Ongoing carry it on; Waiting carries it on as a waiting line */
   const place=(l)=>{ sh.lines=sh.lines.filter(x=>x.from!==l.id); const v=sh.y[l.id];
-    if(v==='today'||v==='ongoing'){ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
-      sh.lines.unshift(carry(l,v==='today'?td:(l.due&&l.due>=td?l.due:td))); }
+    if(v==='today'||v==='ongoing'||v==='waiting'){ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
+      sh.lines.unshift(carry(l,v==='today'?td:(l.due&&l.due>=td?l.due:td),v==='waiting'?{wait:{on:sh.yw[l.id]||'',since:(l.wait&&l.wait.since)||y}}:{})); }
     if(!sh.lines.length) sh.lines=[wlNewLine()]; };
   if(!sh.init&&ahead){ sh.init=1; sh.y={}; sh.err=''; sh.lines=aheadLoad(sh.day); }
-  if(!sh.init){ sh.init=1; sh.y={}; sh.lines=cur?(cur.lines||[]).map(l=>({...l,due:l.due||td})):[]; sh.err='';
-    /* lines still running come back already set to Ongoing; a line whose task was finished on the project list comes back Finished */
-    if(!cur) [...yOpen].reverse().forEach(l=>{ sh.y[l.id]=wlTaskDone(l)||(l.ask&&l.ask.at&&wlAskDone(S.uid,l.ask.at))?'done':(l.due&&l.due>=td&&!l.ask)?'ongoing':''; if(sh.y[l.id]==='ongoing') place(l); });
+  if(!sh.init){ sh.init=1; sh.y={}; sh.yw={}; sh.yr={}; sh.ys={}; sh.ex=[]; sh.lines=cur?(cur.lines||[]).map(l=>({...l,due:l.due||td})):[]; sh.err='';
+    /* lines still running come back already set to Ongoing (a waiting line to Still waiting); a line whose task was finished on the project list comes back Finished */
+    if(!cur) [...yOpen].reverse().forEach(l=>{ sh.y[l.id]=wlTaskDone(l)||(l.ask&&l.ask.at&&wlAskDone(S.uid,l.ask.at))?'done':l.wait&&!l.ask?'waiting':(l.due&&l.due>=td&&!l.ask)?'ongoing':'';
+      if(sh.y[l.id]==='waiting') sh.yw[l.id]=l.wait.on||''; if(sh.y[l.id]==='ongoing'||sh.y[l.id]==='waiting') place(l); });
     else yOpen.forEach(l=>{ sh.y[l.id]=wlTaskDone(l)?'done':sh.lines.some(x=>x.from===l.id)?(sh.lines.find(x=>x.from===l.id).due===td?'today':'ongoing'):''; });
     /* lines planned ahead for today (or for a day already passed) come in here, marked "Planned ahead" */
     sh.aheadDays=Object.keys(S.ahead||{}).filter(d=>d<=td);
@@ -4147,13 +4176,22 @@ function sheetWlog(){
     return h('div',{class:'wl-y'},h('div',{class:'wl-yt'},h('b',{text:lineHead(l)}),h('span',{text:l.text}),
         l.ask?h('span',{class:'wlf-tag',text:'You asked for a task'}):l.due?h('span',{class:'wlf-tag'+(past?' late':''),text:past?`Finish-by date passed (${wlBy(l.due,td)})`:run_?`Finish by ${wlBy(l.due,td)}`+(l.since?` · since ${wd(l.since)} ${fmtD(l.since)}`:''):''}):null,
         wlTaskDone(l)?h('span',{class:'wlf-tag ok',text:'Its task is finished on the project list'}):null),
-      h('div',{class:'ci-seg',role:'radiogroup','aria-label':'How did it go?'},[['done',y===wlPrevDay(td)?'Finished yesterday':'Finished '+yName],['today','Finish today'],['ongoing','Ongoing'],['stopped','Stopped']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String(sh.y[l.id]===k),class:'ci-opt'+(sh.y[l.id]===k?' on '+(k==='done'?'done':k==='stopped'?'todo':'doing'):''),onclick:()=>setY(l,k),text:lb})))); };
+      h('div',{class:'ci-seg',role:'radiogroup','aria-label':'How did it go?'},[['done',y===wlPrevDay(td)?'Finished yesterday':'Finished '+yName],['today','Finish today'],['ongoing',l.wait?'Back on it':'Ongoing'],['waiting',l.wait?'Still waiting':'Waiting'],['stopped','Stopped']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String(sh.y[l.id]===k),class:'ci-opt'+(sh.y[l.id]===k?' on '+(k==='done'?'done':k==='stopped'?'todo':'doing'):''),onclick:()=>setY(l,k),text:lb}))),
+      yWhy(l,past)); };
+  /* what each answer asks for: who it waits on, why it stopped, why the finish-by date passed */
+  const yWhy=(l,past)=>{ const v=sh.y[l.id];
+    if(v==='waiting') return h('div',{class:'wl-why'},h('span',{class:'lbl',text:'Waiting on'}),h('div',{class:'chips'},WL_WAIT.map(([k,lb])=>h('button',{type:'button',class:'chip'+(sh.yw[l.id]===k?' on':''),onclick:()=>{ sh.yw[l.id]=k; place(l); sh.err=''; renderSheet(); },text:lb}))));
+    if(v==='stopped') return h('div',{class:'wl-why'},h('span',{class:'lbl',text:'Why did it stop?'}),h('input',{type:'text',maxlength:160,placeholder:'e.g. client put the project on hold',value:sh.ys[l.id]||'',oninput:e=>{ sh.ys[l.id]=e.target.value; }}));
+    if((v==='today'||v==='ongoing')&&past) return h('div',{class:'wl-why'},h('span',{class:'lbl',text:`Its finish-by date (${wd(l.due)} ${fmtD(l.due)}) passed. Why?`}),h('div',{class:'chips'},WL_LATE.map(([k,lb])=>h('button',{type:'button',class:'chip'+(sh.yr[l.id]===k?' on':''),onclick:()=>{ sh.yr[l.id]=k; sh.err=''; renderSheet(); },text:lb}))),
+      l.moved?h('span',{class:'wlf-tag late',text:`Date already moved ${l.moved} time${l.moved>1?'s':''}`}):null);
+    return null; };
   const dueRow=l=>{ const nw=wlNextDay(base), custom=l.due&&l.due!==base&&l.due!==nw;
     const di=h('input',{type:'date',class:'wlf-date','aria-label':'Pick a finish-by date',min:base,max:addDays(td,WL_MAXD),value:custom?l.due:'',onchange:e=>{ if(e.target.value){ l.due=e.target.value<base?base:e.target.value; sh.err=''; renderSheet(); } }});
     return h('div',{class:'wlf'},h('span',{class:'wlf-l',text:'Finish by'}),
       h('div',{class:'chips'},[[base,ahead?'Same day':'Today'],[nw,nw===addDays(base,1)?(ahead?'Day after':'Tomorrow'):'Next working day']].map(([d,lb])=>h('button',{type:'button',class:'chip qd'+(l.due===d?' on':''),onclick:()=>{ l.due=d; renderSheet(); }},h('b',{text:lb}),h('span',{text:`${wd(d)} ${+d.slice(8)}`}))),
         h('label',{class:'chip qd wlf-pick'+(custom?' on':'')},h('b',{text:custom?`${wd(l.due)} ${fmtD(l.due)}`:'Pick a date'}),di)),
-      l.from&&l.due0&&l.due>l.due0?h('span',{class:'wlf-tag late',text:`first set for ${wd(l.due0)} ${fmtD(l.due0)}`}):null); };
+      l.from&&l.due0&&l.due>l.due0?h('span',{class:'wlf-tag late',text:`first set for ${wd(l.due0)} ${fmtD(l.due0)}`+(l.moved?` · moved ${l.moved}×`:'')}):null,
+      l.due&&wlWorkDays(base,l.due)>5?h('span',{class:'wlf-hint',text:'More than 5 working days: think about splitting it into parts (e.g. ground floor, typical floors, roof), so progress shows and checks come earlier.'}):null); };
   const line=(l,i)=>{
     const pSel=h('select',{'aria-label':'Project',disabled:!!l.ask,onchange:e=>{ l.projectId=e.target.value==='~'?null:e.target.value==='studio'?'':e.target.value; wlClearPick(l); sh.pick=l.projectId?l.id:''; sh.err=''; renderSheet(); }},
       h('option',{value:'~',text:'Choose a project…'}),h('option',{value:'studio',text:'Studio work (not a project)'}),wlProjOpts(ps));
@@ -4171,10 +4209,14 @@ function sheetWlog(){
         h('span',{class:'wl-sub',text:WL_KIND[(l.newKind||'Task')==='Deliverable'?'deliverable':'task'][1]+' '+wlNewWhere(l)})); })():null,
       l.pre&&!ahead?h('span',{class:'wlf-tag',text:'Planned ahead: check it is still right'}):null,
       l.ask?h('span',{class:'wl-sub',text:`Request to ${wlAskWho(S.uid)}${l.ask.at?' · sent '+wlTime(l.ask.at):' · sent when you submit'}`+(l.ask.at&&wlAskDone(S.uid,l.ask.at)?' · a task has been given':'')}):null,
-      h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:'What exactly will you do on it today? e.g. 4th floor plan: kitchen and toilet layout, revise after client comments',value:l.text||'',
+      l.wait?h('div',{class:'wlf'},h('span',{class:'wlf-tag late',text:wlWaitTxt(l.wait)}),h('button',{class:'linkish',type:'button',style:'font-size:12.5px',onclick:()=>{ delete l.wait; sh.err=''; renderSheet(); },text:'Not waiting any more'})):null,
+      h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:l.from?'The task, in your own words':'What exactly will you do on it today? e.g. 4th floor plan: kitchen and toilet layout, revise after client comments',value:l.text||'',
         oninput:e=>{ l.text=e.target.value; const c=e.target.parentNode.querySelector('.wl-cnt'); const k2=e.target.value.trim().length; if(c){ c.textContent=k2<10?`${10-k2} more characters`:'✓'; c.classList.toggle('ok',k2>=10); } }}),
       h('div',{class:'wl-cnt'+(n>=10?' ok':''),text:n<10?`${10-n} more characters`:'✓'}),
-      l.ask?null:dueRow(l));
+      /* a task running for days: what today's part of it is, so the log shows progress, not the same words again */
+      l.from&&!l.wait&&!l.ask&&!ahead?h('div',{class:'wl-part'},h('span',{class:'lbl',text:`Today’s part${l.since?` · day ${wlWorkDays(l.since,td)+1}${l.due&&l.due>td?' of '+(wlWorkDays(l.since,l.due)+1):''}`:''}`}),
+        h('input',{type:'text',class:'wlf-nt',maxlength:200,placeholder:'e.g. ground and 1st floor done, starting typical floors',value:l.part||'',oninput:e=>{ l.part=e.target.value; }})):null,
+      l.ask||l.wait?null:dueRow(l));
   };
   const hasAsk=sh.lines.some(l=>l.ask), askTo=wlAskTo(S.uid);
   const addAsk=()=>{ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
@@ -4186,16 +4228,27 @@ function sheetWlog(){
     run(()=>wlAheadWrite({...(S.ahead||{}),[base]:lines}),`Planned for ${wd(base)} ${fmtD(base)}. It comes into that morning’s plan`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const dropAhead=()=>{ const it={...(S.ahead||{})}; delete it[base]; run(()=>wlAheadWrite(it),`Plan for ${wd(base)} ${fmtD(base)} removed`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const save=()=>{ if(ahead) return saveAhead();
-    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing or Stopped.`:'';
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing, Waiting or Stopped.`
+      :yOpen.find(l=>sh.y[l.id]==='waiting'&&!sh.yw[l.id])?'Say who each waiting line is waiting on.'
+      :yOpen.find(l=>sh.y[l.id]==='stopped'&&(sh.ys[l.id]||'').trim().length<3)?'Say in a few words why each stopped line stopped.'
+      :yOpen.find(l=>(sh.y[l.id]==='today'||sh.y[l.id]==='ongoing')&&l.due&&l.due<td&&!sh.yr[l.id])?'Say why the finish-by date passed on each line that carries on.'
+      :sh.ex.find(e=>e.projectId==null)?'Choose a project (or Studio work) for each thing you added for yesterday.':sh.ex.find(e=>(e.text||'').trim().length<10)?'Write what you did on each thing you added for yesterday (at least 10 characters).'
+      :!cur&&sh.lines.find(l=>l.from&&!l.wait&&!l.ask&&(l.part||'').trim().length<5)?'Write today’s part on each line carried on (what you will get done on it today).':'';
     if(bad){ sh.err=bad; renderSheet(); return; }
+    /* a passed finish-by date that carries on: count the move and keep the reason */
+    if(!cur) sh.lines.forEach(l=>{ const o=l.from&&yOpen.find(x=>x.id===l.from); if(o&&o.due&&o.due<td&&(sh.y[o.id]==='today'||sh.y[o.id]==='ongoing')){ l.moved=(o.moved||0)+1; l.lateWhy=sh.yr[o.id]; } });
     const sb=window.slateSupabase, nowIso=new Date().toISOString(); let fin=[];
     run(async()=>{
       for(const l of sh.lines) if(l.newTitle!=null&&l.projectId&&!l.taskId){ const id=await wlCreateTask(l); if(id){ l.taskId=id; delete l.newTitle; } }
       const lines=sh.lines.map(l=>({id:l.id,projectId:l.projectId||'',taskId:l.taskId||'',...(l.clRef&&!l.taskId?{clRef:l.clRef}:{}),text:l.text.trim(),status:l.status||'planned',due:l.due,due0:l.due0||l.due,since:l.since||td,
-        ...(l.from?{from:l.from}:{}),...(l.note?{note:l.note}:{}),...(l.closedAt?{closedAt:l.closedAt}:{}),...(l.ask?{ask:{to:l.ask.to||askTo,at:l.ask.at||nowIso}}:{})}));
-      if(yLog&&yOpen.length){ const st={done:'done',today:'carried',ongoing:'carried',stopped:'stopped'};
+        ...(l.from?{from:l.from}:{}),...(l.note?{note:l.note}:{}),...(l.closedAt?{closedAt:l.closedAt}:{}),...(l.ask?{ask:{to:l.ask.to||askTo,at:l.ask.at||nowIso}}:{}),
+        ...((l.part||'').trim()?{part:l.part.trim()}:{}),...(l.wait?{wait:l.wait}:{}),...(l.moved?{moved:l.moved}:{}),...(l.lateWhy?{lateWhy:l.lateWhy}:{}),...(l.extra?{extra:1}:{})}));
+      if(yLog&&(yOpen.length||sh.ex.length)){ const st={done:'done',today:'carried',ongoing:'carried',waiting:'carried',stopped:'stopped'};
         fin=yOpen.filter(l=>sh.y[l.id]==='done');
-        const yl=(yLog.lines||[]).map(l=>sh.y[l.id]?{...l,status:st[sh.y[l.id]],closedAt:nowIso}:l);
+        const yl=(yLog.lines||[]).map(l=>{ const v=sh.y[l.id]; if(!v) return l;
+          return {...l,status:st[v],closedAt:nowIso,...(v==='stopped'?{why:(sh.ys[l.id]||'').trim()}:{}),...(v==='waiting'?{wait:{on:sh.yw[l.id],since:(l.wait&&l.wait.since)||y}}:{})}; });
+        /* "Anything else you did yesterday?": added to that day's log as done, marked as added the next morning */
+        sh.ex.forEach(e=>{ if(yl.length<8) yl.push({id:e.id,projectId:e.projectId||'',taskId:'',text:e.text.trim(),status:'done',extra:1,due:y,due0:y,since:y,closedAt:nowIso}); });
         const {data,error}=await sb.from('work_logs').update({lines:yl}).eq('user_id',S.uid).eq('day',y).select().maybeSingle(); if(error) throw new Error(error.message); if(data) WL.rows[wlKey(S.uid,y)]=data; }
       const {data,error}=await sb.from('work_logs').upsert({user_id:S.uid,day:td,lines},{onConflict:'user_id,day'}).select().maybeSingle(); if(error) throw new Error(error.message); if(data) WL.rows[wlKey(S.uid,td)]=data;
       await wlStartTasks(lines.filter(l=>(l.status||'planned')==='planned'));
@@ -4220,16 +4273,26 @@ function sheetWlog(){
   return [head(fmtD(td)+' · '+(cur?'update':'every working morning'),cur?'Update today’s plan':'What are you working on today?'),modeSeg,
     h('p',{class:'lead',style:'margin:0',text:'Which projects and which tasks, in your own words, and when each will be finished. '+(myHeadTeam()||amPodLead()?'The COO and the Principal see it.':isDraftMember(S.uid)?'The Design Associate Lead, the COO and the Principal see it.':'Your POD leader, the COO and the Principal see it.')+' It is a work record, not a score.'}),
     yOpen.length?h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:(yName==='yesterday'?'Yesterday':'Last plan')+' · '+fmtD(y)}),h('span',{class:'cnt',text:'how did it go?'})),h('div',{class:'wl-ys'},yOpen.map(yRow))):null,
+    yLog&&!cur?(()=>{ const room=8-(yLog.lines||[]).length-sh.ex.length;
+      const exRow=(e,i)=>{ const pSel=h('select',{'aria-label':'Project',onchange:ev=>{ e.projectId=ev.target.value==='~'?null:ev.target.value==='studio'?'':ev.target.value; sh.err=''; }},
+          h('option',{value:'~',text:'Choose a project…'}),h('option',{value:'studio',text:'Studio work (not a project)'}),wlProjOpts(ps));
+        pSel.value=e.projectId==null?'~':e.projectId===''?'studio':e.projectId;
+        return h('div',{class:'wl-line'},h('div',{class:'wl-sel'},pSel,h('button',{class:'icon-btn',type:'button','aria-label':'Remove',title:'Remove',onclick:()=>{ sh.ex.splice(i,1); renderSheet(); },text:'×'})),
+          h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:'What you did, e.g. urgent client revision of the 3rd floor plan',value:e.text||'',oninput:ev=>{ e.text=ev.target.value; }})); };
+      return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:`Anything else you did ${yName==='yesterday'?'yesterday':'on '+yName}?`}),h('span',{class:'cnt',text:'optional'})),
+        sh.ex.length?h('div',{class:'wl-extra'},sh.ex.map(exRow)):null,
+        room>0?h('div',{class:'wlf-adds'},h('button',{class:'linkish',type:'button',style:'font-size:13.5px',onclick:()=>{ sh.ex.push({id:Math.random().toString(36).slice(2,10),projectId:null,text:''}); renderSheet(); },text:'+ Add work that wasn’t in the plan'})):null); })():null,
     h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Today'}),h('span',{class:'cnt',text:`${sh.lines.length} line${sh.lines.length>1?'s':''}`})),
       h('div',{class:'wl-lines'},sh.lines.map(line)),
       h('div',{class:'wlf-adds'},sh.lines.length<8?h('button',{class:'linkish',type:'button',style:'font-size:13.5px',onclick:()=>{ sh.lines.push(wlNewLine()); renderSheet(); },text:'+ Add another project or task'}):null,
         !hasAsk&&sh.lines.length<8&&askTo&&askTo!==S.uid?h('button',{class:'linkish',type:'button',style:'font-size:13.5px',onclick:addAsk,text:`No task for today? Ask ${wlAskWho(S.uid)}`}):null)),
     sh.err?h('div',{class:'err',text:sh.err}):null,
     h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:save,text:cur?'Save changes':'Submit today’s plan'}),
-      cur?null:h('button',{class:'btn',type:'button',onclick:()=>{ savePref('planLater',{d:td,at:Date.now()}); closeSheet(); },text:'Later'}))];
+      cur||wlGated()?null:h('button',{class:'btn',type:'button',onclick:()=>{ savePref('planLater',{d:td,at:Date.now()}); closeSheet(); },text:'Later'})),
+    wlGated()?h('p',{class:'f-hint',style:'margin:0',text:'SLATE OS opens once today’s plan is in.'}):null];
 }
 /* a plan line in a list: its task on the project list, its finish-by date, a request still open */
-function wlMeta(l,day,td=today()){ const bits=[l.text]; const t=wlTaskOf(l);
+function wlMeta(l,day,td=today()){ const bits=[l.text,l.part?'today: '+l.part:'',l.wait?wlWaitTxt(l.wait):'']; const t=wlTaskOf(l);
   if(l.ask) bits.push(l.ask.at&&wlAskDone(S.uid,l.ask.at)?'task given':'asked for a task');
   else if(l.due&&l.due!==day) bits.push((l.due<td&&(l.status||'planned')==='planned'?'was due ':'finish by ')+wlBy(l.due,td));
   if(t&&!l.ask) bits.push(t.doneAt?'task done':t.verify||stageOf(t)==='review'?'task sent for checking':stageOf(t)==='doing'?'task in progress':'');
@@ -4239,6 +4302,17 @@ function wlAddBar(aheadOnly){ if(!S.canWrite||window.slateReview) return null; c
   return h('div',{class:'wl-addbar'},aheadOnly?null:h('button',{class:'btn btn-sm wl-add',type:'button',onclick:()=>openWlog('today',true),text:'+ Add to today'}),
     h('button',{class:'btn btn-sm wl-add',type:'button',onclick:()=>openWlog('ahead'),text:'Plan ahead'}),
     ds.length?h('span',{class:'wl-ahd'},'Planned: ',ds.slice(0,4).map((d,i)=>h('button',{class:'linkish',type:'button',onclick:()=>{ S.sheet={type:'wlog',mode:'ahead',day:d}; renderSheet(); },text:(i?', ':'')+(d===addDays(today(),1)?'tomorrow':wd(d)+' '+fmtD(d))+` (${S.ahead[d].length})`}))):null); }
+/* the only screen before today's plan is in (plan gate, 7 Nov 2026) */
+function viewPlanGate(){ const td=today(), last=wlLastLog(S.uid,td), open=last?(last.lines||[]).filter(l=>(l.status||'planned')==='planned').length:0;
+  return h('div',{class:'wl-gate'},
+    h('div',{class:'eyebrow',text:`${wd(td)} ${fmtD(td)}`}),
+    h('h1',{class:'h1',text:`Good ${new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, ${(nameOf(S.uid)||'').split(' ')[0]}`}),
+    h('p',{class:'lead',text:'SLATE OS opens once today’s plan is in.'}),
+    h('ol',{class:'wl-gate-steps'},
+      h('li',{},h('b',{text:open?`Close ${last.day===wlPrevDay(td)?'yesterday’s':'your last'} plan`:'Yesterday'}),h('span',{text:open?`${open} line${open>1?'s':''}: done, ongoing, waiting or stopped. Add anything else you did.`:'Nothing left open.'})),
+      h('li',{},h('b',{text:'Plan today'}),h('span',{text:'Which project and step or task, today’s part, and when it will be finished. No task? Ask for one.'}))),
+    h('button',{class:'btn btn-primary',type:'button',onclick:()=>openWlog(),text:'Write today’s plan'}),
+    h('p',{class:'f-hint',text:'Notifications and messages (the bell) stay open. On leave today? Ask the COO to open SLATE OS for you.'})); }
 /* Home: your own plan for today, or a reminder to write it (with what is still running from before) */
 function wlMyCard(){ const c=wlMyCard0(); if(!c) return WL.loaded&&needPlan(S.uid)&&!isWorkDay(today())?wlAddBar(true):null; const b=wlAddBar(); return b?h('div',{class:'wl-wrap'},c,b):c; }
 function wlMyCard0(){
@@ -4252,7 +4326,7 @@ function wlMyCard0(){
 }
 /* Who is doing what: today's plan lines for a person, or, before it is written, what is still running from the last plan */
 function wlWhoLines(id){ if(!WL.loaded||!needPlan(id)) return null; const td=today(); if(!isWorkDay(td)) return null; const r=wlGet(id,td);
-  const pl=(l,run_)=>h('span',{class:'who-pl'+(l.ask?' ask':'')+((l.status||'planned')==='done'?' done':'')},(l.status||'planned')==='done'?'✓ ':run_?'→ ':'',h('b',{text:wlProjName(l.projectId)}),h('span',{text:' · '+(l.ask?'Asked for a task':l.text)+(l.due&&l.due>td?' · by '+wlBy(l.due,td):'')}));
+  const pl=(l,run_)=>h('span',{class:'who-pl'+(l.ask?' ask':'')+((l.status||'planned')==='done'?' done':'')},(l.status||'planned')==='done'?'✓ ':run_?'→ ':'',h('b',{text:wlProjName(l.projectId)}),h('span',{text:' · '+(l.ask?'Asked for a task':l.wait?wlWaitTxt(l.wait)+' · '+l.text:(l.part||l.text))+(l.due&&l.due>td&&!l.wait?' · by '+wlBy(l.due,td):'')+(l.moved?` · date moved ${l.moved}×`:'')}));
   if(!r){ const late=new Date().getHours()>=11, go=wlRunning(id,td);
     if(!go.length) return h('span',{class:'who-plan none'+(late?' late':''),text:late?'No plan written today':'No plan yet today'});
     return h('span',{class:'who-plan run'},go.slice(0,3).map(l=>pl(l,true)),h('span',{class:'who-more'+(late?' late':''),text:(go.length>3?`+${go.length-3} more · `:'')+'carried on, not confirmed today'})); }
@@ -4275,16 +4349,38 @@ function viewWorklog(){
   const out=[h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Records · '+(ap?'every POD and the Drafting Pool':amPodLead()?podLabel(myPod()):myHeadTeam()?myHeadTeam():'your own')}),h('h1',{class:'h1',text:'Day log'})),
     h('div',{class:'bar dash-bar'},podSel,whoSel,V.who?null:[V.d!==td?h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ V.d=td; render(true); },text:'Today'}):null,
       h('button',{class:'btn btn-sm',type:'button','aria-label':'Previous day',onclick:()=>go(-1),text:'‹'}),h('span',{class:'wl-day',text:fmtD(V.d)+(V.d===td?' · today':'')}),h('button',{class:'btn btn-sm',type:'button','aria-label':'Next day',disabled:V.d>=td,onclick:()=>go(1),text:'›'})]))];
-  const lineEl=(l,day,uid)=>{ const st=(l.status||'planned')==='planned'&&day<td?['?','Not closed','var(--late)']:WL_ST[l.status||'planned'];
-    const sub=[l.ask?(l.ask.at&&wlAskDone(uid,l.ask.at)?'asked for a task · given':'asked for a task'):'',
+  /* flags for the POD leader (7 Nov 2026): a very short note, or the same words three working days running with no "today's part" */
+  const flagOf=(l,day,uid)=>{ if(uid===S.uid||l.ask||l.extra) return ''; const tx=(l.text||'').trim().toLowerCase();
+    if(tx.length<20) return 'very short note';
+    if(!l.part){ let d=day, same=1; for(let i=0;i<2;i++){ d=wlPrevDay(d); const r=wlGet(uid,d); if(r&&(r.lines||[]).some(x=>(x.text||'').trim().toLowerCase()===tx&&!x.part)) same++; else break; } if(same>=3) return 'same note 3 days running'; }
+    return ''; };
+  const lineEl=(l,day,uid)=>{ const st=(l.status||'planned')==='planned'&&l.wait?['⏸','Waiting','var(--muted)']:(l.status||'planned')==='planned'&&day<td?['?','Not closed','var(--late)']:WL_ST[l.status||'planned'];
+    const fl=flagOf(l,day,uid);
+    const sub=[l.extra?'added the next morning':'',l.wait?wlWaitTxt(l.wait):'',l.why?'stopped: '+l.why:'',l.moved?`date moved ${l.moved}×`+(l.lateWhy?` (${wlLateName(l.lateWhy).toLowerCase()})`:''):'',
+      l.ask?(l.ask.at&&wlAskDone(uid,l.ask.at)?'asked for a task · given':'asked for a task'):'',
       l.due&&l.due!==day?((l.status||'planned')==='planned'&&l.due<td?'finish-by date passed ('+fmtD(l.due)+')':'finish by '+wd(l.due)+' '+fmtD(l.due)):'',
       l.due0&&l.due&&l.due>l.due0?'first set for '+fmtD(l.due0):'', l.since&&l.since<day?'since '+wd(l.since)+' '+fmtD(l.since):'',
       wlTaskOf(l)?(wlTaskOf(l).doneAt?'task done':wlTaskOf(l).verify?'task sent for checking':stageOf(wlTaskOf(l))==='doing'?'task in progress':''):l.clRef&&wlStepOf(l)&&wlStepOf(l).done?'step ticked':''].filter(Boolean).join(' · ');
-    return h('div',{class:'wl-l'},h('span',{class:'wl-st',title:st[1],style:`color:${st[2]}`,text:st[0]}),h('div',{},h('b',{text:wlLineName(l)}),h('div',{class:'wl-tx',text:l.text}),sub?h('div',{class:'wl-sub'+(/passed/.test(sub)?' late':''),text:sub}):l.from?h('div',{class:'wl-sub',text:'carried on from the day before'}):null)); };
+    return h('div',{class:'wl-l'},h('span',{class:'wl-st',title:st[1],style:`color:${st[2]}`,text:st[0]}),h('div',{},h('b',{text:wlLineName(l)}),h('div',{class:'wl-tx',text:l.text}),l.part?h('div',{class:'wl-tx',text:'Today: '+l.part}):null,fl?h('div',{class:'wl-flag',text:'⚑ '+fl}):null,sub?h('div',{class:'wl-sub'+(/passed/.test(sub)?' late':''),text:sub}):l.from?h('div',{class:'wl-sub',text:'carried on from the day before'}):null)); };
   const card=(id,day,showName)=>{ const r=wlGet(id,day);
     return h('div',{class:'wl-card'},h('div',{class:'wl-ch'},showName?[avaEl(id,false,'sm'),h('b',{text:nameOf(id)}),h('span',{class:'muted',text:podLabel(teamOf(id))})]:h('b',{text:fmtD(day)}),
         h('span',{class:'wl-at'+(wlLate(r)?' late':''),text:r?'written '+wlTime(r.submitted_at):isWorkDay(day)?(day===td&&new Date().getHours()<11?'not yet':'no plan written'):'day off'})),
       r?h('div',{class:'wl-ls'},(r.lines||[]).map(l=>lineEl(l,day,id))):null); };
+  /* the plan rule: the Principal and the COO switch it, and open SLATE OS for a day (everyone, or one person on leave) */
+  if((S.isOwner||isCOO(S.uid))&&S.canWrite&&!window.slateReview){ const g=wlGateCfg()||{}, on=wlGateOn(td), soon=!on&&!g.off&&g.from&&g.from>td, op=(g.open||{})[td];
+    const setG=(patch,msg)=>run(()=>settingsRef().update({planGate:patch}),msg).then(()=>render(true));
+    const opened=op==='all'?'everyone':Array.isArray(op)&&op.length?op.map(shortName).join(', '):'';
+    const pick=h('select',{'aria-label':'Open SLATE OS today for one person',style:'max-width:280px',onchange:e=>{ const id=e.target.value; if(id) setG({open:{[td]:[...new Set([...(Array.isArray(op)?op:[]),id])]}},`SLATE OS open today for ${shortName(id)}`); }},
+      h('option',{value:'',text:'Open today for one person…'}),wlPeople().filter(id=>!(Array.isArray(op)&&op.includes(id))).map(id=>h('option',{value:id,text:nameOf(id)})));
+    out.push(h('div',{class:'card',style:'display:grid;gap:8px;margin-bottom:12px'},
+      h('div',{style:'display:grid;gap:2px'},h('b',{text:'Plan before opening SLATE OS'}),
+        h('span',{class:'f-hint',style:'margin:0',text:on?`On since ${wd(g.from)} ${fmtD(g.from)}. On working days POD leaders, POD members and the Drafting Pool close yesterday’s lines and write today’s plan before SLATE OS opens. Notifications stay open.`:soon?`Starts ${wd(g.from)} ${fmtD(g.from)}.`:'Off: the plan is asked for, but SLATE OS opens without it.'}),
+        opened?h('span',{class:'f-hint',style:'margin:0;color:var(--late)',text:`Open today without a plan: ${opened}`}):null),
+      h('div',{class:'bar'},
+        on||soon?h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>setG({off:true},'Plan rule switched off'),text:'Switch off'}):h('button',{class:'btn btn-sm btn-primary',type:'button',disabled:S.busy,onclick:()=>setG({off:false,from:td},'Plan rule on from today'),text:'Switch on from today'}),
+        on&&op!=='all'?h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>setG({open:{[td]:'all'}},'SLATE OS open for everyone today'),text:'Open for everyone today'}):null,
+        on&&op!=='all'?pick:null,
+        on&&opened?h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>setG({open:{[td]:null}},'Plan rule back on for today'),text:'Undo today'}):null))); }
   if(V.who){ const days=[]; let x=td; for(let i=0;i<40&&days.length<20;i++){ if(isWorkDay(x)) days.push(x); x=addDays(x,-1); }
     out.push(h('div',{class:'wl-grid'},days.map(d=>card(V.who,d,false)))); return out; }
   if(!ids.length){ out.push(h('p',{class:'muted',text:'No one to show.'})); return out; }
