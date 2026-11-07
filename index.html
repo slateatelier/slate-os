@@ -3272,6 +3272,8 @@ function convSetSec(){ const C=loadConv(); if(!S.isOwner) return null;
    the person to reload (an open tab keeps the old version until it reloads). */
 const APP_VER='__APP_VER__', APP_AT='__APP_AT__';
 const appVerN=()=>/^\d+$/.test(APP_VER)?+APP_VER:0;
+/* the version people see starts at 2.001 with release 410 (Principal, 7 Nov 2026): 2.002, 2.003 … one step per release */
+const verName=n=>!n?'':n>=410?'2.'+String(n-409).padStart(3,'0'):'v'+n;
 let verLive=0, verAt=0;
 async function verCheck(force){ if(!force&&Date.now()-verAt<60000) return; verAt=Date.now();
   try{ const t=await (await fetch('/sw.js',{cache:'no-store'})).text(), m=t.match(/slate-os-v(\d+)/); verLive=m?+m[1]:0; }catch(e){ return; }
@@ -3280,12 +3282,12 @@ function verBar(){ const newer=appVerN()&&verLive>appVerN(); let b=document.getE
   if(!newer){ if(b) b.remove(); return; }
   if(!b){ b=document.createElement('div'); b.id='ver-bar'; b.setAttribute('role','status');
     b.innerHTML='<span></span><button type="button" class="btn btn-primary btn-sm">Reload</button>'; b.querySelector('button').onclick=()=>location.reload(); document.body.appendChild(b); }
-  b.querySelector('span').textContent=`SLATE OS has been updated (v${verLive}). Reload to get it.`; }
+  b.querySelector('span').textContent=`SLATE OS has been updated to ${verName(verLive)}. Reload to get it.`; }
 function verLine(){ verCheck(false); const n=appVerN(), at=/^\d{4}-/.test(APP_AT)?new Date(APP_AT):null;
   const when=at&&!isNaN(at)?at.toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}):'';
   const newer=n&&verLive>n;
-  return h('div',{class:'ver-line'},h('span',{text:n?`SLATE OS v${n}`+(when?` · released ${when}`:''):'SLATE OS · version not known (test copy)'}),
-    newer?h('button',{class:'linkish',type:'button',onclick:()=>location.reload(),text:`v${verLive} is out · Reload`}):n&&verLive?h('span',{style:'color:var(--ontime)',text:'Up to date'}):null); }
+  return h('div',{class:'ver-line'},h('span',{text:n?`SLATE OS ${verName(n)}`+(when?` · released ${when}`:''):'SLATE OS · version not known (test copy)'}),
+    newer?h('button',{class:'linkish',type:'button',onclick:()=>location.reload(),text:`${verName(verLive)} is out · Reload`}):n&&verLive?h('span',{style:'color:var(--ontime)',text:'Up to date'}):null); }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') verCheck(false); });
 setTimeout(()=>verCheck(true),8000);
 function viewMore(){

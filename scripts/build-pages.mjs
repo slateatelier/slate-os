@@ -19,4 +19,4 @@ for (const name of readdirSync('.')) {
 const ver = (readFileSync('sw.js', 'utf8').match(/slate-os-v(\d+)/) || [])[1] || '';
 const page = `${OUT}/index.html`;
 writeFileSync(page, readFileSync(page, 'utf8').replace("'__APP_VER__'", `'${ver}'`).replace("'__APP_AT__'", `'${new Date().toISOString()}'`));
-console.log('SLATE OS: published', readdirSync(OUT).join(', '), '· release v' + ver);
+console.log('SLATE OS: published', readdirSync(OUT).join(', '), '· release v' + ver + ' (shown as 2.' + String(+ver - 409).padStart(3, '0') + ')');
