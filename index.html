@@ -13764,7 +13764,7 @@ function sheetProjView(){
   { const tm=teamSection(p); if(tm) put('plan',tm); }
   { const sp=supportSection(p); if(sp) put('now',sp); }
   { const sb=subsSection(p); if(sb) put('records',sb); }
-  { const cm=cmCard(p); if(cm) put('plan',cm); let tl=null; try{ tl=tlSection(p); }catch(e){} if(tl) put('plan',tl); }
+  const top=[]; { const cm=cmCard(p); if(cm) top.push(cm); let tl=null; try{ tl=tlSection(p); }catch(e){} if(tl) top.push(tl); }
   { const ss=stdSection(p); if(ss) put('now',ss); }
   { const fl=frLogSection(p); if(fl) put('records',fl); }
   if(!p.closed&&p.support&&p.support.status==='active'){ const sb=supBox(p); if(sb) put('now',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Construction support'})),sb)); }
@@ -13789,7 +13789,7 @@ function sheetProjView(){
   acts.push(...lifecycleActs(p));
   if(acts.length) put('now',h('div',{class:'actions'},acts));
   { const dz=deleteZone(p); if(dz) put('records',dz); }
-  const [hd,stl,sum,fx]=out; if(ap&&sum) B.records.unshift(sum); if(fx){ const i=B.plan.findIndex(e=>e&&e.classList&&e.classList.contains('tl-card')); B.plan.splice(i+1,0,fx); }
+  const [hd,stl,sum,fx]=out; if(ap&&sum) B.records.unshift(sum); B.plan=[...top,...(fx?[fx]:[]),...B.plan];
   /* the project page in three tabs (Principal, 7 Nov 2026): Now = what to do, Plan = dates and facts, Records = what happened */
   const tabBar=h('div',{class:'pv-tabs',role:'tablist'},[['now','Now'],['plan','Plan'],['records','Records']].map(([k,l])=>h('button',{type:'button',role:'tab','aria-selected':String(tab===k),class:tab===k?'on':'',onclick:()=>{ S.sheet.tab=k; renderSheet(); const sc=document.querySelector('#sheet .panel'); if(sc) sc.scrollTop=0; },text:l})));
   return [hd,stl,tabBar,...(B[tab].length?B[tab]:[h('p',{class:'f-hint',style:'margin:0 4px',text:'Nothing here yet.'})])];
