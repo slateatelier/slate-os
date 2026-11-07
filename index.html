@@ -1786,6 +1786,9 @@ function status(t,basis='approved'){
 }
 /* SLATE OS go-live: work finished before it is history ("legacy") and never scored */
 const goLive=()=>(S.settings&&S.settings.goLive)||'2026-11-01';
+/* phase dates are asked, never pre-filled (Principal, 7 Nov 2026): the POD leader gives each phase's finish date (SLATE's final
+   submission), the COO approves it; SLATE OS no longer writes standard dates onto gates. settings.askDates=false turns it off. */
+const askDates=()=>!(typeof S!=='undefined'&&S.settings&&S.settings.askDates===false);
 const preLive=()=>addDays(goLive(),-1);
 /* scores count from this day (settings.scoreFrom); work due before it is a trial run: shown, never scored */
 const scoreLive=()=>(S.settings&&S.settings.scoreFrom)||'2026-11-10';
@@ -6583,6 +6586,7 @@ function buildNotifs(){
         body:l.text+(done?'':'\nTap to give one.'),...(done?{view:'worklog'}:{askFor:r.user_id})}); } }
   try{ dwNotifs(add); }catch(e){}
   try{ frNotifs(add); }catch(e){}
+  try{ finNotifs(add); }catch(e){}
   try{ siteNotifs(add); }catch(e){}
   return out.sort((a,b)=>b.at.localeCompare(a.at));
 }
@@ -8230,8 +8234,9 @@ const PH_ISSUE=['4','6','7','8','9'];
 function phSE(p,k,s,live){ const f=live&&live[k]&&!live[k].none?live[k]:null, td=today(), issue=PH_ISSUE.includes(k)||!s.sub;
   const ks0=stdPhases(p), pk=ks0[ks0.indexOf(k)-1], pf=pk?stdState(p,pk).fin:null, pfd=pf&&pf.doneAt&&!pf.legacyNoDate?pf.doneAt.slice(0,10):'';
   const g=issue?s.fin:s.sub, sentAt=!issue?'':(((p.std||{}).sentAt||{})[k]||'');
-  const start=f?f.s:pfd?nextWD(pfd):'';
-  const end=(g&&g.target)||(f?(issue?f.fin:f.sub):'');
+  const ask=askDates(), req=g&&!g.target&&g.request&&g.request.date||'';
+  const start=ask?(pfd?nextWD(pfd):''):f?f.s:pfd?nextWD(pfd):'';
+  const end=(g&&g.target)||(ask?'':f?(issue?f.fin:f.sub):'');
   const endA=g&&g.doneAt&&!g.legacyNoDate?String(g.doneAt).slice(0,10):(!issue&&!s.sub?'':(((p.std||{}).sentAt||{})[k]||''));
   const doneS=issue?s.done:!!(g&&g.doneAt)||!!(((p.std||{}).sentAt||{})[k]);
   const started=doneS||(s.created&&activePhases(p).includes(k)&&!!start&&start<=td);
@@ -8241,9 +8246,24 @@ function phSE(p,k,s,live){ const f=live&&live[k]&&!live[k].none?live[k]:null, td
   else if(end&&started) st=[`${Math.max(0,wdBetween(td,end))} working day${wdBetween(td,end)===1?'':'s'} to finish`,'var(--muted)'];
   const d=(lbl,v,sub)=>h('div',{},h('span',{text:lbl}),h('b',{text:v?fmtD(v):'—'}),sub?h('span',{style:'font-weight:500',text:sub}):null);
   const top=h('div',{class:'ph-se'},d('Start',start,doneS?'':started?'started':start&&start>td?'planned':''),h('span',{class:'ph-se-arrow','aria-hidden':'true',text:'→'}),
-    d('Finish',doneS?(endA||end):end,doneS?(g&&g.legacy?'before SLATE OS':issue?'issued':'submitted'):end?(issue?'final issue':'final submission'):'no date yet'),
+    d('Finish',doneS?(endA||end):(end||req),doneS?(g&&g.legacy?'before SLATE OS':issue?'issued':'submitted'):end?(issue?'final issue':'final submission'):req?'proposed · COO to approve':'not given yet'),
     st[0]?h('span',{class:'ph-se-st',style:`color:${st[1]}`,text:st[0]}):null);
-  return [top,phClientLine(p,k,s,f,issue,doneS,endA)]; }
+  return [top,!doneS&&ask&&g&&!g.target?finAsk(p,k,g,!!req):null,phClientLine(p,k,s,f,issue,doneS,endA)]; }
+/* the POD leader gives the phase's finish date; the Principal or the COO sets it directly, a POD leader's goes to the COO */
+function finAsk(p,k,g,pending){ if(!S.canWrite||!(amApprover()||isProjLead(p))) return pending?null:h('div',{class:'f-hint',style:'margin:0',text:'The POD leader gives this phase’s finish date.'});
+  const A=S.sheet.finA||(S.sheet.finA={}), v=A[k]!=null?A[k]:(g.request&&g.request.date)||'', ap=amApprover();
+  const save=()=>{ const date=A[k]; if(!date) return toast('Choose the finish date.'); if(date<today()) return toast('The finish date can’t be in the past.');
+    run(()=>ap?taskUpdate(g.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:'Finish date given'}])
+      :taskUpdate(g.id,{request:{date,reason:'Finish date given by the POD leader',by:S.uid,at:new Date().toISOString(),initial:true}},[{type:'proposed',to:date,note:'Finish date given'}]),
+      ap?'Finish date set':'Finish date sent to the COO').then(ok=>{ if(ok){ delete A[k]; renderSheet(); } }); };
+  return h('div',{class:'cstep'},h('span',{class:'cstep-l',text:pending?'Change the proposed finish date?':'When will SLATE finish this phase?'}),
+    h('input',{type:'date',min:today(),value:v,'aria-label':'Finish date',onchange:e=>{ A[k]=e.target.value; }}),
+    h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:save,text:ap?'Set finish date':pending?'Send again':'Send to the COO'})); }
+/* the bell: POD leaders give the finish date of each phase that is running without one */
+function finNotifs(add){ for(const p of projects()){ if(!p||!p.std||p.closed||!isProjLead(p)||!askDates()) continue;
+  for(const k of activePhases(p)){ const s=stdState(p,k); if(!s.created||s.done) continue; const issue=PH_ISSUE.includes(k)||!s.sub, g=issue?s.fin:s.sub;
+    if(!g||g.doneAt||g.target||g.request||(!issue&&((p.std.sentAt||{})[k]))) continue;
+    add({id:`finask:${p.id}:${k}`,cat:'action',pending:true,at:new Date(today()+'T03:00:00Z').toISOString(),title:`Give the finish date: ${projLabel(p)} · Phase ${phLabel(k,p)}`,body:'When will SLATE make its final submission for this phase? The COO approves it.',projId:p.id}); } } }
 /* "Client feedback · Phase n": the client's review after SLATE's submission, kept apart from SLATE's dates */
 function phClientLine(p,k,s,f,issue,doneS,subA){ const td=today(), rs=frOf(p,k), last=rs[rs.length-1], std=p.std||{};
   const lbl='Client feedback · Phase '+phNo(k);
@@ -8287,7 +8307,7 @@ function stdSection(p){
         h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),s.done?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:tg,text:'Fold ‹'}):stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
         s.created?phSE(p,k,s,live):null,
-        PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`SLATE time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:''].filter(Boolean).join(' · ')}):null,
+        PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`Standard SLATE time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:''].filter(Boolean).join(' · ')}):null,
         /* finished phases show the same two dates (above) */
         s.created&&!s.done&&fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):null,
         s.created&&!s.done&&fbEdit&&S.canWrite&&stepsOf(p.std.type,k).length>1?frBox(p,k,s):null,
@@ -8519,7 +8539,7 @@ const wdWaiting=p=>!!p&&!!p.std&&stdPhases(p).includes('4')&&stdPhases(p).includ
 /* record the go-ahead and re-date the open working-drawing gates from it */
 async function wdGoSave(p,on,early){ const go={on,by:S.uid,at:new Date().toISOString(),...(early?{early:true}:{})};
   await S.db.doc('projects/'+p.id).update({std:{wdGo:go}});
-  const np={...p,std:{...p.std,wdGo:go}}; if(!tlOf(np)) return; const pl=tlCompute(np,tlOf(np).start,true);
+  const np={...p,std:{...p.std,wdGo:go}}; if(!tlOf(np)||askDates()) return; const pl=tlCompute(np,tlOf(np).start,true);
   for(const k of ['6','7','8'].filter(k=>tlPhases(np).includes(k))){ const f=pl[k], st=stdState(np,k); if(!f||f.none) continue;
     for(const [g,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(g&&!g.doneAt&&date&&g.target!==date) await taskUpdate(g.id,{target:date,...(g.target?{}:{originalTarget:date})},[{type:'scheduled',from:g.target||'',to:date,note:early?'Working drawings started before authority approval (COO)':'Working drawings started: client go-ahead after authority approval'}]); } }
 function wdGoBox(p){ if(!wdWaiting(p)||!S.canWrite) return null; const can=amApprover()||isProjLead(p), coo=S.isOwner||isCOO(S.uid); if(!can) return null;
@@ -8639,7 +8659,7 @@ async function saveTlAdj(pid,d){ const p={...S.projects[pid],id:pid}, ks=tlPhase
           const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=a!==stdSlateDays(q,k)?a:''; cd[k]=b!==stdClientDays(q,k)?b:''; if(kwOf(k)){ const c=+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
           const base={}; Object.values(live.plan).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd,...(x.kd?{kd:x.kd,share:x.share,kDue:x.kDue}:{})}; });
           await S.db.doc('projects/'+p.id).update({std:{dv:13,sd,cd,kd,...(amApprover()||leadFree(pid)?{tlReq:null}:{}),tl:{start:t.start||d.from,from:d.from,take:+(t.take??TAKE_IN),base,adj:{by:S.uid,at:now},prev:[...(t.prev||[]),...(t.base?[{base:t.base,at:t.at||'',by:t.by||''}]:[])]}}});
-          for(const k of ks){ const f=live.plan[k], s=stdState(q,k); if(!f||f.none||s.done||d.close[k]) continue;
+          if(!askDates()) for(const k of ks){ const f=live.plan[k], s=stdState(q,k); if(!f||f.none||s.done||d.close[k]) continue;
             for(const [g,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!g||g.doneAt||!date||g.target===date) continue;
               await taskUpdate(g.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:'Timeline set to where the project stands'}]); } }
 }
@@ -8894,12 +8914,12 @@ function sheetTl(){
           else upd.std.tl={take:+d.take||0};
           await S.db.doc('projects/'+p.id).update(upd);
           /* days changed on a timeline already set: the open gates from the first changed phase on move to the new dates (Principal or COO) */
-          if(had&&ap){ const ch=ks.findIndex(k=>(+d.sd[k]||0)!==slateDaysFor(p,k)||(+d.cd[k]||0)!==clientDaysOf(p,k)||(kwOf(k)&&d.kd[k]!==''&&d.kd[k]!=null&&+d.kd[k]!==consultDaysOf(p,k)));
+          if(had&&ap&&!askDates()){ const ch=ks.findIndex(k=>(+d.sd[k]||0)!==slateDaysFor(p,k)||(+d.cd[k]||0)!==clientDaysOf(p,k)||(kwOf(k)&&d.kd[k]!==''&&d.kd[k]!=null&&+d.kd[k]!==consultDaysOf(p,k)));
             if(ch>=0){ const np={...p,std:{...p.std,...upd.std,tl:{...p.std.tl,take:+d.take||0}}}, lv=tlCompute(np,tlOf(p).start,true);
               for(const k of ks.slice(ch)){ const f=lv[k], st=stdState(p,k); if(!f||f.none) continue;
                 for(const [t,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(t&&!t.doneAt&&date&&t.target!==date) await taskUpdate(t.id,{target:date,request:null},[{type:'target',from:t.target||'',to:date,note:'Phase days changed on the timeline'}]); } } }
           const resumed=had&&d.resume&&d.resume!==((p.std&&p.std.resume)||'');
-          if((!had&&d.gates)||resumed){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
+          if(((!had&&d.gates)||resumed)&&!askDates()){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
             for(const [t,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!t||t.doneAt||t.target||t.request) continue;
               if(ap) await taskUpdate(t.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:resumed?'Land share resumed':'From the project timeline'}]);
               else await taskUpdate(t.id,{request:{date,reason:'From the project timeline',by:S.uid,at:new Date().toISOString(),initial:true}},[{type:'proposed',to:date,note:'From the project timeline'}]); } } }
@@ -9016,7 +9036,7 @@ async function createGates(np,type,ks,o){
   for(const k of ks){
     for(const [step,txt] of stepsFor(np,type,k)){ const pr=pre[k];
       if(pr){ const dt=pr[step]||(step==='sub'?pr.final:pr.sub)||''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},legacy:true,doneAt:dt||preLive(),legacyNoDate:!dt,target:dt||preLive()}); }
-      else { const f=o.dates&&o.dates[k], dt=f&&!f.none?(step==='sub'?f.sub:f.fin)||'':''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},...(dt?(o.ap?{target:dt}:{proposed:dt}):{})}); } }
+      else { const f=askDates()?null:o.dates&&o.dates[k], dt=f&&!f.none?(step==='sub'?f.sub:f.fin)||'':''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},...(dt?(o.ap?{target:dt}:{proposed:dt}):{})}); } }
     const m={}, pr=pre[k]; clItems(k).forEach(it=>{ if((it.only&&it.only!==type)||(it.not&&it.not.includes(type))){ m[it.id]={na:true}; return; } if(pr){ m[it.id]={done:pr.final||pr.sub||preLive(),legacy:true}; return; } if(o.pace==='fast'&&type==='proposal'&&SPRINT_NA.includes(it.id)){ m[it.id]={na:true,sp:true}; return; } const r0=(it.r||'')[0], who=r0==='L'?o.lead:r0==='J'?jr:''; if(who&&!isPriv(who)&&!isCOO(who)) m[it.id]={who}; });
     cl[k]=m; }
   return cl;
