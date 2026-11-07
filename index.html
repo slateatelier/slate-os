@@ -1591,6 +1591,8 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
+.ph-se{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}.ph-se>div{display:grid;gap:0}.ph-se>div>span:first-child{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.ph-se>div>b{font-size:15px}.ph-se>div>span:last-child{font-size:12px;color:var(--muted)}.ph-se-arrow{color:var(--muted);font-size:18px}.ph-se-st{font-size:13px;font-weight:600;margin-left:auto}
+.dv{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:3px 0 2px;font-size:13px}.dv-f{display:inline-flex;gap:6px;align-items:center;min-width:0;max-width:100%}.dv-f .linkish{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}.dv-x{color:var(--muted)}.dv-up{color:var(--late);font-weight:500}.dv-btn{background:var(--group)}
 .cl-val{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13px;color:var(--ink);margin:3px 0 2px}.cl-val>span{min-width:0;overflow-wrap:anywhere}.cl-val-ed{display:grid;gap:6px;padding:8px 10px;background:var(--group);border-radius:10px}.cl-val-ed select,.cl-val-ed input:not([type=checkbox]){width:100%;box-sizing:border-box}.cl-trig{display:flex;flex-wrap:wrap;gap:6px 14px}.cl-trig label{display:flex;gap:6px;align-items:center;font-size:13.5px}
 .cl-opt{color:var(--muted);font-style:italic}
 .sub-ck{display:grid;gap:6px;padding:8px 10px;background:#fff;border-radius:10px;border:1px solid var(--line)}.sub-ck label{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;cursor:pointer}.sub-ck input{margin-top:2px;flex:0 0 auto}
@@ -3328,6 +3330,9 @@ const vfPatch=t=>({doneAt:t.verify.at,doneBy:t.verify.by,verify:null,verifiedBy:
 async function undoSpawn(t,spawned){ if(!spawned) return; if(!S.paths[spawned]) S.paths[spawned]=isPriv(t.assignee)?`lead/${t.assignee}/tasks/${spawned}`:'tasks/'+spawned; await taskUpdate(spawned,{archived:true},[{type:'archived',note:'Undone'}]); }
 /* the one way to finish a task: done outright, or sent for verification */
 async function finishTask(t,date,note,o={}){
+  /* a phase finishes only when its checklist is complete (Principal, 7 Nov 2026) */
+  if(t&&t.gate&&t.gate.step==='final'&&t.projectId){ const gp=S.projects[t.projectId]; if(gp&&gp.std){ const c=clCount(gp,t.gate.k);
+    if(c.left>0) throw new Error(`${c.left} checklist item${c.left===1?' is':'s are'} still open in phase ${phLabel(t.gate.k,gp)}. Tick ${c.left===1?'it':'them'} (deliverables need their document) or mark N/A before finishing the phase.`); } }
   const patch={}, now=new Date().toISOString(); let spawned=null;
   if(o.spawn!==false&&t.repeat&&!t.nextId&&!t.archived){ spawned=await spawnNext(t); patch.nextId=spawned; }
   if(mustVerify(t)){
@@ -7928,7 +7933,54 @@ function farTxt(p,v){ let x=null; if(p.farApplies==='yes'){ try{ x=farCalc({...p
   return [head,v&&v.rules?lbOf(FAR_RULES,v.rules):'',v&&v.height?'Height: '+v.height:''].filter(Boolean).join(' · '); }
 const briefTxt=p=>[p.briefMix,p.briefParking?'Parking: '+p.briefParking:'',p.briefBudget?'Budget: '+p.briefBudget:'',p.briefLo?'LO: '+p.briefLo:''].filter(Boolean).join(' · ');
 /* what is still missing before the item can be ticked ('' = ready) */
+/* ---------- deliverables with documents (Principal, 7 Nov 2026) ----------
+   A deliverable on a phase checklist is ticked only once its document is uploaded; files go to Google Drive through SLATE OS
+   (SLATE OS / Projects / <CODE · name> / Phase …), and the checklist entry keeps them as files [{id,name,size,by,at}].
+   A phase finishes only when every required item is ticked or N/A. */
+const DELIV=new Set(['0:0-n6','0:0-n2','0:0-5','1:1-5','1:1-n1','1:1-q1','1:1-9','1:1-n2',
+  '2:2-n6','2:1-8','2:2-q2','2:2-1','2:2-5','2:2-3','2:2-q6','2:2-q4','3:3-q2','3:3-n1','3:3-n4','3:3-12','3:3-q4',
+  '4:2-n2','4:2-n4','4:2-4','4:4-5','4:4-n2','4:4-7','4:4-2','4:4-3','4:4-4','4:4-n4','4:4-n3','4:4-8','4:4-n6','4:4-6','4:4-n9','4:4-1','4:4-11','4:4-q7',
+  '5:5-3','5:5-4','5:5-0','5:5-1','5:5-q1','5:5-n1','5:5-6','5:5-5','5:5-7','5:5-n4','5:5-q3','6:6-n7','6:6-9','6:6-n6','7:7-n6','7:7-6','7:7-n9',
+  '8:8-6','8:8-10','8:8-n7','9:9-1','9:9-2','3r:3r-n1']);
+const isDeliv=(k,id)=>DELIV.has(k+':'+id);
+const filesOf=x=>Array.isArray(x&&x.files)?x.files.filter(f=>f&&f.id):[];
+const fmtSize=n=>!n?'':n>=1048576?(n/1048576).toFixed(n>=10485760?0:1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+async function fnCall(body){ const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
+  if(!tok) throw new Error('Sign in again, then try once more.');
+  let r; try{ r=await fetch(window.SLATE_CONFIG.url+'/functions/v1/drive-upload',{method:'POST',headers:{Authorization:'Bearer '+tok,apikey:window.SLATE_CONFIG.key,'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+  catch(_){ throw new Error('No connection, so the file wasn’t sent. Check your signal and try again.'); }
+  return r; }
+/* send one file straight to Google through a resumable session SLATE OS opens; resolves {id,name,size} */
+function driveSend(url,file,onPct){ return new Promise((ok,bad)=>{ const x=new XMLHttpRequest(); x.open('PUT',url,true);
+  x.upload.onprogress=e=>{ if(e.lengthComputable) onPct(Math.round(e.loaded/e.total*100)); };
+  x.onload=()=>{ if(x.status>=200&&x.status<300){ try{ ok(JSON.parse(x.responseText)); }catch(_){ bad(new Error('Google took the file but didn’t say where it is. Try again.')); } } else bad(new Error(`Google refused the file (${x.status}).`)); };
+  x.onerror=()=>bad(new Error('The upload broke off. Check the connection and try again.')); x.send(file); }); }
+async function delivUpload(p,k,it,list){ const key=k+':'+it.id, U=S.sheet.up||(S.sheet.up={}); const done=[];
+  try{ for(const [i,file] of [...list].entries()){
+      U[key]={name:file.name,pct:0,n:i+1,of:list.length}; renderSheet();
+      const r=await fnCall({act:'start',pid:p.id,k,item:it.t.slice(0,80),label:it.t.slice(0,40),name:file.name,size:file.size,mime:file.type||'application/octet-stream'});
+      const j=await r.json().catch(()=>({})); if(!r.ok||!j.url) throw new Error(j.error||'SLATE OS couldn’t open the upload.');
+      let last=0; const g=await driveSend(j.url,file,pct=>{ if(pct-last>=5||pct===100){ last=pct; U[key]={...U[key],pct}; renderSheet(); } });
+      done.push({id:g.id,name:file.name,size:+g.size||file.size,by:S.uid,at:new Date().toISOString()}); }
+  }catch(e){ toast(e.message||'Upload failed.'); }
+  finally{ delete U[key]; }
+  if(done.length){ const cur=clOf(S.projects[p.id]||p,k,it.id); await clSet(p,k,it.id,{files:[...filesOf(cur),...done]},done.length===1?'Uploaded to Google Drive':`${done.length} files uploaded to Google Drive`); }
+  else renderSheet(); }
+async function delivOpen(p,f){ toast('Opening '+f.name+'…');
+  try{ const r=await fnCall({act:'get',pid:p.id,id:f.id}); if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'Couldn’t open the file.'); }
+    const b=await r.blob(), u=URL.createObjectURL(b), a=document.createElement('a'); a.href=u; a.download=f.name||'file'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),60000); }
+  catch(e){ toast(e.message||'Couldn’t open the file.'); } }
+function delivBox(p,k,it,x,can){ if(!isDeliv(k,it.id)) return null; const fs=filesOf(x), up=(S.sheet.up||{})[k+':'+it.id];
+  const pick=()=>{ const inp=document.createElement('input'); inp.type='file'; inp.multiple=true; inp.onchange=()=>{ if(inp.files&&inp.files.length) delivUpload(p,k,it,inp.files); }; inp.click(); };
+  const canDel=can&&!x.done;
+  return h('div',{class:'dv'},
+    fs.map(f=>h('span',{class:'dv-f'},h('button',{class:'linkish',type:'button',title:'Download '+f.name,onclick:()=>delivOpen(p,f),text:'📄 '+f.name}),h('span',{class:'muted',text:[fmtSize(f.size),fmtD((f.at||'').slice(0,10))].filter(Boolean).join(' · ')}),
+      canDel?h('button',{class:'linkish dv-x',type:'button','aria-label':'Remove '+f.name,onclick:()=>{ if(!confirm(`Remove ${f.name} from this item? It stays in Google Drive.`)) return; clSet(p,k,it.id,{files:filesOf(x).filter(y=>y.id!==f.id)},'Removed from the item'); },text:'×'}):null)),
+    up?h('span',{class:'dv-up',text:`Uploading ${up.of>1?`${up.n} of ${up.of}: `:''}${up.name} · ${up.pct}%`}):
+      can&&!x.na?h('button',{class:'btn btn-sm dv-btn',type:'button',disabled:S.busy,onclick:pick,text:fs.length?'+ Add a file':'Upload document'}):null,
+    !fs.length&&!up&&!x.done&&!x.na?h('span',{class:'muted',text:'Deliverable: upload the document to tick it'}):null); }
 function entryMiss(p,k,id){ const e=entryOf(k,id), v=clOf(p,k,id).val||{};
+  if(isDeliv(k,id)&&!filesOf(clOf(p,k,id)).length) return 'Upload the document first: a deliverable is ticked once its file is in.';
   if(e==='auth') return !v.auth?'Pick the authority route first.':v.auth==='other'&&!(v.authOther||'').trim()?'Name the other authority first.':'';
   if(e==='far') return !p.farApplies?'Set FAR in Edit project first (block and front road), then pick the rules here.':!v.rules?'Pick which building rules apply first.':!(v.height||'').trim()?'Write the height limit first.':'';
   if(e==='brief') return !(p.briefMix||'').trim()||!(p.briefParking||'').trim()?'The COO fills in the design brief (unit mix and parking) in Edit project first.':'';
@@ -7971,7 +8023,7 @@ function clRow(p,k,it,manage){
     h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.sheet.clPause=null; renderSheet(); },text:'Cancel'})):null;
   if(pz) setTimeout(()=>{ const el=document.getElementById(`clpz-${k}-${it.id}`); el&&document.activeElement!==el&&el.focus(); },30);
   return h('div',{class:'cl-row'+(x.na?' na':'')+(pz?' pz':'')},box,
-    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),entryBox(p,k,it,canTickCl(p,x)),k==='4'&&it.id==='4-0'&&(clOf(p,'0','0-4').val||{}).auth?h('div',{class:'cl-val'},h('span',{text:'From phase 0: '+authTxt(clOf(p,'0','0-4').val)})):null,h('div',{class:'cl-m'},it.opt&&!x.done&&!x.na?h('span',{class:'cl-opt',text:'Optional ·'}):null,who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk&&!x.done&&!x.na?h('span',{text:'· '+clRole(it.chk)+' checks'}):null,!x.done&&!x.na&&x.st==='doing'?h('span',{class:'cl-st doing',text:'· In progress since '+fmtD(x.stAt||today())}):null,!x.done&&!x.na&&x.st==='paused'?h('span',{class:'cl-st paused',text:'· Paused'+(x.why?': '+x.why:'')+' · since '+fmtD(x.stAt||today())}):null,blk&&!x.done?h('span',{style:'color:var(--late)',text:'· waits for the peer review'}):null,...clHelpTasks(p,k,it.id).map(t=>{ const r=t.assignReq, g=r?r.to:(t.checkerGuide?t.checker:t.assignee); return h('span',{style:'color:var(--early)',text:`· help: ${nameOf(g)} (${(r&&r.guide)||t.checkerGuide?'guides and checks':'doing it'}${r?', waiting for the COO':''})`}); }),x.done?h('span',{title:'Ticked '+fmtD(x.done)+(x.by?' by '+nameOf(x.by):'')+(it.chk?' · checked by '+clRole(it.chk):''),text:'· '+fmtD(x.done)}):null)),
+    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),entryBox(p,k,it,canTickCl(p,x)),delivBox(p,k,it,x,canTickCl(p,x)),k==='4'&&it.id==='4-0'&&(clOf(p,'0','0-4').val||{}).auth?h('div',{class:'cl-val'},h('span',{text:'From phase 0: '+authTxt(clOf(p,'0','0-4').val)})):null,h('div',{class:'cl-m'},it.opt&&!x.done&&!x.na?h('span',{class:'cl-opt',text:'Optional ·'}):null,who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk&&!x.done&&!x.na?h('span',{text:'· '+clRole(it.chk)+' checks'}):null,!x.done&&!x.na&&x.st==='doing'?h('span',{class:'cl-st doing',text:'· In progress since '+fmtD(x.stAt||today())}):null,!x.done&&!x.na&&x.st==='paused'?h('span',{class:'cl-st paused',text:'· Paused'+(x.why?': '+x.why:'')+' · since '+fmtD(x.stAt||today())}):null,blk&&!x.done?h('span',{style:'color:var(--late)',text:'· waits for the peer review'}):null,...clHelpTasks(p,k,it.id).map(t=>{ const r=t.assignReq, g=r?r.to:(t.checkerGuide?t.checker:t.assignee); return h('span',{style:'color:var(--early)',text:`· help: ${nameOf(g)} (${(r&&r.guide)||t.checkerGuide?'guides and checks':'doing it'}${r?', waiting for the COO':''})`}); }),x.done?h('span',{title:'Ticked '+fmtD(x.done)+(x.by?' by '+nameOf(x.by):'')+(it.chk?' · checked by '+clRole(it.chk):''),text:'· '+fmtD(x.done)}):null)),
     manage||(!x.done&&!x.na&&x.who===S.uid&&S.canWrite)?h('div',{class:'cl-a'},!x.done&&!x.na&&canTickCl(p,x)?(()=>{ const e=h('select',{class:'cl-sts','aria-label':'Progress of “'+it.t+'”',disabled:S.busy,onchange:ev=>{ const v=ev.target.value; if(v==='paused'){ S.sheet.clPause={k,id:it.id,why:''}; renderSheet(); return; } clSet(p,k,it.id,{st:v,why:'',stAt:today(),stBy:S.uid},v==='doing'?'In progress':'Back to not started'); }},(x.st==='doing'?[['doing','In progress'],['paused','Paused…'],['','Not started']]:x.st==='paused'?[['paused','Paused'],['doing','Resume: in progress']]:[['','Not started'],['doing','In progress']]).map(([v,l])=>h('option',{value:v,text:l}))); e.value=x.st||''; return e; })():null,who,!x.done&&!x.na&&!p.closed&&S.canWrite?h('button',{class:'cl-lnk',type:'button',title:'Ask another POD leader, the COO or another team for help',disabled:S.busy,onclick:()=>openClHelp(p.id,k,it.id),text:'Help'}):null,manage&&!x.done?h('button',{class:'cl-lnk',type:'button',title:x.na?'Put it back on the list':'Not needed on this project',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo':'N/A'}):null):h('span'),pzBox);
 }
 function setPace(p,v){
@@ -8144,6 +8196,19 @@ function dwNotifs(add){ if(!DW.loaded) return; const td=today(), now=new Date().
     add({id:`dw:${d.id}:${d.updated_at}`,cat:'action',pending:true,at:d.updated_at||now,title:`Drawing to check: ${d.title}`,body:`${projLabel(p)} · ${DWG_NAME[d.phase]} · by ${shortName(d.who)}`+(d.chk1_at&&dwStep(d)==='chk2'?' · drafting ✓':''),projId:p.id}); }
   for(const l of Object.values(DW.lists)){ const p=S.projects[l.project_id]; if(!p||!(dwLead(p)||dwDL())) continue; const due=dwReviewDue(l.project_id,l.phase); if(!due||due>td) continue;
     add({id:`dwr:${l.project_id}:${l.phase}:${due}`,cat:'action',pending:true,at:due+'T04:25:00.000Z',title:`Progress check due: ${projLabel(p)} · ${DWG_NAME[l.phase]}`,body:dwStatTxt(dwStats(l.project_id,l.phase)),projId:p.id}); } }
+/* the phase card shows two dates only: start and finish (Principal, 7 Nov 2026). Planned dates come from the project timeline
+   (or the gate's approved target); the actual finish is the day the gate closed. The other dates still run underneath. */
+function phSE(p,k,s,live){ const f=live&&live[k]&&!live[k].none?live[k]:null, fin=s.fin, td=today();
+  const ks0=stdPhases(p), pk=ks0[ks0.indexOf(k)-1], pf=pk?stdState(p,pk).fin:null, pfd=pf&&pf.doneAt&&!pf.legacyNoDate?pf.doneAt.slice(0,10):'';
+  const start=f?f.s:pfd?nextWD(pfd):'', end=fin&&fin.target||(f?f.fin:''), endA=fin&&fin.doneAt&&!fin.legacyNoDate?fin.doneAt.slice(0,10):'';
+  const started=!!(s.sub&&s.sub.doneAt)||(s.created&&activePhases(p).includes(k)&&start&&start<=td);
+  let st=['','']; if(s.done) st=endA&&end?(endA<=end?['Finished on time','var(--ontime)']:[`Finished ${wdBetween(end,endA)} working day${wdBetween(end,endA)===1?'':'s'} late`,'var(--overdue)']):['Finished','var(--ontime)'];
+  else if(end&&end<td) st=[`${wdBetween(end,td)} working day${wdBetween(end,td)===1?'':'s'} past the finish date`,'var(--overdue)'];
+  else if(end&&started) st=[`${Math.max(0,wdBetween(td,end))} working day${wdBetween(td,end)===1?'':'s'} to finish`,'var(--muted)'];
+  const d=(lbl,v,sub)=>h('div',{},h('span',{text:lbl}),h('b',{text:v?fmtD(v):'—'}),sub?h('span',{style:'font-weight:500',text:sub}):null);
+  return h('div',{class:'ph-se'},d('Start',start,started&&!s.done?'started':start&&start>td?'planned':''),h('span',{class:'ph-se-arrow','aria-hidden':'true',text:'→'}),
+    d('Finish',s.done?(endA||end):end,s.done?(fin&&fin.legacy?'before SLATE OS':'done'):end?'target':'no date yet'),
+    st[0]?h('span',{class:'ph-se-st',style:`color:${st[1]}`,text:st[0]}):null); }
 function stdSection(p){
   const tp=p.type&&T()[p.type], det=canViewProjectDetail(p), own=canSeeProjectDetail(p);
   if(!p.std){ if(!tp||!tp.std||p.pod==='Studio') return null;
@@ -8154,6 +8219,7 @@ function stdSection(p){
       canStart?h('button',{class:'btn btn-go',type:'button',onclick:()=>openStdPlan(p.id,p.type,p.pod),text:'Start the project'}):null)); }
   const ks=stdPhases(p), act=activePhases(p), cur=act[0]||null, manage=own&&canManageCl(p), open=S.sheet&&S.sheet.openPh!==undefined?S.sheet.openPh:cur, fbEdit=S.canWrite&&(amApprover()||isProjLead(p));
   const closed=ks.filter(k=>stdState(p,k).done).length;
+  let live=null; try{ const tl=tlOf(p); if(tl) live=tlCompute(p,tl.start,true); }catch(e){}
   const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub=t.legacyOk?'before SLATE OS':'before SLATE OS · COO to approve'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
     return h('div',{},h('span',{text:lbl}),extra||h('b',{style:t&&!t.doneAt&&status(t)==='overdue'?'color:var(--overdue)':'',text:v}),!extra&&sub?h('span',{style:'font-weight:500',text:sub}):null); };
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'}),h('span',{class:'cnt',text:`${closed}/${ks.length} gates closed`})),
@@ -8170,9 +8236,9 @@ function stdSection(p){
       return h('div',{class:'card','data-ph':k,style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'+(act.includes(k)?';background:#fff;box-shadow:inset 3px 0 0 var(--late)':'')},
         h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),s.done?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:tg,text:'Fold ‹'}):stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
-        s.created&&!s.done?phSteps(p,k,s,fb,fbGot):null,
+        s.created?phSE(p,k,s,live):null,
         PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`Our time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:'',`client ${clientDaysOf(p,k)}`].filter(Boolean).join(' · ')}):null,
-        s.created&&s.done?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
+        /* finished phases show the same two dates (above) */
         s.created&&!s.done&&fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):null,
         s.created&&!s.done&&fbEdit&&S.canWrite&&stepsOf(p.std.type,k).length>1?frBox(p,k,s):null,
         s.created&&!s.done&&fbEdit&&S.canWrite?phUpdate(p,k,s,fbEdit):null,
