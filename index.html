@@ -1592,6 +1592,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
 .pcm-list{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.pcm-row{display:grid;grid-template-columns:minmax(0,1.4fr) 120px minmax(150px,1fr) minmax(110px,.8fr);gap:6px 12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}.pcm-row:first-child{border-top:0}.pcm-head{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-block:8px;background:var(--group)}.pcm-in{display:flex;gap:6px;align-items:center}.pcm-in input{width:72px}.pcm-in span{font-size:13px;color:var(--muted)}.pcm-dates{display:flex;gap:6px;align-items:baseline;font-size:14px}.pcm-std{text-align:right}.pcm-bars{display:grid;gap:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}.pcm-bar-row{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px;align-items:center}.pcm-bar-n{font-size:12.5px;color:var(--muted)}.pcm-track{position:relative;height:16px;background:var(--group);border-radius:4px}.pcm-b,.pcm-c,.pcm-today{position:absolute;top:0;bottom:0;border-radius:4px}.pcm-b{background:#111}.pcm-c{background:repeating-linear-gradient(45deg,#9fb6cc,#9fb6cc 3px,#c9d7e4 3px,#c9d7e4 6px)}.pcm-today{width:2px;background:#C1272D;border-radius:0}.pcm-key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);padding-top:4px}.pcm-key span{display:inline-flex;gap:6px;align-items:center}.pcm-key i{position:static;display:inline-block;width:18px;height:10px}@media (max-width:700px){.pcm-row{grid-template-columns:minmax(0,1fr) 110px}.pcm-dates,.pcm-std{grid-column:1/-1;text-align:left}.pcm-head{display:none}}
+.pv-tabs{display:flex;gap:4px;padding:4px;background:var(--group);border-radius:12px;position:sticky;top:0;z-index:5}.pv-tabs button{flex:1;border:0;background:transparent;padding:9px 8px;border-radius:9px;font:inherit;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer}.pv-tabs button.on{background:#fff;color:#111;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .stp{list-style:none;margin:0;padding:0;display:flex;gap:4px;flex-wrap:wrap}.stp li{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);padding:3px 10px 3px 4px;border-radius:999px;background:var(--group)}.stp li i{font-style:normal;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:#fff;color:var(--muted)}.stp li.done{color:var(--ink,#111)}.stp li.done i{background:var(--ontime);color:#fff}.stp li.now{background:#111;color:#fff;font-weight:600}.stp li.now i{background:#fff;color:#111}.sw-sec{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}.sw-dv{display:grid;gap:8px}.sw-it{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start}
 .ver-line{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;font-size:12.5px;color:var(--muted);padding:14px 4px 4px}#ver-bar{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));z-index:9999;display:flex;gap:12px;align-items:center;background:#111;color:#fff;padding:8px 10px 8px 16px;border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.2);font-size:14px;max-width:calc(100vw - 24px)}#ver-bar .btn{background:#fff;color:#111;border-color:#fff}
 .ph-cf{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;font-size:13px;padding:6px 10px;border-radius:8px;background:var(--group);border-left:3px solid #6b8fb0}.ph-cf b{font-weight:600}.ph-cf span{color:var(--muted)}.ph-cf.done{border-left-color:var(--ontime)}.ph-cf.later{opacity:.75}
@@ -8324,7 +8325,7 @@ function openCm(pid){ const p=S.projects[pid]; if(!p) return; const q={...p,id:p
   cmRows(q).forEach(r=>{ const x=c&&c.ph&&c.ph[r.k]||{}; v[r.k]=x.n!=null?String(x.n):''; });
   S.sheet={type:'phCommit',id:pid,v,note:'',err:''}; renderSheet(); }
 function sheetPhCommit(){ const sh=S.sheet; if(!S.projects[sh.id]) return [head('Project','Not found')]; const p={...S.projects[sh.id],id:sh.id};
-  const c=cmOf(p), ap=amApprover()&&S.canWrite, lead=S.canWrite&&isProjLead(p), rows=cmRows(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
+  const c=cmOf(p), ap=amApprover()&&S.canWrite, lead=S.canWrite&&isProjLead(p), rows=cmRows(p), back=()=>{ S.sheet={type:'projView',id:p.id,tab:'plan'}; renderSheet(); };
   const review=ap&&c&&c.st==='sent', pl=cmPlan(p,sh.v);
   const line=r=>{ const std=slateDaysFor(p,r.k), name=`${phNo(r.k)} ${phName(r.k,p)}`, x=pl[r.k]||{}, val=sh.v[r.k]||'', over=+val>std?Math.round((+val-std)/std*100):0;
     return h('div',{class:'pcm-row'},
@@ -13737,56 +13738,61 @@ function sheetProjView(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
   const st=projStats(p), [hl,hk]=HEALTH[st.health], ap=amApprover(), det=canViewProjectDetail(p), tp=p.type&&(T()[p.type]||LEGACY[p.type]);
   const fact=(l,v,sub)=>v?h('div',{},h('div',{class:'lbl',text:l}),h('div',{class:'v',text:v}),sub&&h('div',{class:'s',text:sub})):null;
+  const B={now:[],plan:[],records:[]}, put=(t,x)=>{ if(x) B[t].push(x); }, tab=['now','plan','records'].includes(S.sheet.tab)?S.sheet.tab:'now';
   const out=[head(`${p.code} · ${podText(p)}`,p.name),
     h('div',{class:'sh-status'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),modoTag(p),tp&&h('span',{class:'tag',text:tp.name}),techTag(p),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.entry==='completed'&&h('span',{class:'tag',text:'Completed before SLATE OS'+(p.completedOn?' · '+MON[+p.completedOn.slice(5,7)-1]+' '+p.completedOn.slice(0,4):'')}),p.entry==='running'&&h('span',{class:'tag',text:'Running before SLATE OS'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:st.tot?`${st.pct}% complete`:'No tasks yet'}),h('span',{class:'muted',text:st.tot?`${st.ts.filter(t=>t.doneAt).length} of ${st.ts.length} done`:''})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${st.pct}%`})),
       h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%'],['Overdue',String(st.over)],['Open',String(st.open)],['No date',String(st.noDate)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
     h('div',{class:'facts'},fact('Client',p.client?(p.clientId?p.clientId+' · ':'')+p.client:'',[p.contact,p.phone].filter(Boolean).join(' · ')),!isInternalP(p)&&p.pod!=='Studio'?fact('Service plan',p.plan&&SP_PLANS[p.plan]?SP_PLANS[p.plan].n:'Legacy terms'):null,fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',siteAddr(p)),isIntP(p)?null:fact('Land',p.katha?p.katha+' katha':''),
       fact('Planned finish',st.end?fmtD(st.end):'',p.dueDate?`Contract: ${fmtD(p.dueDate)}`+(st.end&&st.end>p.dueDate?` · ${diff(p.dueDate,st.end)}d over`:''):null),fact('Current phase',st.phase),(()=>{ const n=st.ts.filter(x=>x.parentId).length; return n?fact('Client revisions',`${n} round${n>1?'s':''}`,`across ${new Set(st.ts.filter(x=>x.parentId).map(x=>x.parentId)).size} item(s)`):null; })())];
-  { const cs=closureSection(p); if(cs) out.push(cs); }
+  { const cs=closureSection(p); if(cs) put('now',cs); }
   /* a client project with no POD yet: the Principal or the COO picks it here (interior projects run in PODs like buildings) */
   if(!p.pod&&!isInternalP(p)&&!p.closed){ const can=ap&&S.canWrite, ps=S.sheet.podPick||(S.sheet.podPick={pod:'',pod2:''});
-    out.splice(2,0,h('div',{class:'callout',style:'display:grid;gap:8px'},h('b',{text:'Which POD runs this project?'}),
+    put('now',h('div',{class:'callout',style:'display:grid;gap:8px'},h('b',{text:'Which POD runs this project?'}),
       can?[h('div',{class:'form-row'},h('select',{id:'pv-pod','aria-label':'POD',onchange:e=>{ ps.pod=e.target.value; renderSheet(); }},h('option',{value:'',text:'Select POD…'}),pods().map(x=>h('option',{value:x,selected:ps.pod===x,text:podLabel(x)}))),
           h('select',{id:'pv-pod2','aria-label':'Second POD',onchange:e=>{ ps.pod2=e.target.value; }},h('option',{value:'',text:'No second POD'}),pods().filter(x=>x!==ps.pod).map(x=>h('option',{value:x,selected:ps.pod2===x,text:podLabel(x)})))),
         h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy||!ps.pod,onclick:()=>run(()=>S.db.doc('projects/'+p.id).update({pod:ps.pod,pod2:ps.pod2&&ps.pod2!==ps.pod?ps.pod2:''}),`${podLabel(ps.pod)} runs this project now`).then(ok=>{ if(ok) S.sheet.podPick=null; }),text:'Save POD'}))]
       :h('span',{class:'f-hint',style:'margin:0',text:'The COO chooses the POD. Until then it has no POD leader and no team.'}))); }
   if(isIntP(p)){ const fs=[fact('Building',p.intBuilding),fact('Apartment or unit',[p.intUnit,p.intFloor?p.intFloor+' floor':''].filter(Boolean).join(' · ')),fact('Interior area',p.intArea?Number(p.intArea).toLocaleString('en-IN')+' sft':''),
       fact('Type of space',(INT_SPACES.find(x=>x[0]===p.intSpace)||[])[1]||''),fact('Rooms in scope',intRoomsTxt(p)),fact('Execution',p.intExec==='build'?'Design + build':p.intExec==='design'?'Design only':'',p.intHandover?'Handover target '+fmtD(p.intHandover):null)].filter(Boolean);
-    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Interior space'})),fs.length?h('div',{class:'facts'},fs):h('p',{class:'f-hint',style:'margin:0 4px',text:'Not filled in yet. Edit the project to add the space, rooms and execution.'}))); }
+    put('plan',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Interior space'})),fs.length?h('div',{class:'facts'},fs):h('p',{class:'f-hint',style:'margin:0 4px',text:'Not filled in yet. Edit the project to add the space, rooms and execution.'}))); }
   if(p.pod!=='Studio'&&p.farApplies&&!isIntP(p)){ const d={...p,upf:p.upf||'',floors:p.floors||''}; const x=p.farApplies==='yes'?(farCalc(d)||p.farCalc):null; const fs=farFacts(d,x,fact);
-    if(fs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Building and FAR'})),h('div',{class:'facts'},fs))); }
+    if(fs.length) put('plan',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Building and FAR'})),h('div',{class:'facts'},fs))); }
   if(!isIntP(p)&&p.pod!=='Studio'&&(p.briefMix||p.briefParking||p.briefBudget||p.briefLo||p.briefNotes)){ const fs=[['Unit mix',p.briefMix],['Parking',p.briefParking],['Budget',p.briefBudget],['Landowner needs',p.briefLo],['Notes',p.briefNotes]].filter(x=>x[1]).map(([l,v])=>fact(l,v));
-    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Design brief'})),h('div',{class:'facts'},fs))); }
-  if(p.type==='jv'&&unitsOf(p)&&(det||amApprover())) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Landowner and developer units'})),h('div',{class:'card'},loChart({...p,loUnits:p.loUnits||[]},false))));
-  { const tm=teamSection(p); if(tm) out.push(tm); }
-  { const sp=supportSection(p); if(sp) out.push(sp); }
-  { const sb=subsSection(p); if(sb) out.push(sb); }
-  { const ss=stdSection(p); if(ss) out.push(ss); }
-  { const fl=frLogSection(p); if(fl) out.push(fl); }
-  if(!p.closed&&p.support&&p.support.status==='active'){ const sb=supBox(p); if(sb) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Construction support'})),sb)); }
-  { const pl=pwProjLine(p); if(pl) out.push(pl); }
-  { const dw=dwgSection(p); if(dw) out.push(dw); }
-  { const ms=projLog(p); if(ms) out.push(ms); }
-  { const ps=phaseSection(p); if(ps) out.push(ps); }
-  if(st.phases.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Task progress by category'})),
+    put('plan',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Design brief'})),h('div',{class:'facts'},fs))); }
+  if(p.type==='jv'&&unitsOf(p)&&(det||amApprover())) put('plan',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Landowner and developer units'})),h('div',{class:'card'},loChart({...p,loUnits:p.loUnits||[]},false))));
+  { const tm=teamSection(p); if(tm) put('plan',tm); }
+  { const sp=supportSection(p); if(sp) put('now',sp); }
+  { const sb=subsSection(p); if(sb) put('records',sb); }
+  { const cm=cmCard(p); if(cm) put('plan',cm); let tl=null; try{ tl=tlSection(p); }catch(e){} if(tl) put('plan',tl); }
+  { const ss=stdSection(p); if(ss) put('now',ss); }
+  { const fl=frLogSection(p); if(fl) put('records',fl); }
+  if(!p.closed&&p.support&&p.support.status==='active'){ const sb=supBox(p); if(sb) put('now',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Construction support'})),sb)); }
+  { const pl=pwProjLine(p); if(pl) put('now',pl); }
+  { const dw=dwgSection(p); if(dw) put('now',dw); }
+  { const ms=projLog(p); if(ms) put('records',ms); }
+  { const ps=phaseSection(p); if(ps) put('records',ps); }
+  if(ap&&st.phases.length) put('records',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Task progress by category'})),
     h('div',{class:'card',style:'gap:10px'},st.phases.map(x=>h('div',{class:'hb',style:'grid-template-columns:minmax(0,150px) minmax(0,1fr) 44px'},h('span',{class:'nm',text:x.name}),h('div',{class:'track'},h('span',{class:'s-ontime',style:`flex:0 0 ${Math.round(x.done/x.tot*100)}%`})),h('span',{class:'v',text:Math.round(x.done/x.tot*100)+'%'}))))));
   if(det){ const dels=st.ts.filter(t=>t.kind==='Deliverable').sort((a,b)=>(a.target||'9999').localeCompare(b.target||'9999'));
-    if(dels.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Milestones'}),h('span',{class:'cnt',text:`${dels.filter(t=>t.doneAt).length}/${dels.length}`})),h('div',{class:'list'},dels.map(t=>row(t,{project:false}))))); }
-  else out.push(h('p',{class:'f-hint',style:'margin:0',text:'Task details are visible to the project’s own pod, the drafting lead, the Principal and the COO.'}));
-  if(ap&&p.pod!=='Studio'&&!isInternalP(p)) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Agreement'}),h('span',{class:'cnt',text:'Principal and COO only'})),
+    if(dels.length) put('records',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Milestones'}),h('span',{class:'cnt',text:`${dels.filter(t=>t.doneAt).length}/${dels.length}`})),h('div',{class:'list'},dels.map(t=>row(t,{project:false}))))); }
+  else put('records',h('p',{class:'f-hint',style:'margin:0',text:'Task details are visible to the project’s own pod, the drafting lead, the Principal and the COO.'}));
+  if(ap&&p.pod!=='Studio'&&!isInternalP(p)) put('plan',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Agreement'}),h('span',{class:'cnt',text:'Principal and COO only'})),
     h('div',{class:'facts'},fact('Status',(AGS.find(x=>x[0]===p.agStatus)||['',''])[1]||'—',({onhold:'Suspended',completed:'Completed',partial:'Terminated after '+((p.closure||{}).lastPhase||'a phase'),cancelled:'Terminated'})[outcomeOf(p)]||null),fact('Date',p.agDate?fmtD(p.agDate):''),fact('Reference',p.agRef),fact('Fee',p.proBono==='yes'?'Pro bono':'Paid'),fact('Contractual completion',p.dueDate?fmtD(p.dueDate):''),
       p.scope&&p.scope.length?h('div',{style:'grid-column:1/-1'},h('div',{class:'lbl',text:'Scope'}),h('div',{class:'chips',style:'margin-top:4px'},p.scope.map(x=>h('span',{class:'chip',style:'padding-right:12px;background:#fff',text:scopeLabel(p,x)})))):null,
       p.docUrl?h('div',{style:'grid-column:1/-1'},h('a',{href:p.docUrl,target:'_blank',rel:'noopener',text:'Open agreement document ↗'})):null)));
-  if(p.note&&(ap||det)) out.push(h('p',{class:'quote',text:p.note}));
+  if(p.note&&(ap||det)) put('plan',h('p',{class:'quote',text:p.note}));
   const acts=[];
   if(det&&S.canWrite) acts.push(h('button',{class:'btn btn-primary',type:'button',onclick:()=>{ S.f.project=p.id; S.f.status='active'; S.view='all'; closeSheet(); render(true); window.scrollTo(0,0); },text:'Open tasks'}));
   if(canSeeProjectDetail(p)&&leadsProj(p.id)&&S.canWrite&&!p.closed&&!isInternalP(p)) acts.push(h('button',{class:'btn',type:'button',onclick:()=>p.type?openPlan(p.id,p.type,p.pod):openPlanPick(p.id),text:planLabel(p)}));
   if(ap&&S.canWrite) acts.push(h('button',{class:'btn',type:'button',onclick:()=>openProject(p.id),text:'Edit'}));
   acts.push(...lifecycleActs(p));
-  if(acts.length) out.push(h('div',{class:'actions'},acts));
-  { const dz=deleteZone(p); if(dz) out.push(dz); }
-  return out;
+  if(acts.length) put('now',h('div',{class:'actions'},acts));
+  { const dz=deleteZone(p); if(dz) put('records',dz); }
+  const [hd,stl,sum,fx]=out; if(ap&&sum) B.records.unshift(sum); if(fx){ const i=B.plan.findIndex(e=>e&&e.classList&&e.classList.contains('tl-card')); B.plan.splice(i+1,0,fx); }
+  /* the project page in three tabs (Principal, 7 Nov 2026): Now = what to do, Plan = dates and facts, Records = what happened */
+  const tabBar=h('div',{class:'pv-tabs',role:'tablist'},[['now','Now'],['plan','Plan'],['records','Records']].map(([k,l])=>h('button',{type:'button',role:'tab','aria-selected':String(tab===k),class:tab===k?'on':'',onclick:()=>{ S.sheet.tab=k; renderSheet(); const sc=document.querySelector('#sheet .panel'); if(sc) sc.scrollTop=0; },text:l})));
+  return [hd,stl,tabBar,...(B[tab].length?B[tab]:[h('p',{class:'f-hint',style:'margin:0 4px',text:'Nothing here yet.'})])];
 }
 /* ---------- project lifecycle: on hold, completed, closed after a phase, cancelled ----------
    `closed` stays the one flag that takes a project out of the active lists and task menus.
