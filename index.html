@@ -1592,6 +1592,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
 .pcm-list{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.pcm-row{display:grid;grid-template-columns:minmax(0,1.4fr) 120px minmax(150px,1fr) minmax(110px,.8fr);gap:6px 12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}.pcm-row:first-child{border-top:0}.pcm-head{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-block:8px;background:var(--group)}.pcm-in{display:flex;gap:6px;align-items:center}.pcm-in input{width:72px}.pcm-in span{font-size:13px;color:var(--muted)}.pcm-dates{display:flex;gap:6px;align-items:baseline;font-size:14px}.pcm-std{text-align:right}.pcm-bars{display:grid;gap:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}.pcm-bar-row{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px;align-items:center}.pcm-bar-n{font-size:12.5px;color:var(--muted)}.pcm-track{position:relative;height:16px;background:var(--group);border-radius:4px}.pcm-b,.pcm-c,.pcm-today{position:absolute;top:0;bottom:0;border-radius:4px}.pcm-b{background:#111}.pcm-c{background:repeating-linear-gradient(45deg,#9fb6cc,#9fb6cc 3px,#c9d7e4 3px,#c9d7e4 6px)}.pcm-today{width:2px;background:#C1272D;border-radius:0}.pcm-key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);padding-top:4px}.pcm-key span{display:inline-flex;gap:6px;align-items:center}.pcm-key i{position:static;display:inline-block;width:18px;height:10px}@media (max-width:700px){.pcm-row{grid-template-columns:minmax(0,1fr) 110px}.pcm-dates,.pcm-std{grid-column:1/-1;text-align:left}.pcm-head{display:none}}
+.stp{list-style:none;margin:0;padding:0;display:flex;gap:4px;flex-wrap:wrap}.stp li{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);padding:3px 10px 3px 4px;border-radius:999px;background:var(--group)}.stp li i{font-style:normal;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:#fff;color:var(--muted)}.stp li.done{color:var(--ink,#111)}.stp li.done i{background:var(--ontime);color:#fff}.stp li.now{background:#111;color:#fff;font-weight:600}.stp li.now i{background:#fff;color:#111}.sw-sec{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}.sw-dv{display:grid;gap:8px}.sw-it{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start}
 .ver-line{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;font-size:12.5px;color:var(--muted);padding:14px 4px 4px}#ver-bar{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));z-index:9999;display:flex;gap:12px;align-items:center;background:#111;color:#fff;padding:8px 10px 8px 16px;border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.2);font-size:14px;max-width:calc(100vw - 24px)}#ver-bar .btn{background:#fff;color:#111;border-color:#fff}
 .ph-cf{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;font-size:13px;padding:6px 10px;border-radius:8px;background:var(--group);border-left:3px solid #6b8fb0}.ph-cf b{font-weight:600}.ph-cf span{color:var(--muted)}.ph-cf.done{border-left-color:var(--ontime)}.ph-cf.later{opacity:.75}
 .site-log{display:grid;gap:4px;margin-top:4px}
@@ -7047,7 +7048,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='dwgSetup'?sheetDwgSetup():S.sheet.type==='dwgList'?sheetDwgList():S.sheet.type==='podWeek'?sheetPodWeek():S.sheet.type==='podWeekView'?sheetPodWeekView():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='phCommit'?sheetPhCommit():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='dwgSetup'?sheetDwgSetup():S.sheet.type==='dwgList'?sheetDwgList():S.sheet.type==='podWeek'?sheetPodWeek():S.sheet.type==='podWeekView'?sheetPodWeekView():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='phCommit'?sheetPhCommit():S.sheet.type==='subWin'?sheetSubWin():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+((S.sheet.type==='propQuick'&&!S.sheet.done)||(S.sheet.type==='wlog'&&S.sheet.wide)||S.sheet.type==='dwgList'||S.sheet.type==='podWeek'||S.sheet.type==='podWeekView'?' panel-wide':'')+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   const dock=dockable(); document.body.classList.toggle('sheet-dock',dock);
@@ -7777,6 +7778,18 @@ const subCkMiss=(p,key)=>{ const c=subCkState(key), miss=subCkList(p).filter(([i
 const subCkRec=(p,key)=>{ const c=subCkState(key); return {info:!!c.info,far:isIntP(p)?'na':!!c.far,by:S.uid,at:new Date().toISOString()}; };
 const subCkClear=key=>{ if(S.sheet&&S.sheet.sck) delete S.sheet.sck[key]; };
 const subCkTxt=x=>x&&x.chk?`✓ Info sheet · ${x.chk.far==='na'?'no FAR (interior)':'✓ FAR checked'} by ${nameOf(x.chk.by)}`:'';
+/* records one client step of a phase (the same gate deliverables Tasks tick, plus the Submissions log for a submission) */
+function csApply(p,k,what,day,chk){ const steps=stepsFor(p,p.std.type||p.type,k), s=stdState(p,k), sub=s.sub, fin=s.fin, wd=isWD(k);
+  return run(async()=>{ if(day>today()) throw new Error('The date can’t be in the future.');
+    if(what==='fb'){ await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:day}}}); return; }
+    if(what==='sent'){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[], txt=(steps.find(x=>x[0]==='sub')||[])[1]||'Sent to the client';
+      await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:day}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'},chk}]}); return; }
+    const t=what==='sub'?sub:fin; const [, txt]=steps.find(x=>x[0]===(what==='sub'?'sub':'final'))||[];
+    await finishTask(t,day,'From the phase card');
+    if(what==='sub'||wd){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[];
+      if(!list.some(x=>x&&x.gate&&x.gate.k===k&&x.gate.step===(what==='sub'?'sub':'final')))
+        await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'},...(chk?{chk}:{})}]}); }
+  },what==='fb'?'Client feedback received':what==='sub'||what==='sent'?'Marked submitted. The client’s review clock has started':'Phase gate done'); }
 function clientStep(p,k,s,fb,fbGot){
   const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, sub=s.sub, fin=s.fin, wd=isWD(k);
   const pend=t=>t&&!t.doneAt&&t.verify;
@@ -7792,23 +7805,40 @@ function clientStep(p,k,s,fb,fbGot){
     else if(two){ next=['frNew',frOf(p,k).length||!fbGot?'Client comments in':'Write the client’s comments']; alt=['final',finLbl]; } else next=['final',finLbl]; }
   if(!next&&!info) return null;
   const isSubm=w=>w==='sub'||w==='sent'||(w==='final'&&wd), ckKey='cs:'+p.id+':'+k;
-  const go=what=>what==='frNew'?(()=>{ const N=S.sheet.frN||(S.sheet.frN={}); N[k]={date:st[k]||(!frOf(p,k).length&&fbGot)||today(),txt:'',via:''}; renderSheet(); })():isSubm(what)&&subCkMiss(p,ckKey)?toast(subCkMiss(p,ckKey)):run(async()=>{ const day=st[k]||today(); if(day>today()) throw new Error('The date can’t be in the future.'); const chk=isSubm(what)?subCkRec(p,ckKey):null;
-    if(what==='fb'){ await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:day}}}); return; }
-    if(what==='sent'){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[], txt=(steps.find(x=>x[0]==='sub')||[])[1]||'Sent to the client';
-      await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:day}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'},chk}]}); return; }
-    const t=what==='sub'?sub:fin; const [, txt]=steps.find(x=>x[0]===(what==='sub'?'sub':'final'))||[];
-    await finishTask(t,day,'From the phase card');
-    if(what==='sub'||wd){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[];
-      if(!list.some(x=>x&&x.gate&&x.gate.k===k&&x.gate.step===(what==='sub'?'sub':'final')))
-        await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'},...(chk?{chk}:{})}]}); }
-  },what==='fb'?'Client feedback received':what==='sub'||what==='sent'?'Marked submitted. The client’s review clock has started':'Phase gate done').then(ok=>{ if(ok){ delete st[k]; subCkClear(ckKey); renderSheet(); } });
-  return h('div',{style:'display:grid;gap:6px'},!info&&next&&isSubm(next[0])?subCkBox(p,ckKey):null,h('div',{class:'cstep'},
+  const go=what=>what==='frNew'?(()=>{ const N=S.sheet.frN||(S.sheet.frN={}); N[k]={date:st[k]||(!frOf(p,k).length&&fbGot)||today(),txt:'',via:''}; renderSheet(); })()
+    :isSubm(what)?openSubWin(p.id,k,what)
+    :csApply(p,k,what,st[k]||today(),null).then(ok=>{ if(ok){ delete st[k]; renderSheet(); } });
+  return h('div',{style:'display:grid;gap:6px'},stepBar(p,k,s,fbGot),h('div',{class:'cstep'},
     info?h('span',{class:'f-hint',style:'margin:0',text:info}):[
       h('span',{class:'cstep-l',text:next[0]==='sub'||next[0]==='sent'?'Sent to the client?':next[0]==='fb'||next[0]==='frNew'?(frOf(p,k).length?'Client back on the resubmission?':'Client comments in?'):wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
-      h('input',{type:'date',id:`cs-${k}`,value:d,max:today(),'aria-label':'Date',onchange:e=>{ st[k]=e.target.value||today(); }}),
-      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:next[1]}),
+      isSubm(next[0])?null:h('input',{type:'date',id:`cs-${k}`,value:d,max:today(),'aria-label':'Date',onchange:e=>{ st[k]=e.target.value||today(); }}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:isSubm(next[0])?(wd&&next[0]==='final'?'Issue to the client…':'Submit to the client…'):next[1]}),
       alt?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>go(alt[0]),text:alt[1]}):null]));
 }
+/* where a phase stands, in four plain steps (Principal, 7 Nov 2026): Working → Submitted → Client feedback → Approved.
+   Issue phases (authority, WD, as-built) have two: Working → Issued. */
+function phStepNow(p,k,s,fbGot){ const two=stepsFor(p,p.std.type||p.type,k).length>1;
+  if(s.fin&&s.fin.doneAt) return two?3:1;
+  if(!two) return 0;
+  if(frOf(p,k).length||fbGot) return 2;
+  return (s.sub&&s.sub.doneAt)||((p.std||{}).sentAt||{})[k]?1:0; }
+function stepBar(p,k,s,fbGot){ const two=stepsFor(p,p.std.type||p.type,k).length>1, n=phStepNow(p,k,s,fbGot);
+  const L=two?['Working','Submitted','Client feedback','Approved']:['Working',isWD(k)?'Issued':'Submitted'];
+  return h('ol',{class:'stp','aria-label':'Where phase '+phLabel(k,p)+' stands'},L.map((l,i)=>h('li',{class:i<n?'done':i===n?'now':'','aria-current':i===n?'step':null},h('i',{'aria-hidden':'true',text:i<n?'✓':String(i+1)}),h('span',{text:l})))); }
+/* one window for every submission to the client: the PDFs of the phase's deliverables, the information sheet and FAR ticks, and the date */
+function openSubWin(pid,k,what){ S.sheet={type:'subWin',id:pid,k,what,day:today(),openPh:k,sck:{}}; renderSheet(); }
+function sheetSubWin(){ const sh=S.sheet, p0=S.projects[sh.id]; if(!p0) return [head('Project','Not found')]; const p={...p0,id:sh.id}, k=sh.k, wd=isWD(k)&&sh.what==='final';
+  const back=()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); }, key='sw:'+p.id+':'+k, can=S.canWrite&&(amApprover()||isProjLead(p));
+  const dv=clItems(k).filter(it=>isDeliv(k,it.id)&&!clOf(p,k,it.id).na), withF=dv.filter(it=>filesOf(clOf(p,k,it.id)).length).length;
+  const go=()=>{ const m=subCkMiss(p,key); if(m){ sh.err=m; return renderSheet(); } if(!sh.day||sh.day>today()){ sh.err='Pick the date it went to the client (not in the future).'; return renderSheet(); }
+    csApply(p,k,sh.what,sh.day,subCkRec(p,key)).then(ok=>ok&&back()); };
+  return [head(projLabel(p),(wd?'Issue phase ':'Submit phase ')+phLabel(k,p)+' to the client'),
+    h('div',{class:'sw-sec'},h('b',{text:'1. The PDFs'}),h('span',{class:'f-hint',style:'margin:0',text:dv.length?`${withF} of ${dv.length} deliverables have their document. Upload the PDFs that go with this submission; they are kept in Google Drive under the project and phase.`:'This phase has no deliverables to upload.'}),
+      dv.length?h('div',{class:'sw-dv'},dv.map(it=>{ const x=clOf(p,k,it.id); return h('div',{class:'sw-it'},h('span',{class:'chk '+(filesOf(x).length?'on':'off'),'aria-hidden':'true',text:filesOf(x).length?'✓':''}),h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),delivBox(p,k,it,x,can))); })):null),
+    h('div',{class:'sw-sec'},h('b',{text:'2. Before it goes'}),subCkBox(p,key)),
+    h('div',{class:'sw-sec'},h('b',{text:'3. The date it went'}),h('input',{type:'date',value:sh.day,max:today(),'aria-label':'Date it went to the client',style:'max-width:200px',onchange:e=>{ sh.day=e.target.value; }})),
+    sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!can,onclick:go,text:wd?'Mark issued':'Mark submitted'}),h('button',{class:'btn',type:'button',onclick:back,text:'Cancel'}))]; }
 /* opening or closing a phase keeps that phase where it was on screen (other phases folding above it no longer move the page);
    closing from the pinned bar far down brings the phase's own heading back to the top */
 function phKeep(k,change){ const sc=document.querySelector('#sheet .panel'), c=sc&&sc.querySelector(`[data-ph="${k}"]`), r0=c?c.getBoundingClientRect().top:null;
@@ -8414,7 +8444,7 @@ function stdSection(p){
         s.created?phSE(p,k,s,live):null,
         PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`Standard SLATE time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:''].filter(Boolean).join(' · ')}):null,
         /* finished phases show the same two dates (above) */
-        s.created&&!s.done&&fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):null,
+        s.created&&!s.done&&act.includes(k)?(fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):stepBar(p,k,s,fbGot)):null,
         s.created&&!s.done&&fbEdit&&S.canWrite&&stepsOf(p.std.type,k).length>1?frBox(p,k,s):null,
         s.created&&!s.done&&fbEdit&&S.canWrite?phUpdate(p,k,s,fbEdit):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
