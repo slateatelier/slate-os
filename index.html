@@ -6634,6 +6634,7 @@ function buildNotifs(){
         body:l.text+(done?'':'\nTap to give one.'),...(done?{view:'worklog'}:{askFor:r.user_id})}); } }
   try{ dwNotifs(add); }catch(e){}
   try{ frNotifs(add); }catch(e){}
+  try{ hoNotifs(add); }catch(e){}
   try{ finNotifs(add); }catch(e){}
   try{ siteNotifs(add); }catch(e){}
   return out.sort((a,b)=>b.at.localeCompare(a.at));
@@ -7635,7 +7636,7 @@ function subsSection(p){
   const sh=S.sheet, f=sh.subAdd||null, save=list=>run(()=>S.db.doc('projects/'+p.id).update({subs:list}),'Submissions log saved');
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Submissions log'}),h('span',{class:'cnt',text:String(xs.length)})),
     xs.length?h('div',{class:'list'},xs.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:10px'},
-      h('span',{class:'mono',text:x.date?fmtD(x.date):'—'}),h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:x.what+(x.rev?` · R${x.rev}`:'')}),x.note?h('div',{class:'f-hint',text:x.note}):null,h('div',{class:'f-hint',text:(x.date&&x.date<goLive()?'Before SLATE OS · ':'')+'Logged by '+nameOf(x.by)+(x.ok===false?' · waiting for the COO':'')}),x.chk?h('div',{class:'f-hint',style:'color:var(--ontime)',text:subCkTxt(x)}):null),
+      h('span',{class:'mono',text:x.date?fmtD(x.date):'—'}),h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:x.what+(x.rev?` · R${x.rev}`:'')}),x.note?h('div',{class:'f-hint',text:x.note}):null,h('div',{class:'f-hint',text:(x.date&&x.date<goLive()?'Before SLATE OS · ':'')+(x.ho?`Handed over by ${nameOf(x.ho.by)} ${fmtD(x.ho.day)}${x.ho.pBy?' · design checked by '+shortName(x.ho.pBy):''} · sent by ${nameOf(x.sentBy||x.by)}`:'Logged by '+nameOf(x.by))+(x.ok===false?' · waiting for the COO':'')}),x.chk?h('div',{class:'f-hint',style:'color:var(--ontime)',text:subCkTxt(x)}):null),
       can?h('button',{class:'icon-btn',type:'button','aria-label':'Remove',onclick:()=>save((p.subs||[]).filter(y=>y!==x&&!(y.id&&y.id===x.id))),text:'×'}):h('span')))):h('p',{class:'muted',style:'margin:0 4px',text:'Nothing logged yet.'}),
     can?(!f?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ sh.subAdd={date:'',what:'',rev:'',note:''}; renderSheet(); },text:'+ Log a submission'})
       :h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Log a submission'}),
@@ -7825,16 +7826,17 @@ const subCkRec=(p,key)=>{ const c=subCkState(key); return {info:!!c.info,far:isI
 const subCkClear=key=>{ if(S.sheet&&S.sheet.sck) delete S.sheet.sck[key]; };
 const subCkTxt=x=>x&&x.chk?`✓ Info sheet · ${x.chk.far==='na'?'no FAR (interior)':'✓ FAR checked'} by ${nameOf(x.chk.by)}`:'';
 /* records one client step of a phase (the same gate deliverables Tasks tick, plus the Submissions log for a submission) */
-function csApply(p,k,what,day,chk){ const steps=stepsFor(p,p.std.type||p.type,k), s=stdState(p,k), sub=s.sub, fin=s.fin, wd=isWD(k);
+function csApply(p,k,what,day,chk,o={}){ const steps=stepsFor(p,p.std.type||p.type,k), s=stdState(p,k), sub=s.sub, fin=s.fin, wd=isWD(k), sent=o.sent||day, hx=o.ho?{ho:{by:o.ho.by,day:o.ho.day,pBy:o.ho.pBy||null},sentBy:S.uid}:{};
   return run(async()=>{ if(day>today()) throw new Error('The date can’t be in the future.');
     if(what==='fb'){ await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:day}}}); return; }
     if(what==='sent'){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[], txt=(steps.find(x=>x[0]==='sub')||[])[1]||'Sent to the client';
-      await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:day}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'},chk}]}); return; }
+      await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:sent}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:sent,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'},chk,...hx}]}); return; }
     const t=what==='sub'?sub:fin; const [, txt]=steps.find(x=>x[0]===(what==='sub'?'sub':'final'))||[];
-    await finishTask(t,day,'From the phase card');
+    await finishTask(t,day,o.ho?`Handed to the COO ${fmtD(o.ho.day)}; sent to the client ${fmtD(sent)}`:'From the phase card');
+    if(o.ho&&what==='sub') await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:sent}}});
     if(what==='sub'||wd){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[];
       if(!list.some(x=>x&&x.gate&&x.gate.k===k&&x.gate.step===(what==='sub'?'sub':'final')))
-        await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'},...(chk?{chk}:{})}]}); }
+        await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:sent,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'},...(chk?{chk}:{}),...hx}]}); }
   },what==='fb'?'Client feedback received':what==='sub'||what==='sent'?'Marked submitted. The client’s review clock has started':'Phase gate done'); }
 function clientStep(p,k,s,fb,fbGot){
   const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, sub=s.sub, fin=s.fin, wd=isWD(k);
@@ -7858,7 +7860,7 @@ function clientStep(p,k,s,fb,fbGot){
     info?h('span',{class:'f-hint',style:'margin:0',text:info}):[
       h('span',{class:'cstep-l',text:next[0]==='sub'||next[0]==='sent'?'Sent to the client?':next[0]==='fb'||next[0]==='frNew'?(frOf(p,k).length?'Client back on the resubmission?':'Client comments in?'):wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
       isSubm(next[0])?null:h('input',{type:'date',id:`cs-${k}`,value:d,max:today(),'aria-label':'Date',onchange:e=>{ st[k]=e.target.value||today(); }}),
-      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:isSubm(next[0])?(wd&&next[0]==='final'?'Issue to the client…':'Submit to the client…'):next[1]}),
+      isSubm(next[0])?hoControls(p,k,next[0]):h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:next[1]}),
       alt?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>go(alt[0]),text:alt[1]}):null]));
 }
 /* where a phase stands, in four plain steps (Principal, 7 Nov 2026): Working → Submitted → Client feedback → Approved.
@@ -7871,20 +7873,121 @@ function phStepNow(p,k,s,fbGot){ const two=stepsFor(p,p.std.type||p.type,k).leng
 function stepBar(p,k,s,fbGot){ const two=stepsFor(p,p.std.type||p.type,k).length>1, n=phStepNow(p,k,s,fbGot);
   const L=two?['Working','Submitted','Client feedback','Approved']:['Working',isWD(k)?'Issued':'Submitted'];
   return h('ol',{class:'stp','aria-label':'Where phase '+phLabel(k,p)+' stands'},L.map((l,i)=>h('li',{class:i<n?'done':i===n?'now':'','aria-current':i===n?'step':null},h('i',{'aria-hidden':'true',text:i<n?'✓':String(i+1)}),h('span',{text:l})))); }
+/* ---------- formal submission through the COO (Principal, 8 Nov 2026) ----------
+   The POD leader prepares a submission (PDFs, info sheet and FAR ticks) and hands it to the COO. The Principal checks the design
+   first where it is required (gate submissions in phases 0–3, WD issues, anything marked a design change or sent to him). The COO
+   checks it is complete and sends it to the client with a transmittal, or returns it with a note. Phase finish (SLATE's date)
+   = the handover date; the client's clock starts on the send date. The COO sends the same working day when handed over before
+   15:00, else the next working day. Kept in the project's std.ho[<phase>] and std.ho['<phase>:rr<round>'] for resubmissions. */
+const hoAll=p=>((p&&p.std&&p.std.ho)||{});
+const hoOf=(p,key)=>{ const x=hoAll(p)[key]; return x&&x.st?x:null; };
+const HO_PCHK=['0','1','2','3','3r'];
+const hoNeedsP=(k,what,dchg,askP)=>!!(dchg||askP)||(what!=='rr'&&(HO_PCHK.includes(k)||(isWD(k)&&what==='final')));
+const hoWaitP=x=>!!x&&x.st==='ready'&&x.pNeed&&!x.pAt;
+const hoForCoo=x=>!!x&&x.st==='ready'&&(!x.pNeed||!!x.pAt);
+function hoDue(x){ const base=x.pNeed&&x.pAt?x.pAt:x.at; if(!base) return x.day||today(); const d=new Date(base), day=localDay(d);
+  return d.getHours()<15&&isWorkDay(day)?day:addWorkDays(day,1); }
+const localDay=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function hoSave(p,key,patch,msg){ return run(()=>S.db.doc('projects/'+p.id).update({std:{ho:{[key]:{...(hoAll(S.projects[p.id]||p)[key]||{}),...patch}}}}),msg||'Saved'); }
+const hoWhoTxt=x=>x.st==='returned'?`Returned by ${shortName(x.retBy)} ${fmtD(String(x.retAt||'').slice(0,10))}`:hoWaitP(x)?`With the Principal for the design check · handed over ${fmtD(x.day)}`:`With the COO to send · handed over ${fmtD(x.day)}${hoDue(x)<today()?' · send overdue':''}`;
+/* the step row for a submission: hand over (POD leader), check (Principal), send or return (COO) */
+function hoControls(p,k,what){ const wd=isWD(k)&&what==='final', x=hoOf(p,k), top=amApprover()&&S.canWrite, lead=isProjLead(p)&&S.canWrite, boss=S.isOwner&&S.canWrite;
+  const B=(t,f,pri,st)=>h('button',{class:'btn btn-sm'+(pri?' btn-primary':''),type:'button',style:st||'',disabled:S.busy,onclick:f,text:t});
+  const out=[];
+  if(x&&x.st==='ready'){ out.push(h('span',{class:'f-hint',style:'margin:0',text:hoWhoTxt(x)}));
+    if(hoWaitP(x)&&boss) out.push(B('Design checked',()=>hoSave(p,k,{pAt:new Date().toISOString(),pBy:S.uid},'Design checked: it goes to the COO to send'),true),B('Return',()=>openSubWin(p.id,k,what,'send'),false,'background:#fff'));
+    else if(hoForCoo(x)&&top) out.push(B((wd?'Issue':'Send')+' to the client…',()=>openSubWin(p.id,k,what,'send'),true));
+    return h('span',{style:'display:contents'},out); }
+  if(x&&x.st==='returned'){ out.push(h('span',{class:'f-hint',style:'margin:0;color:var(--overdue)',text:`${hoWhoTxt(x)}: ${x.retNote||''}`})); }
+  if(top) out.push(B((wd?'Issue':'Send')+' to the client…',()=>openSubWin(p.id,k,what),true));
+  else if(lead) out.push(B(x&&x.st==='returned'?'Hand over again…':'Hand over to the COO…',()=>openSubWin(p.id,k,what,'ho'),true));
+  return h('span',{style:'display:contents'},out); }
+function hoSummary(p,k,x){ return h('div',{class:'callout',style:'display:grid;gap:4px'},
+  h('b',{text:`Handed over by ${nameOf(x.by)} on ${fmtD(x.day)}`}),
+  x.pNeed?h('span',{class:'f-hint',style:'margin:0',text:x.pAt?`Design checked by ${nameOf(x.pBy)} ${fmtD(String(x.pAt).slice(0,10))}`:'Waiting for the Principal’s design check'}):null,
+  x.dchg?h('span',{class:'tag',style:'justify-self:start;color:var(--late)',text:'Includes a design change'}):null,
+  x.note?h('span',{class:'f-hint',style:'margin:0',text:'Note: '+x.note}):null,
+  h('span',{class:'f-hint',style:'margin:0',text:`Send by ${wd(hoDue(x))} ${fmtD(hoDue(x))}. Check every document is here, the right revision and named to the standard; return it if anything is missing.`})); }
+function hoSheet(p,k,wdIs,dv,withF,can,key,back){ const sh=S.sheet, need=hoNeedsP(k,sh.what,sh.dchg,sh.askP);
+  const save=()=>{ const m=subCkMiss(p,key); if(m){ sh.err=m; return renderSheet(); } if(dv.length&&!withF){ sh.err='Upload the PDFs of this submission first: the COO sends what is uploaded here.'; return renderSheet(); }
+    const now=new Date().toISOString();
+    hoSave(p,k,{st:'ready',what:sh.what,day:today(),by:S.uid,at:now,chk:subCkRec(p,key),note:(sh.note||'').trim().slice(0,500),dchg:!!sh.dchg,askP:!!sh.askP,pNeed:need,pAt:null,pBy:null,retBy:null,retAt:null,retNote:null,sent:null,sentBy:null},
+      need?'Handed over: the Principal checks the design, then the COO sends it':'Handed over: the COO checks it and sends it to the client').then(ok=>ok&&back()); };
+  return [head(projLabel(p),'Hand over phase '+phLabel(k,p)+' to the COO'),
+    h('p',{class:'f-hint',style:'margin:0 0 6px',text:'The COO sends every submission to the client. Prepare it here; your phase finish date is the day you hand it over complete.'}),
+    h('div',{class:'sw-sec'},h('b',{text:'1. The PDFs'}),h('span',{class:'f-hint',style:'margin:0',text:dv.length?`${withF} of ${dv.length} deliverables have their document. Upload every PDF that goes to the client.`:'This phase has no deliverables to upload.'}),
+      dv.length?h('div',{class:'sw-dv'},dv.map(it=>{ const x=clOf(p,k,it.id); return h('div',{class:'sw-it'},h('span',{class:'chk '+(filesOf(x).length?'on':'off'),'aria-hidden':'true',text:filesOf(x).length?'✓':''}),h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),delivBox(p,k,it,x,can))); })):null),
+    h('div',{class:'sw-sec'},h('b',{text:'2. Before it goes'}),subCkBox(p,key)),
+    h('div',{class:'sw-sec'},h('b',{text:'3. The Principal’s design check'}),
+      h('div',{class:'sub-ck'},h('label',{},h('input',{type:'checkbox',checked:!!sh.dchg,onchange:e=>{ sh.dchg=e.target.checked; renderSheet(); }}),h('span',{text:'This includes a design change'})),
+        h('label',{},h('input',{type:'checkbox',checked:!!sh.askP,onchange:e=>{ sh.askP=e.target.checked; renderSheet(); }}),h('span',{text:'Ask the Principal to check it'}))),
+      h('span',{class:'f-hint',style:'margin:0',text:need?'The Principal checks the design first, then it goes to the COO.':'Not needed for this submission: it goes straight to the COO.'})),
+    h('div',{class:'sw-sec'},h('b',{text:'4. Note for the COO (optional)'}),h('textarea',{rows:2,maxlength:500,value:sh.note||'',placeholder:'Who it goes to, anything to mention in the message…',oninput:e=>{ sh.note=e.target.value; }})),
+    sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!can,onclick:save,text:'Hand over to the COO'}),h('button',{class:'btn',type:'button',onclick:back,text:'Cancel'}))]; }
+/* the transmittal: SLATE letterhead, one row per document in the submission */
+function trHTML(p,k,what,rr){ const E=pbEsc, td=today(), wd=isWD(k)&&what==='final', docs=[];
+  clItems(k).forEach(it=>{ if(!isDeliv(k,it.id)) return; const x=clOf(p,k,it.id); if(x.na) return; filesOf(x).forEach(f=>docs.push({item:it.t,name:f.name||'Document'})); });
+  const ref=`${p.code||''} · TR · ${phLabel(k,p)}${rr?' · R'+rr:''} · ${td.replace(/-/g,'')}`;
+  const rows=docs.length?docs.map((d,i)=>`<tr><td class="n">${i+1}</td><td><b>${E(d.name)}</b><span class="pb-del">${E(d.item)}</span></td><td>PDF</td><td class="n">${rr?'R'+E(rr):'R0'}</td></tr>`).join(''):'<tr><td></td><td>No documents uploaded in SLATE OS yet</td><td></td><td></td></tr>';
+  return pbHead((p.name||'Project')+' · transmittal')+`<body><div class="page">${pbLetterhead()}<div class="pb-blk pb-first">
+<div class="ref"><span class="dt"><b>Date:</b> ${E(fmtLong(td).toUpperCase())}</span><span class="dt"><b>Ref:</b> ${E(ref)}</span></div>
+<h1>Transmittal</h1>
+<table class="pb-ov" style="margin:3mm 0 4mm"><tbody>
+<tr><td class="pb-k">To</td><td><b>${E(p.client||'')}</b>${p.contact?' · '+E(p.contact):''}</td></tr>
+<tr><td class="pb-k">Project</td><td><b>${E(p.name||'')}</b>${p.code?' · '+E(p.code):''}${siteAddr(p)?' · '+E(siteAddr(p)):''}</td></tr>
+<tr><td class="pb-k">Stage</td><td>Phase ${E(phLabel(k,p))}: ${E(phName(k,p))}${rr?` · resubmission after round ${E(rr)} of comments`:''}</td></tr>
+<tr><td class="pb-k">Purpose</td><td>${wd?'Issued for construction (GFC)':rr?'For your review (revised)':'For your review and approval'}</td></tr></tbody></table>
+<h2>Documents</h2><table class="pb-tl"><thead><tr><th class="n">#</th><th>Document</th><th>Format</th><th class="n">Rev</th></tr></thead><tbody>${rows}</tbody></table>
+<p class="pb-small" style="margin-top:5mm">Please acknowledge receipt. Comments on this submission are welcome in one consolidated list.</p>
+<p style="margin-top:12mm">For SLATE<br><br><b>${E(nameOf(S.uid))}</b><br>${E(roleOf(S.uid)||'')}</p>
+</div><div class="docref"><span class="dm">${E('Sent through SLATE OS')}</span><span>${E(ref)}</span></div></div></body></html>`; }
+async function trPdf(p,k,what,rr){ const {data}=await window.slateSupabase.auth.getSession(); const tok=data&&data.session&&data.session.access_token;
+  if(!tok) throw new Error('Your sign-in has expired. Reload SLATE OS and try again.');
+  let r; try{ r=await fetch('/api/invoice-pdf',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'text/plain;charset=utf-8'},body:trHTML(p,k,what,rr)}); }catch(_){ throw new Error('Couldn’t reach the PDF printer. Check your connection and try again.'); }
+  if(!r.ok){ let m=''; try{ m=(await r.json()).error; }catch(_){} throw new Error(m||'Couldn’t make the PDF. Try again in a moment.'); }
+  return new File([await r.blob()],('SLATE transmittal '+(p.code||p.name||'')+' phase '+phLabel(k,p)+(rr?' R'+rr:'')+' '+today()).replace(/[^\w\- ]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf',{type:'application/pdf'}); }
+function trOpen(p,k,what,rr){ const html=trHTML(p,k,what,rr);
+  const ov=document.createElement('div'); ov.className='pv-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-label','Transmittal');
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',esc); }, esc=e=>{ if(e.key==='Escape') close(); };
+  ov.innerHTML='<div class="pv-bar"><b></b><span class="pv-note">Send it as the first file of the submission</span><button type="button" class="btn btn-sm btn-primary" data-a="pdf">Download PDF</button><button type="button" class="btn btn-sm" data-a="x">Close</button></div>';
+  ov.querySelector('b').textContent=(p.name||'Project')+' · transmittal';
+  const fr=document.createElement('iframe'); fr.className='pv-frame'; fr.title='Transmittal'; fr.srcdoc=html; ov.append(fr);
+  ov.querySelector('[data-a=x]').onclick=close;
+  const b=ov.querySelector('[data-a=pdf]'); b.onclick=async()=>{ b.disabled=true; b.textContent='Making…'; try{ dlFile(await trPdf(p,k,what,rr)); }catch(e){ toast(e.message||String(e)); } b.textContent='Download PDF'; b.disabled=false; };
+  document.addEventListener('keydown',esc); document.body.append(ov); }
+/* bell and Waiting for you: the Principal's checks, the COO's sends, the POD leader's returns */
+function hoNotifs(add){ const td=today(), boss=S.isOwner, coo=isCOO(S.uid);
+  for(const p of projects()){ if(!p||!p.std||p.closed) continue; const lead=isProjLead(p);
+    for(const [key,x] of Object.entries(hoAll(p))){ if(!x||!x.st||x.st==='sent') continue; const [k,rr]=key.split(':rr'), lbl=`${projLabel(p)} · Phase ${phLabel(k,p)}${rr?' resubmission':''}`;
+      if(x.st==='returned'&&lead) add({id:`hor:${p.id}:${key}:${x.retAt}`,cat:'action',pending:true,at:x.retAt||x.at,title:`Returned by ${shortName(x.retBy)}: ${lbl}`,body:x.retNote||'',projId:p.id});
+      if(hoWaitP(x)&&boss) add({id:`hop:${p.id}:${key}:${x.at}`,cat:'action',pending:true,at:x.at,title:`Design check: ${lbl}`,body:`Handed over by ${nameOf(x.by)}${x.dchg?' · includes a design change':''}${x.note?' · '+x.note:''}`,projId:p.id});
+      if(hoForCoo(x)){ const due=hoDue(x), late=due<td;
+        if(coo||(boss&&late)) add({id:`hos:${p.id}:${key}:${x.at}`,cat:coo?'action':'update',pending:coo,at:x.pAt||x.at,title:`${late?'Send overdue':'Ready to send'}: ${lbl}`,body:`Handed over by ${nameOf(x.by)} ${fmtD(x.day)} · send by ${fmtD(due)}${x.note?' · '+x.note:''}`,projId:p.id}); } } } }
 /* one window for every submission to the client: the PDFs of the phase's deliverables, the information sheet and FAR ticks, and the date */
-function openSubWin(pid,k,what){ S.sheet={type:'subWin',id:pid,k,what,day:today(),openPh:k,sck:{}}; renderSheet(); }
+function openSubWin(pid,k,what,mode){ const p=S.projects[pid], x=mode==='send'&&p?hoOf({...p,id:pid},k):null; S.sheet={type:'subWin',id:pid,k,what,mode:mode||'',day:today(),openPh:k,sck:x&&x.chk?{['sw:'+pid+':'+k]:{info:!!x.chk.info,far:!!x.chk.far}}:{},dchg:false,askP:false,note:''}; renderSheet(); }
 function sheetSubWin(){ const sh=S.sheet, p0=S.projects[sh.id]; if(!p0) return [head('Project','Not found')]; const p={...p0,id:sh.id}, k=sh.k, wd=isWD(k)&&sh.what==='final';
   const back=()=>{ S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); }, key='sw:'+p.id+':'+k, can=S.canWrite&&(amApprover()||isProjLead(p));
   const dv=clItems(k).filter(it=>isDeliv(k,it.id)&&!clOf(p,k,it.id).na), withF=dv.filter(it=>filesOf(clOf(p,k,it.id)).length).length;
   const go=()=>{ const m=subCkMiss(p,key); if(m){ sh.err=m; return renderSheet(); } if(!sh.day||sh.day>today()){ sh.err='Pick the date it went to the client (not in the future).'; return renderSheet(); }
-    csApply(p,k,sh.what,sh.day,subCkRec(p,key)).then(ok=>ok&&back()); };
-  return [head(projLabel(p),(wd?'Issue phase ':'Submit phase ')+phLabel(k,p)+' to the client'),
+    const hx=sh.mode==='send'?hoOf(p,k):null; if(hx&&hx.day&&sh.day<hx.day){ sh.err='It can’t go to the client before it was handed over ('+fmtD(hx.day)+').'; return renderSheet(); }
+    csApply(p,k,sh.what,hx?hx.day:sh.day,subCkRec(p,key),hx?{sent:sh.day,ho:hx}:{}).then(ok=>{ if(!ok) return; if(hx) hoSave(p,k,{st:'sent',sent:sh.day,sentBy:S.uid,sentAt:new Date().toISOString()}).then(()=>back()); else back(); }); };
+  if(sh.mode==='ho') return hoSheet(p,k,wd,dv,withF,can,key,back);
+  const hx0=sh.mode==='send'?hoOf(p,k):null;
+  return [head(projLabel(p),(hx0?'Send phase ':wd?'Issue phase ':'Submit phase ')+phLabel(k,p)+' to the client'),
+    hx0?hoSummary(p,k,hx0):null,
     h('div',{class:'sw-sec'},h('b',{text:'1. The PDFs'}),h('span',{class:'f-hint',style:'margin:0',text:dv.length?`${withF} of ${dv.length} deliverables have their document. Upload the PDFs that go with this submission; they are kept in Google Drive under the project and phase.`:'This phase has no deliverables to upload.'}),
       dv.length?h('div',{class:'sw-dv'},dv.map(it=>{ const x=clOf(p,k,it.id); return h('div',{class:'sw-it'},h('span',{class:'chk '+(filesOf(x).length?'on':'off'),'aria-hidden':'true',text:filesOf(x).length?'✓':''}),h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),delivBox(p,k,it,x,can))); })):null),
     h('div',{class:'sw-sec'},h('b',{text:'2. Before it goes'}),subCkBox(p,key)),
-    h('div',{class:'sw-sec'},h('b',{text:'3. The date it went'}),h('input',{type:'date',value:sh.day,max:today(),'aria-label':'Date it went to the client',style:'max-width:200px',onchange:e=>{ sh.day=e.target.value; }})),
+    h('div',{class:'sw-sec'},h('b',{text:'3. The transmittal'}),h('span',{class:'f-hint',style:'margin:0',text:'On the SLATE letterhead, listing every document in this submission. Send it as the first file.'}),h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start',onclick:()=>trOpen(p,k,sh.what),text:'Transmittal (PDF)'})),
+    h('div',{class:'sw-sec'},h('b',{text:'4. The date it went'}),h('input',{type:'date',value:sh.day,max:today(),'aria-label':'Date it went to the client',style:'max-width:200px',onchange:e=>{ sh.day=e.target.value; }})),
     sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
-    h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!can,onclick:go,text:wd?'Mark issued':'Mark submitted'}),h('button',{class:'btn',type:'button',onclick:back,text:'Cancel'}))]; }
+    h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!(amApprover()&&S.canWrite),onclick:go,text:wd?'Mark issued':'Mark sent to the client'}),
+      hx0?h('button',{class:'btn',type:'button',style:'color:var(--overdue)',onclick:()=>{ sh.ret=sh.ret==null?'':null; renderSheet(); },text:'Return to the POD leader'}):null,
+      h('button',{class:'btn',type:'button',onclick:back,text:'Cancel'})),
+    hx0&&sh.ret!=null?h('div',{class:'callout',style:'display:grid;gap:8px'},h('b',{text:'What is missing or wrong?'}),h('textarea',{rows:3,maxlength:600,value:sh.ret,placeholder:'e.g. FAR chart missing from the PDF; rename the files to the standard pattern',oninput:e=>{ sh.ret=e.target.value; }}),
+      h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ const n=(sh.ret||'').trim(); if(n.length<5){ sh.err='Say what needs fixing.'; return renderSheet(); }
+        hoSave(p,k,{st:'returned',retBy:S.uid,retAt:new Date().toISOString(),retNote:n},'Returned to the POD leader with your note').then(ok=>ok&&back()); },text:'Return with this note'}))):null]; }
 /* opening or closing a phase keeps that phase where it was on screen (other phases folding above it no longer move the page);
    closing from the pinned bar far down brings the phase's own heading back to the top */
 function phKeep(k,change){ const sc=document.querySelector('#sheet .panel'), c=sc&&sc.querySelector(`[data-ph="${k}"]`), r0=c?c.getBoundingClientRect().top:null;
@@ -8559,11 +8662,19 @@ function frBox(p,k,s){
   const keep=()=>frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(r) r.items.forEach(i=>{ if(a[i.id]!=null) i.a=String(a[i.id]).trim().slice(0,600); }); });
   const sd=S.sheet.frD||(S.sheet.frD={});
   const ckKey='fr:'+p.id+':'+k;
-  const resend=()=>{ if(subCkMiss(p,ckKey)) return toast(subCkMiss(p,ckKey)); const chk=subCkRec(p,ckKey); const lf=(open.items||[]).filter(i=>!String(val(i)).trim()).length; if(lf) return toast(`Answer every comment first: ${lf} still open.`); const day=sd[k]||td; if(day>td) return toast('The date can’t be in the future.');
+  const hk=k+':rr'+open.n, hx=hoOf(p,hk)&&hoOf(p,hk).rid===open.id&&hoOf(p,hk).st!=='sent'?hoOf(p,hk):null, top=amApprover()&&S.canWrite, boss=S.isOwner&&S.canWrite;
+  const resend=()=>{ if(hx&&hx.day&&(sd[k]||td)<hx.day) return toast('It can’t go before it was handed over ('+fmtD(hx.day)+').'); if(subCkMiss(p,ckKey)&&!(hx&&hx.chk)) return toast(subCkMiss(p,ckKey)); const chk=hx&&hx.chk&&subCkMiss(p,ckKey)?hx.chk:subCkRec(p,ckKey); const lf=(open.items||[]).filter(i=>!String(val(i)).trim()).length; if(lf) return toast(`Answer every comment first: ${lf} still open.`); const day=sd[k]||td; if(day>td) return toast('The date can’t be in the future.');
     run(async()=>{ await frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(!r) return; r.items.forEach(i=>{ if(a[i.id]!=null) i.a=String(a[i.id]).trim().slice(0,600); }); r.sent=day; r.sentBy=S.uid; });
       const cur=S.projects[p.id]||p, subs=Array.isArray(cur.subs)?cur.subs:[];
-      await S.db.doc('projects/'+p.id).update({subs:[...subs,{id:frId(),ok:true,auto:true,what:`Resubmission after round ${open.n} of ${what} (${(open.items||[]).length} point${(open.items||[]).length===1?'':'s'} answered)`,date:day,rev:String(open.n),note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'rr'+open.n},chk}]}); },
+      await S.db.doc('projects/'+p.id).update({subs:[...subs,{id:frId(),ok:true,auto:true,what:`Resubmission after round ${open.n} of ${what} (${(open.items||[]).length} point${(open.items||[]).length===1?'':'s'} answered)`,date:day,rev:String(open.n),note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'rr'+open.n},chk,...(hx?{ho:{by:hx.by,day:hx.day,pBy:hx.pBy||null},sentBy:S.uid}:{})}]});
+      if(hx) await S.db.doc('projects/'+p.id).update({std:{ho:{[hk]:{...hx,st:'sent',sent:day,sentBy:S.uid,sentAt:new Date().toISOString()}}}}); },
       'Resubmission recorded. The client’s review starts again').then(ok=>{ if(ok){ delete A[k]; delete sd[k]; subCkClear(ckKey); renderSheet(); } }); };
+  /* POD leaders hand the resubmission to the COO, who sends it (Principal, 8 Nov 2026) */
+  const handOver=()=>{ if(subCkMiss(p,ckKey)) return toast(subCkMiss(p,ckKey)); const lf=(open.items||[]).filter(i=>!String(val(i)).trim()).length; if(lf) return toast(`Answer every comment first: ${lf} still open.`);
+    const chk=subCkRec(p,ckKey), dc=!!(S.sheet.frDc&&S.sheet.frDc[k]), now=new Date().toISOString();
+    run(async()=>{ await frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(!r) return; r.items.forEach(i=>{ if(a[i.id]!=null) i.a=String(a[i.id]).trim().slice(0,600); }); r.hoDay=td; });
+      await S.db.doc('projects/'+p.id).update({std:{ho:{[hk]:{st:'ready',what:'rr',rr:open.n,rid:open.id,day:td,by:S.uid,at:now,chk,note:'',dchg:dc,askP:false,pNeed:hoNeedsP(k,'rr',dc,false),pAt:null,pBy:null,retBy:null,retAt:null,retNote:null,sent:null,sentBy:null}}}}); },
+      dc?'Handed over: the Principal checks the design change, then the COO sends it':'Handed over: the COO sends the resubmission').then(ok=>{ if(ok){ delete A[k]; subCkClear(ckKey); renderSheet(); } }); };
   const add=S.sheet.frX||(S.sheet.frX={});
   return h('div',{class:'callout fr-box'},
     h('div',{class:'pc-row'},h('b',{style:'font-size:14px',text:`Round ${open.n}: ${(open.items||[]).length} ${(open.items||[]).length===1?what.replace(/s$/,''):what}`}),
@@ -8574,11 +8685,18 @@ function frBox(p,k,s){
     h('div',{class:'bar',style:'margin:0'},h('input',{type:'text',maxlength:400,placeholder:'Add a comment the client gave later',value:add[k]||'',style:'background:#fff',oninput:e=>{ add[k]=e.target.value; }}),
       h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>{ const t=(add[k]||'').trim(); if(t.length<3) return toast('Write the comment.');
         run(()=>frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(r) r.items.push({id:frId(),t:t.slice(0,400),a:''}); }),'Comment added').then(ok=>{ if(ok){ delete add[k]; renderSheet(); } }); },text:'Add'})),
-    left?null:subCkBox(p,ckKey),
-    h('div',{class:'cstep',style:'margin:0'},
-      h('span',{class:'cstep-l',text:left?`${left} of ${(open.items||[]).length} still to answer`:'All answered. Resubmitted on'}),
-      h('input',{type:'date',value:sd[k]||td,max:td,'aria-label':'Resubmission date',onchange:e=>{ sd[k]=e.target.value||td; }}),
-      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:resend,text:'Resubmitted'}),
+    left||(hx&&hx.st==='ready')?null:subCkBox(p,ckKey),
+    hx?h('div',{class:'f-hint',style:'margin:0;'+(hx.st==='returned'?'color:var(--overdue)':''),text:hoWhoTxt(hx)+(hx.st==='returned'&&hx.retNote?': '+hx.retNote:'')}):null,
+    !top&&!left&&!(hx&&hx.st==='ready')?h('label',{class:'sub-ck',style:'display:flex;gap:8px;align-items:center'},h('input',{type:'checkbox',checked:!!(S.sheet.frDc&&S.sheet.frDc[k]),onchange:e=>{ (S.sheet.frDc=S.sheet.frDc||{})[k]=e.target.checked; }}),h('span',{text:'This includes a design change (the Principal checks it first)'})):null,
+    boss&&hx&&hoWaitP(hx)?h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>hoSave(p,hk,{pAt:new Date().toISOString(),pBy:S.uid},'Design checked: it goes to the COO to send'),text:'Design checked'})):null,
+    top&&hx&&hx.st==='ready'?h('div',{class:'bar',style:'margin:0'},h('input',{type:'text',maxlength:400,placeholder:'Return to the POD leader: what is missing?',value:(S.sheet.frRet||{})[k]||'',style:'background:#fff',oninput:e=>{ (S.sheet.frRet=S.sheet.frRet||{})[k]=e.target.value; }}),
+      h('button',{class:'btn btn-sm',type:'button',style:'background:#fff;color:var(--overdue)',disabled:S.busy,onclick:()=>{ const n=((S.sheet.frRet||{})[k]||'').trim(); if(n.length<5) return toast('Say what needs fixing.');
+        run(async()=>{ await frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(r) r.hoDay=null; }); await S.db.doc('projects/'+p.id).update({std:{ho:{[hk]:{...hx,st:'returned',retBy:S.uid,retAt:new Date().toISOString(),retNote:n}}}}); },'Returned to the POD leader').then(ok=>{ if(ok){ delete S.sheet.frRet[k]; renderSheet(); } }); },text:'Return'})):null,
+    !top&&hx&&hx.st==='ready'?null:h('div',{class:'cstep',style:'margin:0'},
+      h('span',{class:'cstep-l',text:left?`${left} of ${(open.items||[]).length} still to answer`:top?(hx&&hoWaitP(hx)?'Waiting for the Principal’s check':'All answered. Sent to the client on'):'All answered.'}),
+      top?h('input',{type:'date',value:sd[k]||td,max:td,'aria-label':'Resubmission date',onchange:e=>{ sd[k]=e.target.value||td; }}):null,
+      top?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>trOpen(p,k,'rr',String(open.n)),text:'Transmittal'}):null,
+      top?h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy||!!(hx&&hoWaitP(hx)),onclick:resend,text:'Resubmitted'}):h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy||!!left,onclick:handOver,text:hx&&hx.st==='returned'?'Hand over again':'Hand over to the COO'}),
       h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>run(keep,'Answers saved').then(ok=>{ if(ok){ delete A[k]; renderSheet(); } }),text:'Save answers'}))); }
 /* the project's feedback log: every round on every phase, the comments and how each was taken in */
 function frText(p,k,r){ return [`${projLabel(p)} · Phase ${phLabel(k,p)} · Round ${r.n} · ${frWhat(k)} received ${fmtD(r.got)}`,
@@ -8604,7 +8722,7 @@ function frLogSection(p){ if(!p||!p.std||!canSeeProjectDetail(p)) return null;
 function frNotifs(add){ const td=today();
   for(const p of projects()){ if(!p||!p.std||p.closed) continue; const lead=isProjLead(p), top=amApprover(); if(!lead&&!top) continue;
     for(const k of stdPhases(p)){ for(const r of frOf(p,k)){
-      if(!r.sent&&lead){ const left=frLeft(r); add({id:`fr:${p.id}:${k}:${r.id}`,cat:'action',pending:true,at:(r.at||r.got+'T00:00:00.000Z'),title:`${r.due<td?'Re-share overdue':'Re-share by '+fmtD(r.due)}: ${projLabel(p)} · Phase ${phLabel(k,p)}`,body:`Round ${r.n}: ${left?`${left} of ${(r.items||[]).length} comments still to answer`:'all answered, resubmit'}`,projId:p.id}); }
+      if(!r.sent&&!r.hoDay&&lead){ const left=frLeft(r); add({id:`fr:${p.id}:${k}:${r.id}`,cat:'action',pending:true,at:(r.at||r.got+'T00:00:00.000Z'),title:`${r.due<td?'Re-share overdue':'Re-share by '+fmtD(r.due)}: ${projLabel(p)} · Phase ${phLabel(k,p)}`,body:`Round ${r.n}: ${left?`${left} of ${(r.items||[]).length} comments still to answer`:'all answered, resubmit'}`,projId:p.id}); }
       if(top&&frPaid(k,r.n)) add({id:`frc:${p.id}:${k}:${r.id}`,cat:'update',at:(r.at||r.got+'T00:00:00.000Z'),title:`Chargeable revision: ${projLabel(p)} · Phase ${phLabel(k,p)}`,body:`Round ${r.n} of client comments (${FR_FREE} free rounds used) · ${(r.items||[]).length} points`,projId:p.id}); } } } }
 function phSteps(p,k,s,fb,fbGot){
   const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, sub=s.sub, fin=s.fin, wd=isWD(k), td=today();
