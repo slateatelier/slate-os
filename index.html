@@ -1591,6 +1591,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
+.cl-val{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13px;color:var(--ink);margin:3px 0 2px}.cl-val>span{min-width:0;overflow-wrap:anywhere}.cl-val-ed{display:grid;gap:6px;padding:8px 10px;background:var(--group);border-radius:10px}.cl-val-ed select,.cl-val-ed input:not([type=checkbox]){width:100%;box-sizing:border-box}.cl-trig{display:flex;flex-wrap:wrap;gap:6px 14px}.cl-trig label{display:flex;gap:6px;align-items:center;font-size:13.5px}
 .cl-opt{color:var(--muted);font-style:italic}
 .sub-ck{display:grid;gap:6px;padding:8px 10px;background:#fff;border-radius:10px;border:1px solid var(--line)}.sub-ck label{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;cursor:pointer}.sub-ck input{margin-top:2px;flex:0 0 auto}
 </style>
@@ -6906,7 +6907,7 @@ const siteReq=(id,d)=>{ const p=id&&S.projects[id]; return p?!(p.closed||p.legac
 /* typed as "C" or "4": a letter reads as a block (Bashundhara), a number as a sector (Uttara); anything named in full stays as typed */
 const siteBlock=b=>!b?'':/^[A-Z]{1,2}$/i.test(b)?'Block '+b:/^\d+[A-Z]?$/i.test(b)?'Sector '+b:b.replace(/^(BLOCK|SECTOR|SECTION)\b/i,m=>m[0].toUpperCase()+m.slice(1).toLowerCase());
 const siteAddr=p=>!p?'':[p.plotNo?'Plot '+p.plotNo:'',p.roadNo?'Road '+p.roadNo:'',siteBlock(p.blockSector),p.location||''].filter(Boolean).join(', ');
-const PFIELDS=['intBuilding','intUnit','intFloor','intArea','intSpace','intExec','intHandover','plan','entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note'];
+const PFIELDS=['intBuilding','intUnit','intFloor','intArea','intSpace','intExec','intHandover','plan','entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note','briefMix','briefParking','briefBudget','briefLo','briefNotes'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
 const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
 /* outsourced services: the consultant or vendor doing the work */
@@ -7495,7 +7496,13 @@ function sheetProject(){
         d.type==='proposal'?h('div',{class:'callout',style:'font-size:13.5px',text:'Design proposal (R&D): only the name, POD, client and area are needed now. Land size, FAR, plot and road, agreement and scope can wait until the project is confirmed; fill them in then (Edit project), or when you create the real project.'}):null,
         h('div',{class:'form-row'},field(d.type==='proposal'?'Land size (katha)':'Land size (katha) *',h('input',{id:'sh-katha',type:'number',min:0,step:'any',inputmode:'decimal',value:d.katha||'',oninput:e=>{const was=parseFloat(d.katha)>30;d.katha=e.target.value;if((parseFloat(d.katha)>30)!==was)renderSheet()}})),
           field(parseFloat(d.katha)>30?'Second pod *':'Second pod (optional)',sel('pod2',[['','None'],...pods().filter(x=>x!==d.pod).map(x=>[x,podLabel(x)])]))),
-        d.type==='proposal'?null:farFormSection(d,sec)]),
+        d.type==='proposal'?null:farFormSection(d,sec),
+        /* design brief (Principal, 7 Nov 2026): the COO fills it in when setting up the project; phase 0 checks it */
+        d.type==='proposal'?null:[sec('Design brief'),
+          h('div',{class:'f-hint',text:'Filled in by the COO when the project is set up. The phase 0 checklist item “Design brief” can be ticked only once the unit mix and parking are here.'}),
+          h('div',{class:'form-row'},field('Unit mix',inp('briefMix',{maxlength:200,placeholder:'e.g. 2 units per floor: 3 bed 1,450 sft and 3 bed 1,250 sft'})),field('Parking',inp('briefParking',{maxlength:120,placeholder:'e.g. 1 car per unit, 18 cars, 1 basement'}))),
+          h('div',{class:'form-row'},field('Budget',inp('briefBudget',{maxlength:120,placeholder:'e.g. construction Tk 4,500 per sft'})),field('Landowner needs',inp('briefLo',{maxlength:200,placeholder:'e.g. LO wants the 2nd and 3rd floors, south units'}))),
+          field('Other brief notes',inp('briefNotes',{maxlength:400,placeholder:'Anything else the client asked for'}))]]),
         sec('Client and site'),
         h('div',{class:'form-row'},field('Client *',clientPick(d,{ph:'Company or owner'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Area / locality *',inp('location',{maxlength:120,placeholder:'e.g. Bashundhara R/A, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
@@ -7906,6 +7913,46 @@ function peerScan(){ const open=[], stat=new Map(), st=id=>{ if(!stat.has(id)) s
       if(!p.closed&&peerOpen(x)&&activePhases(p).includes(k)) open.push({p,k,it,x,peer:clWho(p,it,x)}); }); }
   return {open,stat}; }
 function clWhoOpts(p){ const ps=podsOfProject(p); return [['','Owner: role'],...people().filter(id=>!isCOO(id)&&!isPriv(id)&&id!==ownerId()&&(ps.includes(teamOf(id))||(amApprover()&&isSupport(id)))).map(id=>[id,nameOf(id)])]; }
+/* checklist items that record a value (Principal, 7 Nov 2026): the authority route and the FAR, MGC and height check are picked
+   from lists in phase 0, and the design brief comes from the project details (the COO fills it in at set-up). The item can be
+   ticked only once its value is in. Values are kept on the checklist entry as `val`. */
+const AUTH_ROUTES=[['rajuk','RAJUK'],['cantonment','Cantonment Board'],['jolshiri','Jolshiri'],['bashundhara','Bashundhara (RAJUK + gate pass)'],['purbachal','Purbachal (RAJUK)'],['other','Other authority']];
+const AUTH_TRIG=[['pp','PP (block development)'],['dtca','DTCA'],['fire','Fire Service NOC'],['caab','CAAB height clearance'],['doe','DoE clearance'],['landuse','Land use clearance']];
+const FAR_RULES=[['2025','Imarat Nirman Bidhimala 2025'],['2008','Imarat Nirman Bidhimala 2008 (older approval)'],['1996','Imarat Nirman Bidhimala 1996 (older approval)']];
+const CL_ENTRY={'0-4':'auth','0-2':'far','0-n1':'brief'};
+const entryOf=(k,id)=>k==='0'?CL_ENTRY[id]||'':'';
+const lbOf=(xs,v)=>(xs.find(x=>x[0]===v)||[])[1]||v;
+function authTxt(v){ if(!v||!v.auth) return ''; return lbOf(AUTH_ROUTES,v.auth)+(v.authOther?' ('+v.authOther+')':'')+((v.trig||[]).length?' · '+v.trig.map(t=>lbOf(AUTH_TRIG,t)).join(', '):' · no other approvals'); }
+function farTxt(p,v){ let x=null; if(p.farApplies==='yes'){ try{ x=farCalc({...p})||p.farCalc||null; }catch(e){ x=p.farCalc||null; } }
+  const head=p.farApplies==='no'?'FAR not applicable':x&&x.far!=null?`FAR ${x.zero?'0':(+x.far).toFixed(3)}`+(x.mgcMaxPct!=null?` · ground coverage max ${pctTxt(x.mgcMaxPct)}`:'')+(x.maxUnits!=null?` · ${x.maxUnits} units max`:''):'';
+  return [head,v&&v.rules?lbOf(FAR_RULES,v.rules):'',v&&v.height?'Height: '+v.height:''].filter(Boolean).join(' · '); }
+const briefTxt=p=>[p.briefMix,p.briefParking?'Parking: '+p.briefParking:'',p.briefBudget?'Budget: '+p.briefBudget:'',p.briefLo?'LO: '+p.briefLo:''].filter(Boolean).join(' · ');
+/* what is still missing before the item can be ticked ('' = ready) */
+function entryMiss(p,k,id){ const e=entryOf(k,id), v=clOf(p,k,id).val||{};
+  if(e==='auth') return !v.auth?'Pick the authority route first.':v.auth==='other'&&!(v.authOther||'').trim()?'Name the other authority first.':'';
+  if(e==='far') return !p.farApplies?'Set FAR in Edit project first (block and front road), then pick the rules here.':!v.rules?'Pick which building rules apply first.':!(v.height||'').trim()?'Write the height limit first.':'';
+  if(e==='brief') return !(p.briefMix||'').trim()||!(p.briefParking||'').trim()?'The COO fills in the design brief (unit mix and parking) in Edit project first.':'';
+  return ''; }
+function entryBox(p,k,it,can){ const e=entryOf(k,it.id); if(!e) return null; const x=clOf(p,k,it.id), v=x.val||{};
+  const E=S.sheet.clE||(S.sheet.clE={}), key=k+':'+it.id, ed=E[key];
+  if(e==='brief'){ const t=briefTxt(p); return h('div',{class:'cl-val'},h('span',{text:t||'No design brief yet: the COO fills it in when setting up the project.'}),
+      !t&&S.canWrite&&(S.isOwner||isCOO(S.uid))?h('button',{class:'linkish',type:'button',onclick:()=>openProject(p.id),text:'Fill in the design brief'}):null); }
+  const shown=e==='auth'?authTxt(v):farTxt(p,v);
+  if(!ed) return h('div',{class:'cl-val'},h('span',{text:shown||(e==='auth'?'Authority route not picked yet.':'FAR check not recorded yet.')}),
+    can&&!x.done&&!x.na?h('button',{class:'linkish',type:'button',onclick:()=>{ E[key]=JSON.parse(JSON.stringify({auth:'',authOther:'',trig:[],rules:'',height:'',...v})); renderSheet(); },text:(e==='auth'?v.auth:v.rules)?'Change':'Pick'}):null);
+  const save=()=>{ const nv=e==='auth'?{auth:ed.auth,authOther:ed.auth==='other'?(ed.authOther||'').trim():'',trig:ed.trig||[]}:{rules:ed.rules,height:(ed.height||'').trim()};
+    if(e==='auth'&&!nv.auth) return toast('Pick the authority.'); if(e==='auth'&&nv.auth==='other'&&!nv.authOther) return toast('Name the other authority.');
+    if(e==='far'&&!nv.rules) return toast('Pick the building rules.'); if(e==='far'&&!nv.height) return toast('Write the height limit.');
+    clSet(p,k,it.id,{val:nv},'Saved').then(ok=>{ if(ok){ delete E[key]; renderSheet(); } }); };
+  const body=e==='auth'?[
+      (()=>{ const sl=h('select',{'aria-label':'Authority',onchange:ev=>{ ed.auth=ev.target.value; renderSheet(); }},h('option',{value:'',text:'Which authority approves it?'}),AUTH_ROUTES.map(([a,l])=>h('option',{value:a,text:l}))); sl.value=ed.auth||''; return sl; })(),
+      ed.auth==='other'?h('input',{maxlength:80,placeholder:'Name of the authority',value:ed.authOther||'',oninput:ev=>{ ed.authOther=ev.target.value; }}):null,
+      h('div',{class:'f-hint',style:'margin:0',text:'Other approvals this project needs:'}),
+      h('div',{class:'cl-trig'},AUTH_TRIG.map(([t,l])=>h('label',{},h('input',{type:'checkbox',checked:(ed.trig||[]).includes(t),onchange:ev=>{ const s2=new Set(ed.trig||[]); if(ev.target.checked) s2.add(t); else s2.delete(t); ed.trig=[...s2]; }}),h('span',{text:l}))))]
+    :[h('div',{class:'f-hint',style:'margin:0',text:p.farApplies?(farTxt(p,{})||'FAR figures need the land size, block and front road in Edit project.'):'FAR is not set for this project yet: Edit project › FAR (block and front road).'}),
+      (()=>{ const sl=h('select',{'aria-label':'Building rules',onchange:ev=>{ ed.rules=ev.target.value; }},h('option',{value:'',text:'Which building rules apply?'}),FAR_RULES.map(([a,l])=>h('option',{value:a,text:l}))); sl.value=ed.rules||''; return sl; })(),
+      h('input',{maxlength:120,placeholder:'Height limit, e.g. G+9, 33 m; CAAB not needed',value:ed.height||'',oninput:ev=>{ ed.height=ev.target.value; }})];
+  return h('div',{class:'cl-val cl-val-ed'},body,h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:save,text:'Save'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ delete E[key]; renderSheet(); },text:'Cancel'}))); }
 function clRow(p,k,it,manage){
   const x=clOf(p,k,it.id), peer=isPeerIt(it), pw=peer?clWho(p,it,x):'', blk=peerBlocks(p,k,it), can=!peer&&!blk&&canTickCl(p,x), whoTxt=pw?nameOf(pw):x.who?nameOf(x.who):clRole(it.r);
   if(peer){ const r=revOf(x), open=peerOpen(x), mine=pw===S.uid&&r.state!=='changes', fixMe=r.state==='changes'&&isProjLead(p);
@@ -7916,7 +7963,7 @@ function clRow(p,k,it,manage){
       h('div',{class:'cl-a'},sel,!x.na?h('button',{class:'btn btn-sm'+((mine||fixMe)&&open?' btn-primary':''),type:'button',style:(mine||fixMe)&&open?'':'background:var(--group)',onclick:()=>openPeerRev(p.id,k,it.id),text:open?(mine?'Review':fixMe?'Fix points':'Open'):'Log'}):null,
         manage&&open&&amApprover()?h('button',{class:'btn btn-sm',type:'button',style:'background:var(--group)',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo N/A':'N/A'}):null)); }
   const box=x.na?h('span',{class:'chk off','aria-hidden':'true'}):x.done?(can?holdTick(fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on','aria-label':'Press and hold to untick “'+it.t+'”',disabled:S.busy,text:'✓'}),()=>clSet(p,k,it.id,{done:null},'Unticked'),'Untick'):h('span',fxA(`cl:${p.id}:${k}:${it.id}`,['done'],{class:'chk on',text:'✓'})))
-    :can?holdTick({class:'chk'+(x.st==='doing'?' doing':x.st==='paused'?' paused':''),'aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'):h('span',{class:'chk off','aria-hidden':'true'});
+    :can?holdTick({class:'chk'+(x.st==='doing'?' doing':x.st==='paused'?' paused':''),'aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy},()=>{ const m=entryMiss(p,k,it.id); if(m) return toast(m); return clSet(p,k,it.id,{done:today(),na:false},'Ticked'); },'Tick'):h('span',{class:'chk off','aria-hidden':'true'});
   let who=null; if(manage&&!x.done&&!x.na){ const opts=clWhoOpts(p); if(x.who&&!opts.some(o=>o[0]===x.who)) opts.push([x.who,nameOf(x.who)]); who=h('select',{id:`clw-${k}-${it.id}`,'aria-label':'Who does it',onchange:e=>clSet(p,k,it.id,{who:e.target.value},'Assigned')},opts.map(([v,l])=>h('option',{value:v,text:v?l:`Owner: ${clRole(it.r)}`}))); who.value=x.who||''; }
   const pz=S.sheet&&S.sheet.clPause&&S.sheet.clPause.k===k&&S.sheet.clPause.id===it.id?S.sheet.clPause:null;
   const pzBox=pz?h('div',{class:'cl-pz'},h('input',{id:`clpz-${k}-${it.id}`,maxlength:140,placeholder:'Why is it paused? e.g. waiting for the client’s unit mix',value:pz.why,oninput:e=>{ pz.why=e.target.value; }}),
@@ -7924,7 +7971,7 @@ function clRow(p,k,it,manage){
     h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.sheet.clPause=null; renderSheet(); },text:'Cancel'})):null;
   if(pz) setTimeout(()=>{ const el=document.getElementById(`clpz-${k}-${it.id}`); el&&document.activeElement!==el&&el.focus(); },30);
   return h('div',{class:'cl-row'+(x.na?' na':'')+(pz?' pz':'')},box,
-    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),h('div',{class:'cl-m'},it.opt&&!x.done&&!x.na?h('span',{class:'cl-opt',text:'Optional ·'}):null,who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk&&!x.done&&!x.na?h('span',{text:'· '+clRole(it.chk)+' checks'}):null,!x.done&&!x.na&&x.st==='doing'?h('span',{class:'cl-st doing',text:'· In progress since '+fmtD(x.stAt||today())}):null,!x.done&&!x.na&&x.st==='paused'?h('span',{class:'cl-st paused',text:'· Paused'+(x.why?': '+x.why:'')+' · since '+fmtD(x.stAt||today())}):null,blk&&!x.done?h('span',{style:'color:var(--late)',text:'· waits for the peer review'}):null,...clHelpTasks(p,k,it.id).map(t=>{ const r=t.assignReq, g=r?r.to:(t.checkerGuide?t.checker:t.assignee); return h('span',{style:'color:var(--early)',text:`· help: ${nameOf(g)} (${(r&&r.guide)||t.checkerGuide?'guides and checks':'doing it'}${r?', waiting for the COO':''})`}); }),x.done?h('span',{title:'Ticked '+fmtD(x.done)+(x.by?' by '+nameOf(x.by):'')+(it.chk?' · checked by '+clRole(it.chk):''),text:'· '+fmtD(x.done)}):null)),
+    h('div',{style:'min-width:0'},h('div',{class:'cl-t',text:it.t}),entryBox(p,k,it,canTickCl(p,x)),k==='4'&&it.id==='4-0'&&(clOf(p,'0','0-4').val||{}).auth?h('div',{class:'cl-val'},h('span',{text:'From phase 0: '+authTxt(clOf(p,'0','0-4').val)})):null,h('div',{class:'cl-m'},it.opt&&!x.done&&!x.na?h('span',{class:'cl-opt',text:'Optional ·'}):null,who?null:x.who?h('span',{class:'who'},avaEl(x.who,false,'sm'),whoTxt):h('span',{text:whoTxt}),it.chk&&!x.done&&!x.na?h('span',{text:'· '+clRole(it.chk)+' checks'}):null,!x.done&&!x.na&&x.st==='doing'?h('span',{class:'cl-st doing',text:'· In progress since '+fmtD(x.stAt||today())}):null,!x.done&&!x.na&&x.st==='paused'?h('span',{class:'cl-st paused',text:'· Paused'+(x.why?': '+x.why:'')+' · since '+fmtD(x.stAt||today())}):null,blk&&!x.done?h('span',{style:'color:var(--late)',text:'· waits for the peer review'}):null,...clHelpTasks(p,k,it.id).map(t=>{ const r=t.assignReq, g=r?r.to:(t.checkerGuide?t.checker:t.assignee); return h('span',{style:'color:var(--early)',text:`· help: ${nameOf(g)} (${(r&&r.guide)||t.checkerGuide?'guides and checks':'doing it'}${r?', waiting for the COO':''})`}); }),x.done?h('span',{title:'Ticked '+fmtD(x.done)+(x.by?' by '+nameOf(x.by):'')+(it.chk?' · checked by '+clRole(it.chk):''),text:'· '+fmtD(x.done)}):null)),
     manage||(!x.done&&!x.na&&x.who===S.uid&&S.canWrite)?h('div',{class:'cl-a'},!x.done&&!x.na&&canTickCl(p,x)?(()=>{ const e=h('select',{class:'cl-sts','aria-label':'Progress of “'+it.t+'”',disabled:S.busy,onchange:ev=>{ const v=ev.target.value; if(v==='paused'){ S.sheet.clPause={k,id:it.id,why:''}; renderSheet(); return; } clSet(p,k,it.id,{st:v,why:'',stAt:today(),stBy:S.uid},v==='doing'?'In progress':'Back to not started'); }},(x.st==='doing'?[['doing','In progress'],['paused','Paused…'],['','Not started']]:x.st==='paused'?[['paused','Paused'],['doing','Resume: in progress']]:[['','Not started'],['doing','In progress']]).map(([v,l])=>h('option',{value:v,text:l}))); e.value=x.st||''; return e; })():null,who,!x.done&&!x.na&&!p.closed&&S.canWrite?h('button',{class:'cl-lnk',type:'button',title:'Ask another POD leader, the COO or another team for help',disabled:S.busy,onclick:()=>openClHelp(p.id,k,it.id),text:'Help'}):null,manage&&!x.done?h('button',{class:'cl-lnk',type:'button',title:x.na?'Put it back on the list':'Not needed on this project',disabled:S.busy,onclick:()=>clSet(p,k,it.id,{na:!x.na},x.na?'Back on the list':'Marked N/A'),text:x.na?'Undo':'N/A'}):null):h('span'),pzBox);
 }
 function setPace(p,v){
@@ -9117,7 +9164,7 @@ function myChecklistSec(list,o={}){
   const pick=(p,k,it)=>{ if(isPeerIt(it)) return openPeerRev(p.id,k,it.id); const x=key(p,k,it); sel.has(x)?sel.delete(x):sel.add(x); render(true); };
   const one=({p,k,it,due,peer},grp)=>h('div',{class:'row',role:'button',tabindex:'0',onclick:()=>{ if(peer) return openPeerRev(p.id,k,it.id); if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); },onkeydown:e=>{ if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); if(sel) return pick(p,k,it); S.sheet={type:'projView',id:p.id,openPh:k}; renderSheet(); } }},
       isPeerIt(it)?h('span',{class:'chk pr-dot'+(peer==='fix'?' bad':''),'aria-hidden':'true'}):
-      sel?h('span',{class:'chk'+(sel.has(key(p,k,it))?' on':''),'aria-hidden':'true',text:sel.has(key(p,k,it))?'✓':''}):holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>clSet(p,k,it.id,{done:today(),na:false},'Ticked'),'Tick'),
+      sel?h('span',{class:'chk'+(sel.has(key(p,k,it))?' on':''),'aria-hidden':'true',text:sel.has(key(p,k,it))?'✓':''}):holdTick({class:'chk','aria-label':'Press and hold to tick “'+it.t+'”',disabled:S.busy||!S.canWrite},()=>{ const m=entryMiss(p,k,it.id); if(m) return toast(m); return clSet(p,k,it.id,{done:today(),na:false},'Ticked'); },'Tick'),
       h('div',{class:'row-main'},h('div',{class:'row-title'},h('span',{text:peer==='fix'?'Fix the peer review points (phase '+phNo(k)+')':peer?(/^peer review/i.test(it.t)?'Peer review to do':'Peer review: '+it.t):it.t}),it.cost?h('span',{class:'tag',text:'Cost check'}):null),
         h('div',{class:'row-meta'},...(grp?[]:[h('span',{class:'mono',text:p.code||p.name}),h('span',{text:'·'})]),h('span',{text:'Phase '+phLabel(k,p)}),...(due?[h('span',{text:'·'}),dueTxt(due)]:[])),!grp&&p.code?h('div',{class:'row-pn',text:p.name}):null),
       h('span'),h('span'));
@@ -13447,6 +13494,8 @@ function sheetProjView(){
     out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Interior space'})),fs.length?h('div',{class:'facts'},fs):h('p',{class:'f-hint',style:'margin:0 4px',text:'Not filled in yet. Edit the project to add the space, rooms and execution.'}))); }
   if(p.pod!=='Studio'&&p.farApplies&&!isIntP(p)){ const d={...p,upf:p.upf||'',floors:p.floors||''}; const x=p.farApplies==='yes'?(farCalc(d)||p.farCalc):null; const fs=farFacts(d,x,fact);
     if(fs.length) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Building and FAR'})),h('div',{class:'facts'},fs))); }
+  if(!isIntP(p)&&p.pod!=='Studio'&&(p.briefMix||p.briefParking||p.briefBudget||p.briefLo||p.briefNotes)){ const fs=[['Unit mix',p.briefMix],['Parking',p.briefParking],['Budget',p.briefBudget],['Landowner needs',p.briefLo],['Notes',p.briefNotes]].filter(x=>x[1]).map(([l,v])=>fact(l,v));
+    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Design brief'})),h('div',{class:'facts'},fs))); }
   if(p.type==='jv'&&unitsOf(p)&&(det||amApprover())) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Landowner and developer units'})),h('div',{class:'card'},loChart({...p,loUnits:p.loUnits||[]},false))));
   { const tm=teamSection(p); if(tm) out.push(tm); }
   { const sp=supportSection(p); if(sp) out.push(sp); }
