@@ -1591,6 +1591,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
+.sub-ck{display:grid;gap:6px;padding:8px 10px;background:#fff;border-radius:10px;border:1px solid var(--line)}.sub-ck label{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;cursor:pointer}.sub-ck input{margin-top:2px;flex:0 0 auto}
 </style>
 
 <div class="chrome">
@@ -7537,7 +7538,7 @@ function subsSection(p){
   const sh=S.sheet, f=sh.subAdd||null, save=list=>run(()=>S.db.doc('projects/'+p.id).update({subs:list}),'Submissions log saved');
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Submissions log'}),h('span',{class:'cnt',text:String(xs.length)})),
     xs.length?h('div',{class:'list'},xs.map(x=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:10px'},
-      h('span',{class:'mono',text:x.date?fmtD(x.date):'—'}),h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:x.what+(x.rev?` · R${x.rev}`:'')}),x.note?h('div',{class:'f-hint',text:x.note}):null,h('div',{class:'f-hint',text:(x.date&&x.date<goLive()?'Before SLATE OS · ':'')+'Logged by '+nameOf(x.by)+(x.ok===false?' · waiting for the COO':'')})),
+      h('span',{class:'mono',text:x.date?fmtD(x.date):'—'}),h('div',{style:'min-width:0'},h('div',{style:'font-weight:500',text:x.what+(x.rev?` · R${x.rev}`:'')}),x.note?h('div',{class:'f-hint',text:x.note}):null,h('div',{class:'f-hint',text:(x.date&&x.date<goLive()?'Before SLATE OS · ':'')+'Logged by '+nameOf(x.by)+(x.ok===false?' · waiting for the COO':'')}),x.chk?h('div',{class:'f-hint',style:'color:var(--ontime)',text:subCkTxt(x)}):null),
       can?h('button',{class:'icon-btn',type:'button','aria-label':'Remove',onclick:()=>save((p.subs||[]).filter(y=>y!==x&&!(y.id&&y.id===x.id))),text:'×'}):h('span')))):h('p',{class:'muted',style:'margin:0 4px',text:'Nothing logged yet.'}),
     can?(!f?h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ sh.subAdd={date:'',what:'',rev:'',note:''}; renderSheet(); },text:'+ Log a submission'})
       :h('div',{class:'callout',style:'display:grid;gap:8px'},h('div',{class:'lbl',text:'Log a submission'}),
@@ -7545,9 +7546,10 @@ function subsSection(p){
         h('input',{id:'sb-what',maxlength:80,placeholder:'What was submitted',value:f.what,style:'background:#fff',oninput:e=>{f.what=e.target.value}}),
         h('div',{class:'form-row'},h('input',{id:'sb-date',type:'date',max:today(),value:f.date,style:'background:#fff','aria-label':'Date',oninput:e=>{f.date=e.target.value}}),h('input',{id:'sb-rev',type:'number',min:0,placeholder:'Revision no. (optional)',value:f.rev,style:'background:#fff',oninput:e=>{f.rev=e.target.value}})),
         h('input',{id:'sb-note',maxlength:120,placeholder:'Note (optional), e.g. to the client by email',value:f.note,style:'background:#fff',oninput:e=>{f.note=e.target.value}}),
-        h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!(f.what||'').trim()) return toast('Write what was submitted.'); if(f.date&&f.date>today()) return toast('The date can’t be in the future.');
-            const x={id:Math.random().toString(36).slice(2,10),ok:amApprover(),what:f.what.trim(),date:f.date||'',rev:f.rev?String(parseInt(f.rev)):'',note:(f.note||'').trim(),by:S.uid,at:new Date().toISOString()};
-            save([...(Array.isArray(p.subs)?p.subs:[]),x]).then(ok=>{ if(ok){ sh.subAdd=null; renderSheet(); if(x.date&&x.date>=goLive()&&diff(x.date,today())<=7) celebrate('stamp',{title:x.what||'Submission',pid:p.id,sub:`${projShort(p.id)} · submitted ${fmtD(x.date)}`}); } }); },text:'Save'}),
+        f.date&&f.date<goLive()?null:subCkBox(p,'log:'+p.id),
+        h('div',{class:'actions'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>{ if(!(f.what||'').trim()) return toast('Write what was submitted.'); if(f.date&&f.date>today()) return toast('The date can’t be in the future.'); const old=!!(f.date&&f.date<goLive()); if(!old&&subCkMiss(p,'log:'+p.id)) return toast(subCkMiss(p,'log:'+p.id));
+            const x={id:Math.random().toString(36).slice(2,10),ok:amApprover(),what:f.what.trim(),date:f.date||'',rev:f.rev?String(parseInt(f.rev)):'',note:(f.note||'').trim(),by:S.uid,at:new Date().toISOString(),...(old?{}:{chk:subCkRec(p,'log:'+p.id)})};
+            save([...(Array.isArray(p.subs)?p.subs:[]),x]).then(ok=>{ if(ok){ sh.subAdd=null; subCkClear('log:'+p.id); renderSheet(); if(x.date&&x.date>=goLive()&&diff(x.date,today())<=7) celebrate('stamp',{title:x.what||'Submission',pid:p.id,sub:`${projShort(p.id)} · submitted ${fmtD(x.date)}`}); } }); },text:'Save'}),
           h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.subAdd=null; renderSheet(); },text:'Cancel'})))):null);
 }
 /* history entered by a POD leader (phases finished before SLATE OS, past submissions) waits for the COO */
@@ -7714,6 +7716,17 @@ function phaseReqCards(){
 }
 /* one tap for the client steps of a phase: submitted → feedback received → approved (or issued).
    It ticks the same gate deliverables as Tasks do, so nothing is recorded twice; a submission also goes into the Submissions log. */
+/* before any client submission (Principal, 7 Nov 2026): the team prepares the project information sheet themselves and puts it in
+   the submission PDF, and the project architect confirms the FAR and floor area calculation is OK. Both are ticked by hand, never
+   filled in from SLATE OS; the ticks, who made them and when go on the Submissions log entry. Interior projects have no FAR tick. */
+const subCkList=p=>[['info','Project information sheet prepared and included in the submission PDF'],...(isIntP(p)?[]:[['far','FAR and floor area calculation checked by the project architect: OK']])];
+const subCkState=key=>{ const B=S.sheet.sck||(S.sheet.sck={}); return B[key]||(B[key]={}); };
+function subCkBox(p,key){ const c=subCkState(key);
+  return h('div',{class:'sub-ck'},subCkList(p).map(([id,l])=>h('label',{},h('input',{type:'checkbox',checked:!!c[id],onchange:e=>{ c[id]=e.target.checked; }}),h('span',{text:l})))); }
+const subCkMiss=(p,key)=>{ const c=subCkState(key), miss=subCkList(p).filter(([id])=>!c[id]); return miss.length?(miss[0][0]==='info'?'Tick the project information sheet first: it goes in every submission PDF.':'Tick the FAR and floor area check first: the project architect confirms it before every submission.'):''; };
+const subCkRec=(p,key)=>{ const c=subCkState(key); return {info:!!c.info,far:isIntP(p)?'na':!!c.far,by:S.uid,at:new Date().toISOString()}; };
+const subCkClear=key=>{ if(S.sheet&&S.sheet.sck) delete S.sheet.sck[key]; };
+const subCkTxt=x=>x&&x.chk?`✓ Info sheet · ${x.chk.far==='na'?'no FAR (interior)':'✓ FAR checked'} by ${nameOf(x.chk.by)}`:'';
 function clientStep(p,k,s,fb,fbGot){
   const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, sub=s.sub, fin=s.fin, wd=isWD(k);
   const pend=t=>t&&!t.doneAt&&t.verify;
@@ -7728,22 +7741,23 @@ function clientStep(p,k,s,fb,fbGot){
     else if(two&&S.sheet.frN&&S.sheet.frN[k]) info='';
     else if(two){ next=['frNew',frOf(p,k).length||!fbGot?'Client comments in':'Write the client’s comments']; alt=['final',finLbl]; } else next=['final',finLbl]; }
   if(!next&&!info) return null;
-  const go=what=>what==='frNew'?(()=>{ const N=S.sheet.frN||(S.sheet.frN={}); N[k]={date:st[k]||(!frOf(p,k).length&&fbGot)||today(),txt:'',via:''}; renderSheet(); })():run(async()=>{ const day=st[k]||today(); if(day>today()) throw new Error('The date can’t be in the future.');
+  const isSubm=w=>w==='sub'||w==='sent'||(w==='final'&&wd), ckKey='cs:'+p.id+':'+k;
+  const go=what=>what==='frNew'?(()=>{ const N=S.sheet.frN||(S.sheet.frN={}); N[k]={date:st[k]||(!frOf(p,k).length&&fbGot)||today(),txt:'',via:''}; renderSheet(); })():isSubm(what)&&subCkMiss(p,ckKey)?toast(subCkMiss(p,ckKey)):run(async()=>{ const day=st[k]||today(); if(day>today()) throw new Error('The date can’t be in the future.'); const chk=isSubm(what)?subCkRec(p,ckKey):null;
     if(what==='fb'){ await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:day}}}); return; }
     if(what==='sent'){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[], txt=(steps.find(x=>x[0]==='sub')||[])[1]||'Sent to the client';
-      await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:day}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'}}]}); return; }
+      await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:day}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'},chk}]}); return; }
     const t=what==='sub'?sub:fin; const [, txt]=steps.find(x=>x[0]===(what==='sub'?'sub':'final'))||[];
     await finishTask(t,day,'From the phase card');
     if(what==='sub'||wd){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[];
       if(!list.some(x=>x&&x.gate&&x.gate.k===k&&x.gate.step===(what==='sub'?'sub':'final')))
-        await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'}}]}); }
-  },what==='fb'?'Client feedback received':what==='sub'||what==='sent'?'Marked submitted. The client’s review clock has started':'Phase gate done').then(ok=>{ if(ok){ delete st[k]; renderSheet(); } });
-  return h('div',{class:'cstep'},
+        await S.db.doc('projects/'+p.id).update({subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt||t.title,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:what==='sub'?'sub':'final'},...(chk?{chk}:{})}]}); }
+  },what==='fb'?'Client feedback received':what==='sub'||what==='sent'?'Marked submitted. The client’s review clock has started':'Phase gate done').then(ok=>{ if(ok){ delete st[k]; subCkClear(ckKey); renderSheet(); } });
+  return h('div',{style:'display:grid;gap:6px'},!info&&next&&isSubm(next[0])?subCkBox(p,ckKey):null,h('div',{class:'cstep'},
     info?h('span',{class:'f-hint',style:'margin:0',text:info}):[
       h('span',{class:'cstep-l',text:next[0]==='sub'||next[0]==='sent'?'Sent to the client?':next[0]==='fb'||next[0]==='frNew'?(frOf(p,k).length?'Client back on the resubmission?':'Client comments in?'):wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
       h('input',{type:'date',id:`cs-${k}`,value:d,max:today(),'aria-label':'Date',onchange:e=>{ st[k]=e.target.value||today(); }}),
       h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:next[1]}),
-      alt?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>go(alt[0]),text:alt[1]}):null]);
+      alt?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>go(alt[0]),text:alt[1]}):null]));
 }
 /* opening or closing a phase keeps that phase where it was on screen (other phases folding above it no longer move the page);
    closing from the pinned bar far down brings the phase's own heading back to the top */
@@ -8160,11 +8174,12 @@ function frBox(p,k,s){
   const a=A[k]||(A[k]={}), val=i=>a[i.id]!=null?a[i.id]:(i.a||''), left=(open.items||[]).filter(i=>!String(val(i)).trim()).length, late=open.due<td, paid=frPaid(k,open.n);
   const keep=()=>frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(r) r.items.forEach(i=>{ if(a[i.id]!=null) i.a=String(a[i.id]).trim().slice(0,600); }); });
   const sd=S.sheet.frD||(S.sheet.frD={});
-  const resend=()=>{ const lf=(open.items||[]).filter(i=>!String(val(i)).trim()).length; if(lf) return toast(`Answer every comment first: ${lf} still open.`); const day=sd[k]||td; if(day>td) return toast('The date can’t be in the future.');
+  const ckKey='fr:'+p.id+':'+k;
+  const resend=()=>{ if(subCkMiss(p,ckKey)) return toast(subCkMiss(p,ckKey)); const chk=subCkRec(p,ckKey); const lf=(open.items||[]).filter(i=>!String(val(i)).trim()).length; if(lf) return toast(`Answer every comment first: ${lf} still open.`); const day=sd[k]||td; if(day>td) return toast('The date can’t be in the future.');
     run(async()=>{ await frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(!r) return; r.items.forEach(i=>{ if(a[i.id]!=null) i.a=String(a[i.id]).trim().slice(0,600); }); r.sent=day; r.sentBy=S.uid; });
       const cur=S.projects[p.id]||p, subs=Array.isArray(cur.subs)?cur.subs:[];
-      await S.db.doc('projects/'+p.id).update({subs:[...subs,{id:frId(),ok:true,auto:true,what:`Resubmission after round ${open.n} of ${what} (${(open.items||[]).length} points answered)`,date:day,rev:'R'+open.n,note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'rr'+open.n}}]}); },
-      'Resubmission recorded. The client’s review starts again').then(ok=>{ if(ok){ delete A[k]; delete sd[k]; renderSheet(); } }); };
+      await S.db.doc('projects/'+p.id).update({subs:[...subs,{id:frId(),ok:true,auto:true,what:`Resubmission after round ${open.n} of ${what} (${(open.items||[]).length} point${(open.items||[]).length===1?'':'s'} answered)`,date:day,rev:String(open.n),note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'rr'+open.n},chk}]}); },
+      'Resubmission recorded. The client’s review starts again').then(ok=>{ if(ok){ delete A[k]; delete sd[k]; subCkClear(ckKey); renderSheet(); } }); };
   const add=S.sheet.frX||(S.sheet.frX={});
   return h('div',{class:'callout fr-box'},
     h('div',{class:'pc-row'},h('b',{style:'font-size:14px',text:`Round ${open.n}: ${(open.items||[]).length} ${what}`}),
@@ -8175,6 +8190,7 @@ function frBox(p,k,s){
     h('div',{class:'bar',style:'margin:0'},h('input',{type:'text',maxlength:400,placeholder:'Add a comment the client gave later',value:add[k]||'',style:'background:#fff',oninput:e=>{ add[k]=e.target.value; }}),
       h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>{ const t=(add[k]||'').trim(); if(t.length<3) return toast('Write the comment.');
         run(()=>frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(r) r.items.push({id:frId(),t:t.slice(0,400),a:''}); }),'Comment added').then(ok=>{ if(ok){ delete add[k]; renderSheet(); } }); },text:'Add'})),
+    left?null:subCkBox(p,ckKey),
     h('div',{class:'cstep',style:'margin:0'},
       h('span',{class:'cstep-l',text:left?`${left} of ${(open.items||[]).length} still to answer`:'All answered. Resubmitted on'}),
       h('input',{type:'date',value:sd[k]||td,max:td,'aria-label':'Resubmission date',onchange:e=>{ sd[k]=e.target.value||td; }}),
