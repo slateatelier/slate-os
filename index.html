@@ -858,6 +858,15 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .mebtn .ava.on{box-shadow:0 0 0 2px #34C759}
 @media (max-width:640px){.top-in{--hic:34px}.bell.has{padding-right:9px}.bell .bn{margin-left:6px;font-size:12.5px}.me-plus{width:14px;height:14px;line-height:14px;font-size:11px}}
 .bell .badge{position:absolute;top:-3px;right:-4px;min-width:18px;text-align:center;border:2px solid #fff}
+.wk-f{margin:2px 0 8px}.wk-f .chip{border:1px solid var(--border);background:#fff;cursor:pointer;padding-right:12px;font:inherit;font-size:13px}.wk-f .chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.wk-l{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.wk-r{display:grid;grid-template-columns:74px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 12px;border:0;border-top:1px solid var(--line);background:#fff;text-align:left;font:inherit;color:inherit;width:100%}
+.wk-r:first-child{border-top:0}button.wk-r{cursor:pointer}button.wk-r:hover{background:#fafaf8}
+.wk-k{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.wk-r.k-dwg .wk-k{color:var(--early)}.wk-r.k-step .wk-k{color:var(--ontime)}.wk-r.k-gate .wk-k{color:var(--overdue)}
+.wk-t{display:grid;min-width:0}.wk-t b{font-weight:500}.wk-m{font-size:12.5px;color:var(--muted)}
+.wk-d{font-size:12.5px;color:var(--muted);white-space:nowrap;padding-top:2px}.wk-d.late{color:var(--overdue);font-weight:600}
+@media (max-width:520px){.wk-r{grid-template-columns:minmax(0,1fr) auto}.wk-k{grid-column:1/-1;padding:0}}
 .n-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
 .n-sum div{background:var(--group);border-radius:10px;padding:10px 12px;display:grid;gap:2px}
 .n-sum b{font-size:20px;font-variant-numeric:tabular-nums}
@@ -4198,6 +4207,11 @@ const WL_KIND={task:['Task','Work you do and finish yourself; your POD leader ch
   deliverable:['Deliverable','What leaves the studio: a drawing set, report or submission for the client or the authority. The COO confirms it as a deliverable.'],
   step:['Checklist step','A standard step of the project’s current phase (the SOP checklist). Ticking it moves the phase on.'],
   dwg:['Drawing','A drawing on the project’s WD drawing list. Choosing it puts it In progress; finishing the line sends it for checking.']};
+/* one work list (Principal, 8 Nov 2026): a day-plan line on a client project points at one piece of recorded work, a task, a
+   checklist step or a drawing (or a new task written into the project), so no work happens off the record. Studio work and a
+   request for a task are free text. */
+const wlNeedsPick=l=>{ if(!l||l.ask||!l.projectId) return false; const p=S.projects[l.projectId]; if(!p||isInternalP(p)) return false;
+  return !(l.taskId||l.clRef||l.dwRef||(l.newTitle!=null&&String(l.newTitle).trim())); };
 const wlClearPick=l=>{ l.taskId=''; delete l.clRef; delete l.dwRef; delete l.newTitle; delete l.newKind; };
 function wlNewWhere(l){ const p=S.projects[l.projectId], k=p&&p.std?curPhase(p):null;
   return `It goes on the project’s task list${k?' under '+phLabel(k,p):''}, given to you`+(amApprover()||leadFree(l.projectId)?'.':'; your finish-by date goes to your POD leader to approve.'); }
@@ -4239,7 +4253,7 @@ function wlPicker(l,sh){ const all=wlSugg(l), q=(sh.q||'').trim().toLowerCase(),
         !q&&xs.length>lim?h('div',{class:'wl-sub',text:`${xs.length-lim} more: search to find them`}):null); })
       :h('div',{class:'wl-sub',text:q?'Nothing matches.':'No open tasks on this project yet.'}),
     h('div',{class:'wlf-pa'},S.canWrite?h('button',{class:'linkish',type:'button',onclick:()=>pick({newTitle:sh.q||''}),text:'+ Write a new task for this project'}):null,
-      l.taskId||l.clRef||l.dwRef||l.newTitle!=null?h('button',{class:'linkish',type:'button',onclick:()=>{ wlClearPick(l); sh.pick=''; renderSheet(); },text:'No particular task'}):null)); }
+      (l.taskId||l.clRef||l.dwRef||l.newTitle!=null)&&!wlNeedsPick({projectId:l.projectId})?h('button',{class:'linkish',type:'button',onclick:()=>{ wlClearPick(l); sh.pick=''; renderSheet(); },text:'No particular task'}):null)); }
 function sheetWlog(){
   const sh=S.sheet, td=today(), ahead=sh.mode==='ahead', yLog=ahead?null:wlLastLog(S.uid,td), y=yLog?yLog.day:wlPrevDay(td), cur=ahead?null:wlGet(S.uid,td);
   if(ahead&&!sh.day) sh.day=wlAheadDays()[0]||wlNextDay(td);
@@ -4324,13 +4338,13 @@ function sheetWlog(){
   const addAsk=()=>{ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
     sh.lines.push(wlNewLine({projectId:'',text:'No task for today: please give me one.',ask:{to:askTo},due:td})); sh.err=''; renderSheet(); };
   const saveAhead=()=>{
-    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<base||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (that day or later).':'';
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<base||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (that day or later).':'';
     if(bad){ sh.err=bad; renderSheet(); return; }
     const lines=sh.lines.map(l=>{ const x={...l,text:l.text.trim()}; delete x.pre; delete x.ask; return x; });
     run(()=>wlAheadWrite({...(S.ahead||{}),[base]:lines}),`Planned for ${wd(base)} ${fmtD(base)}. It comes into that morning’s plan`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const dropAhead=()=>{ const it={...(S.ahead||{})}; delete it[base]; run(()=>wlAheadWrite(it),`Plan for ${wd(base)} ${fmtD(base)} removed`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const save=()=>{ if(ahead) return saveAhead();
-    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing, Waiting or Stopped.`
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing, Waiting or Stopped.`
       :yOpen.find(l=>sh.y[l.id]==='waiting'&&!sh.yw[l.id])?'Say who each waiting line is waiting on.'
       :yOpen.find(l=>sh.y[l.id]==='stopped'&&(sh.ys[l.id]||'').trim().length<3)?'Say in a few words why each stopped line stopped.'
       :yOpen.find(l=>(sh.y[l.id]==='today'||sh.y[l.id]==='ongoing')&&l.due&&l.due<td&&!sh.yr[l.id])?'Say why the finish-by date passed on each line that carries on.'
@@ -13748,6 +13762,34 @@ function viewProjects(){
   if(acctSec) out.push(acctSec);
   return out;
 }
+/* ---------- one work list per project (Principal, 8 Nov 2026) ----------
+   Tasks, checklist steps of the phases under way and drawings in one list on the project's Now tab, each labelled with its kind,
+   who has it, its date and its state. Late first, then by date, undated last. The phase cards below keep the detail. */
+function workItemsOf(p){ const td=today(), out=[];
+  Object.entries(S.tasks).forEach(([id,t])=>{ if(!t||t.projectId!==p.id||t.archived||t.doneAt) return;
+    out.push({kind:t.gate?'gate':'task',title:t.title||'Task',who:t.assignee||'',due:t.target||'',st:t.verify||stageOf(t)==='review'?'Sent for checking':stageOf(t)==='doing'?'In progress':'',open:()=>openTask(id)}); });
+  if(p.std) activePhases(p).forEach(k=>clItems(k).forEach(it=>{ const x=clOf(p,k,it.id); if(x.done||x.na) return;
+    out.push({kind:'step',title:it.t,who:clWho(p,it,x)||'',role:clRole(it.r),due:'',st:x.st==='doing'?'In progress':x.st==='paused'?'Paused':'',ph:phLabel(k,p),opt:it.opt}); }));
+  if(typeof DW!=='undefined'&&DW.loaded) dwItems(p.id).forEach(d=>{ if(d.st==='issued') return;
+    out.push({kind:'dwg',title:(d.no?d.no+' · ':'')+d.title,who:d.who||'',due:d.due||'',st:(DWG_ST[d.st]||[''])[0],ph:DWG_NAME[d.phase]||'',open:()=>openDwgList(p.id,d.phase)}); });
+  const rank=x=>x.due&&x.due<td?0:x.due?1:2;
+  return out.sort((a,b)=>rank(a)-rank(b)||String(a.due).localeCompare(String(b.due))||(a.opt?1:0)-(b.opt?1:0)); }
+const WK_KIND={task:'Task',gate:'Phase gate',step:'Checklist',dwg:'Drawing'};
+function workListSection(p){ if(!p||p.closed||isInternalP(p)||!canViewProjectDetail(p)) return null;
+  const all=workItemsOf(p); if(!all.length) return null;
+  const f=S.sheet.wkF||'all', td=today(), sel=all.filter(x=>f==='all'?true:f==='mine'?x.who===S.uid:f==='late'?x.due&&x.due<td:x.kind===f||(f==='task'&&x.kind==='gate'));
+  const n=k=>k==='mine'?all.filter(x=>x.who===S.uid).length:k==='late'?all.filter(x=>x.due&&x.due<td).length:k==='task'?all.filter(x=>x.kind==='task'||x.kind==='gate').length:all.filter(x=>x.kind===k).length;
+  const lim=S.sheet.wkAll?999:12;
+  const chip=(k,l)=>{ const c=k==='all'?all.length:n(k); return k!=='all'&&!c?null:h('button',{type:'button',class:'chip'+(f===k?' on':''),'aria-pressed':String(f===k),onclick:()=>{ S.sheet.wkF=k; renderSheet(); },text:`${l} ${c}`}); };
+  return h('section',{class:'sec wk'},h('div',{class:'sec-h'},h('h2',{text:'Work list'}),h('span',{class:'cnt',text:`${all.length} open`})),
+    h('div',{class:'chips wk-f'},chip('all','All'),chip('mine','Mine'),chip('late','Late'),chip('task','Tasks'),chip('step','Checklist'),chip('dwg','Drawings')),
+    sel.length?h('div',{class:'wk-l'},sel.slice(0,lim).map(x=>{ const late=x.due&&x.due<td;
+      return h(x.open?'button':'div',{class:'wk-r k-'+x.kind,...(x.open?{type:'button',onclick:x.open}:{})},
+        h('span',{class:'wk-k',text:WK_KIND[x.kind]}),
+        h('span',{class:'wk-t'},h('b',{text:x.title}),h('span',{class:'wk-m',text:[x.ph,x.who?(x.who===S.uid?'You':shortName(x.who)):x.role||'Nobody yet',x.st,x.opt?'Optional':''].filter(Boolean).join(' · ')})),
+        h('span',{class:'wk-d'+(late?' late':''),text:x.due?(late?'Late · ':'')+fmtD(x.due):''})); }))
+      :h('p',{class:'f-hint',style:'margin:0 4px',text:'Nothing in this view.'}),
+    sel.length>lim?h('button',{class:'h-more',type:'button',onclick:()=>{ S.sheet.wkAll=1; renderSheet(); },text:`Show all ${sel.length}`}):null); }
 function openProjectView(id){ if(isChalkProj(S.projects[id])) return openChalkProjView(id); S.sheet={type:'projView',id}; renderSheet(); }
 function sheetProjView(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
@@ -13780,6 +13822,7 @@ function sheetProjView(){
   { const sp=supportSection(p); if(sp) put('now',sp); }
   { const sb=subsSection(p); if(sb) put('records',sb); }
   const top=[]; { const cm=cmCard(p); if(cm) top.push(cm); let tl=null; try{ tl=tlSection(p); }catch(e){} if(tl) top.push(tl); }
+  { const wl=workListSection(p); if(wl) put('now',wl); }
   { const ss=stdSection(p); if(ss) put('now',ss); }
   { const fl=frLogSection(p); if(fl) put('records',fl); }
   if(!p.closed&&p.support&&p.support.status==='active'){ const sb=supBox(p); if(sb) put('now',h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Construction support'})),sb)); }
