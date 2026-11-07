@@ -1591,6 +1591,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
+.ph-cf{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;font-size:13px;padding:6px 10px;border-radius:8px;background:var(--group);border-left:3px solid #6b8fb0}.ph-cf b{font-weight:600}.ph-cf span{color:var(--muted)}.ph-cf.done{border-left-color:var(--ontime)}.ph-cf.later{opacity:.75}
 .site-log{display:grid;gap:4px;margin-top:4px}
 .ph-se{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}.ph-se>div{display:grid;gap:0}.ph-se>div>span:first-child{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.ph-se>div>b{font-size:15px}.ph-se>div>span:last-child{font-size:12px;color:var(--muted)}.ph-se-arrow{color:var(--muted);font-size:18px}.ph-se-st{font-size:13px;font-weight:600;margin-left:auto}
 .dv{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:3px 0 2px;font-size:13px}.dv-f{display:inline-flex;gap:6px;align-items:center;min-width:0;max-width:100%}.dv-f .linkish{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}.dv-x{color:var(--muted)}.dv-up{color:var(--late);font-weight:500}.dv-btn{background:var(--group)}
@@ -8198,19 +8199,42 @@ function dwNotifs(add){ if(!DW.loaded) return; const td=today(), now=new Date().
     add({id:`dw:${d.id}:${d.updated_at}`,cat:'action',pending:true,at:d.updated_at||now,title:`Drawing to check: ${d.title}`,body:`${projLabel(p)} · ${DWG_NAME[d.phase]} · by ${shortName(d.who)}`+(d.chk1_at&&dwStep(d)==='chk2'?' · drafting ✓':''),projId:p.id}); }
   for(const l of Object.values(DW.lists)){ const p=S.projects[l.project_id]; if(!p||!(dwLead(p)||dwDL())) continue; const due=dwReviewDue(l.project_id,l.phase); if(!due||due>td) continue;
     add({id:`dwr:${l.project_id}:${l.phase}:${due}`,cat:'action',pending:true,at:due+'T04:25:00.000Z',title:`Progress check due: ${projLabel(p)} · ${DWG_NAME[l.phase]}`,body:dwStatTxt(dwStats(l.project_id,l.phase)),projId:p.id}); } }
-/* the phase card shows two dates only: start and finish (Principal, 7 Nov 2026). Planned dates come from the project timeline
-   (or the gate's approved target); the actual finish is the day the gate closed. The other dates still run underneath. */
-function phSE(p,k,s,live){ const f=live&&live[k]&&!live[k].none?live[k]:null, fin=s.fin, td=today();
+/* the phase card shows two dates only: start and finish (Principal, 7 Nov 2026). Finish = SLATE's final submission in the phase:
+   the submission where the client then approves (0, 1, 2, 3, 3R, 5), or the issue SLATE makes at the end (4 signed set handed over,
+   6–8 GFC, 9 final print). The client's review is not SLATE time: it shows on its own line, "Client feedback · Phase n". */
+const PH_ISSUE=['4','6','7','8','9'];
+function phSE(p,k,s,live){ const f=live&&live[k]&&!live[k].none?live[k]:null, td=today(), issue=PH_ISSUE.includes(k)||!s.sub;
   const ks0=stdPhases(p), pk=ks0[ks0.indexOf(k)-1], pf=pk?stdState(p,pk).fin:null, pfd=pf&&pf.doneAt&&!pf.legacyNoDate?pf.doneAt.slice(0,10):'';
-  const start=f?f.s:pfd?nextWD(pfd):'', end=fin&&fin.target||(f?f.fin:''), endA=fin&&fin.doneAt&&!fin.legacyNoDate?fin.doneAt.slice(0,10):'';
-  const started=!!(s.sub&&s.sub.doneAt)||(s.created&&activePhases(p).includes(k)&&start&&start<=td);
-  let st=['','']; if(s.done) st=endA&&end?(endA<=end?['Finished on time','var(--ontime)']:[`Finished ${wdBetween(end,endA)} working day${wdBetween(end,endA)===1?'':'s'} late`,'var(--overdue)']):['Finished','var(--ontime)'];
+  const g=issue?s.fin:s.sub, sentAt=!issue?'':(((p.std||{}).sentAt||{})[k]||'');
+  const start=f?f.s:pfd?nextWD(pfd):'';
+  const end=(g&&g.target)||(f?(issue?f.fin:f.sub):'');
+  const endA=g&&g.doneAt&&!g.legacyNoDate?String(g.doneAt).slice(0,10):(!issue&&!s.sub?'':(((p.std||{}).sentAt||{})[k]||''));
+  const doneS=issue?s.done:!!(g&&g.doneAt)||!!(((p.std||{}).sentAt||{})[k]);
+  const started=doneS||(s.created&&activePhases(p).includes(k)&&!!start&&start<=td);
+  let st=['',''];
+  if(doneS) st=endA&&end?(wdBetween(end,endA)===0?['Submitted on time','var(--ontime)']:[`Submitted ${wdBetween(end,endA)} working day${wdBetween(end,endA)===1?'':'s'} late`,'var(--overdue)']):['Submitted','var(--ontime)'];
   else if(end&&end<td) st=[`${wdBetween(end,td)} working day${wdBetween(end,td)===1?'':'s'} past the finish date`,'var(--overdue)'];
   else if(end&&started) st=[`${Math.max(0,wdBetween(td,end))} working day${wdBetween(td,end)===1?'':'s'} to finish`,'var(--muted)'];
   const d=(lbl,v,sub)=>h('div',{},h('span',{text:lbl}),h('b',{text:v?fmtD(v):'—'}),sub?h('span',{style:'font-weight:500',text:sub}):null);
-  return h('div',{class:'ph-se'},d('Start',start,started&&!s.done?'started':start&&start>td?'planned':''),h('span',{class:'ph-se-arrow','aria-hidden':'true',text:'→'}),
-    d('Finish',s.done?(endA||end):end,s.done?(fin&&fin.legacy?'before SLATE OS':'done'):end?'target':'no date yet'),
-    st[0]?h('span',{class:'ph-se-st',style:`color:${st[1]}`,text:st[0]}):null); }
+  const top=h('div',{class:'ph-se'},d('Start',start,doneS?'':started?'started':start&&start>td?'planned':''),h('span',{class:'ph-se-arrow','aria-hidden':'true',text:'→'}),
+    d('Finish',doneS?(endA||end):end,doneS?(g&&g.legacy?'before SLATE OS':issue?'issued':'submitted'):end?(issue?'final issue':'final submission'):'no date yet'),
+    st[0]?h('span',{class:'ph-se-st',style:`color:${st[1]}`,text:st[0]}):null);
+  return [top,phClientLine(p,k,s,f,issue,doneS,endA)]; }
+/* "Client feedback · Phase n": the client's review after SLATE's submission, kept apart from SLATE's dates */
+function phClientLine(p,k,s,f,issue,doneS,subA){ const td=today(), rs=frOf(p,k), last=rs[rs.length-1], std=p.std||{};
+  const lbl='Client feedback · Phase '+phNo(k);
+  if(issue){ // WD sets and authority: the client's comments come between the first issue and the final one
+    if(!(s.sub&&s.sub.doneAt)||s.done) return null;
+    const got=(std.fbGot||{})[k], exp=(std.fb||{})[k]||addWorkDays(String(s.sub.doneAt).slice(0,10),clientDaysOf(p,k));
+    return h('div',{class:'ph-cf'},h('b',{text:lbl}),h('span',{text:got?`comments in ${fmtD(got)}`+(rs.length?` · ${rs.length} round${rs.length===1?'':'s'}`:''):`with the client · comments expected ${fmtD(exp)}`+(exp<td?` · ${wdBetween(exp,td)} working day${wdBetween(exp,td)===1?'':'s'} over`:'')})); }
+  if(!doneS) return h('div',{class:'ph-cf later'},h('b',{text:lbl}),h('span',{text:`after the submission · ${clientDaysOf(p,k)} working days for the client to review`}));
+  if(s.done){ const on=s.fin&&s.fin.doneAt&&!s.fin.legacyNoDate?String(s.fin.doneAt).slice(0,10):'';
+    return h('div',{class:'ph-cf done'},h('b',{text:lbl}),h('span',{text:(on?`approved ${fmtD(on)}`:'approved')+(rs.length?` · ${rs.length} round${rs.length===1?'':'s'} of comments`:'')})); }
+  const exp=(std.fb||{})[k]||(subA?addWorkDays(subA,clientDaysOf(p,k)):'');
+  const txt=last&&!last.sent?`round ${last.n}: comments in ${fmtD(last.got)} · SLATE re-shares by ${fmtD(last.due)}`
+    :last&&last.sent?`resubmitted ${fmtD(last.sent)} after round ${last.n} · waiting for the client`
+    :`with the client since ${fmtD(subA)}`+(exp?` · comments expected ${fmtD(exp)}`+(exp<td?` · ${wdBetween(exp,td)} working day${wdBetween(exp,td)===1?'':'s'} over`:''):'');
+  return h('div',{class:'ph-cf'},h('b',{text:lbl}),h('span',{text:txt})); }
 function stdSection(p){
   const tp=p.type&&T()[p.type], det=canViewProjectDetail(p), own=canSeeProjectDetail(p);
   if(!p.std){ if(!tp||!tp.std||p.pod==='Studio') return null;
@@ -8239,7 +8263,7 @@ function stdSection(p){
         h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),s.done?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:tg,text:'Fold ‹'}):stat),
         h('div',{class:'f-hint',text:'Gate: '+phGate(k,p)}),
         s.created?phSE(p,k,s,live):null,
-        PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`Our time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:'',`client ${clientDaysOf(p,k)}`].filter(Boolean).join(' · ')}):null,
+        PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`SLATE time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:''].filter(Boolean).join(' · ')}):null,
         /* finished phases show the same two dates (above) */
         s.created&&!s.done&&fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):null,
         s.created&&!s.done&&fbEdit&&S.canWrite&&stepsOf(p.std.type,k).length>1?frBox(p,k,s):null,
@@ -8304,7 +8328,7 @@ function frBox(p,k,s){
       'Resubmission recorded. The client’s review starts again').then(ok=>{ if(ok){ delete A[k]; delete sd[k]; subCkClear(ckKey); renderSheet(); } }); };
   const add=S.sheet.frX||(S.sheet.frX={});
   return h('div',{class:'callout fr-box'},
-    h('div',{class:'pc-row'},h('b',{style:'font-size:14px',text:`Round ${open.n}: ${(open.items||[]).length} ${what}`}),
+    h('div',{class:'pc-row'},h('b',{style:'font-size:14px',text:`Round ${open.n}: ${(open.items||[]).length} ${(open.items||[]).length===1?what.replace(/s$/,''):what}`}),
       h('span',{class:'f-hint',style:'margin:0;'+(late?'color:var(--overdue)':''),text:`in ${fmtD(open.got)} · re-share ${late?'was due':'by'} ${fmtD(open.due)}`+(late?`, ${wdBetween(open.due,td)} working day${wdBetween(open.due,td)===1?'':'s'} late`:'')})),
     paid?h('span',{class:'tag',style:'justify-self:start;color:var(--late)',text:'Chargeable revision'}):null,
     h('ol',{class:'fr-list'},(open.items||[]).map(i=>h('li',{},h('div',{class:'fr-t',text:i.t}),
