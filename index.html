@@ -1590,6 +1590,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.now i{border-color:var(--ink);background:var(--ink)}.ps-row.now{font-weight:600}
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
+.fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
 </style>
 
 <div class="chrome">
@@ -2288,7 +2289,8 @@ const INT_ORDER=['i0','i1','i2','i3','i4','i5'];
 Object.keys(PH).forEach(k=>{ PH[k]={...PH[k],items:PH[k].items.map((x,i)=>({id:x[4]||k+'-'+i,t:x[0],r:x[1],c:x[2]?1:0,...(x[3]?{o:x[3]}:{}),...(x[5]?{x:x[5]}:{}),...(x[6]?{k:x[6]}:{})}))}; });
 /* consultant window (v1.3): [SLATE days before the plans go to the STR/MEP consultants, consultant working days]. The rest of the
    phase's SLATE days come after their drawings are back. Consultant time is its own clock (R8), like the client's. */
-const KW={'2':[10,7],'3':[1,2],'3r':[4,7],'4':[7,10],'6':[10,10],'7':[18,10]};
+/* design development: the consultants return column sizes, framing, UGWR, OHWR and the EME room within a week (5 working days; Principal, 7 Nov 2026) */
+const KW={'2':[10,5],'3':[1,2],'3r':[4,7],'4':[7,10],'6':[10,10],'7':[18,10]};
 Object.entries(KW).forEach(([k,v])=>{ if(PH[k]) PH[k].kw=v; });
 /* share of the SLATE days before the plans go out, used when the days come from the plot-size table */
 const KW_R=Object.fromEntries(Object.entries(KW).map(([k,v])=>[k,v[0]/((PH[k]&&PH[k].d&&PH[k].d[0])||v[0]+1)]));
@@ -2332,7 +2334,7 @@ const DAYS_LBL={std:['3–7','7–10','10–20','20–30','30–60','60+'],dev:[
 /* standard = the POD leaders' table (29 Oct 2026) + 15%, whole days; developer-owned land = the sheet's Developer tab as it is
    (fast track, its own bands up to 30–90 and 90+ katha; Principal's decision, 1 Nov 2026) */
 const DAYS_T={
-  std:{'0':[3,[2,2,3,5,5,5]],'1':[3,[6,8,12,17,17,17]],'2':[6,[9,12,14,17,23,29]],'3':[2,[2,2,2,2,2,2]],'4':[12,[6,7,9,12,14,17]],'5':[3,[12,14,17,23,25,35]],
+  std:{'0':[3,[2,2,3,5,5,5]],'1':[3,[5,5,8,12,15,15]],'2':[6,[9,12,14,17,23,29]],'3':[2,[2,2,2,2,2,2]],'4':[12,[6,7,9,12,14,17]],'5':[3,[12,14,17,23,25,35]],
        '6':[6,[6,8,12,16,17,23]],'7':[6,[13,15,18,23,29,35]],'8':[6,[16,21,23,29,29,35]],'9':[null,[5,6,8,8,13,17]]},
   dev:{'0':[2,[3,4,4,5,6,7]],'1':[5,[6,7,8,10,12,15]],'2':[5,[8,10,12,15,20,30]],'3':[4,[1,2,2,2,2,2]],'4':[4,[5,7,8,10,14,20]],'5':[4,[9,10,12,14,20,25]],
        '6':[4,[10,12,14,20,25,35]],'7':[5,[15,20,25,30,40,60]],'8':[5,[13,15,20,25,35,50]],'9':[null,[5,6,8,11,15,25]]}};
@@ -2343,7 +2345,9 @@ const bandLbl=p=>{ const t=daysTbl(p); return DAYS_LBL[t][bandOf(p,t)]+' katha'+
 /* projects whose timeline was set before v1.3 keep the days they were planned on; the rest use the plot-size table */
 const useBand=p=>!!(p&&p.std&&(p.std.dv===13||!(p.std.tl&&p.std.tl.start)));
 const bandRow=(p,k)=>{ const t=daysTbl(p); return DAYS_T[t][k==='3r'?'3':k]||null; };
-const stdSlateDays=(p,k)=>{ if(useBand(p)){ const r=bandRow(p,k); if(r) return r[1][bandOf(p)]; } return slateDaysOf(k); };
+/* concept layout (Principal, 7 Nov 2026): up to 10 katha 5 days, 10–20 katha 8, 20–30 katha 12, bigger 15; land share 10 whatever the size */
+const SHARE_CONCEPT=10;
+const stdSlateDays=(p,k)=>{ if(useBand(p)){ if(k==='1'&&daysTbl(p)==='std'&&((p.std&&p.std.type)||p.type)==='share') return SHARE_CONCEPT; const r=bandRow(p,k); if(r) return r[1][bandOf(p)]; } return slateDaysOf(k); };
 const stdClientDays=(p,k)=>{ if(useBand(p)){ const r=bandRow(p,k); if(r&&r[0]!=null) return r[0]; } return (PH[k]&&PH[k].d)?PH[k].d[1]:null; };
 const kwOf=k=>(PH[k]&&PH[k].kw)||null;
 const consultDaysOf=(p,k)=>{ const w=kwOf(k); if(!w) return 0; const v=p&&p.std&&p.std.kd&&p.std.kd[k]; return v!=null&&v!==''?+v:w[1]; };
@@ -6539,6 +6543,7 @@ function buildNotifs(){
       add({id:`ask:${r.user_id}:${r.day}`,cat:done?'update':'action',pending:!done&&r.day===td,at:l.ask.at,title:done?`${nameOf(r.user_id)} has a task now`:`${nameOf(r.user_id)} needs a task${r.day===td?' for today':' ('+fmtD(r.day)+')'}`,
         body:l.text+(done?'':'\nTap to give one.'),...(done?{view:'worklog'}:{askFor:r.user_id})}); } }
   try{ dwNotifs(add); }catch(e){}
+  try{ frNotifs(add); }catch(e){}
   return out.sort((a,b)=>b.at.localeCompare(a.at));
 }
 const nst=()=>S.nst||{};
@@ -7719,9 +7724,11 @@ function clientStep(p,k,s,fb,fbGot){
   if(two&&sub&&!sub.doneAt){ if(pend(sub)) info=`Submitted ${fmtD(sub.verify.at)} · waiting for verification`; else next=['sub','Mark submitted']; }
   else if(two&&!sub&&fin&&!fin.doneAt&&!sentAt&&!fbGot) next=['sent','Mark submitted'];
   else if(fin&&!fin.doneAt){ if(pend(fin)) info=`${finLbl.replace('Mark ','')} ${fmtD(fin.verify.at)} · waiting for verification`;
-    else if(two&&!fbGot){ next=['fb','Feedback received']; alt=['final',finLbl]; } else next=['final',finLbl]; }
+    else if(two&&frOpen(p,k)) info='Client comments are being taken in: answer each one below, then resubmit';
+    else if(two&&S.sheet.frN&&S.sheet.frN[k]) info='';
+    else if(two){ next=['frNew',frOf(p,k).length||!fbGot?'Client comments in':'Write the client’s comments']; alt=['final',finLbl]; } else next=['final',finLbl]; }
   if(!next&&!info) return null;
-  const go=what=>run(async()=>{ const day=st[k]||today(); if(day>today()) throw new Error('The date can’t be in the future.');
+  const go=what=>what==='frNew'?(()=>{ const N=S.sheet.frN||(S.sheet.frN={}); N[k]={date:st[k]||(!frOf(p,k).length&&fbGot)||today(),txt:'',via:''}; renderSheet(); })():run(async()=>{ const day=st[k]||today(); if(day>today()) throw new Error('The date can’t be in the future.');
     if(what==='fb'){ await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:day}}}); return; }
     if(what==='sent'){ const cur=S.projects[p.id]||p, list=Array.isArray(cur.subs)?cur.subs:[], txt=(steps.find(x=>x[0]==='sub')||[])[1]||'Sent to the client';
       await S.db.doc('projects/'+p.id).update({std:{sentAt:{[k]:day}},subs:[...list,{id:Math.random().toString(36).slice(2,10),ok:true,auto:true,what:txt,date:day,rev:'',note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'sub'}}]}); return; }
@@ -7733,7 +7740,7 @@ function clientStep(p,k,s,fb,fbGot){
   },what==='fb'?'Client feedback received':what==='sub'||what==='sent'?'Marked submitted. The client’s review clock has started':'Phase gate done').then(ok=>{ if(ok){ delete st[k]; renderSheet(); } });
   return h('div',{class:'cstep'},
     info?h('span',{class:'f-hint',style:'margin:0',text:info}):[
-      h('span',{class:'cstep-l',text:next[0]==='sub'||next[0]==='sent'?'Sent to the client?':next[0]==='fb'?'Client comments in?':wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
+      h('span',{class:'cstep-l',text:next[0]==='sub'||next[0]==='sent'?'Sent to the client?':next[0]==='fb'||next[0]==='frNew'?(frOf(p,k).length?'Client back on the resubmission?':'Client comments in?'):wd?'GFC set issued?':two?'Client signed off?':finTxt+'?'}),
       h('input',{type:'date',id:`cs-${k}`,value:d,max:today(),'aria-label':'Date',onchange:e=>{ st[k]=e.target.value||today(); }}),
       h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>go(next[0]),text:next[1]}),
       alt?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>go(alt[0]),text:alt[1]}):null]);
@@ -8099,6 +8106,7 @@ function stdSection(p){
         PH[k].d&&!s.done?h('div',{class:'f-hint',style:'margin:0',text:[`Our time ${slateDaysFor(p,k)} working days`+(graceDays(p,k)?` (+${graceDays(p,k)} grace)`:''),kwOf(k)?`consultants ${consultDaysOf(p,k)}`:'',`client ${clientDaysOf(p,k)}`].filter(Boolean).join(' · ')}):null,
         s.created&&s.done?h('div',{class:'ph-dates'},stepsOf(p.std.type,k).length>1?dt('Submission',s.sub):null,stepsOf(p.std.type,k).length>1?dt('Client feedback due',null,[fbEl,fbGot?h('span',{style:'font-weight:500;color:var(--ontime)',text:'received '+fmtD(fbGot)}):!fb&&s.sub&&s.sub.doneAt&&PH[k].d?h('span',{style:'font-weight:500',text:'by the standard '+fmtD(addWorkDays(s.sub.doneAt.slice(0,10),clientDaysOf(p,k)))}):null]):null,dt(stepsOf(p.std.type,k).length>1?'Final':'Issued',s.fin)):null,
         s.created&&!s.done&&fbEdit&&S.canWrite?clientStep(p,k,s,fb,fbGot):null,
+        s.created&&!s.done&&fbEdit&&S.canWrite&&stepsOf(p.std.type,k).length>1?frBox(p,k,s):null,
         s.created&&!s.done&&fbEdit&&S.canWrite?phUpdate(p,k,s,fbEdit):null,
         h('div',{class:'bar',style:'justify-content:space-between'},h('span',{style:'font-size:13.5px'},`Checklist ${c.done} of ${c.tot-c.na} done`+(c.na?` · ${c.na} N/A`:'')),
           det?h('button',{class:'btn btn-sm',type:'button',style:'background:'+(act.includes(k)?'var(--group)':'#fff'),onclick:()=>phToggle(k,isOpen?null:k),text:isOpen?'Hide checklist':'Show checklist'}):null),
@@ -8115,6 +8123,89 @@ function stdSection(p){
 }
 /* phase card, read-only: the steps of a phase in plain words (our work → consultants → client → gate), Principal 1 Nov 2026.
    Anything that happened is recorded with "Log an update", not with date boxes on the card. */
+/* ---------- client feedback rounds (Principal, 7 Nov 2026) ----------
+   Every round of client comments on a submission is written down point by point. The project architect (POD leader) answers
+   each point and re-shares within 3 working days; a resubmission is recorded only when every point has an answer. On the design
+   phases the first 2 rounds are free; a further round is a chargeable revision (Business decides). In authority drawings the
+   rounds are the vetting observations. p.std.fr = {k:[{id,n,got,via,items:[{id,t,a}],due,sent,by,at,sentBy}]} */
+const FR_FREE=2, FR_DAYS=3, FR_PAY=['1','2','3','3r'];
+const frOf=(p,k)=>{ const a=p&&p.std&&p.std.fr&&p.std.fr[k]; return Array.isArray(a)?a.filter(x=>x&&typeof x==='object'):[]; };
+const frOpen=(p,k)=>{ const r=frOf(p,k), l=r[r.length-1]; return l&&!l.sent?l:null; };
+const frPaid=(k,n)=>FR_PAY.includes(k)&&n>FR_FREE;
+const frWhat=k=>k==='4'?'vetting observations':isWD(k)?'client and site comments':'client comments';
+const frLeft=r=>(r.items||[]).filter(i=>!String(i.a||'').trim()).length;
+const frId=()=>Math.random().toString(36).slice(2,10);
+const frVia=k=>[['meeting','Meeting'],['email','Email'],['whatsapp','WhatsApp'],['phone','Phone call'],['site','Site visit'],...(k==='4'?[['vetting','Vetting report']]:[]),['other','Other']];
+async function frWrite(p,k,fn){ const cur=S.projects[p.id]||p, list=frOf(cur,k).map(r=>({...r,items:(r.items||[]).map(i=>({...i}))})); fn(list);
+  await S.db.doc('projects/'+p.id).update({std:{fr:{[k]:list}}}); return list; }
+/* the new-round form, the open round (answer each point, then resubmit) */
+function frBox(p,k,s){
+  const N=S.sheet.frN||(S.sheet.frN={}), A=S.sheet.frA||(S.sheet.frA={}), td=today(), what=frWhat(k);
+  const rounds=frOf(p,k), open=frOpen(p,k), f=N[k];
+  if(f){ const n=rounds.length+1, lines=String(f.txt||'').split('\n').map(x=>x.replace(/^\s*(?:[-•*]|\d+[.)])\s*/,'').trim()).filter(Boolean);
+    const viaSel=h('select',{'aria-label':'How the comments came',onchange:e=>{ f.via=e.target.value; }},h('option',{value:'',text:'How did they come?'}),frVia(k).map(([v,l])=>h('option',{value:v,text:l}))); viaSel.value=f.via||'';
+    const save=()=>{ if(!f.date) return toast('Choose the date the comments came in.'); if(f.date>td) return toast('The date can’t be in the future.');
+      if(!lines.length) return toast('Write the comments, one per line.'); if(lines.some(x=>x.length<3)) return toast('Each comment needs a few words.');
+      run(async()=>{ await frWrite(p,k,list=>list.push({id:frId(),n,got:f.date,via:f.via||'',items:lines.slice(0,60).map(t=>({id:frId(),t:t.slice(0,400),a:''})),due:addWorkDays(f.date,FR_DAYS),by:S.uid,at:new Date().toISOString()}));
+          const fg=((S.projects[p.id]||p).std||{}).fbGot||{}; if(!fg[k]) await S.db.doc('projects/'+p.id).update({std:{fbGot:{[k]:f.date}}}); },
+        `Round ${n} recorded: re-share by ${fmtD(addWorkDays(f.date,FR_DAYS))}`).then(ok=>{ if(ok){ delete N[k]; renderSheet(); } }); };
+    return h('div',{class:'callout fr-box'},
+      h('div',{class:'lbl',text:`Round ${n}: write down the ${what}`}),
+      frPaid(k,n)?h('div',{class:'f-hint',style:'margin:0;color:var(--late)',text:`Round ${n} is beyond the ${FR_FREE} free rounds: it counts as a chargeable revision. The Principal and the COO see it in the feedback log.`}):null,
+      h('div',{class:'form-row'},h('label',{class:'field'},h('span',{class:'lbl',text:'Came in on'}),h('input',{type:'date',value:f.date,max:td,style:'background:#fff',oninput:e=>{ f.date=e.target.value; }})),h('label',{class:'field'},h('span',{class:'lbl',text:'How'}),viaSel)),
+      h('label',{class:'field'},h('span',{class:'lbl',text:'Comments, one per line'}),h('textarea',{rows:6,maxlength:8000,style:'background:#fff',placeholder:'e.g. Make the lobby double height\nAdd one more parking space\nMove the kitchen to the north side',value:f.txt||'',oninput:e=>{ f.txt=e.target.value; }})),
+      h('div',{class:'f-hint',style:'margin:0',text:`Write every point, even small ones: each one is answered before the resubmission, and the log goes with every resubmission. Re-share within ${FR_DAYS} working days.`}),
+      h('div',{class:'actions',style:'margin:0'},h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:save,text:'Save the comments'}),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ delete N[k]; renderSheet(); },text:'Cancel'}))); }
+  if(!open) return null;
+  const a=A[k]||(A[k]={}), val=i=>a[i.id]!=null?a[i.id]:(i.a||''), left=(open.items||[]).filter(i=>!String(val(i)).trim()).length, late=open.due<td, paid=frPaid(k,open.n);
+  const keep=()=>frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(r) r.items.forEach(i=>{ if(a[i.id]!=null) i.a=String(a[i.id]).trim().slice(0,600); }); });
+  const sd=S.sheet.frD||(S.sheet.frD={});
+  const resend=()=>{ const lf=(open.items||[]).filter(i=>!String(val(i)).trim()).length; if(lf) return toast(`Answer every comment first: ${lf} still open.`); const day=sd[k]||td; if(day>td) return toast('The date can’t be in the future.');
+    run(async()=>{ await frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(!r) return; r.items.forEach(i=>{ if(a[i.id]!=null) i.a=String(a[i.id]).trim().slice(0,600); }); r.sent=day; r.sentBy=S.uid; });
+      const cur=S.projects[p.id]||p, subs=Array.isArray(cur.subs)?cur.subs:[];
+      await S.db.doc('projects/'+p.id).update({subs:[...subs,{id:frId(),ok:true,auto:true,what:`Resubmission after round ${open.n} of ${what} (${(open.items||[]).length} points answered)`,date:day,rev:'R'+open.n,note:'Phase '+phLabel(k,p),by:S.uid,at:new Date().toISOString(),gate:{k,step:'rr'+open.n}}]}); },
+      'Resubmission recorded. The client’s review starts again').then(ok=>{ if(ok){ delete A[k]; delete sd[k]; renderSheet(); } }); };
+  const add=S.sheet.frX||(S.sheet.frX={});
+  return h('div',{class:'callout fr-box'},
+    h('div',{class:'pc-row'},h('b',{style:'font-size:14px',text:`Round ${open.n}: ${(open.items||[]).length} ${what}`}),
+      h('span',{class:'f-hint',style:'margin:0;'+(late?'color:var(--overdue)':''),text:`in ${fmtD(open.got)} · re-share ${late?'was due':'by'} ${fmtD(open.due)}`+(late?`, ${wdBetween(open.due,td)} working day${wdBetween(open.due,td)===1?'':'s'} late`:'')})),
+    paid?h('span',{class:'tag',style:'justify-self:start;color:var(--late)',text:'Chargeable revision'}):null,
+    h('ol',{class:'fr-list'},(open.items||[]).map(i=>h('li',{},h('div',{class:'fr-t',text:i.t}),
+      h('textarea',{rows:2,maxlength:600,'aria-label':'How it was taken in: '+i.t,placeholder:'How it was taken in (or why not)',value:val(i),style:'background:#fff',oninput:e=>{ a[i.id]=e.target.value; }})))),
+    h('div',{class:'bar',style:'margin:0'},h('input',{type:'text',maxlength:400,placeholder:'Add a comment the client gave later',value:add[k]||'',style:'background:#fff',oninput:e=>{ add[k]=e.target.value; }}),
+      h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>{ const t=(add[k]||'').trim(); if(t.length<3) return toast('Write the comment.');
+        run(()=>frWrite(p,k,list=>{ const r=list.find(x=>x.id===open.id); if(r) r.items.push({id:frId(),t:t.slice(0,400),a:''}); }),'Comment added').then(ok=>{ if(ok){ delete add[k]; renderSheet(); } }); },text:'Add'})),
+    h('div',{class:'cstep',style:'margin:0'},
+      h('span',{class:'cstep-l',text:left?`${left} of ${(open.items||[]).length} still to answer`:'All answered. Resubmitted on'}),
+      h('input',{type:'date',value:sd[k]||td,max:td,'aria-label':'Resubmission date',onchange:e=>{ sd[k]=e.target.value||td; }}),
+      h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:resend,text:'Resubmitted'}),
+      h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>run(keep,'Answers saved').then(ok=>{ if(ok){ delete A[k]; renderSheet(); } }),text:'Save answers'}))); }
+/* the project's feedback log: every round on every phase, the comments and how each was taken in */
+function frText(p,k,r){ return [`${projLabel(p)} · Phase ${phLabel(k,p)} · Round ${r.n} · ${frWhat(k)} received ${fmtD(r.got)}`,
+  ...(r.items||[]).map((i,x)=>`${x+1}. ${i.t}\n   → ${String(i.a||'').trim()||'Not answered yet'}`),r.sent?`Resubmitted ${fmtD(r.sent)}`:''].filter(Boolean).join('\n'); }
+function frLogSection(p){ if(!p||!p.std||!canSeeProjectDetail(p)) return null;
+  const ks=stdPhases(p).filter(k=>frOf(p,k).length); if(!ks.length) return null;
+  const all=ks.flatMap(k=>frOf(p,k).map(r=>({k,r}))), open=all.filter(x=>!x.r.sent).length, paid=all.filter(x=>frPaid(x.k,x.r.n)).length;
+  const F=S.sheet.frLog||(S.sheet.frLog={});
+  const copy=txt=>{ try{ navigator.clipboard.writeText(txt).then(()=>toast('Copied: paste it into the resubmission'),()=>toast('Couldn’t copy on this device')); }catch(e){ toast('Couldn’t copy on this device'); } };
+  return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Client feedback log'}),h('span',{class:'cnt',text:`${all.length} round${all.length===1?'':'s'}`+(open?` · ${open} open`:'')+(paid?` · ${paid} chargeable`:'')})),
+    h('div',{class:'list',style:'overflow:clip'},ks.map(k=>{ const rs=frOf(p,k), isOpen=!!F[k];
+      return h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:8px'},
+        h('div',{class:'pc-row'},h('b',{text:'Phase '+phLabel(k,p)}),h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ F[k]=!isOpen; renderSheet(); },text:`${rs.length} round${rs.length===1?'':'s'} ${isOpen?'‹':'›'}`})),
+        isOpen?rs.map(r=>h('div',{class:'fr-log'},
+          h('div',{class:'pc-row'},h('span',{style:'font-weight:600;font-size:14px',text:`Round ${r.n} · ${fmtD(r.got)}`+(r.via?' · '+((frVia(k).find(x=>x[0]===r.via)||[])[1]||r.via):'')}),
+            h('span',{style:'display:flex;gap:6px;align-items:center'},frPaid(k,r.n)?h('span',{class:'tag',style:'color:var(--late)',text:'Chargeable'}):null,
+              h('span',{class:'f-hint',style:'margin:0;'+(!r.sent&&r.due<today()?'color:var(--overdue)':''),text:r.sent?'resubmitted '+fmtD(r.sent):'re-share by '+fmtD(r.due)}))),
+          h('ol',{class:'fr-list'},(r.items||[]).map(i=>h('li',{},h('div',{class:'fr-t',text:i.t}),h('div',{class:'f-hint',style:'margin:0;'+(String(i.a||'').trim()?'':'color:var(--late)'),text:String(i.a||'').trim()?'→ '+i.a:'Not answered yet'})))),
+          h('div',{class:'f-hint',style:'margin:0',text:`Written by ${nameOf(r.by)}`+(r.sentBy?` · resubmitted by ${nameOf(r.sentBy)}`:'')}),
+          h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>copy(frText(p,k,r)),text:'Copy comments and answers'}))):null); })),
+    h('p',{class:'f-hint',style:'margin:0;padding:0 4px',text:`Every resubmission carries the comments and how each was taken in. Design phases: ${FR_FREE} free rounds, after that a round is a chargeable revision.`})); }
+/* the bell: re-shares due (POD leader of the project), chargeable rounds (Principal and COO) */
+function frNotifs(add){ const td=today();
+  for(const p of projects()){ if(!p||!p.std||p.closed) continue; const lead=isProjLead(p), top=amApprover(); if(!lead&&!top) continue;
+    for(const k of stdPhases(p)){ for(const r of frOf(p,k)){
+      if(!r.sent&&lead){ const left=frLeft(r); add({id:`fr:${p.id}:${k}:${r.id}`,cat:'action',pending:true,at:(r.at||r.got+'T00:00:00.000Z'),title:`${r.due<td?'Re-share overdue':'Re-share by '+fmtD(r.due)}: ${projLabel(p)} · Phase ${phLabel(k,p)}`,body:`Round ${r.n}: ${left?`${left} of ${(r.items||[]).length} comments still to answer`:'all answered, resubmit'}`,projId:p.id}); }
+      if(top&&frPaid(k,r.n)) add({id:`frc:${p.id}:${k}:${r.id}`,cat:'update',at:(r.at||r.got+'T00:00:00.000Z'),title:`Chargeable revision: ${projLabel(p)} · Phase ${phLabel(k,p)}`,body:`Round ${r.n} of client comments (${FR_FREE} free rounds used) · ${(r.items||[]).length} points`,projId:p.id}); } } } }
 function phSteps(p,k,s,fb,fbGot){
   const steps=stepsFor(p,p.std.type||p.type,k), two=steps.length>1, sub=s.sub, fin=s.fin, wd=isWD(k), td=today();
   const pl=n=>`${n} working day${n===1?'':'s'}`, dd=t=>t?String(t).slice(0,10):'';
@@ -8133,6 +8224,8 @@ function phSteps(p,k,s,fb,fbGot){
     if(fbGot) row('done',`Client comments in ${fmtD(fbGot)}`);
     else if(sub&&sub.doneAt) row(exp&&exp<td?'late':'now',`With the client: comments ${exp<td?'were ':''}expected ${fmtD(exp)}`+(exp<td?`, ${pl(wdBetween(exp,td))} over`:''));
     else row('later',`Client reviews for ${pl(clientDaysOf(p,k))}`); }
+  if(two) frOf(p,k).forEach(r=>{ const left=frLeft(r); row(r.sent?'done':r.due<td?'late':'now',`Round ${r.n}: ${(r.items||[]).length} ${frWhat(k)} ${fmtD(r.got)}`+(r.sent?` · resubmitted ${fmtD(r.sent)}`:` · ${left?left+' to answer · ':''}re-share ${r.due<td?'was due':'by'} ${fmtD(r.due)}`)+(frPaid(k,r.n)?' · chargeable revision':'')); });
+  { const rs=frOf(p,k), l=rs[rs.length-1]; if(two&&l&&l.sent&&!(fin&&fin.doneAt)) row('now',`With the client: resubmission after round ${l.n} sent ${fmtD(l.sent)}`); }
   if(fin){ const what=wd?'Issued for construction':two?'Client approval':((steps.find(x=>x[0]==='final')||[])[1]||'Done');
     if(fin.doneAt) row('done',`${what} ${fin.legacy?'before SLATE OS':fmtD(dd(fin.doneAt))}`);
     else row(fin.target&&fin.target<td&&!two?'late':'later',fin.target?`${what} expected ${fmtD(fin.target)}`:`${what}: no date yet`); }
@@ -13336,6 +13429,7 @@ function sheetProjView(){
   { const sp=supportSection(p); if(sp) out.push(sp); }
   { const sb=subsSection(p); if(sb) out.push(sb); }
   { const ss=stdSection(p); if(ss) out.push(ss); }
+  { const fl=frLogSection(p); if(fl) out.push(fl); }
   { const pl=pwProjLine(p); if(pl) out.push(pl); }
   { const dw=dwgSection(p); if(dw) out.push(dw); }
   { const ms=projLog(p); if(ms) out.push(ms); }
