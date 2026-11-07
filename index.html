@@ -1591,7 +1591,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
-.pcm-list{display:grid;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.pcm-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(120px,170px);gap:6px 12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}.pcm-row:first-child{border-top:0}.pcm-std{text-align:right}@media (max-width:640px){.pcm-row{grid-template-columns:minmax(0,1fr) auto}.pcm-std{grid-column:1/-1;text-align:left}}
+.pcm-list{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.pcm-row{display:grid;grid-template-columns:minmax(0,1.4fr) 120px minmax(150px,1fr) minmax(110px,.8fr);gap:6px 12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}.pcm-row:first-child{border-top:0}.pcm-head{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-block:8px;background:var(--group)}.pcm-in{display:flex;gap:6px;align-items:center}.pcm-in input{width:72px}.pcm-in span{font-size:13px;color:var(--muted)}.pcm-dates{display:flex;gap:6px;align-items:baseline;font-size:14px}.pcm-std{text-align:right}.pcm-bars{display:grid;gap:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}.pcm-bar-row{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px;align-items:center}.pcm-bar-n{font-size:12.5px;color:var(--muted)}.pcm-track{position:relative;height:16px;background:var(--group);border-radius:4px}.pcm-b,.pcm-c,.pcm-today{position:absolute;top:0;bottom:0;border-radius:4px}.pcm-b{background:#111}.pcm-c{background:repeating-linear-gradient(45deg,#9fb6cc,#9fb6cc 3px,#c9d7e4 3px,#c9d7e4 6px)}.pcm-today{width:2px;background:#C1272D;border-radius:0}.pcm-key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);padding-top:4px}.pcm-key span{display:inline-flex;gap:6px;align-items:center}.pcm-key i{position:static;display:inline-block;width:18px;height:10px}@media (max-width:700px){.pcm-row{grid-template-columns:minmax(0,1fr) 110px}.pcm-dates,.pcm-std{grid-column:1/-1;text-align:left}.pcm-head{display:none}}
 .ver-line{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;font-size:12.5px;color:var(--muted);padding:14px 4px 4px}#ver-bar{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));z-index:9999;display:flex;gap:12px;align-items:center;background:#111;color:#fff;padding:8px 10px 8px 16px;border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.2);font-size:14px;max-width:calc(100vw - 24px)}#ver-bar .btn{background:#fff;color:#111;border-color:#fff}
 .ph-cf{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;font-size:13px;padding:6px 10px;border-radius:8px;background:var(--group);border-left:3px solid #6b8fb0}.ph-cf b{font-weight:600}.ph-cf span{color:var(--muted)}.ph-cf.done{border-left-color:var(--ontime)}.ph-cf.later{opacity:.75}
 .site-log{display:grid;gap:4px;margin-top:4px}
@@ -1792,7 +1792,7 @@ const goLive=()=>(S.settings&&S.settings.goLive)||'2026-11-01';
 const askDates=()=>!(typeof S!=='undefined'&&S.settings&&S.settings.askDates===false);
 const preLive=()=>addDays(goLive(),-1);
 /* scores count from this day (settings.scoreFrom); work due before it is a trial run: shown, never scored */
-const scoreLive=()=>(S.settings&&S.settings.scoreFrom)||'2026-11-10';
+const scoreLive=()=>(S.settings&&S.settings.scoreFrom)||'2026-11-29';
 /* test run (Principal, 3 Nov 2026): the Principal and the COO see scores counted from settings.scoreTrialFrom (3 Nov) until the
    live day; everyone else still sees the practice period. View only: anything saved (date revisions) follows the live day. */
 const scoreTrial=()=>{ const t=(S.settings&&S.settings.scoreTrialFrom)||'2026-11-03'; return seePriv()&&t<scoreLive()&&today()<scoreLive()?t:''; };
@@ -8254,46 +8254,76 @@ function cmRows(p){ return (tlPhases(p).length?tlPhases(p):stdPhases(p)).filter(
     const sent=!(PH_ISSUE.includes(k)||!s.sub)&&!!((p.std.sentAt||{})[k]);
     return {k,s,g,start:st,now:!!st||activePhases(p).includes(k),started:!!st&&st<=addDays(today(),30),done:s.done||!!(g&&g.doneAt)||sent,waits:k==='6'&&wdWaiting(p),land:k==='3r'&&!(p.std&&p.std.resume)}; })
   .filter(r=>r.s.created&&!r.done); }
-function cmFinish(p,k){ const c=cmOf(p), x=c&&c.ph&&c.ph[k]; if(!x) return ''; if(x.d) return x.d; const st=phStartA(p,k); return x.n&&st?spanWD(st,+x.n):''; }
+function cmFinish(p,k){ const c=cmOf(p), x=c&&c.ph&&c.ph[k]; if(!x) return ''; if(x.d) return x.d; const st=phStartA(p,k)||(activePhases(p).includes(k)?cmFrom(p):''); return x.n&&st?spanWD(st,+x.n):''; }
 function cmCard(p){ if(!askP(p)) return null; const c=cmOf(p), lead=S.canWrite&&isProjLead(p), ap=S.canWrite&&amApprover(), rows=cmRows(p); if(!rows.length&&!c) return null;
-  const st=!c?['Phase dates not given yet','s-late']:c.st==='sent'?['Sent to the COO '+fmtD((c.at||'').slice(0,10)),'s-late']:c.st==='back'?['Returned by the COO','s-overdue']:['Approved by '+nameOf(c.okBy)+' '+fmtD((c.okAt||'').slice(0,10)),'s-ontime'];
-  const btn=ap&&c&&c.st==='sent'?['Review phase dates',true]:(lead||ap)&&(!c||c.st==='back')?['Give phase dates',true]:(lead||ap)?[c&&c.st==='ok'?'Change phase dates':'Edit',false]:null;
-  return h('div',{class:'callout',style:'display:grid;gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Phase dates'}),h('span',{class:'pill '+st[1],text:st[0]})),
-    h('div',{class:'f-hint',style:'margin:0',text:c&&c.st==='back'&&c.note?'COO: '+c.note:'The POD leader gives the finish date of the phase under way and the working days for each later phase; the COO approves. Start dates follow from what happens.'}),
+  const st=!c?['Phase days not given yet','s-late']:c.st==='sent'?['Sent to the COO '+fmtD((c.at||'').slice(0,10)),'s-late']:c.st==='back'?['Returned by the COO','s-overdue']:['Approved by '+nameOf(c.okBy)+' '+fmtD((c.okAt||'').slice(0,10)),'s-ontime'];
+  const btn=ap&&c&&c.st==='sent'?['Review phase days',true]:(lead||ap)&&(!c||c.st==='back')?['Open the phase timeline',true]:[c&&c.st==='ok'?'Open the phase timeline':'See the phase timeline',false];
+  return h('div',{class:'callout',style:'display:grid;gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Phase timeline'}),h('span',{class:'pill '+st[1],text:st[0]})),
+    h('div',{class:'f-hint',style:'margin:0',text:c&&c.st==='back'&&c.note?'COO: '+c.note:'The POD leader types SLATE’s working days for each phase on one page and sees the dates and timeline; the COO approves.'}),
     btn?h('button',{class:'btn btn-sm'+(btn[1]?' btn-primary':''),type:'button',style:'justify-self:start',onclick:()=>openCm(p.id),text:btn[0]}):null); }
-function openCm(pid){ const p=S.projects[pid]; if(!p) return; const c=cmOf({...p,id:pid}), q={...p,id:pid}, v={};
-  cmRows(q).forEach(r=>{ const x=c&&c.ph&&c.ph[r.k]||{}; v[r.k]=r.now?{d:x.d||(r.g&&r.g.target)||''}:{n:x.n!=null?String(x.n):''}; });
+/* the plan worked out from the working days typed for each open phase: start (from what it waits for), SLATE's finish
+   (start + days) and the client's review after it (standard review days, shown only, never a target). A phase under way with
+   no recorded start counts from CM_FROM. Phases already done use their real dates. */
+const CM_FROM='2026-11-09';
+const cmFrom=p=>{ const t=p.std&&p.std.tl&&p.std.tl.start; return firstWD(t&&t>CM_FROM?t:CM_FROM); };
+function cmPlan(p,days){ const ks=tlPhases(p).length?tlPhases(p):stdPhases(p), rows=cmRows(p), rowOf=Object.fromEntries(rows.map(r=>[r.k,r])), out={}, std=p.std||{};
+  const dd=t=>t&&t.doneAt&&!t.legacyNoDate?String(t.doneAt).slice(0,10):'';
+  for(const k of ks){ if(!PH[k]) continue; const s=stdState(p,k), issue=PH_ISSUE.includes(k)||!s.sub, r=rowOf[k];
+    if(!r){ const f=issue?dd(s.fin):(dd(s.sub)||((std.sentAt||{})[k]||'')), a=issue?f:dd(s.fin); out[k]={done:true,f,a:a||f}; continue; }
+    let st=r.start;
+    if(!st&&r.now) st=cmFrom(p);
+    if(!st&&!r.now){ let dep; try{ dep=tlDep(p,k); }catch(e){ dep={prev:true}; }
+      if(dep.start) st=std.tl&&std.tl.start?firstWD(std.tl.start):firstWD(CM_FROM);
+      else if(!dep.resume){ const rk=dep.prev?ks[ks.indexOf(k)-1]:dep.k, ref=rk&&out[rk]; const at=dep.prev?'fin':(dep.at||'fin');
+        const rd=ref?(at==='sub'?ref.f:ref.a):''; if(rd) st=nextWD(rd); } }
+    if(k==='6'&&r.waits) st='';
+    if(k==='3r'&&r.land) st='';
+    const n=parseInt(days[k],10)||0, f=st&&n?spanWD(st,n):'', cd=issue?0:(clientDaysOf(p,k)||0), a=f?(cd?addWorkDays(f,cd):f):'';
+    out[k]={s:st,n,f,a,cd,issue,wait:r.waits?'authority':r.land?'restart':''}; }
+  return out; }
+function cmBars(p,rows,pl){ const ds=rows.flatMap(r=>[pl[r.k]&&pl[r.k].s,pl[r.k]&&pl[r.k].a]).filter(Boolean).sort(); if(!ds.length) return null;
+  const t0=ds[0], t1=maxD(ds[ds.length-1],today()), span=Math.max(14,(new Date(t1)-new Date(t0))/864e5+5), X=d=>Math.max(0,((new Date(d)-new Date(t0))/864e5)/span*100), W=(a,b)=>Math.max(.8,X(addDays(b,1))-X(a));
+  const tx=X(today());
+  return h('div',{class:'pcm-bars','aria-label':'Phase timeline'},
+    rows.map(r=>{ const x=pl[r.k]||{}; return h('div',{class:'pcm-bar-row'},h('span',{class:'pcm-bar-n',text:'Phase '+phNo(r.k)}),
+      h('div',{class:'pcm-track'},x.s&&x.f?h('i',{class:'pcm-b',style:`left:${X(x.s)}%;width:${W(x.s,x.f)}%`,title:`SLATE ${fmtD(x.s)} → ${fmtD(x.f)}`}):null,
+        x.f&&x.a&&x.a>x.f?h('i',{class:'pcm-c',style:`left:${X(nextWD(x.f))}%;width:${W(nextWD(x.f),x.a)}%`,title:`Client review to about ${fmtD(x.a)}`}):null,
+        tx>0&&tx<100?h('i',{class:'pcm-today',style:`left:${tx}%`}):null)); }),
+    h('div',{class:'pcm-key'},h('span',{},h('i',{class:'pcm-b'}),'SLATE'),h('span',{},h('i',{class:'pcm-c'}),'Client review (shown only, never a deadline)'),h('span',{},h('i',{class:'pcm-today'}),'Today'))); }
+function openCm(pid){ const p=S.projects[pid]; if(!p) return; const q={...p,id:pid}, c=cmOf(q), v={};
+  cmRows(q).forEach(r=>{ const x=c&&c.ph&&c.ph[r.k]||{}; v[r.k]=x.n!=null?String(x.n):''; });
   S.sheet={type:'phCommit',id:pid,v,note:'',err:''}; renderSheet(); }
-function sheetPhCommit(){ const sh=S.sheet, p={...S.projects[sh.id],id:sh.id}; if(!S.projects[sh.id]) return [head('Project','Not found')];
+function sheetPhCommit(){ const sh=S.sheet; if(!S.projects[sh.id]) return [head('Project','Not found')]; const p={...S.projects[sh.id],id:sh.id};
   const c=cmOf(p), ap=amApprover()&&S.canWrite, lead=S.canWrite&&isProjLead(p), rows=cmRows(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
-  const review=ap&&c&&c.st==='sent';
-  const line=r=>{ const v=sh.v[r.k]||(sh.v[r.k]={}), std=slateDaysFor(p,r.k), name='Phase '+phLabel(r.k,p);
-    const over=v.n&&+v.n>std?Math.round((+v.n-std)/std*100):0;
-    return h('div',{class:'pcm-row'},h('div',{style:'min-width:0'},h('b',{text:name}),
-        h('div',{class:'f-hint',style:'margin:0',text:r.waits?'Waits for the authority go-ahead: give its working days':r.land?'Waits for the land share restart: give its working days':r.now?(r.start?`Started ${fmtD(r.start)} · `:'Under way · ')+'give the finish date (SLATE’s final submission)':'Starts after the phase before · give the working days SLATE needs'})),
-      r.now?h('input',{type:'date',min:r.start||today(),value:v.d||'','aria-label':'Finish date for '+name,onchange:e=>{ v.d=e.target.value; renderSheet(); }})
-        :h('div',{style:'display:flex;gap:6px;align-items:center'},h('input',{type:'number',min:'1',max:'200',inputmode:'numeric',style:'width:84px',value:v.n||'','aria-label':'Working days for '+name,oninput:e=>{ v.n=e.target.value; },onchange:()=>renderSheet()}),h('span',{class:'f-hint',style:'margin:0',text:'days'})),
-      h('div',{class:'f-hint pcm-std',style:'margin:0;'+(over>20?'color:var(--late)':''),text:r.now&&r.start&&v.d?`${wdBetween(addDays(r.start,-1),v.d)} working days · standard ${std}`:`standard ${std}`+(over?` · +${over}%`:'')})); };
-  const collect=()=>{ const ph={}; for(const r of rows){ const v=sh.v[r.k]||{}; if(r.now){ if(!v.d) return [null,`Give the finish date for phase ${phLabel(r.k,p)}.`]; if(r.start&&v.d<r.start) return [null,`Phase ${phLabel(r.k,p)} can’t finish before it started.`]; ph[r.k]={d:v.d}; }
-      else { const n=parseInt(v.n,10); if(!(n>=1&&n<=200)) return [null,`Give the working days for phase ${phLabel(r.k,p)}.`]; ph[r.k]={n}; } } return [ph,''] };
+  const review=ap&&c&&c.st==='sent', pl=cmPlan(p,sh.v);
+  const line=r=>{ const std=slateDaysFor(p,r.k), name=`${phNo(r.k)} ${phName(r.k,p)}`, x=pl[r.k]||{}, val=sh.v[r.k]||'', over=+val>std?Math.round((+val-std)/std*100):0;
+    return h('div',{class:'pcm-row'},
+      h('div',{style:'min-width:0'},h('b',{text:name}),h('div',{class:'f-hint',style:'margin:0',text:r.now?'Under way'+(r.start?` since ${fmtD(r.start)}`:` · counted from ${fmtD(cmFrom(p))}`):x.wait==='authority'?'Waits for the authority go-ahead':x.wait==='restart'?'Waits for the land share restart':(x.s?'Starts '+fmtD(x.s):'Starts after the phase before')})),
+      h('div',{class:'pcm-in'},h('input',{type:'number',min:'1',max:'200',inputmode:'numeric',value:val,'aria-label':'Working days for phase '+name,placeholder:String(std),oninput:e=>{ sh.v[r.k]=e.target.value; },onchange:()=>renderSheet()}),h('span',{text:'days'})),
+      h('div',{class:'pcm-dates'},h('span',{text:x.s?fmtD(x.s):'—'}),h('span',{class:'muted',text:'→'}),h('b',{text:x.f?fmtD(x.f):'—'})),
+      h('div',{class:'f-hint pcm-std',style:'margin:0;'+(over>20?'color:var(--late)':''),text:`standard ${std}`+(over?` · +${over}%`:'')+(x.f&&x.cd?` · client ~${x.cd} days`:'')})); };
+  const collect=()=>{ const ph={}; for(const r of rows){ const n=parseInt(sh.v[r.k],10); if(!(n>=1&&n<=200)) return [null,`Give the working days for phase ${phLabel(r.k,p)}.`]; ph[r.k]={n}; } return [ph,'']; };
   const send=()=>{ const [ph,err]=collect(); if(err){ sh.err=err; return renderSheet(); }
-    run(()=>S.db.doc('projects/'+p.id).update({std:{cm:{st:'sent',by:S.uid,at:new Date().toISOString(),note:'',ph,okBy:'',okAt:''}}}),'Phase dates sent to the COO').then(ok=>ok&&back()); };
+    run(()=>S.db.doc('projects/'+p.id).update({std:{cm:{st:'sent',by:S.uid,at:new Date().toISOString(),note:'',ph,okBy:'',okAt:''}}}),'Phase days sent to the COO').then(ok=>ok&&back()); };
   const approve=()=>{ const [ph,err]=collect(); if(err){ sh.err=err; return renderSheet(); }
     run(async()=>{ const now=new Date().toISOString();
       await S.db.doc('projects/'+p.id).update({std:{cm:{st:'ok',by:(c&&c.by)||S.uid,at:(c&&c.at)||now,note:'',ph,okBy:S.uid,okAt:now}}});
-      const np={...p,std:{...p.std,cm:{st:'ok',ph}}};
-      for(const r of rows){ const g=r.g; if(!g||g.doneAt) continue; const fin=r.now?ph[r.k].d:''; if(!fin) continue;
-        if(g.target!==fin) await taskUpdate(g.id,{target:fin,...(g.target?{}:{originalTarget:fin,revisions:0}),request:null},[{type:'scheduled',from:g.target||'',to:fin,note:'Phase dates approved'}]); }
-      await cmSweep(np,true); },'Phase dates approved').then(ok=>ok&&back()); };
+      for(const r of rows){ const g=r.g, x=pl[r.k]; if(!g||g.doneAt||!r.now||!x||!x.f) continue;
+        if(g.target!==x.f) await taskUpdate(g.id,{target:x.f,...(g.target?{}:{originalTarget:x.f,revisions:0}),request:null},[{type:'scheduled',from:g.target||'',to:x.f,note:`Phase days approved: ${ph[r.k].n} working days`}]); }
+      await cmSweep({...p,std:{...p.std,cm:{st:'ok',ph}}},true); },'Phase days approved').then(ok=>ok&&back()); };
   const ret=()=>{ const note=(sh.note||'').trim(); if(note.length<3){ sh.err='Say what to change.'; return renderSheet(); }
     run(()=>S.db.doc('projects/'+p.id).update({std:{cm:{st:'back',note,okBy:S.uid,okAt:new Date().toISOString()}}}),'Returned to the POD leader').then(ok=>ok&&back()); };
-  return [head(projLabel(p),review?'Review phase dates':'Phase dates'),
-    h('p',{class:'lead',style:'margin:0',text:review?`Sent by ${nameOf(c.by)} ${fmtD((c.at||'').slice(0,10))}. Change anything, then approve, or return it with a note. Approved dates are the commitment the POD is measured against.`:'Finish = SLATE’s final submission. Give a date for the phase under way and working days for each later phase; its finish is set when it starts. Client review days are not part of it.'}),
-    rows.length?h('div',{class:'pcm-list'},rows.map(line)):h('p',{class:'muted',text:'No open phases.'}),
-    review||ap?h('input',{maxlength:200,placeholder:'Note to the POD leader (needed to return it)',value:sh.note||'',oninput:e=>{ sh.note=e.target.value; }}):null,
+  const lastA=maxD(...rows.map(r=>pl[r.k]&&pl[r.k].a).filter(Boolean)), lastF=maxD(...rows.map(r=>pl[r.k]&&pl[r.k].f).filter(Boolean));
+  return [head(projLabel(p),review?'Review phase days':'Phase timeline'),
+    h('p',{class:'lead',style:'margin:0',text:review?`Sent by ${nameOf(c.by)} ${fmtD((c.at||'').slice(0,10))}. Change any days, then approve, or return it with a note.`:'Type SLATE’s working days for each phase. The dates follow: each phase starts after the one it waits for, and finishes on SLATE’s final submission. The client’s review is shown for planning only.'}),
+    c&&c.st==='back'&&c.note?h('div',{class:'callout',style:'font-size:13.5px',text:'COO: '+c.note}):null,
+    rows.length?h('div',{class:'pcm-list'},h('div',{class:'pcm-row pcm-head'},h('span',{text:'Phase'}),h('span',{text:'Working days'}),h('span',{text:'Start → finish'}),h('span',{})),rows.map(line)):h('p',{class:'muted',text:'No open phases.'}),
+    rows.length?h('div',{class:'f-hint',style:'margin:0',text:lastF?`SLATE’s last submission ${fmtD(lastF)}`+(lastA&&lastA!==lastF?` · client reviews to about ${fmtD(lastA)}`:''):'Type the days to see the dates.'}):null,
+    rows.length?cmBars(p,rows,pl):null,
+    review||(ap&&c)?h('input',{maxlength:200,placeholder:'Note to the POD leader (needed to return it)',value:sh.note||'',oninput:e=>{ sh.note=e.target.value; }}):null,
     sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
-    h('div',{class:'actions'},ap?h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!rows.length,onclick:approve,text:'Approve'}):lead?h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!rows.length,onclick:send,text:'Send to the COO'}):null,
-      review?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:ret,text:'Return'}):null,h('button',{class:'btn',type:'button',onclick:back,text:'Cancel'}))]; }
+    h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},ap?h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!rows.length,onclick:approve,text:'Approve'}):lead?h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!rows.length,onclick:send,text:'Send to the COO'}):null,
+      review?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:ret,text:'Return'}):null,h('button',{class:'btn',type:'button',onclick:back,text:'Close'}))]; }
 /* once a later phase starts, its finish date follows from the approved days (run by the Principal's or the COO's SLATE OS) */
 let cmSweepAt=0;
 async function cmSweep(one,force){ if(!amApprover()||!S.canWrite) return; if(!one&&!force&&Date.now()-cmSweepAt<120000) return; if(!one) cmSweepAt=Date.now();
@@ -8333,8 +8363,8 @@ function finAsk(p,k,g,pending){ if(!S.canWrite||!(amApprover()||isProjLead(p))) 
 /* the bell: POD leaders give the finish date of each phase that is running without one */
 function finNotifs(add){ try{ cmSweep(null,false); }catch(e){}
   for(const p of projects()){ if(!p||!p.std||p.closed||!askP(p)) continue; const c=cmOf(p), rows=cmRows(p); if(!rows.length) continue;
-    if(isProjLead(p)&&(!c||c.st==='back')) add({id:`cmask:${p.id}:${c?c.okAt:''}`,cat:'action',pending:true,at:(c&&c.okAt)||new Date(today()+'T03:00:00Z').toISOString(),title:`Give phase dates: ${projLabel(p)}`,body:c&&c.st==='back'?'Returned by the COO'+(c.note?': '+c.note:''):'Finish date for the phase under way, working days for each later phase. The COO approves.',projId:p.id});
-    if(amApprover()&&c&&c.st==='sent') add({id:`cmrev:${p.id}:${c.at}`,cat:'action',pending:true,at:c.at,title:`Review phase dates: ${projLabel(p)}`,body:`Sent by ${nameOf(c.by)}`,projId:p.id}); }
+    if(isProjLead(p)&&(!c||c.st==='back')) add({id:`cmask:${p.id}:${c?c.okAt:''}`,cat:'action',pending:true,at:(c&&c.okAt)||new Date(today()+'T03:00:00Z').toISOString(),title:`Give the phase days: ${projLabel(p)}`,body:c&&c.st==='back'?'Returned by the COO'+(c.note?': '+c.note:''):'Type SLATE’s working days for each phase on the phase timeline. The COO approves.',projId:p.id});
+    if(amApprover()&&c&&c.st==='sent') add({id:`cmrev:${p.id}:${c.at}`,cat:'action',pending:true,at:c.at,title:`Review phase days: ${projLabel(p)}`,body:`Sent by ${nameOf(c.by)}`,projId:p.id}); }
   return; for(const p of projects()){ if(!p||!p.std||p.closed||!isProjLead(p)||!askDates()) continue;
   for(const k of activePhases(p)){ const s=stdState(p,k); if(!s.created||s.done) continue; const issue=PH_ISSUE.includes(k)||!s.sub, g=issue?s.fin:s.sub;
     if(!g||g.doneAt||g.target||g.request||(!issue&&((p.std.sentAt||{})[k]))) continue;
@@ -9067,17 +9097,7 @@ function sheetStdPlan(){
   return [head(projLabel(p),'Start the project'),
     h('div',{class:'qs-step'},h('span',{class:'lbl',text:'1. When does the work start?'}),h('input',{id:'qs-start',type:'date',value:sh.start,class:'tl-num qs-in',style:'max-width:220px',oninput:e=>{ sh.start=e.target.value; },onchange:()=>renderSheet()}),h('span',{class:'f-hint',style:'margin:0',text:'Usually the work order or advance date.'})),
     h('div',{class:'qs-step'},h('span',{class:'lbl',text:'2. Who leads it?'}),(()=>{ ld.style.maxWidth='320px'; return ld; })()),
-    sh.start&&n?h('div',{class:'qs-step'},h('span',{class:'lbl',text:'3. Check the plan'}),
-      h('div',{class:'qs-sum'},h('div',{style:'display:grid;gap:2px'},h('b',{text:last?`Last gate ${fmtD(last)}`:'Dates follow later'}),h('span',{class:'f-hint',style:'margin:0',text:`${tp.name} · ${n} phase${n===1?'':'s'}`+(sh.pace&&sh.pace!=='std'?' · '+paceName({type:sh.tpl},sh.pace):'')+(custom?' · custom days':'')+(nDated<n&&nDated?` · ${n-nDated} dated later`:'')})),
-        preAny?null:h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ sh.dates=!sh.dates; renderSheet(); },text:sh.dates?'Hide the dates':'See or change the dates'}))):null,
-    sh.start&&n&&!preAny&&sh.dates?h('div',{class:'tbl-wrap',style:'background:#fff'},h('table',{class:'qs-tbl'},
-      h('thead',{},h('tr',{},h('th',{text:'Phase'}),h('th',{class:'n',text:'Our days'}),h('th',{class:'n',text:'Submitted'}),h('th',{class:'n',text:'Gate closes'}))),
-      h('tbody',{},rows.map(({k,f})=>h('tr',{},h('td',{text:`${phNo(k)} ${phName(k,q.np)}`}),h('td',{class:'n'},h('input',{type:'number',min:1,step:1,class:'qs-days'+(q.sd[k]?' set':''),'aria-label':'SLATE working days for '+phName(k,q.np),value:String(q.sd[k]||stdSlateDays(q.np,k)),onchange:e=>{ const v=Math.round(+e.target.value); sh.sd=sh.sd||{}; if(v>0&&v!==stdSlateDays(q.np,k)) sh.sd[k]=v; else delete sh.sd[k]; sh.fitTo=''; renderSheet(); }})),h('td',{class:'n',text:f.none?'—':f.sub?fmtD(f.sub):'—'}),f.none?h('td',{class:'n muted',style:'font-family:inherit;font-size:13px',text:f.auth?'after authority':'after WD-1'}):h('td',{class:'n',style:'font-weight:600',text:f.fin?fmtD(f.fin):'—'}))),
-        last?h('tr',{class:'qs-last'},h('td',{text:rows.some(r=>r.f.none)?'Last dated gate':'Last gate'}),h('td'),h('td'),h('td',{class:'n',text:fmtD(last)})):null))):null,
-    sh.start&&n&&!preAny&&sh.dates?h('div',{class:'qs-fit'},h('span',{class:'qs-k',text:'Finish by'}),h('input',{type:'date',class:'tl-num qs-in',min:sh.start,value:sh.fitTo||'',oninput:e=>{ sh.fitTo=e.target.value; }}),
-      h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ if(!sh.fitTo) return toast('Choose the finish date.'); const sd=qsFit(sh,{...p,id:sh.projectId},sh.fitTo); if(!sd){ sh.err='That date is too early even at a fifth of the standard days. Choose a later date or fewer phases.'; renderSheet(); return; } sh.err=''; sh.sd=sd; renderSheet(); toast('Our days fitted to finish by '+fmtD(sh.fitTo)); },text:'Fit the days'}),
-      Object.keys(q.sd).length?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ sh.sd={}; sh.fitTo=''; renderSheet(); },text:'Back to the standard'}):null,
-      h('span',{class:'f-hint',style:'margin:0;flex-basis:100%',text:Object.keys(q.sd).length?'Changed days are in bold. Client review days stay the same. Working drawings waiting for the authority go-ahead are not dated yet, so the finish date counts the dated phases.':'Type SLATE’s working days per phase, or give a finish date and fit the days to it. Client review days stay the same.'})):null,
+    sh.start&&n?h('div',{class:'qs-step'},h('span',{class:'lbl',text:'3. Phase days'}),h('span',{class:'f-hint',style:'margin:0',text:'Next, the phase timeline opens: type SLATE’s working days for each phase and see the dates. The COO approves them.'})):null,
     preAny?h('div',{class:'callout',style:'font-size:13.5px',text:'Some phases were finished before SLATE OS. After set-up the timeline opens so the start date and days can be checked.'}):null,
     h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:14px',onclick:()=>{ sh.more=!sh.more; renderSheet(); },text:sh.more?'Hide phases and pace ‹':'More options: phases and pace ›'}),
     sh.more?h('div',{style:'display:grid;gap:12px'},
@@ -9085,7 +9105,6 @@ function sheetStdPlan(){
         h('div',{class:'f-hint',text:(sh.pace==='fast'&&sh.tpl==='proposal'?PACE_NOTE.sprint:PACE_NOTE[sh.pace])+(canPace()?'':' Fast track is set by the Principal or the COO.')}))),
       phaseEditor(sh.m,{type:sh.tpl,idp:'sp',extra:pre}),
       sh.running?h('p',{class:'f-hint',style:'margin:0',text:`This project was already running. Tick each phase finished before SLATE OS went live (${fmtD(goLive())}).`}):null):null,
-    ap?null:h('div',{class:'f-hint',style:'margin:0',text:'The dates go to the COO for approval.'}),
     sh.err&&h('div',{class:'err',role:'alert',text:sh.err}),
     h('div',{class:'actions',style:'position:sticky;bottom:0;background:#fff;padding-block:12px'},
       h('button',{class:'btn btn-go',type:'button',disabled:S.busy||!n||!sh.start,onclick:createStdPlan,text:!n?'Choose at least one phase':!sh.start?'Give the start date':'Start the project'}),
@@ -9099,11 +9118,11 @@ function createStdPlan(){
   const preAny=Object.keys(sh.pre).length>0, ap=amApprover()||leadFree(pid), q=qsPlan(sh,{...p,id:pid}), ks=q.ks;
   const timed=!preAny&&!isInternalP(p)&&p.pod!=='Studio';
   run(async()=>{
-    const cl=await createGates(q.np,sh.tpl,ks,{lead:sh.lead,pod:sh.pod,pace:sh.pace,pre:sh.pre,...(timed?{dates:q.plan,ap}:{})});
-    const std={v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed:q.ed,...(Object.keys(q.sd||{}).length?{sd:q.sd}:{})};
+    const cl=await createGates(q.np,sh.tpl,ks,{lead:sh.lead,pod:sh.pod,pace:sh.pace,pre:sh.pre});
+    const std={v:1,dv:13,type:sh.tpl,phases:ks,lead:sh.lead,pace:sh.pace||'std',ed:q.ed,askDates:true};
     if(timed){ std.grace=q.grace; std.tl={start:sh.start,at:new Date().toISOString(),by:S.uid,take:TAKE_IN,base:tlPlanSnap(q.np,sh.start)}; }
     await S.db.doc('projects/'+pid).update({type:sh.tpl,std,cl});
-  },timed?(ap?'Project started: phases and dates set':'Project started: dates sent to the COO'):`${ks.length} phase${ks.length===1?'':'s'} set up`).then(ok=>{ if(!ok) return; if(preAny) openTl(pid); else { S.sheet={type:'projView',id:pid}; renderSheet(); } });
+  },'Project started: now type the phase days').then(ok=>{ if(!ok) return; openCm(pid); });
 }
 /* gate deliverables and checklist for the phases being added to a project */
 async function createGates(np,type,ks,o){
