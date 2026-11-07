@@ -1591,6 +1591,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
+.site-log{display:grid;gap:4px;margin-top:4px}
 .ph-se{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}.ph-se>div{display:grid;gap:0}.ph-se>div>span:first-child{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.ph-se>div>b{font-size:15px}.ph-se>div>span:last-child{font-size:12px;color:var(--muted)}.ph-se-arrow{color:var(--muted);font-size:18px}.ph-se-st{font-size:13px;font-weight:600;margin-left:auto}
 .dv{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:3px 0 2px;font-size:13px}.dv-f{display:inline-flex;gap:6px;align-items:center;min-width:0;max-width:100%}.dv-f .linkish{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}.dv-x{color:var(--muted)}.dv-up{color:var(--late);font-weight:500}.dv-btn{background:var(--group)}
 .cl-val{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13px;color:var(--ink);margin:3px 0 2px}.cl-val>span{min-width:0;overflow-wrap:anywhere}.cl-val-ed{display:grid;gap:6px;padding:8px 10px;background:var(--group);border-radius:10px}.cl-val-ed select,.cl-val-ed input:not([type=checkbox]){width:100%;box-sizing:border-box}.cl-trig{display:flex;flex-wrap:wrap;gap:6px 14px}.cl-trig label{display:flex;gap:6px;align-items:center;font-size:13.5px}
@@ -6557,6 +6558,7 @@ function buildNotifs(){
         body:l.text+(done?'':'\nTap to give one.'),...(done?{view:'worklog'}:{askFor:r.user_id})}); } }
   try{ dwNotifs(add); }catch(e){}
   try{ frNotifs(add); }catch(e){}
+  try{ siteNotifs(add); }catch(e){}
   return out.sort((a,b)=>b.at.localeCompare(a.at));
 }
 const nst=()=>S.nst||{};
@@ -13568,6 +13570,7 @@ function sheetProjView(){
   { const sb=subsSection(p); if(sb) out.push(sb); }
   { const ss=stdSection(p); if(ss) out.push(ss); }
   { const fl=frLogSection(p); if(fl) out.push(fl); }
+  if(!p.closed&&p.support&&p.support.status==='active'){ const sb=supBox(p); if(sb) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Construction support'})),sb)); }
   { const pl=pwProjLine(p); if(pl) out.push(pl); }
   { const dw=dwgSection(p); if(dw) out.push(dw); }
   { const ms=projLog(p); if(ms) out.push(ms); }
@@ -13867,60 +13870,88 @@ function stopAb(pid){ const p=S.projects[pid]; if(!p||!abOn({...p,id:pid})) retu
    Work under it: site visits (scheduled and on-call visits are both scored; on-call ones are recorded after the visit)
    and drawing corrections (counted, not scored). The project stays Completed throughout. */
 const SUP_PHASE='Construction support';
-const supOn=p=>!!p&&!!p.closed&&outcomeOf(p)==='completed'&&!!p.support&&p.support.status==='active';
+/* construction support can start once WD-1 is issued Good for Construction, while WD-2 and WD-3 are still drawn (Principal, 7 Nov 2026) */
+const wd1Done=p=>!!p&&!p.closed&&!!p.std&&stdPhases(p).includes('6')&&stdState(p,'6').done;
+const supStage=p=>!!p&&((!!p.closed&&outcomeOf(p)==='completed')||wd1Done(p));
+const supOn=p=>!!p&&supStage(p)&&!!p.support&&p.support.status==='active';
 const handedOver=p=>!!p&&!!p.support&&p.support.status==='handover';
-const supCan=p=>!!p&&S.canWrite&&outcomeOf(p)==='completed'&&!isInternalP(p)&&p.pod!=='Studio'&&(amApprover()||isProjLead(p));
+const supCan=p=>!!p&&S.canWrite&&supStage(p)&&!isInternalP(p)&&p.pod!=='Studio'&&(amApprover()||isProjLead(p));
+/* POD members of the project raise site requirements too; their target date goes for approval as usual */
+const supReqCan=p=>supOn(p)&&S.canWrite&&(amApprover()||isProjLead(p)||(inMyPodProject(p)&&canSeeProjectDetail(p)));
+const SITE_FROM=[['site','Site engineer'],['contractor','Contractor'],['client','Client'],['consultant','Consultant'],['other','Other']];
 const supTasks=pid=>Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.projectId===pid&&t.site&&!t.archived);
-const SITE_KIND={visit:'Site visit',oncall:'On-call site visit',correction:'Drawing correction'};
+const SITE_KIND={visit:'Site visit',oncall:'On-call site visit',correction:'Drawing correction',req:'Site requirement',billing:'Handover billing check'};
 const cooUid=()=>people().find(id=>isCOO(id)&&id!==ownerId())||'';
+/* the site log: every requirement, visit and correction with who raised it, dates, the answer and whether it was on time */
+function siteRows(p){ return supTasks(p.id).map(t=>{ const hs=t.history||[], made=(hs[0]&&hs[0].at||t.createdAt||'').slice(0,10), fin=hs.filter(e=>['done','completed','verified','submitted'].includes(e.type)).pop();
+    const on=t.doneAt?(t.doneAt.slice?t.doneAt.slice(0,10):t.doneAt):'', late=on&&t.target?wdBetween(t.target,on):0;
+    return {t,made,kind:SITE_KIND[t.site.type]||'Site task',from:t.site.from?lbOf(SITE_FROM,t.site.from):'',on,late,ans:(fin&&fin.note)||'',chg:!!t.site.chg}; })
+  .sort((a,b)=>(b.made||'').localeCompare(a.made||'')); }
+function siteLogText(p){ return [`${projLabel(p)} · Site log · ${fmtD(today())}`,...siteRows(p).map(r=>`${fmtD(r.made)} · ${r.kind}${r.from?' · raised by '+r.from:''} · ${r.t.title}\n   ${nameOf(r.t.assignee)} · target ${r.t.target?fmtD(r.t.target):'not approved yet'} · ${r.on?`done ${fmtD(r.on)}${r.late>0?` (${r.late} working day${r.late===1?'':'s'} late)`:''}`:'open'}${r.chg?' · CHARGEABLE':''}${r.ans?'\n   Answer: '+r.ans:''}`)].join('\n'); }
+function siteLog(p){ const rs=siteRows(p); if(!rs.length) return h('div',{class:'f-hint',style:'margin:0',text:'Nothing in the site log yet.'});
+  return h('div',{class:'site-log'},rs.map(r=>h('button',{type:'button',class:'card',style:'background:#fff;cursor:pointer;gap:2px;padding:8px 10px;text-align:left',onclick:()=>openTask(r.t.id)},
+      h('div',{style:'display:flex;justify-content:space-between;gap:8px'},h('b',{style:'font-weight:600;min-width:0;overflow-wrap:anywhere',text:r.t.title}),h('span',{class:'mono f-hint',style:'margin:0;white-space:nowrap',text:fmtD(r.made)})),
+      h('span',{class:'f-hint',style:'margin:0',text:[r.kind,r.from?'raised by '+r.from:'',nameOf(r.t.assignee),r.t.target?'target '+fmtD(r.t.target):r.t.proposed||r.t.request?'date waiting for approval':'',r.on?('done '+fmtD(r.on)+(r.late>0?` · ${r.late} working day${r.late===1?'':'s'} late`:' · on time')):'open'].filter(Boolean).join(' · ')}),
+      r.chg?h('span',{class:'tag',style:'justify-self:start;color:var(--late)',text:'Chargeable'}):null,
+      r.ans?h('span',{style:'font-size:13px',text:'Answer: '+r.ans}):null)),
+    h('button',{class:'btn btn-sm',type:'button',style:'justify-self:start;background:#fff',onclick:()=>{ try{ navigator.clipboard.writeText(siteLogText(p)).then(()=>toast('Site log copied'),()=>toast('Couldn’t copy on this device')); }catch(e){ toast('Couldn’t copy on this device'); } },text:'Copy the site log'})); }
+function siteNotifs(add){ if(!amApprover()) return; for(const p of projects()){ if(!p||!p.support) continue;
+  for(const t of supTasks(p.id)) if(t.site.type==='req'&&t.site.chg) add({id:`sitechg:${t.id}`,cat:'update',at:((t.history||[])[0]||{}).at||new Date().toISOString(),title:`Chargeable site requirement: ${projLabel(p)}`,body:t.title.replace(/^Site requirement · /,'')+(t.doneAt?' · done':''),projId:p.id}); } }
 function supBox(p){ const s=p.support; if(!s) return null;
   const ts=supTasks(p.id), next=ts.filter(t=>!t.doneAt&&t.site.type==='visit'&&t.target).sort((a,b)=>a.target.localeCompare(b.target))[0];
-  const visits=ts.filter(t=>t.site.type!=='correction'&&t.doneAt).length, corr=ts.filter(t=>t.site.type==='correction').length, openC=ts.filter(t=>t.site.type==='correction'&&!t.doneAt).length;
+  const visits=ts.filter(t=>['visit','oncall'].includes(t.site.type)&&t.doneAt).length, corr=ts.filter(t=>t.site.type==='correction').length, openC=ts.filter(t=>t.site.type==='correction'&&!t.doneAt).length, reqs=ts.filter(t=>t.site.type==='req'), openR=reqs.filter(t=>!t.doneAt).length, logOpen=!!(S.sheet&&S.sheet.siteLog);
   if(handedOver(p)) return h('div',{class:'callout',style:'margin-top:10px;box-shadow:inset 3px 0 0 var(--ontime)'},h('b',{text:`Building handed over ${s.handedOn?fmtD(s.handedOn):''}`}),
     h('span',{class:'f-hint',style:'margin:0',text:(s.from?`Construction support from ${fmtD(s.from)}. `:'')+`${visits} site visit${visits===1?'':'s'} and ${corr} drawing correction${corr===1?'':'s'} recorded.`+(s.handedBy?` Marked by ${nameOf(s.handedBy)}.`:'')}),
     s.handNote?h('p',{class:'quote',style:'margin:0',text:s.handNote}):null);
   return h('div',{class:'callout',style:'margin-top:10px'},h('b',{text:'Construction support · building under construction'}),
-    h('span',{class:'f-hint',style:'margin:0',text:`Since ${fmtD(s.from)} · ${visits} visit${visits===1?'':'s'} done · ${corr} correction${corr===1?'':'s'}${openC?` (${openC} open)`:''}`+(next?` · next visit ${fmtD(next.target)}`:' · no visit scheduled')}),
+    h('span',{class:'f-hint',style:'margin:0',text:`Since ${fmtD(s.from)} · ${reqs.length} site requirement${reqs.length===1?'':'s'}${openR?` (${openR} open)`:''} · ${visits} visit${visits===1?'':'s'} done · ${corr} correction${corr===1?'':'s'}${openC?` (${openC} open)`:''}`+(next?` · next visit ${fmtD(next.target)}`:' · no visit scheduled')}),
+    h('div',{class:'actions',style:'margin:0'},...(supReqCan(p)?[h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openSup(p.id,'req'),text:'+ Site requirement'})]:[]),h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>{ S.sheet.siteLog=!logOpen; renderSheet(); },text:logOpen?'Hide site log':`Site log · ${ts.length}`})),
+    logOpen?siteLog(p):null,
     s.note?h('p',{class:'quote',style:'margin:0',text:s.note}):null,
-    ts.length?h('div',{style:'display:grid;gap:4px;margin-top:4px'},ts.sort((a,b)=>(b.target||b.doneAt||'').localeCompare(a.target||a.doneAt||'')).slice(0,8).map(t=>
+    ts.length&&!logOpen?h('div',{style:'display:grid;gap:4px;margin-top:4px'},ts.sort((a,b)=>(b.target||b.doneAt||'').localeCompare(a.target||a.doneAt||'')).slice(0,8).map(t=>
       h('button',{type:'button',class:'card',style:'background:#fff;cursor:pointer;gap:2px;padding:8px 10px',onclick:()=>openTask(t.id)},
         h('div',{style:'display:flex;justify-content:space-between;gap:8px'},h('b',{style:'font-weight:600',text:t.title}),h('span',{class:'mono f-hint',style:'margin:0',text:fmtD(t.doneAt||t.target)})),
-        h('span',{class:'f-hint',style:'margin:0',text:SITE_KIND[t.site.type]+(t.assignee?' · '+nameOf(t.assignee):'')+(t.doneAt?' · done':'')})))):null); }
-function supActs(p){ if(!supCan(p)||handedOver(p)) return [];
-  if(!supOn(p)) return [h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'start'),text:'Construction support'}),h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'hand'),text:'Mark handed over'})];
-  return [h('button',{class:'btn btn-primary',type:'button',onclick:()=>openSup(p.id,'visit'),text:'Schedule site visit'}),
+        h('span',{class:'f-hint',style:'margin:0',text:(SITE_KIND[t.site.type]||'Site task')+(t.site.chg?' · chargeable':'')+(t.assignee?' · '+nameOf(t.assignee):'')+(t.doneAt?' · done':'')})))):null); }
+function supActs(p){ if(handedOver(p)) return []; if(!supCan(p)) return supReqCan(p)?[h('button',{class:'btn btn-primary',type:'button',onclick:()=>openSup(p.id,'req'),text:'Site requirement'})]:[];
+  const hand=p.closed?[h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'hand'),text:'Mark handed over'})]:[];
+  if(!supOn(p)) return [h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'start'),text:'Construction support'}),...hand];
+  return [h('button',{class:'btn btn-primary',type:'button',onclick:()=>openSup(p.id,'req'),text:'Site requirement'}),h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'visit'),text:'Schedule site visit'}),
     h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'oncall'),text:'Log on-call visit'}),
-    h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'correction'),text:'Drawing correction'}),
-    h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'hand'),text:'Mark handed over'})]; }
+    h('button',{class:'btn',type:'button',onclick:()=>openSup(p.id,'correction'),text:'Drawing correction'}),...hand]; }
 function openSup(pid,mode){ const p=S.projects[pid]; if(!p) return;
   const lead=(p.std&&p.std.lead)||personFor('lead',p.pod)||'';
-  S.sheet={type:'sup',id:pid,mode,err:'',d:{from:closedOn(p)||today(),on:mode==='oncall'?today():addDays(today(),7),who:lead,purpose:'',drawing:'',note:'',handedOn:today(),time:''}}; renderSheet(); }
+  S.sheet={type:'sup',id:pid,mode,err:'',d:{raised:'site',chg:false,...(mode==='req'&&!amApprover()&&!isProjLead(p)?{who:S.uid}:{}),from:closedOn(p)||today(),on:mode==='oncall'?today():addDays(today(),7),who:lead,purpose:'',drawing:'',note:'',handedOn:today(),time:'',...(mode==='req'&&!amApprover()&&!isProjLead(p)?{who:S.uid}:{})}}; renderSheet(); }
 function sheetSup(){
   const p=S.projects[S.sheet.id]?{...S.projects[S.sheet.id],id:S.sheet.id}:null; if(!p) return [head('Project','Not found')];
   const m=S.sheet.mode, d=D(), td=today(), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
   const who=()=>{ const x=h('select',{id:'sh-who',onchange:e=>{d.who=e.target.value}},memberOpts(d.who).map(([v,l])=>h('option',{value:v,text:l}))); x.value=d.who||''; return x; };
-  const T={start:'Start construction support',visit:'Schedule a site visit',oncall:'Log an on-call site visit',correction:'Drawing correction',hand:'Building handed over'}[m];
+  const T={start:'Start construction support',visit:'Schedule a site visit',oncall:'Log an on-call site visit',correction:'Drawing correction',req:'Site requirement',hand:'Building handed over'}[m];
   const intro={start:'SLATE’s scope is complete and the building is under construction. Site visits and drawing corrections can be recorded on this project until it’s handed over. The project stays Completed.',
     visit:'A planned visit, e.g. a slab casting or a monthly check. It counts like any task once its date is approved.',
     oncall:'A visit made when the site called. Record it after the visit; it counts in scores like a scheduled visit.',
     correction:'A change to issued drawings asked for by the site or the client. Counted, not scored.',
+    req:'Something the site needs from SLATE: a detail clarification, a material or sample approval, a shop drawing check, a decision on site. It gets a target date, is scored like any task, and goes into the site log. Write the answer when you finish it.',
     hand:'The developer or owner has handed the building over. Construction support ends and the project becomes a record.'}[m];
   const f=[];
   if(m==='start') f.push(field('Under construction since *',inp('from',{type:'date',max:td})),field('Note',ta('note',{rows:2,placeholder:'e.g. Contractor on site, piling done'})));
   if(m==='visit') f.push(h('div',{class:'form-row'},field('Visit date *',inp('on',{type:'date',min:td})),field('Time',timeSel('sh-time',D().time,v=>{D().time=v},true))),field('Who goes *',who()),field('Purpose *',inp('purpose',{placeholder:'e.g. Check slab reinforcement before casting, level 3'})));
   if(m==='oncall') f.push(field('Visit date *',inp('on',{type:'date',max:td})),field('Who went *',who()),field('Why the site called *',inp('purpose',{placeholder:'e.g. Column clash with a sewer line'})),field('What was decided',ta('note',{rows:2})));
   if(m==='correction') f.push(field('Drawing or sheet *',inp('drawing',{placeholder:'e.g. A-201 Level 4 plan'})),field('What changes and why *',inp('purpose',{placeholder:'e.g. Shift kitchen window; site request'})),h('div',{class:'form-row'},field('Due *',inp('on',{type:'date',min:td})),field('Who corrects it *',who())));
+  if(m==='req'){ const rs=h('select',{id:'sh-raised',onchange:e=>{ d.raised=e.target.value; }},SITE_FROM.map(([v,l])=>h('option',{value:v,text:l}))); rs.value=d.raised||'site';
+    f.push(h('div',{class:'form-row'},field('Raised by *',rs),field('Target date *',inp('on',{type:'date',min:td}))),field('What does the site need? *',inp('purpose',{maxlength:160,placeholder:'e.g. Lift lobby floor tile pattern detail, level 1'})),field('Who handles it *',who()),
+      h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-chg',checked:!!d.chg,onchange:e=>{ d.chg=e.target.checked; }}),h('span',{text:'Extra scope: outside the agreement, chargeable'})),
+      field('Note',ta('note',{rows:2,placeholder:'e.g. Asked by the site engineer on WhatsApp, photo in the group'}))); }
   if(m==='hand'){ f.push(field('Handed over on *',inp('handedOn',{type:'date',max:td})),field('Note',ta('note',{rows:2,placeholder:'e.g. Handed over to the owners’ association'})));
     const open=supTasks(p.id).filter(t=>!t.doneAt);
     f.push(h('div',{class:'card',style:'gap:4px;background:var(--group)'},h('b',{text:'What happens'}),h('span',{class:'f-hint',style:'margin:0',text:(open.length?`${open.length} open site task${open.length===1?' is':'s are'} dropped and not scored. `:'')+'The COO gets a task to check any as-built or handover payment in Finance.'}))); }
   return [head(projLabel(p),T),h('p',{class:'lead',style:'margin:0',text:intro}),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault();
         if(m==='start'&&!d.from) return fail('Give the date construction started.');
-        if(['visit','oncall','correction'].includes(m)){ if(!d.on) return fail('Give the date.'); if(!d.who) return fail('Choose who.'); if(!(d.purpose||'').trim()) return fail(m==='correction'?'Say what changes.':'Give the purpose.'); if(m==='correction'&&!(d.drawing||'').trim()) return fail('Name the drawing.'); }
+        if(['visit','oncall','correction','req'].includes(m)){ if(!d.on) return fail('Give the date.'); if(!d.who) return fail('Choose who.'); if(!(d.purpose||'').trim()) return fail(m==='correction'?'Say what changes.':'Give the purpose.'); if(m==='correction'&&!(d.drawing||'').trim()) return fail('Name the drawing.'); }
         if(m==='hand'&&!d.handedOn) return fail('Give the handover date.');
-        run(()=>doSup(p.id,m,d),{start:'Construction support started',visit:'Site visit scheduled',oncall:'Site visit recorded',correction:'Drawing correction added',hand:'Marked handed over'}[m]).then(ok=>{ if(ok) back(); }); }},
+        run(()=>doSup(p.id,m,d),{start:'Construction support started',visit:'Site visit scheduled',oncall:'Site visit recorded',correction:'Drawing correction added',req:'Site requirement added',hand:'Marked handed over'}[m]).then(ok=>{ if(ok) back(); }); }},
       f,S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
-      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:{start:'Start',visit:'Schedule visit',oncall:'Record visit',correction:'Add correction',hand:'Mark handed over'}[m]}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
+      h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:{start:'Start',visit:'Schedule visit',oncall:'Record visit',correction:'Add correction',req:'Add requirement',hand:'Mark handed over'}[m]}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
 }
 async function doSup(pid,m,d){
   const p=S.projects[pid], now=new Date().toISOString(), note=(d.note||'').trim(), s=p.support||{}, log=x=>[...(s.log||[]),{...x,at:now,by:S.uid}].slice(-40);
@@ -13932,10 +13963,11 @@ async function doSup(pid,m,d){
     if(coo&&canAssignTo(coo)) await createTask({projectId:pid,title:`Check as-built / handover billing in Finance · ${p.code||p.name}`,kind:'Task',assignee:coo,phase:SUP_PHASE,...(amApprover()?{target:addDays(today(),3)}:{proposed:addDays(today(),3)}),site:{type:'billing'},unscored:true,note:'Building handed over '+fmtD(d.handedOn)});
     return S.db.doc('projects/'+pid).update({support:{...s,status:'handover',from:s.from||closedOn(p)||d.handedOn,handedOn:d.handedOn,handedBy:S.uid,handNote:note,log:log({type:'handover',on:d.handedOn,note})}});
   }
-  const purpose=d.purpose.trim(), title=m==='correction'?`Correction · ${d.drawing.trim()} · ${purpose}`:`${m==='oncall'?'On-call visit':'Site visit'} · ${purpose}`;
+  const purpose=d.purpose.trim(), title=m==='correction'?`Correction · ${d.drawing.trim()} · ${purpose}`:m==='req'?`Site requirement · ${purpose}`:`${m==='oncall'?'On-call visit':'Site visit'} · ${purpose}`;
   // the Principal and COO set dates; a POD leader proposes them and the COO approves (as for every task)
   const when=amApprover()?{target:d.on}:{proposed:d.on};
-  const id=await createTask({projectId:pid,title,kind:'Task',assignee:d.who,phase:SUP_PHASE,...when,...(m==='visit'&&d.time?{time:d.time}:{}),site:{type:m,purpose,...(m==='correction'?{drawing:d.drawing.trim()}:{})},unscored:m==='correction',note});
+  const id=await createTask({projectId:pid,title,kind:'Task',assignee:d.who,phase:SUP_PHASE,...when,...(m==='visit'&&d.time?{time:d.time}:{}),site:{type:m,purpose,...(m==='correction'?{drawing:d.drawing.trim()}:{}),...(m==='req'?{from:d.raised||'site',chg:!!d.chg}:{})},unscored:m==='correction',note});
+  if(m==='req'&&(amApprover()||isProjLead(p))){ const s2=(S.projects[pid]||p).support||{}; await S.db.doc('projects/'+pid).update({support:{log:[...(s2.log||[]),{type:'req',on:today(),note:purpose+(d.chg?' (chargeable)':''),at:now,by:S.uid,task:id}].slice(-200)}}); }
   // an on-call visit is recorded as done; where verification is on it goes to the Principal or the COO like any finished work
   if(m==='oncall'){ const t=S.tasks[id]||{projectId:pid,kind:'Task',assignee:d.who,site:{type:'oncall'},unscored:true,history:[]};
     const r=await finishTask({...t,id},d.on,note||'Visit recorded after the call',{spawn:false});
