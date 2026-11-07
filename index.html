@@ -1591,6 +1591,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 .ps-row.late i{border-color:var(--overdue);background:var(--overdue)}.ps-row.late{color:var(--overdue);font-weight:600}
 .ps-row.later{color:var(--muted)}
 .fr-box{display:grid;gap:8px}.fr-list{margin:0;padding-left:22px;display:grid;gap:8px}.fr-list li{display:grid;gap:4px}.fr-t{font-size:14px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}.fr-list textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;resize:vertical}.fr-log{display:grid;gap:6px;padding:10px 12px;background:var(--group);border-radius:10px}
+.pcm-list{display:grid;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.pcm-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(120px,170px);gap:6px 12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}.pcm-row:first-child{border-top:0}.pcm-std{text-align:right}@media (max-width:640px){.pcm-row{grid-template-columns:minmax(0,1fr) auto}.pcm-std{grid-column:1/-1;text-align:left}}
 .ver-line{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;font-size:12.5px;color:var(--muted);padding:14px 4px 4px}#ver-bar{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));z-index:9999;display:flex;gap:12px;align-items:center;background:#111;color:#fff;padding:8px 10px 8px 16px;border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.2);font-size:14px;max-width:calc(100vw - 24px)}#ver-bar .btn{background:#fff;color:#111;border-color:#fff}
 .ph-cf{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;font-size:13px;padding:6px 10px;border-radius:8px;background:var(--group);border-left:3px solid #6b8fb0}.ph-cf b{font-weight:600}.ph-cf span{color:var(--muted)}.ph-cf.done{border-left-color:var(--ontime)}.ph-cf.later{opacity:.75}
 .site-log{display:grid;gap:4px;margin-top:4px}
@@ -7046,7 +7047,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='dwgSetup'?sheetDwgSetup():S.sheet.type==='dwgList'?sheetDwgList():S.sheet.type==='podWeek'?sheetPodWeek():S.sheet.type==='podWeekView'?sheetPodWeekView():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='dwgSetup'?sheetDwgSetup():S.sheet.type==='dwgList'?sheetDwgList():S.sheet.type==='podWeek'?sheetPodWeek():S.sheet.type==='podWeekView'?sheetPodWeekView():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='phCommit'?sheetPhCommit():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+((S.sheet.type==='propQuick'&&!S.sheet.done)||(S.sheet.type==='wlog'&&S.sheet.wide)||S.sheet.type==='dwgList'||S.sheet.type==='podWeek'||S.sheet.type==='podWeekView'?' panel-wide':'')+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   const dock=dockable(); document.body.classList.toggle('sheet-dock',dock);
@@ -8231,12 +8232,82 @@ function dwNotifs(add){ if(!DW.loaded) return; const td=today(), now=new Date().
    the submission where the client then approves (0, 1, 2, 3, 3R, 5), or the issue SLATE makes at the end (4 signed set handed over,
    6–8 GFC, 9 final print). The client's review is not SLATE time: it shows on its own line, "Client feedback · Phase n". */
 const PH_ISSUE=['4','6','7','8','9'];
+/* ---------- phase dates for running projects (Principal, 7 Nov 2026) ----------
+   Projects that were running when dates were reset carry std.askDates. Their POD leader gives all phases at once: a finish date
+   for each phase already started, working days for each later phase; the COO reviews, edits and approves. A phase's start is never
+   typed: it is the working day after the event it waits for. Once a later phase starts, its finish = start + the approved days.
+   New projects get their timeline at project setup, as before. std.cm = {st:'sent'|'ok'|'back', by, at, note, ph:{k:{d|n}}, okBy, okAt} */
+const askP=p=>!!(p&&p.std&&p.std.askDates);
+function phStartA(p,k){ const std=p.std||{}, ks=tlPhases(p).length?tlPhases(p):stdPhases(p); let dep; try{ dep=tlDep(p,k); }catch(e){ dep={prev:true}; }
+  if(dep.start) return std.tl&&std.tl.start?firstWD(std.tl.start):'';
+  if(dep.resume) return std.resume?firstWD(std.resume):'';
+  const rk=dep.prev?ks[ks.indexOf(k)-1]:dep.k, at=dep.prev?'fin':(dep.at||'fin'); if(!rk) return '';
+  const st=stdState(p,rk), t=at==='sub'?st.sub:st.fin;
+  const d=t&&t.doneAt&&!t.legacyNoDate?String(t.doneAt).slice(0,10):at==='sub'?((std.sentAt||{})[rk]||''):'';
+  if(!d) return ''; let s=nextWD(d);
+  if(k==='6'&&ks.includes('4')){ const go=std.wdGo&&std.wdGo.on; if(!go) return ''; const g=nextWD(go); if(s<g) s=g; }
+  return s; }
+const cmOf=p=>(p&&p.std&&p.std.cm)||null;
+const finGate=(p,k)=>{ const s=stdState(p,k); return (PH_ISSUE.includes(k)||!s.sub)?s.fin:s.sub; };
+/* the open phases a commitment covers, in order, with whether each is already under way (a date) or later (days) */
+function cmRows(p){ return (tlPhases(p).length?tlPhases(p):stdPhases(p)).filter(k=>PH[k]).map(k=>{ const s=stdState(p,k), g=finGate(p,k), st=phStartA(p,k);
+    const sent=!(PH_ISSUE.includes(k)||!s.sub)&&!!((p.std.sentAt||{})[k]);
+    return {k,s,g,start:st,now:!!st||activePhases(p).includes(k),started:!!st&&st<=addDays(today(),30),done:s.done||!!(g&&g.doneAt)||sent,waits:k==='6'&&wdWaiting(p),land:k==='3r'&&!(p.std&&p.std.resume)}; })
+  .filter(r=>r.s.created&&!r.done); }
+function cmFinish(p,k){ const c=cmOf(p), x=c&&c.ph&&c.ph[k]; if(!x) return ''; if(x.d) return x.d; const st=phStartA(p,k); return x.n&&st?spanWD(st,+x.n):''; }
+function cmCard(p){ if(!askP(p)) return null; const c=cmOf(p), lead=S.canWrite&&isProjLead(p), ap=S.canWrite&&amApprover(), rows=cmRows(p); if(!rows.length&&!c) return null;
+  const st=!c?['Phase dates not given yet','s-late']:c.st==='sent'?['Sent to the COO '+fmtD((c.at||'').slice(0,10)),'s-late']:c.st==='back'?['Returned by the COO','s-overdue']:['Approved by '+nameOf(c.okBy)+' '+fmtD((c.okAt||'').slice(0,10)),'s-ontime'];
+  const btn=ap&&c&&c.st==='sent'?['Review phase dates',true]:(lead||ap)&&(!c||c.st==='back')?['Give phase dates',true]:(lead||ap)?[c&&c.st==='ok'?'Change phase dates':'Edit',false]:null;
+  return h('div',{class:'callout',style:'display:grid;gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Phase dates'}),h('span',{class:'pill '+st[1],text:st[0]})),
+    h('div',{class:'f-hint',style:'margin:0',text:c&&c.st==='back'&&c.note?'COO: '+c.note:'The POD leader gives the finish date of the phase under way and the working days for each later phase; the COO approves. Start dates follow from what happens.'}),
+    btn?h('button',{class:'btn btn-sm'+(btn[1]?' btn-primary':''),type:'button',style:'justify-self:start',onclick:()=>openCm(p.id),text:btn[0]}):null); }
+function openCm(pid){ const p=S.projects[pid]; if(!p) return; const c=cmOf({...p,id:pid}), q={...p,id:pid}, v={};
+  cmRows(q).forEach(r=>{ const x=c&&c.ph&&c.ph[r.k]||{}; v[r.k]=r.now?{d:x.d||(r.g&&r.g.target)||''}:{n:x.n!=null?String(x.n):''}; });
+  S.sheet={type:'phCommit',id:pid,v,note:'',err:''}; renderSheet(); }
+function sheetPhCommit(){ const sh=S.sheet, p={...S.projects[sh.id],id:sh.id}; if(!S.projects[sh.id]) return [head('Project','Not found')];
+  const c=cmOf(p), ap=amApprover()&&S.canWrite, lead=S.canWrite&&isProjLead(p), rows=cmRows(p), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); };
+  const review=ap&&c&&c.st==='sent';
+  const line=r=>{ const v=sh.v[r.k]||(sh.v[r.k]={}), std=slateDaysFor(p,r.k), name='Phase '+phLabel(r.k,p);
+    const over=v.n&&+v.n>std?Math.round((+v.n-std)/std*100):0;
+    return h('div',{class:'pcm-row'},h('div',{style:'min-width:0'},h('b',{text:name}),
+        h('div',{class:'f-hint',style:'margin:0',text:r.waits?'Waits for the authority go-ahead: give its working days':r.land?'Waits for the land share restart: give its working days':r.now?(r.start?`Started ${fmtD(r.start)} · `:'Under way · ')+'give the finish date (SLATE’s final submission)':'Starts after the phase before · give the working days SLATE needs'})),
+      r.now?h('input',{type:'date',min:r.start||today(),value:v.d||'','aria-label':'Finish date for '+name,onchange:e=>{ v.d=e.target.value; renderSheet(); }})
+        :h('div',{style:'display:flex;gap:6px;align-items:center'},h('input',{type:'number',min:'1',max:'200',inputmode:'numeric',style:'width:84px',value:v.n||'','aria-label':'Working days for '+name,oninput:e=>{ v.n=e.target.value; },onchange:()=>renderSheet()}),h('span',{class:'f-hint',style:'margin:0',text:'days'})),
+      h('div',{class:'f-hint pcm-std',style:'margin:0;'+(over>20?'color:var(--late)':''),text:r.now&&r.start&&v.d?`${wdBetween(addDays(r.start,-1),v.d)} working days · standard ${std}`:`standard ${std}`+(over?` · +${over}%`:'')})); };
+  const collect=()=>{ const ph={}; for(const r of rows){ const v=sh.v[r.k]||{}; if(r.now){ if(!v.d) return [null,`Give the finish date for phase ${phLabel(r.k,p)}.`]; if(r.start&&v.d<r.start) return [null,`Phase ${phLabel(r.k,p)} can’t finish before it started.`]; ph[r.k]={d:v.d}; }
+      else { const n=parseInt(v.n,10); if(!(n>=1&&n<=200)) return [null,`Give the working days for phase ${phLabel(r.k,p)}.`]; ph[r.k]={n}; } } return [ph,''] };
+  const send=()=>{ const [ph,err]=collect(); if(err){ sh.err=err; return renderSheet(); }
+    run(()=>S.db.doc('projects/'+p.id).update({std:{cm:{st:'sent',by:S.uid,at:new Date().toISOString(),note:'',ph,okBy:'',okAt:''}}}),'Phase dates sent to the COO').then(ok=>ok&&back()); };
+  const approve=()=>{ const [ph,err]=collect(); if(err){ sh.err=err; return renderSheet(); }
+    run(async()=>{ const now=new Date().toISOString();
+      await S.db.doc('projects/'+p.id).update({std:{cm:{st:'ok',by:(c&&c.by)||S.uid,at:(c&&c.at)||now,note:'',ph,okBy:S.uid,okAt:now}}});
+      const np={...p,std:{...p.std,cm:{st:'ok',ph}}};
+      for(const r of rows){ const g=r.g; if(!g||g.doneAt) continue; const fin=r.now?ph[r.k].d:''; if(!fin) continue;
+        if(g.target!==fin) await taskUpdate(g.id,{target:fin,...(g.target?{}:{originalTarget:fin,revisions:0}),request:null},[{type:'scheduled',from:g.target||'',to:fin,note:'Phase dates approved'}]); }
+      await cmSweep(np,true); },'Phase dates approved').then(ok=>ok&&back()); };
+  const ret=()=>{ const note=(sh.note||'').trim(); if(note.length<3){ sh.err='Say what to change.'; return renderSheet(); }
+    run(()=>S.db.doc('projects/'+p.id).update({std:{cm:{st:'back',note,okBy:S.uid,okAt:new Date().toISOString()}}}),'Returned to the POD leader').then(ok=>ok&&back()); };
+  return [head(projLabel(p),review?'Review phase dates':'Phase dates'),
+    h('p',{class:'lead',style:'margin:0',text:review?`Sent by ${nameOf(c.by)} ${fmtD((c.at||'').slice(0,10))}. Change anything, then approve, or return it with a note. Approved dates are the commitment the POD is measured against.`:'Finish = SLATE’s final submission. Give a date for the phase under way and working days for each later phase; its finish is set when it starts. Client review days are not part of it.'}),
+    rows.length?h('div',{class:'pcm-list'},rows.map(line)):h('p',{class:'muted',text:'No open phases.'}),
+    review||ap?h('input',{maxlength:200,placeholder:'Note to the POD leader (needed to return it)',value:sh.note||'',oninput:e=>{ sh.note=e.target.value; }}):null,
+    sh.err?h('div',{class:'err',role:'alert',text:sh.err}):null,
+    h('div',{class:'actions'},ap?h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!rows.length,onclick:approve,text:'Approve'}):lead?h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!rows.length,onclick:send,text:'Send to the COO'}):null,
+      review?h('button',{class:'btn',type:'button',disabled:S.busy,onclick:ret,text:'Return'}):null,h('button',{class:'btn',type:'button',onclick:back,text:'Cancel'}))]; }
+/* once a later phase starts, its finish date follows from the approved days (run by the Principal's or the COO's SLATE OS) */
+let cmSweepAt=0;
+async function cmSweep(one,force){ if(!amApprover()||!S.canWrite) return; if(!one&&!force&&Date.now()-cmSweepAt<120000) return; if(!one) cmSweepAt=Date.now();
+  for(const p of one?[one]:projects()){ if(!p||!askP(p)||p.closed) continue; const c=cmOf(p); if(!c||c.st!=='ok') continue;
+    for(const r of cmRows(p)){ const x=c.ph&&c.ph[r.k]; if(!x||!x.n||!r.start||r.start>today()||!r.g||r.g.target||r.g.doneAt) continue; const fin=spanWD(r.start,+x.n);
+      try{ await taskUpdate(r.g.id,{target:fin,originalTarget:fin,revisions:0,request:null},[{type:'scheduled',to:fin,note:`Phase started ${fmtD(r.start)}: ${x.n} approved working days`}]); }catch(e){} } } }
+
 function phSE(p,k,s,live){ const f=live&&live[k]&&!live[k].none?live[k]:null, td=today(), issue=PH_ISSUE.includes(k)||!s.sub;
   const ks0=stdPhases(p), pk=ks0[ks0.indexOf(k)-1], pf=pk?stdState(p,pk).fin:null, pfd=pf&&pf.doneAt&&!pf.legacyNoDate?pf.doneAt.slice(0,10):'';
   const g=issue?s.fin:s.sub, sentAt=!issue?'':(((p.std||{}).sentAt||{})[k]||'');
-  const ask=askDates(), req=g&&!g.target&&g.request&&g.request.date||'';
-  const start=ask?(pfd?nextWD(pfd):''):f?f.s:pfd?nextWD(pfd):'';
-  const end=(g&&g.target)||(ask?'':f?(issue?f.fin:f.sub):'');
+  const ask=askP(p), req=g&&!g.target&&g.request&&g.request.date||'';
+  const start=ask?phStartA(p,k):f?f.s:pfd?nextWD(pfd):'';
+  const cmF=ask&&!(g&&g.target)?cmFinish(p,k):'', cmX=ask&&cmOf(p)&&cmOf(p).ph&&cmOf(p).ph[k];
+  const end=(g&&g.target)||cmF||(ask?'':f?(issue?f.fin:f.sub):'');
   const endA=g&&g.doneAt&&!g.legacyNoDate?String(g.doneAt).slice(0,10):(!issue&&!s.sub?'':(((p.std||{}).sentAt||{})[k]||''));
   const doneS=issue?s.done:!!(g&&g.doneAt)||!!(((p.std||{}).sentAt||{})[k]);
   const started=doneS||(s.created&&activePhases(p).includes(k)&&!!start&&start<=td);
@@ -8246,9 +8317,9 @@ function phSE(p,k,s,live){ const f=live&&live[k]&&!live[k].none?live[k]:null, td
   else if(end&&started) st=[`${Math.max(0,wdBetween(td,end))} working day${wdBetween(td,end)===1?'':'s'} to finish`,'var(--muted)'];
   const d=(lbl,v,sub)=>h('div',{},h('span',{text:lbl}),h('b',{text:v?fmtD(v):'—'}),sub?h('span',{style:'font-weight:500',text:sub}):null);
   const top=h('div',{class:'ph-se'},d('Start',start,doneS?'':started?'started':start&&start>td?'planned':''),h('span',{class:'ph-se-arrow','aria-hidden':'true',text:'→'}),
-    d('Finish',doneS?(endA||end):(end||req),doneS?(g&&g.legacy?'before SLATE OS':issue?'issued':'submitted'):end?(issue?'final issue':'final submission'):req?'proposed · COO to approve':'not given yet'),
+    d('Finish',doneS?(endA||end):(end||req),doneS?(g&&g.legacy?'before SLATE OS':issue?'issued':'submitted'):end?(cmF&&cmOf(p).st!=='ok'?'proposed · COO to approve':issue?'final issue':'final submission'):cmX&&cmX.n?`${cmX.n} working days from the start`+(cmOf(p).st!=='ok'?' · proposed':''):req?'proposed · COO to approve':'not given yet'),
     st[0]?h('span',{class:'ph-se-st',style:`color:${st[1]}`,text:st[0]}):null);
-  return [top,!doneS&&ask&&g&&!g.target?finAsk(p,k,g,!!req):null,phClientLine(p,k,s,f,issue,doneS,endA)]; }
+  return [top,phClientLine(p,k,s,f,issue,doneS,endA)]; }
 /* the POD leader gives the phase's finish date; the Principal or the COO sets it directly, a POD leader's goes to the COO */
 function finAsk(p,k,g,pending){ if(!S.canWrite||!(amApprover()||isProjLead(p))) return pending?null:h('div',{class:'f-hint',style:'margin:0',text:'The POD leader gives this phase’s finish date.'});
   const A=S.sheet.finA||(S.sheet.finA={}), v=A[k]!=null?A[k]:(g.request&&g.request.date)||'', ap=amApprover();
@@ -8260,7 +8331,11 @@ function finAsk(p,k,g,pending){ if(!S.canWrite||!(amApprover()||isProjLead(p))) 
     h('input',{type:'date',min:today(),value:v,'aria-label':'Finish date',onchange:e=>{ A[k]=e.target.value; }}),
     h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:save,text:ap?'Set finish date':pending?'Send again':'Send to the COO'})); }
 /* the bell: POD leaders give the finish date of each phase that is running without one */
-function finNotifs(add){ for(const p of projects()){ if(!p||!p.std||p.closed||!isProjLead(p)||!askDates()) continue;
+function finNotifs(add){ try{ cmSweep(null,false); }catch(e){}
+  for(const p of projects()){ if(!p||!p.std||p.closed||!askP(p)) continue; const c=cmOf(p), rows=cmRows(p); if(!rows.length) continue;
+    if(isProjLead(p)&&(!c||c.st==='back')) add({id:`cmask:${p.id}:${c?c.okAt:''}`,cat:'action',pending:true,at:(c&&c.okAt)||new Date(today()+'T03:00:00Z').toISOString(),title:`Give phase dates: ${projLabel(p)}`,body:c&&c.st==='back'?'Returned by the COO'+(c.note?': '+c.note:''):'Finish date for the phase under way, working days for each later phase. The COO approves.',projId:p.id});
+    if(amApprover()&&c&&c.st==='sent') add({id:`cmrev:${p.id}:${c.at}`,cat:'action',pending:true,at:c.at,title:`Review phase dates: ${projLabel(p)}`,body:`Sent by ${nameOf(c.by)}`,projId:p.id}); }
+  return; for(const p of projects()){ if(!p||!p.std||p.closed||!isProjLead(p)||!askDates()) continue;
   for(const k of activePhases(p)){ const s=stdState(p,k); if(!s.created||s.done) continue; const issue=PH_ISSUE.includes(k)||!s.sub, g=issue?s.fin:s.sub;
     if(!g||g.doneAt||g.target||g.request||(!issue&&((p.std.sentAt||{})[k]))) continue;
     add({id:`finask:${p.id}:${k}`,cat:'action',pending:true,at:new Date(today()+'T03:00:00Z').toISOString(),title:`Give the finish date: ${projLabel(p)} · Phase ${phLabel(k,p)}`,body:'When will SLATE make its final submission for this phase? The COO approves it.',projId:p.id}); } } }
@@ -8293,7 +8368,7 @@ function stdSection(p){
   const dt=(lbl,t,extra)=>{ let v='—',sub=''; if(t){ if(t.legacy){ v=t.legacyNoDate?'Before go-live':fmtD(t.doneAt); sub=t.legacyOk?'before SLATE OS':'before SLATE OS · COO to approve'; } else if(t.doneAt){ v=fmtD(t.doneAt); sub=status(t)==='early'?'done early':status(t)==='late'?'done late':'done on time'; } else if(t.target){ v=fmtD(t.target); sub=status(t)==='overdue'?'overdue':'target'; } else if(t.request){ v=fmtD(t.request.date); sub='proposed'; } else sub='no date yet'; }
     return h('div',{},h('span',{text:lbl}),extra||h('b',{style:t&&!t.doneAt&&status(t)==='overdue'?'color:var(--overdue)':'',text:v}),!extra&&sub?h('span',{style:'font-weight:500',text:sub}):null); };
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Phases and gates'}),h('span',{class:'cnt',text:`${closed}/${ks.length} gates closed`})),
-    paceRow(p),prioRow(p),tlSection(p),
+    paceRow(p),prioRow(p),cmCard(p),tlSection(p),
     h('div',{class:'list',style:'overflow:clip'},ks.map(k=>{ const s=stdState(p,k), c=clCount(p,k), isOpen=open===k, fb=((p.std&&p.std.fb)||{})[k]||'', fbGot=((p.std&&p.std.fbGot)||{})[k]||'';
       const stat=s.done?h('span',{class:'pill s-ontime',text:'Gate closed'}):!s.created?h('span',{class:'pill s-open',text:'Not set up'}):act.includes(k)?h('span',{class:'pill s-late',text:'In progress'}):h('span',{class:'pill s-open',text:'Not started'});
       const fbEl=fbEdit&&!s.done?h('input',{id:'fb-'+k,type:'date',value:fb,style:'background:var(--group);padding:4px 6px;font-size:13px','aria-label':'Client feedback due',onchange:e=>run(()=>S.db.doc('projects/'+p.id).update({std:{fb:{[k]:e.target.value||''}}}),'Client feedback date saved')}):h('b',{text:fb?fmtD(fb):'—'});
@@ -8539,7 +8614,7 @@ const wdWaiting=p=>!!p&&!!p.std&&stdPhases(p).includes('4')&&stdPhases(p).includ
 /* record the go-ahead and re-date the open working-drawing gates from it */
 async function wdGoSave(p,on,early){ const go={on,by:S.uid,at:new Date().toISOString(),...(early?{early:true}:{})};
   await S.db.doc('projects/'+p.id).update({std:{wdGo:go}});
-  const np={...p,std:{...p.std,wdGo:go}}; if(!tlOf(np)||askDates()) return; const pl=tlCompute(np,tlOf(np).start,true);
+  const np={...p,std:{...p.std,wdGo:go}}; if(!tlOf(np)||askP(np)) return; const pl=tlCompute(np,tlOf(np).start,true);
   for(const k of ['6','7','8'].filter(k=>tlPhases(np).includes(k))){ const f=pl[k], st=stdState(np,k); if(!f||f.none) continue;
     for(const [g,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(g&&!g.doneAt&&date&&g.target!==date) await taskUpdate(g.id,{target:date,...(g.target?{}:{originalTarget:date})},[{type:'scheduled',from:g.target||'',to:date,note:early?'Working drawings started before authority approval (COO)':'Working drawings started: client go-ahead after authority approval'}]); } }
 function wdGoBox(p){ if(!wdWaiting(p)||!S.canWrite) return null; const can=amApprover()||isProjLead(p), coo=S.isOwner||isCOO(S.uid); if(!can) return null;
@@ -8659,7 +8734,7 @@ async function saveTlAdj(pid,d){ const p={...S.projects[pid],id:pid}, ks=tlPhase
           const sd={}, cd={}, kd={}; ks.forEach(k=>{ const a=+d.sd[k], b=+d.cd[k]; sd[k]=a!==stdSlateDays(q,k)?a:''; cd[k]=b!==stdClientDays(q,k)?b:''; if(kwOf(k)){ const c=+d.kd[k]; kd[k]=c!==kwOf(k)[1]?c:''; } });
           const base={}; Object.values(live.plan).forEach(x=>{ if(!x.none) base[x.k]={s:x.s,sub:x.sub,due:x.due,fin:x.fin,sd:x.sd,cd:x.cd,...(x.kd?{kd:x.kd,share:x.share,kDue:x.kDue}:{})}; });
           await S.db.doc('projects/'+p.id).update({std:{dv:13,sd,cd,kd,...(amApprover()||leadFree(pid)?{tlReq:null}:{}),tl:{start:t.start||d.from,from:d.from,take:+(t.take??TAKE_IN),base,adj:{by:S.uid,at:now},prev:[...(t.prev||[]),...(t.base?[{base:t.base,at:t.at||'',by:t.by||''}]:[])]}}});
-          if(!askDates()) for(const k of ks){ const f=live.plan[k], s=stdState(q,k); if(!f||f.none||s.done||d.close[k]) continue;
+          if(!askP(q)) for(const k of ks){ const f=live.plan[k], s=stdState(q,k); if(!f||f.none||s.done||d.close[k]) continue;
             for(const [g,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!g||g.doneAt||!date||g.target===date) continue;
               await taskUpdate(g.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:'Timeline set to where the project stands'}]); } }
 }
@@ -8914,12 +8989,12 @@ function sheetTl(){
           else upd.std.tl={take:+d.take||0};
           await S.db.doc('projects/'+p.id).update(upd);
           /* days changed on a timeline already set: the open gates from the first changed phase on move to the new dates (Principal or COO) */
-          if(had&&ap&&!askDates()){ const ch=ks.findIndex(k=>(+d.sd[k]||0)!==slateDaysFor(p,k)||(+d.cd[k]||0)!==clientDaysOf(p,k)||(kwOf(k)&&d.kd[k]!==''&&d.kd[k]!=null&&+d.kd[k]!==consultDaysOf(p,k)));
+          if(had&&ap&&!askP(p)){ const ch=ks.findIndex(k=>(+d.sd[k]||0)!==slateDaysFor(p,k)||(+d.cd[k]||0)!==clientDaysOf(p,k)||(kwOf(k)&&d.kd[k]!==''&&d.kd[k]!=null&&+d.kd[k]!==consultDaysOf(p,k)));
             if(ch>=0){ const np={...p,std:{...p.std,...upd.std,tl:{...p.std.tl,take:+d.take||0}}}, lv=tlCompute(np,tlOf(p).start,true);
               for(const k of ks.slice(ch)){ const f=lv[k], st=stdState(p,k); if(!f||f.none) continue;
                 for(const [t,date] of [[st.sub,f.sub],[st.fin,f.fin]]) if(t&&!t.doneAt&&date&&t.target!==date) await taskUpdate(t.id,{target:date,request:null},[{type:'target',from:t.target||'',to:date,note:'Phase days changed on the timeline'}]); } } }
           const resumed=had&&d.resume&&d.resume!==((p.std&&p.std.resume)||'');
-          if(((!had&&d.gates)||resumed)&&!askDates()){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
+          if(((!had&&d.gates)||resumed)&&!askP(p)){ for(const k of ks){ const f=plan[k]; if(!f||f.none) continue; const s=stdState(p,k);
             for(const [t,date] of [[s.sub,f.sub],[s.fin,f.fin]]){ if(!t||t.doneAt||t.target||t.request) continue;
               if(ap) await taskUpdate(t.id,{target:date,originalTarget:date,revisions:0,request:null},[{type:'scheduled',to:date,note:resumed?'Land share resumed':'From the project timeline'}]);
               else await taskUpdate(t.id,{request:{date,reason:'From the project timeline',by:S.uid,at:new Date().toISOString(),initial:true}},[{type:'proposed',to:date,note:'From the project timeline'}]); } } }
@@ -9036,7 +9111,7 @@ async function createGates(np,type,ks,o){
   for(const k of ks){
     for(const [step,txt] of stepsFor(np,type,k)){ const pr=pre[k];
       if(pr){ const dt=pr[step]||(step==='sub'?pr.final:pr.sub)||''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},legacy:true,doneAt:dt||preLive(),legacyNoDate:!dt,target:dt||preLive()}); }
-      else { const f=askDates()?null:o.dates&&o.dates[k], dt=f&&!f.none?(step==='sub'?f.sub:f.fin)||'':''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},...(dt?(o.ap?{target:dt}:{proposed:dt}):{})}); } }
+      else { const f=askP(np)?null:o.dates&&o.dates[k], dt=f&&!f.none?(step==='sub'?f.sub:f.fin)||'':''; await createTask({projectId:pid,title:txt,kind:'Deliverable',assignee:o.lead,phase:phLabel(k,np),gate:{k,step},...(dt?(o.ap?{target:dt}:{proposed:dt}):{})}); } }
     const m={}, pr=pre[k]; clItems(k).forEach(it=>{ if((it.only&&it.only!==type)||(it.not&&it.not.includes(type))){ m[it.id]={na:true}; return; } if(pr){ m[it.id]={done:pr.final||pr.sub||preLive(),legacy:true}; return; } if(o.pace==='fast'&&type==='proposal'&&SPRINT_NA.includes(it.id)){ m[it.id]={na:true,sp:true}; return; } const r0=(it.r||'')[0], who=r0==='L'?o.lead:r0==='J'?jr:''; if(who&&!isPriv(who)&&!isCOO(who)) m[it.id]={who}; });
     cl[k]=m; }
   return cl;
