@@ -2879,6 +2879,13 @@ function openBooks(){
 addEventListener('resize',()=>{ if(S.books){ placeBooks(); booksSide(); } });
 /* Business and Books PIN: ask when they are open and locked; keep them open while in use; reload what they show */
 { const ml=document.querySelector('.mini-logo'), lg=document.querySelector('.top-in .logo'); if(ml&&lg) ml.style.backgroundImage='url("'+lg.src+'")'; }
+/* Business figures load in the background as soon as Business is open on this device (PIN entered, or no PIN needed),
+   so Overview, Money and People value are usually ready before they are tapped (9 Nov 2026) */
+function bizPrefetch(){
+  if(S._bizPre||S.state!=='ready'||!(canProps()&&canView())||!window.SlatePin||!SlatePin.known()||!SlatePin.unlocked()) return;
+  S._bizPre=true;
+  const go=()=>{ try{ if(finOn()) loadFeeFin(); loadMoney(); if(S.uid===ownerId()||revKind()==='principal') pvLoadBooks(); }catch(e){} };
+  if(window.requestIdleCallback) requestIdleCallback(go,{timeout:4000}); else setTimeout(go,1500); }
 function pinGate(){
   if(!window.SlatePin||S.pinAsking) return;
   if(!SlatePin.known()){ SlatePin.status().then(()=>{ if(!SlatePin.unlocked()) pinGate(); }); return; }
@@ -2886,10 +2893,10 @@ function pinGate(){
   S.pinAsking=true;
   SlatePin.ensure().then(ok=>{ S.pinAsking=false; if(!ok){ S.books=false; if(S.view==='biz') S.view=S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'; render(true); window.scrollTo(0,0); } });
 }
-function pinReload(){ S.feeFin=null; try{ if(window.slateReload) window.slateReload(); }catch(e){}
+function pinReload(){ S.feeFin=null; S.money=null; S.pvBooks=null; S._bizPre=false; try{ if(window.slateReload) window.slateReload(); }catch(e){}
   try{ const f=document.querySelector('#books-pane iframe'); if(f&&f.contentWindow&&f.contentWindow.BooksHost&&f.contentWindow.BooksHost.refresh) f.contentWindow.BooksHost.refresh(); }catch(e){} }
 if(window.SlatePin){
-  SlatePin.onUnlock(()=>{ pinReload(); render(true); });
+  SlatePin.onUnlock(()=>{ pinReload(); render(true); bizPrefetch(); });
   SlatePin.onLock(()=>{ pinReload(); if(S.view==='biz'||S.books) pinGate(); else render(true); });
   const act=()=>{ if(S.view==='biz'||S.books) SlatePin.activity(); };
   ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>addEventListener(ev,act,{passive:true}));
@@ -3091,27 +3098,54 @@ function secInfo(root){ if(!root) return; root.querySelectorAll('.sec-h > h2').f
   const d=document.createElement('div'); d.className='f-hint sec-desc'; d.textContent=t; hd.after(d); hd.dataset.info=t; }); }
 let secInfoQ=0; const secInfoSoon=()=>{ if(secInfoQ) return; secInfoQ=requestAnimationFrame(()=>{ secInfoQ=0; secInfo(document.getElementById('view')); secInfo(document.getElementById('sheet')); try{ fitDesk(); }catch(e){} }); };
 (()=>{ const go=()=>{ try{ const mo=new MutationObserver(secInfoSoon); ['view','sheet'].forEach(id=>{ const el=document.getElementById(id); el&&mo.observe(el,{childList:true,subtree:true}); }); secInfoSoon(); }catch(e){} }; if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',go); else go(); })();
+/* ---------- speed on phones (9 Nov 2026) ----------
+   A tab tap only changes which screen shows. It lights the tapped tab at once and builds the screen just after (tabGo),
+   and nothing in the data has changed, so: the counts in the header are reused, and a screen opened in the last minute
+   is put back as it was instead of being built again (VC). Any other redraw (new data, a filter, a save) starts a new
+   round (S._nv) and every kept screen is dropped. */
+let NAVR=false;
+const VC=new Map(), VC_MS=60000;
+function vcKey(){ if(S.state!=='ready') return ''; let g=''; try{ g=(wlGated()?'w':'')+(pwGated()?'p':''); }catch(e){ return ''; }
+  return S.view+(S.view==='biz'&&S.biz?':'+S.biz.tab:'')+(g?'#'+g:''); }
+function vcStash(view,key){ if(!key||view.classList.contains('dash-in')||!view.childNodes.length) return;
+  VC.delete(key); VC.set(key,{nodes:[...view.childNodes],v:+view.dataset.vv,at:+view.dataset.vat,y:window.scrollY});
+  while(VC.size>10) VC.delete(VC.keys().next().value); }
+{ let w0=innerWidth; addEventListener('resize',()=>{ if(innerWidth!==w0){ w0=innerWidth; VC.clear(); } }); }   /* turned the phone or resized the window: screens are laid out again */
+function vcTake(key){ const e=VC.get(key); VC.delete(key); return e&&e.v===(S._nv||0)&&Date.now()-e.at<VC_MS?e:null; }
+function tabMark(b){ const t=b&&b.parentElement; if(!t) return; t.querySelectorAll('[aria-current="page"]').forEach(x=>x.removeAttribute('aria-current')); b.setAttribute('aria-current','page'); }
+function tabGo(){ cancelAnimationFrame(S._navR); clearTimeout(S._navT);
+  S._navR=requestAnimationFrame(()=>{ S._navT=setTimeout(()=>{ NAVR=true; try{ render(true); }finally{ NAVR=false; } window.scrollTo(0,0); },0); }); }
+const PERF=[];
 function render(force){
-  nbBump(); applyStd();
+  const nav=NAVR&&S.state==='ready', t0=performance.now(); let kept=false;
+  if(!nav) nbBump(); applyStd();
   const view=$('#view');
   if(!force&&isTyping(view)){ S.pendingRender=true; return; }
   const k=keepFocus(view);
   renderHeader();
   try{ renderFloatBell(); }catch(e){}
   view.className='wrap'+(S.state==='ready'&&['dash','board','gantt','all','projects','team','cal','risk','drafting','worklog'].includes(S.view)?' wide':'');
-  view.replaceChildren(...[].concat(buildView())); secInfo(view);
+  { const vk=nav?vcKey():'', old=view.dataset.vk||'';
+    if(nav&&old&&old!==vk) vcStash(view,old);
+    const hit=nav&&vk&&old!==vk?vcTake(vk):null;
+    if(hit){ view.replaceChildren(...hit.nodes); view.dataset.vv=String(hit.v); view.dataset.vat=String(hit.at); kept=true; }
+    else if(nav&&vk&&old===vk&&+view.dataset.vv===(S._nv||0)&&Date.now()-(+view.dataset.vat||0)<VC_MS) kept=true;   /* same screen again, nothing changed */
+    else { if(!nav) VC.clear(); view.replaceChildren(...[].concat(buildView())); view.dataset.vv=String(S._nv||0); view.dataset.vat=String(Date.now()); }
+    view.dataset.vk=nav?vk:(S.state==='ready'?vcKey():''); }
+  secInfo(view);
   view.classList.toggle('wrap-desk',S.view==='mine'&&!!view.querySelector('.desk'));
   try{ if(window.slateAfterRender) window.slateAfterRender(); }catch(e){}  /* Messages, banners: placed once, in order */
   try{ daySplash(); }catch(e){}
   try{ if(S.view==='mine') checkinArm(); }catch(e){}
   restoreFocus(k);
   dashCount(view);
+  if(S.state==='ready'){ PERF.push({v:S.view+(S.view==='biz'&&S.biz?':'+S.biz.tab:''),ms:Math.round(performance.now()-t0),kept}); if(PERF.length>60) PERF.shift(); }
 }
 /* Dashboard: on opening it (or changing period, scope, pod or person) every figure counts up from 0,
    bars sweep in and the status ring turns in, together, once. A refresh mid-way carries on. */
 const DASH_MS=750;
 function dashCount(view){
-  if(S.view!=='dash'||S.state!=='ready'||motionOff()){ S.dashAnim=null; view.classList.remove('dash-in'); return; }
+  if(S.view!=='dash'||S.state!=='ready'||motionOff()||innerWidth<1100){ S.dashAnim=null; view.classList.remove('dash-in'); return; }
   const D=S.dash||{}, key=JSON.stringify([D.kind,D.offset,D.scope,D.pod,D.person]);
   if(!S.dashAnim||S.dashAnim.key!==key) S.dashAnim={key,at:performance.now()};
   const el=performance.now()-S.dashAnim.at; if(el>=DASH_MS){ view.classList.remove('dash-in'); return; }
@@ -3157,12 +3191,13 @@ function renderHeader(){
   S.badgeSeen=S.badgeSeen||{}; for(const [k,,n] of list){ const was=S.badgeSeen[k]; if(was!==undefined&&(n||0)>was) fxMark('badge:'+k,'pulse'); S.badgeSeen[k]=n||0; }
   requestAnimationFrame(()=>{ const a=tabs.querySelector('[aria-current="page"]'); if(a&&tabs.scrollWidth>tabs.clientWidth) a.scrollIntoView({block:'nearest',inline:'center'}); });
   const sw=spaces?h('div',{class:'space-sw',role:'group','aria-label':'Space'},[['studio','Studio'],['biz','Business',propList().filter(propDue).length],['books','Books']].map(([k,l,n])=>h('button',{type:'button',class:'space-b'+((k==='books'?!!S.books:(!S.books&&(k==='biz')===inBiz))?' on':''),'aria-pressed':String(k==='books'?!!S.books:(!S.books&&(k==='biz')===inBiz)),
-      onclick:async()=>{ if(k!=='studio'&&window.SlatePin&&!(await SlatePin.ensure())) return; if(k==='books'){ openBooks(); return; } if(S.books){ S.books=false; if((k==='biz')===inBiz){ render(true); window.scrollTo(0,0); return; } } if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; render(true); window.scrollTo(0,0); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
+      onclick:async()=>{ if(k!=='studio'&&window.SlatePin&&!(await SlatePin.ensure())) return; if(k==='books'){ openBooks(); return; } if(S.books){ S.books=false; if((k==='biz')===inBiz){ render(true); window.scrollTo(0,0); return; } } if((k==='biz')===inBiz) return; S.view=k==='biz'?'biz':(S.lastStudio&&S.lastStudio!=='biz'?S.lastStudio:'mine'); tabs.scrollLeft=0; tabGo(); }},l,n&&k==='biz'&&!inBiz?h('span',{class:'badge',text:String(n)}):null))):null;
   /* the switch stays put at the left edge whichever space is open; the tabs scroll beside it */
   /* the switch sits in the top-right corner; Business tints the top bar so it is clear which space is open */
   /* the lock sits in the switch in every space (so the switch never changes size): open padlock while Business and Books are
      unlocked on this device (tap to lock), closed when locked (tap to enter the PIN) */
   if(sw&&window.SlatePin&&!SlatePin.known()&&!S.pinAsked){ S.pinAsked=true; SlatePin.status().then(()=>render(true),()=>{}); }
+  if(sw&&!S._bizPre) bizPrefetch();
   if(sw&&window.SlatePin&&SlatePin.required()){ const open=SlatePin.unlocked();
     sw.append(h('button',{type:'button',class:'space-b space-lock'+(open?' is-open':''),'aria-label':open?'Lock Business and Books':'Business and Books are locked. Enter your PIN',title:open?'Business and Books are open on this device. Tap to lock.':'Business and Books are locked. Tap to enter your PIN.',
       onclick:()=>{ if(!open){ SlatePin.ensure().then(ok=>{ if(ok) render(true); }); return; }
@@ -3173,10 +3208,10 @@ function renderHeader(){
   const dock=null;
   if(inBiz){ S.biz=S.biz||{tab:'over',q:'',st:'active'}; const due=propList().filter(propDue), nl=due.filter(isLead).length, np=due.length-nl;
     const bt=[['over','Overview'],['money','Money'],['fu','Follow-ups',due.length],['leads','Leads',nl],['proposed','Proposals',np],['clients','Clients'],['fees','Fees'],['hr','HR & salaries'],['admin','Running costs'],['tl','Timelines',tlPageRows().filter(p=>cmSugOpen(p)||(cmOf(p)&&cmOf(p).st==='sent')).length],...((S.uid===ownerId()||revKind()==='principal')?[['value','People value']]:[])];
-    tabs.replaceChildren(...bt.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':'biz-'+k,'aria-current':S.biz.tab===k?'page':null,onclick:()=>{ S.biz.tab=k; render(true); window.scrollTo(0,0); }},svgEl('svg',{viewBox:'0 0 24 24',class:'tab-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[BIZ_ICO[k]]||HX_ICO.circle})),l,n?h('span',{class:'badge',text:String(n)}):null)),
+    tabs.replaceChildren(...bt.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':'biz-'+k,'aria-current':S.biz.tab===k?'page':null,onclick:e=>{ S.biz.tab=k; tabMark(e.currentTarget); tabGo(); }},svgEl('svg',{viewBox:'0 0 24 24',class:'tab-ic',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:HX_ICO[BIZ_ICO[k]]||HX_ICO.circle})),l,n?h('span',{class:'badge',text:String(n)}):null)),
       ...(FIN_UI&&window.slateFinanceRole?[h('a',{class:'tab',href:'/finance',target:'_blank',rel:'noopener',style:'text-decoration:none'},'Finance ↗')]:[]));
   } else
-  tabs.replaceChildren(...(dock?[dock]:[]),...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:()=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; render(true); window.scrollTo(0,0); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
+  tabs.replaceChildren(...(dock?[dock]:[]),...list.map(([k,l,n])=>h('button',{class:'tab',type:'button','data-k':k,'aria-current':cur(k)?'page':null,onclick:e=>{ if(k==='acct') return window.slateAccount&&window.slateAccount(); S.view=k==='all'?(pref.taskView||'all'):k; tabMark(e.currentTarget); tabGo(); }},tabIco(k),l,n?h('span',fxA('badge:'+k,['pulse'],{class:'badge',text:String(n)})):null)));
   try{ sideBuild(tabs,!!inBiz); gsearchMount(); gbackMount(); }catch(e){ console.warn('sidebar',e); }
   try{ document.body.dataset.view=S.view; const fh=document.getElementById('far-host'); if(fh) fh.hidden=S.view!=='far'||!!(S.state!=='ready')||!!(S.far&&S.far.tab==='dash'&&canSeeScoring()); }catch(e){}
   const fab=$('#fab'), fm=S.view==='mine'?fabItems():[]; if(S.view!=='mine') fabClose();
@@ -3358,12 +3393,18 @@ async function appReload(){ try{ const r=await navigator.serviceWorker?.getRegis
   location.reload(); }
 async function verCheck(force){ if(!force&&Date.now()-verAt<60000) return; verAt=Date.now();
   try{ const t=await (await fetch('/sw.js',{cache:'no-store'})).text(), m=t.match(/slate-os-v(\d+)/); verLive=m?+m[1]:0; }catch(e){ return; }
-  verBar(); if(S&&S.view==='more') render(false); }
+  verBar(); if(S&&S.view==='more'){ const v=document.querySelector('#view .ver-line'); if(v) v.replaceWith(verLine()); } }   /* only the version line changes: kept screens stay */
 function verBar(){ const newer=appVerN()&&verLive>appVerN(); let b=document.getElementById('ver-bar');
   if(!newer){ if(b) b.remove(); return; }
   if(!b){ b=document.createElement('div'); b.id='ver-bar'; b.setAttribute('role','status');
     b.innerHTML='<span></span><button type="button" class="btn btn-primary btn-sm">Reload</button>'; b.querySelector('button').onclick=()=>appReload(); document.body.appendChild(b); }
   b.querySelector('span').textContent=`SLATE OS has been updated to ${verName(verLive)}. Reload to get it.`; }
+/* the Principal sees how long screens take on the device in hand: the latest time per screen, built or put back */
+function perfLine(){ if(!(S.uid===ownerId()||revKind()==='principal')||!PERF.length) return null;
+  const last=new Map(); PERF.forEach(x=>last.set(x.v+(x.kept?' (kept)':''),x.ms));
+  const name=v=>({mine:'Home',queue:'Approvals',all:'Tasks',board:'Board',gantt:'Timeline',projects:'Projects',cal:'Calendar',meet:'Meetings',team:'Team',dash:'Dashboard',more:'More'})[v]||(v.startsWith('biz:')?'Business '+(({over:'Overview',money:'Money',fu:'Follow-ups',leads:'Leads',proposed:'Proposals',clients:'Clients',fees:'Fees',hr:'HR',admin:'Running costs',tl:'Timelines',value:'People value'})[v.slice(4)]||v.slice(4)):v);
+  const xs=[...last].slice(-12).map(([v,ms])=>`${name(v.replace(' (kept)',''))}${v.endsWith(' (kept)')?' (kept)':''} ${ms} ms`);
+  return h('div',{class:'f-hint',style:'margin:2px 4px 0',text:'Screen speed on this device (only you see this): '+xs.join(' · ')}); }
 function verLine(){ verCheck(false); const n=appVerN(), at=/^\d{4}-/.test(APP_AT)?new Date(APP_AT):null;
   const when=at&&!isNaN(at)?at.toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}):'';
   const newer=n&&verLive>n;
@@ -3389,7 +3430,7 @@ function viewMore(){
     ...grp('Admin',canSeeScoring()?item('risk','Risk and grace',(()=>{ try{ const r=riskScanC(), n=r.grace.length+r.risk.length+r.deem.length+r.shift.length; return n?`${n} decision${n===1?'':'s'} waiting · workload, grace and projects at risk`:'Workload, grace used and every project at risk'; }catch(_){ return 'Workload, grace used and every project at risk'; } })()):null,amApprover()?item('holidays','Holidays','Public holidays and office closures: no timeline counts them as working days'):null,amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null,
       S.isOwner&&!window.slateReview&&window.slateReviewView?item('review','Review logins','Read-only Principal and COO views for an outside reviewer · only you'):null),
-    h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'}))),verLine()];
+    h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'}))),verLine(),perfLine()];
 }
 
 /* ---------- completion verification ----------
@@ -8246,8 +8287,16 @@ function phaseSection(p){
 /* ---------- SLATE standard phases on a project: gates, three dates, checklists ---------- */
 const stdPhases=p=>(p&&p.std&&p.std.phases)||[];
 const planLabel=p=>{ const tp=p&&p.type&&T()[p.type]; return tp&&tp.std?(p.std?'Add phases':'Set up phases'):'Add standard tasks'; };
-function gateTasks(pid){ return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.projectId===pid&&!t.archived&&t.gate); }
-function stdState(p,k){ const ts=gateTasks(p.id).filter(t=>t.gate.k===k); const sub=ts.find(t=>t.gate.step==='sub'), fin=ts.find(t=>t.gate.step==='final'); return {sub,fin,created:ts.length>0,done:!!(fin&&fin.doneAt)}; }
+/* Gate tasks by project, worked out once per data change (9 Nov 2026): the bell, Home and the project pages asked for them
+   hundreds of times per screen, each time copying every task, which was most of the wait on every tap on a phone.
+   Rebuilt whenever the task list is replaced or any screen update starts (S._nv). */
+let _gtKey=null, _gtNv=-1, _gtIdx=new Map(), _gsMemo=new Map();
+function gtIndex(){ if(_gtKey===S.tasks&&_gtNv===(S._nv||0)) return _gtIdx;
+  const m=new Map(); for(const [id,t] of Object.entries(S.tasks)){ if(!t||t.archived||!t.gate||!t.projectId) continue; const x={...t,id}; let a=m.get(t.projectId); if(!a) m.set(t.projectId,a=[]); a.push(x); }
+  _gtIdx=m; _gtKey=S.tasks; _gtNv=S._nv||0; _gsMemo=new Map(); return m; }
+function gateTasks(pid){ const a=gtIndex().get(pid); return a?a.slice():[]; }
+function stdState(p,k){ gtIndex(); const mk=p.id+'|'+k; const hit=_gsMemo.get(mk); if(hit) return hit;
+  const ts=gateTasks(p.id).filter(t=>t.gate.k===k); const sub=ts.find(t=>t.gate.step==='sub'), fin=ts.find(t=>t.gate.step==='final'); const r={sub,fin,created:ts.length>0,done:!!(fin&&fin.doneAt)}; _gsMemo.set(mk,r); return r; }
 const clRaw=(p,k,id)=>(((p&&p.cl)||{})[k]||{})[id]||{};
 /* Version 1.03 merged items: until the merged item is written once (m:1), its state comes from all its parts (looked up in the same
    phase, else wherever the old item sat): done when every part is done or N/A, N/A when all are, and the files of all of them */
@@ -13571,21 +13620,31 @@ const costVar=(fr,c)=>{ const a=costActual(fr,c); return +c.budget>0&&a>0?(+c.bu
 const visitsUsed=pid=>supTasks(pid).filter(t=>t.doneAt&&t.site&&['visit','oncall'].includes(t.site.type)).length;
 const finPType=p=>/comm/i.test(p.building||'')?'Commercial':/mix/i.test(p.building||'')?'Mixed use':'Residential';
 const finId=()=>{ const A='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; return Array.from(crypto.getRandomValues(new Uint8Array(20)),x=>A[x%A.length]).join(''); };
+/* Business figures (9 Nov 2026): the four reads go out together instead of one after another, and once figures are here
+   a refresh happens behind them (the screen keeps showing the last figures, never "Loading…" again). Kept in memory only:
+   nothing financial is saved on the device, so the PIN still guards it. */
 async function loadFeeFin(force){
   const F=S.feeFin||(S.feeFin={state:'idle'});
-  if(F.state==='loading'||(!force&&F.state==='ok'&&Date.now()-F.at<60000)) return;
-  F.state='loading';
-  try{ const sb=window.slateSupabase; if(!sb) throw new Error('Not signed in');
-    const {data,error}=await sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts','workorders','wopays','staff','recurring','expenses','accounts']);
-    if(error) throw error;
+  if(F.busy){ if(!force) return F.busy; try{ await F.busy; }catch(e){} }      /* a load after a save waits for the one running, then reads again */
+  else if(!force&&F.state==='ok'&&Date.now()-F.at<60000) return;
+  if(F.busy) return F.busy;
+  if(F.state!=='ok') F.state='loading';
+  F.busy=(async()=>{ try{ const sb=window.slateSupabase; if(!sb) throw new Error('Not signed in');
+    const [main,pr,bm,rc]=await Promise.all([
+      sb.from('fin_docs').select('coll,doc_id,data').in('coll',['projects','invoices','receipts','workorders','wopays','staff','recurring','expenses','accounts']),
+      Promise.resolve(sb.rpc('fin_private_people')).catch(()=>null),
+      /* money received and invoiced per project comes from Books (m_books_status.sql) */
+      Promise.resolve(sb.rpc('biz_books_money')).catch(()=>null),
+      /* running costs live in Books (Business › Running costs sets them up; Books › Monthly entries confirms each month) */
+      loadRunCosts(sb)]);
+    const {data,error}=main; if(error) throw error;
     const fp={},inv=[],rec=[],wo=[],wp=[],staff=[],exp=[],accts=[]; let rec2=[]; (data||[]).forEach(r=>{ const d={...(r.data||{}),id:r.doc_id}; if(r.coll==='projects') fp[r.doc_id]=d; else if(r.coll==='invoices') inv.push(d); else if(r.coll==='receipts') rec.push(d); else if(r.coll==='workorders') wo.push(d); else if(r.coll==='staff') staff.push(d); else if(r.coll==='recurring') {} else if(r.coll==='expenses'){ if(d.recurringId) exp.push(d); } else if(r.coll==='accounts') accts.push(d); else wp.push(d); });
-    let priv=[]; try{ const pr=await sb.rpc('fin_private_people'); if(!pr.error&&Array.isArray(pr.data)) priv=pr.data; }catch(e){}
-    /* money received and invoiced per project comes from Books (m_books_status.sql) */
-    let bk={}, bkOk=false; try{ const r=await sb.rpc('biz_books_money'); if(!r.error&&r.data){ bk=r.data; bkOk=true; } }catch(e){}
-    /* running costs live in Books (Business › Running costs sets them up; Books › Monthly entries confirms each month) */
-    const rc=await loadRunCosts(sb); rec2=rc.costs;
+    const priv=pr&&!pr.error&&Array.isArray(pr.data)?pr.data:[];
+    let bk={}, bkOk=false; if(bm&&!bm.error&&bm.data){ bk=bm.data; bkOk=true; }
+    rec2=rc.costs;
     Object.assign(F,{state:'ok',fp,inv,rec,wo,wp,staff,priv,rec2,exp,accts,bk,bkOk,rc,at:Date.now(),err:''});
-  }catch(e){ F.state='err'; F.err=(e&&e.message)||String(e); }
+  }catch(e){ if(F.state!=='ok'){ F.state='err'; F.err=(e&&e.message)||String(e); } } })();
+  try{ await F.busy; }finally{ F.busy=null; }
   if(S.view==='biz') render(true); if(S.sheet&&['fee','sal','rec'].includes(S.sheet.type)) renderSheet(); }
 /* the Finance record for an OS project: linked by osId, else by the same code */
 function feeRecOf(p){ const F=S.feeFin; if(!F||F.state!=='ok') return null; const all=Object.values(F.fp);
@@ -13960,8 +14019,8 @@ const MONEY_COL={inc:'var(--ontime)',oinc:'#5AC8FA',staff:'#AF52DE',pc:'var(--la
 const fyOfD=d=>{ const y=+d.slice(0,4), s=+d.slice(5,7)>=7?y:y-1; return {key:'fy'+s,label:'FY '+String(s%100).padStart(2,'0')+'-'+String((s+1)%100).padStart(2,'0'),from:s+'-07-01',to:(s+1)+'-06-30'}; };
 function loadMoney(force){
   const M=S.money||(S.money={state:'idle'});
-  if(!force&&(M.state==='loading'||(M.state==='ok'&&Date.now()-M.at<120000))) return M;
-  M.state='loading';
+  if(M.busy||(!force&&M.state==='loading')||(!force&&M.state==='ok'&&Date.now()-M.at<120000)) return M;
+  if(M.state!=='ok') M.state='loading'; M.busy=true;   /* with figures already here, the refresh happens behind them */
   (async()=>{ try{ const rows=[];
       for(let i=0;;i+=1000){ const {data,error}=await window.slateSupabase.from('books_docs').select('coll,doc_id,data').in('coll',['ledgers','vouchers','projects']).order('path').range(i,i+999);
         if(error) throw error; rows.push(...(data||[])); if(!data||data.length<1000) break; }
@@ -13970,7 +14029,8 @@ function loadMoney(force){
         else if(Array.isArray(d.lines)&&/^\d{4}-\d{2}-\d{2}$/.test(d.date||'')){ const st=d.status||''; if(!st||['approved','tally','checked'].includes(st)) V.push(d); else if(['pending','returned'].includes(st)) wait++; } });
       V.sort((a,b)=>a.date.localeCompare(b.date));
       Object.assign(M,{state:'ok',L,V,P,wait,at:Date.now(),err:''});
-    }catch(e){ Object.assign(M,{state:'err',err:e.message||String(e)}); }
+    }catch(e){ if(M.state!=='ok') Object.assign(M,{state:'err',err:e.message||String(e)}); }
+    M.busy=false;
     if(S.view==='biz'&&S.biz&&S.biz.tab==='money') render(true); })();
   return M; }
 function moneyCalc(M,from,to){
@@ -15237,7 +15297,7 @@ function navApply(L,snap){
       else S.sheet=null;
       renderSheet();
     }
-    if(L.v&&S.view!==L.v){ S.view=L.v; render(true); scrollY=snap?snap.y||0:0; }
+    if(L.v&&S.view!==L.v){ S.view=L.v; NAVR=true; try{ render(true); }finally{ NAVR=false; } scrollY=snap?snap.y||0:0; }
   }catch(e){ console.warn('SLATE OS back:',e); }
   NAV.applying=false;
   if(scrollY!==null) requestAnimationFrame(()=>window.scrollTo(0,scrollY));
