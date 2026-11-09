@@ -615,7 +615,7 @@
   }
   const adoptTone = p => p >= 85 ? '#34C759' : p >= 60 ? '#FF9500' : '#FF3B30';
   /* Home: my own adoption, one line, for two weeks around go-live */
-  const ADOPT_HOME_UNTIL = '2026-11-10';
+  const ADOPT_HOME_UNTIL = '2026-11-08';   /* replaced on Home by the person's own score (9 Nov 2026) */
   const MY_AD = { row: null, at: 0, loading: false };
   async function loadMyAdoption(force) {
     if (MY_AD.loading || (!force && MY_AD.at && Date.now() - MY_AD.at < 120000)) return;
