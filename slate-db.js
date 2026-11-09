@@ -355,7 +355,7 @@
   const displayName = p => (p && (p.label || p.full_name || (p.email || '').split('@')[0])) || 'Team member';
   const user = {
     async me() {
-      return me ? { id: me.id, name: displayName(me), email: me.email, isOwner: me.designation === 'principal' && me.active }
+      return me ? { id: me.id, name: displayName(me), email: me.email, isOwner: me.designation === 'principal' && (me.active || !!(review && review.live && review.kind === 'principal')) }
                 : { id: authUser ? authUser.id : null, name: authUser && authUser.email, isOwner: false };
     },
     async can(what) { return what === 'data.write' ? !!(me && me.active) && !review : true; },

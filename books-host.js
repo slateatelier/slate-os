@@ -204,7 +204,7 @@ const downloads = {
 /* ---------- spaces: Studio · Business · Books (Principal and COO) ---------- */
 function spaceSwitch() {
   if (EMBED) return null;
-  if (!(ROLE === 'Principal' || (ME && PEOPLE[ME.id] && PEOPLE[ME.id].designation === 'coo'))) return null;
+  if (!(ROLE === 'Principal' || (ME && PEOPLE[ME.id] && PEOPLE[ME.id].designation === 'coo') || (REVIEW && REVIEW.live && ROLE === 'COO'))) return null;
   const el = document.createElement('div'); el.className = 'space-sw'; el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Space');
   [['Studio', '/'], ['Business', '/?space=biz'], ['Books', null]].forEach(([l, href]) => {
     const b = document.createElement(href ? 'a' : 'span'); b.className = 'space-b' + (href ? '' : ' on'); b.textContent = l;
