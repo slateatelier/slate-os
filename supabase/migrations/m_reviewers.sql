@@ -189,7 +189,7 @@ begin
   if not private.review_admin() then raise exception 'Only the Principal manages review logins.'; end if;
   update private.reviewers set until = u, off_at = null where kind = p_kind returning id into rid;
   if rid is null then raise exception 'That review login was not found.'; end if;
-  update auth.users set banned_until = u where id = rid;
+  update auth.users set banned_until = null where id = rid;  -- open = not banned; private.review_expire() bans it when the window ends
   insert into public.activity_log (actor, table_name, row_id, action, subject_user, is_private, after)
   values (auth.uid(), 'account', rid::text, 'review_open', rid, true, jsonb_build_object('view', p_kind, 'until', u));
   return jsonb_build_object('until', u);
@@ -228,12 +228,12 @@ begin
       values ('00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated', r.email,
               extensions.crypt(pw, extensions.gen_salt('bf')), now(),
               '{"provider":"email","providers":["email"]}', jsonb_build_object('full_name', r.label), now(), now(),
-              '', '', '', '', u);
+              '', '', '', '', null);
       insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
       values (gen_random_uuid(), uid, uid::text, jsonb_build_object('sub', uid::text, 'email', r.email, 'email_verified', true),
               'email', now(), now(), now());
     else
-      update auth.users set encrypted_password = extensions.crypt(pw, extensions.gen_salt('bf')), banned_until = u, updated_at = now() where id = uid;
+      update auth.users set encrypted_password = extensions.crypt(pw, extensions.gen_salt('bf')), banned_until = null, updated_at = now() where id = uid;
       delete from auth.sessions where user_id = uid;
     end if;
     insert into public.profiles (id, email, full_name) values (uid, r.email, r.label) on conflict (id) do nothing;
