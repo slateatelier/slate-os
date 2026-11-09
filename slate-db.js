@@ -199,25 +199,54 @@
   }
 
   /* ---------------- loading and live updates ---------------- */
+  /* Full load: every doc the person can see. Used at sign-in, after the Business PIN, and as a catch-all
+     every 15 minutes (rows that became hidden or were deleted while the phone slept). In between, only rows
+     changed since the last load are fetched (loadDelta), so returning to the app on a phone stays light. */
+  let lastFullAt = 0, sinceAt = '', loading = null;
+  const maxAt = (a, b) => (!a || (b && b > a)) ? b : a;
   async function loadAll() {
-    const docs = new Map();
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await sb.from('docs').select('path,data').order('path').range(from, from + 999);
-      if (error) throw friendly(error);
-      data.forEach(r => docs.set(r.path, r.data));
-      if (data.length < 1000) break;
-    }
-    const { data: ppl, error: pe } = await sb.from('profiles').select('*');
-    if (pe) throw friendly(pe);
-    // diff so only what changed re-renders
-    for (const [p, d] of docs) if (JSON.stringify(store.get(p)) !== JSON.stringify(d)) { store.set(p, d); touch(p); }
-    for (const p of [...store.keys()]) if (!docs.has(p)) { store.delete(p); touch(p); }
+    if (loading) return loading;
+    loading = (async () => {
+      const docs = new Map(); let top = '';
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await sb.from('docs').select('path,data,updated_at').order('path').range(from, from + 999);
+        if (error) throw friendly(error);
+        data.forEach(r => { docs.set(r.path, r.data); top = maxAt(top, r.updated_at); });
+        if (data.length < 1000) break;
+      }
+      const { data: ppl, error: pe } = await sb.from('profiles').select('*');
+      if (pe) throw friendly(pe);
+      // diff so only what changed re-renders
+      for (const [p, d] of docs) if (JSON.stringify(store.get(p)) !== JSON.stringify(d)) { store.set(p, d); touch(p); }
+      for (const p of [...store.keys()]) if (!docs.has(p)) { store.delete(p); touch(p); }
+      applyPeople(ppl);
+      lastFullAt = Date.now(); sinceAt = top;
+    })();
+    try { return await loading; } finally { loading = null; }
+  }
+  function applyPeople(ppl) {
     let peopleChanged = people.size !== ppl.length;
     for (const r of ppl) { if (JSON.stringify(people.get(r.id)) !== JSON.stringify(r)) peopleChanged = true; people.set(r.id, r); }
     for (const id of [...people.keys()]) if (!ppl.some(r => r.id === id)) { people.delete(id); peopleChanged = true; }
     me = people.get(authUser.id) || null;
     if (me && review) me = { ...me, active: true };   // a review login's profile stays inactive so the team never meets it
     if (peopleChanged) touchPeople();
+  }
+  async function loadDelta() {
+    if (!sinceAt || Date.now() - lastFullAt > 15 * 60000) return loadAll();
+    if (loading) return loading;
+    loading = (async () => {
+      // a minute of overlap: a save that started earlier can commit later with an earlier time
+      const from = new Date(new Date(sinceAt).getTime() - 60000).toISOString();
+      const { data, error } = await sb.from('docs').select('path,data,updated_at').gt('updated_at', from);
+      if (error) throw friendly(error);
+      let top = sinceAt;
+      for (const r of data) { top = maxAt(top, r.updated_at); if (JSON.stringify(store.get(r.path)) !== JSON.stringify(r.data)) { store.set(r.path, r.data); touch(r.path); } }
+      sinceAt = top;
+      const { data: ppl, error: pe } = await sb.from('profiles').select('*');
+      if (!pe && ppl) applyPeople(ppl);
+    })();
+    try { return await loading; } finally { loading = null; }
   }
   window.slateReload = () => loadAll().catch(() => {});   // after the Business PIN is entered or locks again
   let channel = null;
@@ -235,8 +264,13 @@
       })
       .subscribe();
     // Visibility can change without a row changing (a new pod, a new project lead), so resync regularly.
-    setInterval(() => { if (document.visibilityState === 'visible') loadAll().catch(() => {}); }, 120000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadAll().catch(() => {}); });
+    setInterval(() => { if (document.visibilityState === 'visible') loadDelta().catch(() => {}); }, 120000);
+    // Coming back to the app: catch up on what changed while it was hidden (a quick switch away and back costs nothing)
+    let hiddenAt = 0;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') { hiddenAt = Date.now(); return; }
+      if (Date.now() - hiddenAt > 20000) loadDelta().catch(() => {});
+    });
   }
 
   /* ---------------- writes ---------------- */
@@ -425,7 +459,7 @@
   }
   async function loadSeen() {
     const { data } = await sb.from('presence_seen').select('user_id,seen_at,active_at');
-    if (data) { seenMap = new Map(data.map(r => [r.user_id, r])); placeOnline(true); try { if (S.view === 'people') render(true); } catch (_) {} }
+    if (data) { seenMap = new Map(data.map(r => [r.user_id, r])); placeOnline(true); try { if (S.view === 'people') schedule(); } catch (_) {} }
   }
   function setupPresence(session) {
     try { if (session && session.access_token && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(session.access_token); } catch (_) {}
@@ -437,8 +471,8 @@
         const st = ch.presenceState(); onlineIds = []; awayIds = [];
         for (const [id, metas] of Object.entries(st)) (metas.some(m => m.st !== 'away') ? onlineIds : awayIds).push(id);
         const key = onlineIds.slice().sort().join(',');
-        if (key !== lastOnlineKey) { lastOnlineKey = key; try { if (!S.sheet) render(true); } catch (_) {} } /* green rings on people's icons */
-        else { placeOnline(true); try { if (S.view === 'people') render(true); } catch (_) {} }
+        if (key !== lastOnlineKey) { lastOnlineKey = key; try { if (!S.sheet) schedule(); } catch (_) {} } /* green rings on people's icons */
+        else { placeOnline(true); try { if (S.view === 'people') schedule(); } catch (_) {} }
       })
       .subscribe(s => { if (s === 'SUBSCRIBED') track(); });
     document.addEventListener('visibilitychange', () => { track(); beat(); if (vis()) loadSeen(); });

@@ -334,6 +334,12 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* header fixed to the top on every device, slightly see-through: the same see-through (82%) and blur in Studio, Business and Books;
    only the tint and the line under it change (Studio white with a grey line, Business pink with red, Books green with green) */
 .chrome{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border)}
+/* Phones: the frosted-glass top bar and back button blur the page under them on every scroll frame, which
+   phones can't keep up with; there they are plain (near-white), the look is the same at a glance. */
+@media (max-width:1099px){
+  .chrome{background:rgba(255,255,255,.97);backdrop-filter:none;-webkit-backdrop-filter:none}
+  .nav-back{background:rgba(242,242,247,.98);backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+}
 .top-in{display:flex;align-items:center;justify-content:center;gap:12px;padding-block:14px 6px}
 .logo{height:40px;width:auto;display:block}
 .divider{width:1px;height:26px;background:var(--border)}
@@ -2758,7 +2764,7 @@ function refreshProfiles(){
   },80);
 }
 let rq=false;
-function schedule(){ if(rq) return; rq=true; requestAnimationFrame(()=>{ rq=false; render(false); if(S.sheet) renderSheet(true); }); }
+function schedule(){ nbBump(); if(rq) return; rq=true; requestAnimationFrame(()=>{ rq=false; render(false); if(S.sheet) renderSheet(true); }); }
 function onSubErr(){ toast('Lost the live connection to the register. Reload the page.'); }
 
 function mergeTasks(){
@@ -3052,7 +3058,7 @@ function secInfo(root){ if(!root) return; root.querySelectorAll('.sec-h > h2').f
 let secInfoQ=0; const secInfoSoon=()=>{ if(secInfoQ) return; secInfoQ=requestAnimationFrame(()=>{ secInfoQ=0; secInfo(document.getElementById('view')); secInfo(document.getElementById('sheet')); try{ fitDesk(); }catch(e){} }); };
 (()=>{ const go=()=>{ try{ const mo=new MutationObserver(secInfoSoon); ['view','sheet'].forEach(id=>{ const el=document.getElementById(id); el&&mo.observe(el,{childList:true,subtree:true}); }); secInfoSoon(); }catch(e){} }; if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',go); else go(); })();
 function render(force){
-  applyStd();
+  nbBump(); applyStd();
   const view=$('#view');
   if(!force&&isTyping(view)){ S.pendingRender=true; return; }
   const k=keepFocus(view);
@@ -3311,19 +3317,24 @@ const appVerN=()=>/^\d+$/.test(APP_VER)?+APP_VER:0;
 /* the version people see starts at 2.001 with release 410 (Principal, 7 Nov 2026): 2.002, 2.003 … one step per release */
 const verName=n=>!n?'':n>=410?'2.'+String(n-409).padStart(3,'0'):'v'+n;
 let verLive=0, verAt=0;
+/* Reload for a new release: the app opens from its saved copy, so the saved copies are cleared first and the
+   reload fetches every file fresh (no mix of old and new files). */
+async function appReload(){ try{ const r=await navigator.serviceWorker?.getRegistration(); if(r) await r.update().catch(()=>{}); }catch(e){}
+  try{ if(window.caches){ for(const k of await caches.keys()) await caches.delete(k); } }catch(e){}
+  location.reload(); }
 async function verCheck(force){ if(!force&&Date.now()-verAt<60000) return; verAt=Date.now();
   try{ const t=await (await fetch('/sw.js',{cache:'no-store'})).text(), m=t.match(/slate-os-v(\d+)/); verLive=m?+m[1]:0; }catch(e){ return; }
   verBar(); if(S&&S.view==='more') render(false); }
 function verBar(){ const newer=appVerN()&&verLive>appVerN(); let b=document.getElementById('ver-bar');
   if(!newer){ if(b) b.remove(); return; }
   if(!b){ b=document.createElement('div'); b.id='ver-bar'; b.setAttribute('role','status');
-    b.innerHTML='<span></span><button type="button" class="btn btn-primary btn-sm">Reload</button>'; b.querySelector('button').onclick=()=>location.reload(); document.body.appendChild(b); }
+    b.innerHTML='<span></span><button type="button" class="btn btn-primary btn-sm">Reload</button>'; b.querySelector('button').onclick=()=>appReload(); document.body.appendChild(b); }
   b.querySelector('span').textContent=`SLATE OS has been updated to ${verName(verLive)}. Reload to get it.`; }
 function verLine(){ verCheck(false); const n=appVerN(), at=/^\d{4}-/.test(APP_AT)?new Date(APP_AT):null;
   const when=at&&!isNaN(at)?at.toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}):'';
   const newer=n&&verLive>n;
   return h('div',{class:'ver-line'},h('span',{text:n?`SLATE OS ${verName(n)}`+(when?` · released ${when}`:''):'SLATE OS · version not known (test copy)'}),
-    newer?h('button',{class:'linkish',type:'button',onclick:()=>location.reload(),text:`${verName(verLive)} is out · Reload`}):n&&verLive?h('span',{style:'color:var(--ontime)',text:'Up to date'}):null); }
+    newer?h('button',{class:'linkish',type:'button',onclick:()=>appReload(),text:`${verName(verLive)} is out · Reload`}):n&&verLive?h('span',{style:'color:var(--ontime)',text:'Up to date'}):null); }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') verCheck(false); });
 setTimeout(()=>verCheck(true),8000);
 function viewMore(){
@@ -6539,7 +6550,14 @@ function scopeRaw(){ const all=Object.entries(S.tasks).map(([id,t])=>({...t,id})
   if(isBoss()) return all.filter(t=>seePriv()||!isPriv(t.assignee)); return all.filter(canSee); }
 function wkLine(label,ts,s,e){ const c=count(ts.filter(t=>t.target&&t.target>=s&&t.target<=e),'approved'), r=rate(c);
   return c.total?`${label}: ${c.total} due · ${c.early+c.ontime} on time or early${r==null?'':' ('+Math.round(r*100)+'%)'} · ${c.late} late · ${c.overdue} overdue`:`${label}: nothing was due`; }
-function buildNotifs(){
+/* buildNotifs walks every task's history, so it is worked out once per screen update and reused (the badge
+   asks every 4 seconds; the header, floating bell and Home ask again in the same render). Any render or
+   scheduled render starts a new round, and so does a new minute. */
+let _nbKey='', _nbVal=[];
+function nbBump(){ S._nv=(S._nv||0)+1; }
+function buildNotifs(){ const k=(S._nv||0)+'|'+S.uid+'|'+Math.floor(Date.now()/60000);
+  if(k!==_nbKey){ _nbVal=buildNotifs0(); _nbKey=k; } return _nbVal.slice(); }
+function buildNotifs0(){
   const me=S.uid, now=new Date().toISOString(), td=today(), from=addDays(td,-NSPAN), boss=isBoss(), lead=amPodLead(), mp=myPod(), out=[];
   const add=n=>{ if(n.at<=now&&(n.pending||n.at.slice(0,10)>=from)) out.push(n); };
   const proj=t=>{ const p=S.projects[t.projectId]; return p?(p.code||p.name):''; }, pn=(t,ind='')=>{ const p=S.projects[t.projectId]; return p&&p.code?`\n${ind}${p.name}`:''; };
