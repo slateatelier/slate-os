@@ -731,6 +731,7 @@ main.wide{max-width:1160px}
 .pc-dots i.on{background:var(--ontime)}
 .pc-dots i.wait{background:var(--late)}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px}
+.pcard .qpod{justify-content:flex-start;align-items:center}.pcard .qpod-sel{min-height:34px;padding:4px 8px;font-size:13px;border-radius:8px;width:100%;max-width:240px;justify-self:start;position:relative;z-index:2}
 .pcard{appearance:none;text-align:left;background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:grid;gap:7px;cursor:pointer;font:inherit;color:inherit;min-width:0}
 .pcard:hover{border-color:var(--faint)}
 /* completed projects: a quiet grey card with a round red rubber stamp, cut off by the card edge */
@@ -14390,6 +14391,27 @@ function sheetFee(){
           h('span',{id:'ms-sum',class:'f-hint',style:'margin:0;'+(msSum!==100?'color:var(--overdue)':''),text:msTxt()}))],
       ...costSection(d,fr,p,feeNow),
       h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Save fee'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Cancel'})))]; }
+/* Give a project to a POD in one tap (COO request, 10 Nov 2026). The Edit project form asks for every detail
+   (location, plot, road, katha, agreement…), which the old Tally-era projects don't have. On the project card the
+   Principal and the COO pick the POD directly: only the POD (and, for a standard-process project, its POD leader) is written.
+   Shown on cards with no POD yet, and on completed / closed projects (construction support), where the form is the blocker. */
+const quickPodOn=p=>amApprover()&&!!p&&!isInternalP(p)&&p.pod!=='Studio'&&(!podsOfProject(p).length||!!p.closed);
+function quickPodRow(p){
+  const cur=p.pod&&pods().includes(p.pod)?p.pod:'';
+  const el=h('select',{'aria-label':'POD for '+p.name,class:'qpod-sel',onclick:e=>e.stopPropagation(),onkeydown:e=>e.stopPropagation(),
+    onchange:e=>{ e.stopPropagation(); const v=e.target.value; if(v===cur) return; quickPod(p,v,cur); }},
+    h('option',{value:'',text:cur?'No POD':'Give to a POD…'}),pods().map(x=>h('option',{value:x,text:podLabel(x)})));
+  el.value=cur;
+  return h('div',{class:'pc-row qpod',onclick:e=>e.stopPropagation()},h('span',{class:'muted',text:'POD'}),el);
+}
+function quickPod(p,pod,was){
+  const id=p.id||pidOf(p); if(!id) return;
+  const patch={pod:pod||''};
+  if(pod&&p.pod2===pod) patch.pod2='';
+  if(p.std&&pod){ const ld=personFor('lead',pod); if(ld) patch.std={...p.std,lead:ld}; }
+  const nm=pod?podLabel(pod):'no POD';
+  run(()=>S.db.doc('projects/'+id).update(patch),`${p.name}: ${pod?'given to '+nm:'POD removed'}`);
+}
 /* POD dashboard: each POD's active projects by name, with health and the phase now running. Tap a name to open the project. */
 function podBoard(act,stats){
   const ps=pods(); if(!ps.length||!act.length) return null;
@@ -14463,12 +14485,13 @@ function viewProjects(){
         h('div',{},h('span',{class:'pill '+(+a.overdue?'s-overdue':'s-late'),text:acctLine(a)+(+a.overdue?` · ${a.overdue} overdue`:'')}))); }))):null;
   if(!list.length){ out.push(h('p',{class:'muted',text:all.length?(f.st==='archive'?'Nothing in the archive matches these filters.':f.st==='acct'?(S.acct?'No open accounts. Every closed project is fully billed and collected.':'Checking Finance…'):f.st==='active'&&!f.q&&!f.pod?'No active projects.':'No projects match these filters.'):'No projects yet.'})); if(holdSec) out.push(holdSec); if(acctSec) out.push(acctSec); return out; }
   out.push(h('div',{class:'pgrid'},list.map(p=>{ const st=stats.get(p.id), [hl,hk]=HEALTH[st.health];
-    const done=outcomeOf(p)==='completed';
-    return h('button',{class:'pcard'+(done?' done':''),type:'button',onclick:()=>openProjectView(p.id)},
+    const done=outcomeOf(p)==='completed', qp=quickPodOn(p);
+    return h(qp?'div':'button',{class:'pcard'+(done?' done':''),...(qp?{role:'button',tabindex:'0',onkeydown:e=>{ if(e.target===e.currentTarget&&e.key==='Enter') openProjectView(p.id); }}:{type:'button'}),onclick:()=>openProjectView(p.id)},
       done?h('span',{class:'pc-stamp','aria-hidden':'true',innerHTML:handedOver(p)?stampSVG(p.id,p.support.handedOn,'HANDED OVER'):stampSVG(p.id,closedOn(p))}):null,
       h('div',{class:'pc-top'},h('span',{class:'mono pc-code',text:p.code||'—'}),h('span',{style:'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end'},done?null:h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),abOn(p)?h('span',{class:'pill s-late',text:'As-built'}):null,noTech(p)?h('span',{class:'pill tech-pill',title:TECH_TIP,text:'⚠'}):null,acctOf(p)?h('span',{class:'pill s-late',text:'Account open'}):null)),
       h('div',{class:'pc-name'},p.name,isIntP(p)?h('span',{class:'tag tag-modo',style:'margin-left:8px;vertical-align:2px;font-size:10px',text:'MODO'}):null),
-      h('div',{class:'pc-meta',text:[p.client,podText(p),p.katha?p.katha+' katha':'',p.units?p.units+' units'+(p.type==='jv'&&p.loCount!=null?` (LO ${p.loCount} · Dev ${p.devCount})`:''):'',p.farApplies==='yes'&&p.farCalc?Math.round(p.farCalc.saleable/1000)+'k sft saleable':''].filter(Boolean).join(' · ')}),
+      qp?quickPodRow(p):null,
+      h('div',{class:'pc-meta',text:[p.client,qp?'':podText(p),p.katha?p.katha+' katha':'',p.units?p.units+' units'+(p.type==='jv'&&p.loCount!=null?` (LO ${p.loCount} · Dev ${p.devCount})`:''):'',p.farApplies==='yes'&&p.farCalc?Math.round(p.farCalc.saleable/1000)+'k sft saleable':''].filter(Boolean).join(' · ')}),
       !p.closed&&tlOf(p)?(()=>{ const lv=tlCompute(p,tlOf(p).start,true), ks=tlPhases(p).filter(k=>lv[k]&&!lv[k].none), late=ks.filter(k=>lv[k].submitted&&!lv[k].approved&&!isWD(k)&&today()>lv[k].due), dm=ks.some(k=>lv[k].deemDue);
         if(!late.length&&!dm) return null; const n=late.reduce((a,k)=>a+lv[k].lateC,0);
         return h('div',{class:'pc-row'},h('span',{class:'pill s-late',style:'justify-self:start',text:`Client late · ${n} day${n===1?'':'s'}`}),dm?h('span',{class:'muted',text:'Deemed approval due'}):h('span')); })():null,
