@@ -122,6 +122,7 @@
       const r = { team: p.team || '', role: p.role_label || '' };
       if (p.label) r.label = p.label;
       if (p.team_at) r.teamAt = p.team_at;
+      if (p.mentor_id) r.mentor = p.mentor_id;
       roster[p.id] = r;
       if (p.is_manager || p.designation === 'pod_leader') managers.push(p.id);
       if (p.is_approver || p.designation === 'coo') approvers.push(p.id);

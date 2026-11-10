@@ -1681,7 +1681,14 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 <script>
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONL=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const TEAMS_DEFAULT=['Pod 1','Pod 2','Pod 3','Pod 4','Drafting Pool','Visualization',"Principal's Office"];
+const TEAMS_DEFAULT=['Pod 1','Pod 2','Pod 3','Pod 4','Shared (all PODs)','Drafting Pool','Visualization',"Principal's Office"];
+/* shared junior architects (Principal, 10 Nov 2026): no fixed POD; every POD leader gives them work on the POD's projects,
+   sets its dates and checks it; a POD leader is their mentor (roster.mentor); the COO only hears about overloads */
+const SHARED_TEAM='Shared (all PODs)';
+const isSharedTeam=t=>/^shared\b/i.test(t||'');
+const isShared=id=>!!id&&isSharedTeam(teamOf(id));
+const mentorOf=id=>{ const m=roster(id).mentor; return m&&!isLeft(m)?m:''; };
+const sharedPeople=()=>people().filter(id=>isShared(id)&&!isLeft(id));
 const pods=()=>teams().filter(t=>/^pod\b/i.test(t));
 const podsOfProject=p=>p?[...new Set([p.pod,p.pod2,...(Array.isArray(p.pods)?p.pods:[])].filter(x=>x&&x!=='Studio'))]:[];
 /* studio-work projects can hold several pods: each task then belongs to its assignee's pod, so pods aren't scored for each other's work */
@@ -1745,7 +1752,7 @@ function decisionFor(pid,reqAt){ for(const [a,docs] of Object.entries(S.podJoin)
 function podRequests(){ const out=[]; for(const [a,docs] of Object.entries(S.podReq)) for(const [pid,d] of Object.entries(docs)){ if(!d||!d.pod||!isPodLead(a,d.pod)||decisionFor(pid,d.at)) continue; out.push({author:a,pid,d}); } return out.sort((x,y)=>(x.d.at||'').localeCompare(y.d.at||'')); }
 function myPodReqs(){ return Object.entries(S.podReq[S.uid]||{}).map(([pid,d])=>({pid,d,dec:decisionFor(pid,d.at)})); }
 const roleOf=id=>roleLabel(roster(id).role);
-const teams=()=>(S.settings&&S.settings.teams)||TEAMS_DEFAULT;
+const teams=()=>{ const t=(S.settings&&S.settings.teams)||TEAMS_DEFAULT; return t.some(isSharedTeam)?t:[...t.filter(x=>/^pod\b/i.test(x)),SHARED_TEAM,...t.filter(x=>!/^pod\b/i.test(x))]; };
 const ownerId=()=>S.settings&&S.settings.ownerId;
 const isMgr=id=>!!id&&(id===ownerId()||((S.settings&&S.settings.managers)||[]).includes(id));
 const amMgr=()=>S.isOwner||isMgr(S.uid);
@@ -1793,8 +1800,9 @@ const amPodLead=()=>!!myPod()&&isPodLead(S.uid,myPod());
 const isMember=()=>!!S.uid&&!S.isOwner&&!amApprover()&&!isCOO(S.uid)&&!amPodLead()&&!amMgr()&&!amChalkLead()&&!myHeadTeam();
 /* the PC layout: sidebar, search, task beside the list */
 const sideOn=()=>window.innerWidth>=1100;
-const inMyPodProject=p=>podsOfProject(p).includes(myPod());
-const visiblePeople=()=>fullView()?people():people().filter(id=>id===S.uid||(myPod()&&teamOf(id)===myPod())||(myHeadTeam()&&teamOf(id)===myHeadTeam()));
+/* a shared architect works on every POD's projects (10 Nov 2026) */
+const inMyPodProject=p=>{ const ps=podsOfProject(p); return ps.includes(myPod())||(!!p&&ps.length>0&&!isChalkProj(p)&&isShared(S.uid)); };
+const visiblePeople=()=>fullView()?people():people().filter(id=>id===S.uid||(myPod()&&teamOf(id)===myPod())||(amPodLead()&&isShared(id))||(myHeadTeam()&&teamOf(id)===myHeadTeam()));
 const myPod=()=>{ const t=teamOf(S.uid); return /^pod\b/i.test(t)?t:''; };
 /* pod nicknames: the standard name stays the key; the lead (or the Principal) adds a nickname shown beside it */
 const podKey=p=>String(p).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -2109,7 +2117,29 @@ const coverOf=p=>{ const c=(S.settings&&S.settings.cover)||{}; return p?podsOfPr
 const coverOk=(id,pid)=>{ const p=S.projects[pid]; return !!p&&!!coverOf(p)&&isProjLead(p)&&/^pod\b/i.test(teamOf(id)||'')&&!isLeft(id); };
 /* the project's POD leader gives work to the Drafting Pool directly (4 Nov 2026); the Design Associate Lead and the COO are told */
 const draftDirect=(id,pid)=>!!(S.settings&&S.settings.draftDirect)&&!!id&&isDraftMember(id)&&!isLeft(id)&&isProjLead(S.projects[pid]);
-const needsAssignApproval=(id,pid)=>!!id&&!coverOk(id,pid)&&!draftDirect(id,pid)&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(r4on()&&!S.dqAsk&&myHeadTeam()&&teamOf(id)===myHeadTeam());
+/* the project's POD leader gives work to a shared architect directly and sets its dates (10 Nov 2026) */
+const sharedDirect=(id,pid)=>!!id&&isShared(id)&&!isLeft(id)&&!!pid&&isProjLead(S.projects[pid]);
+/* a shared architect's open work by POD (counts and dates only: shared_load), for POD leaders, the Principal and the COO */
+const SH={rows:null,at:0,busy:false};
+function shLoadGet(force){ if(!(amPodLead()||amApprover()||S.isOwner)||SH.busy||!window.slateSupabase) return; if(!force&&SH.at&&Date.now()-SH.at<120000) return;
+  SH.busy=true; window.slateSupabase.rpc('shared_load').then(({data,error})=>{ SH.busy=false; SH.at=Date.now(); if(error) return;
+    const was=JSON.stringify(SH.rows); SH.rows=data||[]; if(JSON.stringify(SH.rows)!==was&&S.state==='ready') render(); },()=>{ SH.busy=false; SH.at=Date.now(); }); }
+const shPodName=p=>/^pod\b/i.test(p||'')?p.replace(/^pod/i,'POD'):'Studio work';
+function shLoadRows(id){ return (SH.rows||[]).filter(r=>r.user_id===id).sort((a,b)=>String(a.pod).localeCompare(String(b.pod))); }
+/* "POD 1: 2, next 12 Nov · POD 3: 1" (short: for a picker) */
+function shLoadText(id,short){
+  if(!SH.rows){ const n=activeTasks().filter(x=>x.assignee===id&&!x.doneAt&&x.target&&x.target<=addDays(today(),7)).length; return `${n} this week`; }
+  const rs=shLoadRows(id); if(!rs.length) return short?'free':'no open work';
+  return rs.map(r=>`${shPodName(r.pod)}: ${r.open_n}${!short&&r.next_due?`, next ${fmtD(r.next_due)}`:''}`).join(short?' · ':' · '); }
+/* the warning under "Assign to" when a POD leader gives work to a shared architect */
+function shClashNote(id,pid,target){ if(!id||!isShared(id)) return null; shLoadGet();
+  const mine=podsOfProject(S.projects[pid]), other=shLoadRows(id).filter(r=>!mine.includes(r.pod));
+  const busy=target&&other.find(r=>r.next_due&&r.next_due<=target&&(r.last_due||'')>=today());
+  const m=mentorOf(id);
+  return h('p',{class:'f-hint',style:busy?'color:var(--late)':'',text:`${shortName(id)} is shared by all PODs. Now: ${shLoadText(id)}.`+
+    (busy?` ${shPodName(busy.pod)} also has work due by ${fmtD(busy.last_due)}: agree the order with its POD leader first.`:'')+
+    (m?` Mentor: ${shortName(m)}.`:'')+' You set the date and check the work.'}); }
+const needsAssignApproval=(id,pid)=>!!id&&!coverOk(id,pid)&&!draftDirect(id,pid)&&!sharedDirect(id,pid)&&(isSupport(id)||isCrossPod(id,pid))&&!amApprover()&&!S.spawning&&!isMemberOk(S.projects[pid],id)&&!(r4on()&&!S.dqAsk&&myHeadTeam()&&teamOf(id)===myHeadTeam());
 function loadOf(id,excl){
   const td=today(), wk=addDays(td,7);
   const ts=Object.entries(S.tasks).map(([k,t])=>({...t,id:k})).filter(t=>t.id!==excl&&!t.archived&&!t.doneAt&&(t.assignee===id||(t.assignReq&&t.assignReq.to===id))&&(!isChalkTask(t)||isChalkP(id)));
@@ -3650,7 +3680,9 @@ const ageTxt=d=>d===0?'today':d===1?'1 day':`${d} days`;
 function queueGroups(){
   if(!amApprover()) return [];
   const ts=activeTasks(), mn=xs=>xs.map(x=>x||'').filter(Boolean).sort()[0]||'';
-  const reqs=ts.filter(t=>t.request).sort((a,b)=>(a.request.at||'').localeCompare(b.request.at||''));
+  /* a shared architect's date goes to the project's POD leader; it reaches the COO only after 3 days undecided */
+  const shLed=t=>isShared(t.assignee)&&podsOfProject(S.projects[t.projectId]).some(pd=>people().some(id=>!isLeft(id)&&isPodLead(id,pd)))&&ageOf(t.request.at)<3;
+  const reqs=ts.filter(t=>t.request&&!shLed(t)).sort((a,b)=>(a.request.at||'').localeCompare(b.request.at||''));
   const areq=ts.filter(t=>t.assignReq).sort((a,b)=>(a.assignReq.at||'').localeCompare(b.assignReq.at||''));
   const ma=minutesToApprove(), cr=S.isOwner?chalkReqs():[], rp=S.isOwner?roleProposals():[];
   const dels=S.isOwner?Object.values(S.projects).filter(p=>p&&p.delReq&&p.delReq.by!==S.uid):[];
@@ -3986,10 +4018,15 @@ function kFollow(td,ap){ const rows=[];
   return rows; }
 function giveSel(t){ const team=people().filter(id=>id!==S.uid&&teamOf(id)===myPod()&&(S.members[id]||{}).active!==false);
   const pool=isProjLead(S.projects[t.projectId])?people().filter(id=>id!==S.uid&&isDraftMember(id)&&!isLeft(id)&&draftDirect(id,t.projectId)):[];
-  const load=id=>`${shortName(id)} · ${activeTasks().filter(x=>x.assignee===id&&!x.doneAt&&x.target&&x.target<=addDays(today(),7)).length} this week`;
+  const shared=sharedPeople().filter(id=>id!==S.uid&&sharedDirect(id,t.projectId));
+  const load0=id=>`${shortName(id)} · ${activeTasks().filter(x=>x.assignee===id&&!x.doneAt&&x.target&&x.target<=addDays(today(),7)).length} this week`;
+  const load=id=>isShared(id)?`${shortName(id)} · ${shLoadText(id,true)}`:load0(id);
   const el=h('select',{class:'h-sel','aria-label':'Give to',style:'width:auto;max-width:100%',onchange:e=>{ const to=e.target.value; if(!to) return;
       run(()=>taskUpdate(t.id,{assignee:to,checker:S.uid,assignReq:null},[{type:'reassigned',from:t.assignee,to,note:`${nameOf(S.uid)} checks it before it goes on`}]),`Given to ${shortName(to)}. It comes back to you to check`); }},
-    h('option',{value:'',text:'Give to…'}),pool.length?[h('optgroup',{label:podLabel(myPod())||'Your POD'},team.map(id=>h('option',{value:id,text:load(id)}))),h('optgroup',{label:'Drafting Pool'},pool.map(id=>h('option',{value:id,text:load(id)})))]:team.map(id=>h('option',{value:id,text:load(id)})));
+    h('option',{value:'',text:'Give to…'}),pool.length||shared.length?[h('optgroup',{label:podLabel(myPod())||'Your POD'},team.map(id=>h('option',{value:id,text:load(id)}))),
+      shared.length?h('optgroup',{label:'Shared (all PODs)'},shared.map(id=>h('option',{value:id,text:load(id)}))):null,
+      pool.length?h('optgroup',{label:'Drafting Pool'},pool.map(id=>h('option',{value:id,text:load(id)}))):null]:team.map(id=>h('option',{value:id,text:load(id)})));
+  shLoadGet();
   return el; }
 function podGlance(td){
   const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&inMyPodProject(p)); if(!ps.length) return null;
@@ -4261,8 +4298,8 @@ function gsearchMount(){
    A record for the Principal, the COO and the POD leader; not scored. Data: public.work_logs (m_work_logs.sql). ---------- */
 const WL={rows:{},on:false,loaded:false,from:''};
 const wlKey=(u,d)=>u+'|'+d;
-/* who writes the day's plan: everyone in a POD and in the Drafting Pool (3 Nov 2026) */
-const wlTeam=id=>{ const t=teamOf(id)||''; return /^pod\b/i.test(t)||/draft/i.test(t); };
+/* who writes the day's plan: everyone in a POD, in the Drafting Pool and the shared architects (3 / 10 Nov 2026) */
+const wlTeam=id=>{ const t=teamOf(id)||''; return /^pod\b/i.test(t)||/draft/i.test(t)||isSharedTeam(t); };
 const needPlan=id=>!!id&&!isLeft(id)&&wlTeam(id)&&!isChalkP(id);
 /* plan before opening (Principal, 7 Nov 2026): on a working day SLATE OS opens only after the day's plan is in
    (yesterday's lines closed, today's written). Settings planGate {from, off, open:{day:'all'|[ids]}}; the Principal or the COO
@@ -4336,18 +4373,23 @@ function wlRunning(u,td=today()){ const r=wlLastLog(u,td); return r?(r.lines||[]
 function wlAskTo(u){ const t=teamOf(u)||''; let to='';
   if(/draft/i.test(t)) to=people().find(id=>id!==u&&!isLeft(id)&&teamOf(id)===t&&roleGroup(id)==='dhead')||'';
   else if(/^pod\b/i.test(t)) to=people().find(id=>id!==u&&!isLeft(id)&&isPodLead(id,t))||'';
+  else if(isSharedTeam(t)) to=mentorOf(u);
   return to||cooId(); }
-const wlAskWho=u=>{ const to=wlAskTo(u); return !to?'the COO':to===cooId()?'the COO':roleGroup(to)==='dhead'?'the Design Associate Lead':'your POD leader'; };
+const wlAskWho=u=>{ const to=wlAskTo(u); return !to?'the COO':to===cooId()?'the COO':roleGroup(to)==='dhead'?'the Design Associate Lead':isShared(u)?'your mentor ('+shortName(to)+')':'your POD leader'; };
 /* a request is answered once a task reaches the person after it was made */
 const wlAskDone=(u,at)=>Object.values(S.tasks).some(t=>t.assignee===u&&!t.archived&&((t.createdAt||'')>at||(t.history||[]).some(e=>e.at>at&&(e.to===u||e.assignee===u)&&/created|reassigned|assignApproved/.test(e.type))));
 const wlNewLine=(x={})=>({id:Math.random().toString(36).slice(2,10),projectId:x.projectId==null?null:x.projectId,taskId:x.taskId||'',text:x.text||'',status:'planned',due:x.due||today(),
   ...(x.clRef?{clRef:x.clRef}:{}),...(x.dwRef?{dwRef:x.dwRef}:{}),...(x.due0?{due0:x.due0}:{}),...(x.since?{since:x.since}:{}),...(x.from?{from:x.from}:{}),...(x.ask?{ask:x.ask}:{}),...(x.newTitle!=null?{newTitle:x.newTitle}:{}),
   ...(x.wait?{wait:x.wait}:{}),...(x.moved?{moved:x.moved}:{}),...(x.lateWhy?{lateWhy:x.lateWhy}:{})});
-function wlMyProjects(){ const dp=isDraftMember(S.uid);   /* the Drafting Pool works for every POD, so it can pick any open project */
+function wlMyProjects(){ const dp=isDraftMember(S.uid)||isShared(S.uid);   /* the Drafting Pool and the shared architects work for every POD, so they can pick any open project */
   return projects().filter(p=>!p.closed&&(fullView()||dp||inMyPodProject(p)||isMemberOk(p,S.uid)||activeTasks().some(t=>t.projectId===p.id&&t.assignee===S.uid)))
   .sort((a,b)=>String(a.name||a.code).localeCompare(String(b.name||b.code))); }
 /* the project list in the plan: the Drafting Pool sees the projects the pool is working on first */
 function wlProjOpts(ps){ const opt=p=>h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')});
+  if(isShared(S.uid)){ const mine=new Set(activeTasks().filter(t=>!t.doneAt&&!t.archived&&t.assignee===S.uid).map(t=>t.projectId));
+    const a=ps.filter(p=>mine.has(p.id)), b=ps.filter(p=>!mine.has(p.id));
+    const lbl=p=>{ const pd=podsOfProject(p)[0]; return pd?h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')+' · '+pd.replace(/^pod/i,'POD')}):opt(p); };
+    return [a.length?h('optgroup',{label:'You have tasks on'},a.map(lbl)):null,b.length?h('optgroup',{label:a.length?'All other projects':'All projects'},b.map(lbl)):null]; }
   if(!isDraftMember(S.uid)) return ps.map(opt);
   const pool=new Set(activeTasks().filter(t=>!t.doneAt&&!t.archived&&t.assignee&&isDraftMember(t.assignee)).map(t=>t.projectId));
   const a=ps.filter(p=>pool.has(p.id)), b=ps.filter(p=>!pool.has(p.id));
@@ -4758,7 +4800,7 @@ function wlWhoLines(id){ if(!WL.loaded||!needPlan(id)) return null; const td=tod
 /* ---------- Day log: what each person planned and how it went, day by day ---------- */
 const WL_ST={done:['✓','Done','var(--ontime)'],carried:['→','Carried on','var(--early)'],stopped:['✕','Stopped','var(--muted)'],planned:['•','Planned','var(--ink)']};
 function wlPeople(){ const all=people().filter(id=>!isLeft(id)&&needPlan(id));
-  if(amApprover()||S.isOwner||isCOO(S.uid)) return all; if(amPodLead()) return all.filter(id=>teamOf(id)===myPod()); const hd=myHeadTeam(); if(hd) return all.filter(id=>teamOf(id)===hd); return all.filter(id=>id===S.uid); }
+  if(amApprover()||S.isOwner||isCOO(S.uid)) return all; if(amPodLead()) return all.filter(id=>teamOf(id)===myPod()||isShared(id)); const hd=myHeadTeam(); if(hd) return all.filter(id=>teamOf(id)===hd); return all.filter(id=>id===S.uid); }
 function viewWorklog(){
   const V=S.wlv||(S.wlv={d:today(),pod:'',who:''}), td=today(), ap=amApprover()||S.isOwner;
   if(!WL.loaded) return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Records'}),h('h1',{class:'h1',text:'Day log'}))),h('p',{class:'muted',text:WL.err?'The day log isn’t set up yet: run m_work_logs.sql in Supabase.':'Loading…'})];
@@ -4784,19 +4826,24 @@ function viewWorklog(){
       l.due0&&l.due&&l.due>l.due0?'first set for '+fmtD(l.due0):'', l.since&&l.since<day?'since '+wd(l.since)+' '+fmtD(l.since):'',
       wlTaskOf(l)?(wlTaskOf(l).doneAt?'task done':wlTaskOf(l).verify?'task sent for checking':stageOf(wlTaskOf(l))==='doing'?'task in progress':''):l.clRef&&wlStepOf(l)&&wlStepOf(l).done?'step ticked':''].filter(Boolean).join(' · ');
     return h('div',{class:'wl-l'},h('span',{class:'wl-st',title:st[1],style:`color:${st[2]}`,text:st[0]}),h('div',{},h('b',{text:wlLineName(l)}),h('div',{class:'wl-tx',text:l.text}),l.part?h('div',{class:'wl-tx',text:'Today: '+l.part}):null,fl?h('div',{class:'wl-flag',text:'⚑ '+fl}):null,sub?h('div',{class:'wl-sub'+(/passed/.test(sub)?' late':''),text:sub}):l.from?h('div',{class:'wl-sub',text:'carried on from the day before'}):null)); };
+  /* a shared architect's day seen by a POD leader (not the mentor): only the lines on the leader's POD's projects */
+  const linesFor=(id,r)=>{ const ls=(r&&r.lines)||[]; if(ap||!isShared(id)||id===S.uid||mentorOf(id)===S.uid) return [ls,0];
+    const mine=ls.filter(l=>l.projectId&&inMyPodProject(S.projects[l.projectId])); return [mine,ls.length-mine.length]; };
+  const lsEl=(id,r,day)=>{ if(!r) return null; const [ls,hid]=linesFor(id,r);
+    return h('div',{class:'wl-ls'},ls.map(l=>lineEl(l,day,id)),hid?h('div',{class:'wl-sub',text:`+ ${hid} line${hid>1?'s':''} on other PODs’ work`}):null); };
   /* one day of one person: written time, then its lines */
   const atTxt=(r,day)=>r?'written '+wlTime(r.submitted_at):isWorkDay(day)?(day===td&&new Date().getHours()<11?'not yet':'no plan written'):'day off';
   const dayCol=(id,day,lbl)=>{ const r=wlGet(id,day);
     return h('div',{class:'wl-dc'},h('div',{class:'wl-cl'},h('b',{text:lbl}),h('span',{class:'wl-at'+(wlLate(r)?' late':''),text:atTxt(r,day)})),
-      r?h('div',{class:'wl-ls'},(r.lines||[]).map(l=>lineEl(l,day,id))):null); };
+      lsEl(id,r,day)); };
   const card=(id,day,showName)=>{ const r=wlGet(id,day);
     /* a day for everyone: each person's previous working day beside the day shown (Principal, 7 Nov 2026) */
     if(showName){ const pd=wlPrevDay(day);
-      return h('div',{class:'wl-card'},h('div',{class:'wl-ch'},avaEl(id,false,'sm'),h('b',{text:nameOf(id)}),h('span',{class:'muted',text:podLabel(teamOf(id))})),
+      return h('div',{class:'wl-card'},h('div',{class:'wl-ch'},avaEl(id,false,'sm'),h('b',{text:nameOf(id)}),h('span',{class:'muted',text:podLabel(teamOf(id))+(isShared(id)&&mentorOf(id)?' · mentor '+shortName(mentorOf(id)):'')})),
         h('div',{class:'wl-2'},dayCol(id,pd,(day===td?'Yesterday · ':'')+wd(pd)+' '+fmtD(pd)),dayCol(id,day,(day===td?'Today · ':'')+wd(day)+' '+fmtD(day)))); }
     return h('div',{class:'wl-card'},h('div',{class:'wl-ch'},showName?[avaEl(id,false,'sm'),h('b',{text:nameOf(id)}),h('span',{class:'muted',text:podLabel(teamOf(id))})]:h('b',{text:fmtD(day)}),
         h('span',{class:'wl-at'+(wlLate(r)?' late':''),text:r?'written '+wlTime(r.submitted_at):isWorkDay(day)?(day===td&&new Date().getHours()<11?'not yet':'no plan written'):'day off'})),
-      r?h('div',{class:'wl-ls'},(r.lines||[]).map(l=>lineEl(l,day,id))):null); };
+      lsEl(id,r,day)); };
   /* the plan rule: the Principal and the COO switch it, and open SLATE OS for a day (everyone, or one person on leave) */
   { const pc=pwCard(); if(pc) out.push(pc); }
   if((S.isOwner||isCOO(S.uid))&&S.canWrite&&!window.slateReview){ const g=wlGateCfg()||{}, on=wlGateOn(td), soon=!on&&!g.off&&g.from&&g.from>td, op=(g.open||{})[td];
@@ -4825,7 +4872,7 @@ function viewWorklog(){
 /* ---------- Studio now (Principal and COO, and a POD leader's own POD) ---------- */
 /* who is doing what: each person in the PODs and support teams, the task they are on now, and their open, late and waiting counts */
 function whoDoingSec(){
-  const td=today(), ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&(/^pod\b/i.test(teamOf(id)||'')||isSupport(id))&&!isChalkP(id)&&!isPriv(id)&&!isOfficeStaff(id));
+  const td=today(), ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&(/^pod\b/i.test(teamOf(id)||'')||isShared(id)||isSupport(id))&&!isChalkP(id)&&!isPriv(id)&&!isOfficeStaff(id));
   if(!ids.length) return null;
   const all=activeTasks().filter(t=>!t.archived&&!t.doneAt);
   const ord=[...pods(),...supportTeams()], tk=id=>{ const i=ord.indexOf(teamOf(id)); return i<0?99:i; };
@@ -4893,7 +4940,11 @@ function viewDeskToday(){
   const acts=lead?(()=>{ try{ return buildNotifs().filter(n=>n.cat==='action'&&n.pending&&!isArchived(n)); }catch(e){ return []; } })():[];
   const actRow=n=>{ const d=workDaysSince(String(n.at||'').slice(0,10));
     return hRow({dot:/overdue|not done/i.test(n.title)?'var(--overdue)':'var(--late)',strong:n.title,meta:[String(n.body||'').split('\n')[0].slice(0,110),d>=1?`waiting ${d} day${d>1?'s':''}`:'since today'].filter(Boolean).join(' · '),onclick:()=>nOpen(n)}); };
-  const waitQ=[...sent.map(t=>({at:(t.verify&&t.verify.at)||t.target||'9999',el:()=>sentRow(t)})),...acts.map(n=>({at:n.at||'9999',el:()=>actRow(n)}))].sort((a,b)=>String(a.at).localeCompare(String(b.at)));
+  /* shared architects' date requests on this POD's projects: the POD leader decides them (10 Nov 2026) */
+  const shReq=lead?activeTasks().filter(t=>t.request&&!t.doneAt&&!t.archived&&sharedDirect(t.assignee,t.projectId)&&t.request.by!==S.uid):[];
+  const shRow=t=>{ const n=ageOf(t.request.at), p=S.projects[t.projectId];
+    return hRow({dot:'var(--late)',strong:`Date to decide: ${t.title}`,meta:[shortName(t.assignee)+' (shared)',t.target?`${fmtD(t.target)} → ${fmtD(t.request.date)}`:`proposes ${fmtD(t.request.date)}`,p?p.name:'',n?`waiting ${ageTxt(n)}`:'since today'].filter(Boolean).join(' · '),onclick:()=>openTask(t.id)}); };
+  const waitQ=[...sent.map(t=>({at:(t.verify&&t.verify.at)||t.target||'9999',el:()=>sentRow(t)})),...acts.map(n=>({at:n.at||'9999',el:()=>actRow(n)})),...shReq.map(t=>({at:t.request.at||'9999',el:()=>shRow(t)}))].sort((a,b)=>String(a.at).localeCompare(String(b.at)));
   const open=mine.filter(t=>!t.doneAt&&!t.verify);
   const now=open.filter(t=>vfReturned(t)||(t.target&&t.target<=td)).sort(byTarget);
   const week=open.filter(t=>!now.includes(t)&&t.target&&t.target<=wk).sort(byTarget);
@@ -7380,7 +7431,7 @@ const newTaskPeople=()=>amMgr()?memberOpts():[['','Select person…'],...msgTask
 function sheetTask(){
   const raw=S.tasks[S.sheet.id];
   if(!raw) return [head('Task','Not found'),h('p',{class:'muted',text:'This task is no longer in the register.'})];
-  const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((!ck&&leadsProj(t.projectId))||amApprover()||cctl)&&S.canWrite, ap=(ck?(S.isOwner||(canChalkAssign()&&!t.target&&!t.request)):(amApprover()||leadFree(t.projectId)))&&S.canWrite, boss=ck?'the Principal':'the COO', mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
+  const t={...raw,id:S.sheet.id}, p=S.projects[t.projectId], ck=isChalkTask(t), cctl=ck&&canChalkEdit(), mgr=((!ck&&leadsProj(t.projectId))||amApprover()||cctl)&&S.canWrite, ap=(ck?(S.isOwner||(canChalkAssign()&&!t.target&&!t.request)):(amApprover()||leadFree(t.projectId)||sharedDirect(t.assignee,t.projectId)))&&S.canWrite, boss=ck?'the Principal':isShared(t.assignee)&&!amApprover()?'the POD leader':'the COO', mine=t.assignee===S.uid, d=S.sheet.d, m=S.sheet.mode;
   const canAct=S.canWrite&&!t.archived&&(mine||mgr);
   const out=[head(`${projLabel(p)} · ${t.kind||'Task'}`,t.title)];
   out.push(h('div',{class:'sh-status'},pill(t),!t.doneAt&&!t.archived&&h('span',{class:'tag',text:STAGE_L[stageOf(t)]}),t.archived&&h('span',{class:'tag',text:t.held?'Frozen · project on hold':t.dropped==='asbuilt'?'Dropped · as-built work stopped':t.dropped?'Dropped · project closed':'Archived'}),(t.revisions||0)>0&&h('span',{class:'tag tag-rev',style:(t.revisions||0)>=3?'background:#FFE5E5;color:var(--overdue)':'',title:movePenalty(t)?`Each move after the first costs 5% of this task's score (now −${Math.round(movePenalty(t)*100)}%)`:(t.revisions||0)>=1?'The first move is free; each later move costs 5% of the score':'',text:`Date revised ${t.revisions}×`+(movePenalty(t)?` · −${Math.round(movePenalty(t)*100)}%`:'')})));
@@ -7628,15 +7679,16 @@ function sheetNewTask(){
          verification only when everyone has finished; separate tasks go one by one */
       const who=[d.assignee,...(d.also||[]).filter(id=>id&&id!==d.assignee)];
       const jt=who.length>1&&d.split!==true?{id:'J'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),with:who}:null;
-      const ap=amApprover()||leadFree(d.projectId); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:ap?d.target:'',proposed:ap?'':d.target,joint:jt}); },who.length>1?(jt?`Joint task added for ${who.length} people`:`Task added for ${who.length} people`):'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}${d.time?' '+fmtTime(d.time):''}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; d.time=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
+      const ap0=amApprover()||leadFree(d.projectId), apOf=id=>ap0||sharedDirect(id,d.projectId), ap=who.every(apOf); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:apOf(id)?d.target:'',proposed:apOf(id)?'':d.target,joint:jt}); },who.length>1?(jt?`Joint task added for ${who.length} people`:`Task added for ${who.length} people`):'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}${d.time?' '+fmtTime(d.time):''}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; d.time=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
     }},
       (()=>{ const tf=titleField(d); return tf[0]; })(),
       h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',(()=>{ const el=sel('assignee',newTaskPeople()); el.addEventListener('change',()=>renderSheet()); return el; })())),
       alsoPeople(d),
+      amApprover()?null:shClashNote(d.assignee,d.projectId,d.target),
       (d.also||[]).filter(id=>id&&id!==d.assignee).length?field('Several people',h('div',{style:'display:grid;gap:8px'},
         h('label',{class:'jt-opt'},h('input',{type:'radio',name:'jt',checked:d.split!==true,onchange:()=>{ d.split=false; renderSheet(); }}),h('span',{},h('b',{text:'One group task'}),h('span',{class:'muted',text:'One date for everyone. Nobody marks it done alone: it is finished for the whole group at once, or split it into parts that each person ticks.'}))),
         h('label',{class:'jt-opt'},h('input',{type:'radio',name:'jt',checked:d.split===true,onchange:()=>{ d.split=true; renderSheet(); }}),h('span',{},h('b',{text:'Separate tasks'}),h('span',{class:'muted',text:'Each person finishes and is approved on their own.'}))))):null,
-      field(amApprover()?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
+      field(amApprover()||sharedDirect(d.assignee,d.projectId)?'Due':'Proposed due date (optional)',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),inp('target',{type:'date'}))),
       field('Time (optional)',timeSel('sh-time',D().time,v=>{D().time=v},true),'For meetings and visits: shows beside the date.'),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'sh-del',checked:d.kind==='Deliverable',onchange:e=>{ d.kind=e.target.checked?'Deliverable':'Task'; }}),canSetDeliv()?'This is a deliverable':'This is a deliverable (the COO confirms)'),
       S.sheet.more?[
@@ -8410,7 +8462,7 @@ function peerScan(){ const open=[], stat=new Map(), st=id=>{ if(!stat.has(id)) s
       r.rounds.forEach(y=>{ const g=st(y.by); g.given++; if(y.res==='pass') g.passed++; else g.changes++; if(lead){ const q=st(lead); q.received++; if(y.res!=='pass') q.recChanges++; } });
       if(!p.closed&&peerOpen(x)&&activePhases(p).includes(k)) open.push({p,k,it,x,peer:clWho(p,it,x)}); }); }
   return {open,stat}; }
-function clWhoOpts(p){ const ps=podsOfProject(p); return [['','Owner: role'],...people().filter(id=>!isCOO(id)&&!isPriv(id)&&id!==ownerId()&&(ps.includes(teamOf(id))||(amApprover()&&isSupport(id)))).map(id=>[id,nameOf(id)])]; }
+function clWhoOpts(p){ const ps=podsOfProject(p); return [['','Owner: role'],...people().filter(id=>!isCOO(id)&&!isPriv(id)&&id!==ownerId()&&(ps.includes(teamOf(id))||isShared(id)||(amApprover()&&isSupport(id)))).map(id=>[id,nameOf(id)])]; }
 /* checklist items that record a value (Principal, 7 Nov 2026): the authority route and the FAR, MGC and height check are picked
    from lists in phase 0, and the design brief comes from the project details (the COO fills it in at set-up). The item can be
    ticked only once its value is in. Values are kept on the checklist entry as `val`. */
@@ -8591,7 +8643,7 @@ const dwStatTxt=s=>`${s.drawn} of ${s.n} drawn · ${s.checked} checked · ${s.nf
 function dwReviewDue(pid,k){ const per=dwDL()?3:5; const l=dwList(pid,k); if(!l||!l.confirmed_at) return null; const s=dwStats(pid,k); if(s.n&&s.gfc===s.n) return null;
   const base=(l.review_at||l.confirmed_at).slice(0,10); let x=base, n=0; for(let i=0;i<30&&n<per;i++){ x=addDays(x,1); if(isWorkDay(x)) n++; } return x; }
 /* people a drawing can go to: the project's PODs and the Drafting Pool (the Design Associate Lead: the Drafting Pool only) */
-function dwPeople(p,poolOnly){ return people().filter(id=>!isLeft(id)&&!isPriv(id)&&id!==ownerId()&&!isCOO(id)&&(isDraftMember(id)||(!poolOnly&&podsOfProject(p).includes(teamOf(id)))))
+function dwPeople(p,poolOnly){ return people().filter(id=>!isLeft(id)&&!isPriv(id)&&id!==ownerId()&&!isCOO(id)&&(isDraftMember(id)||(!poolOnly&&(isShared(id)||podsOfProject(p).includes(teamOf(id))))))
   .sort((a,b)=>(isDraftMember(a)?1:0)-(isDraftMember(b)?1:0)||nameOf(a).localeCompare(nameOf(b))); }
 /* set up the list when the phase starts: the standard list, changed for this project, or another project's list */
 function openDwgSetup(pid,k){ S.sheet={type:'dwgSetup',pid,k,back:S.sheet&&S.sheet.type==='projView'?S.sheet.id:null,
@@ -8627,7 +8679,7 @@ function sheetDwgList(){ const sh=S.sheet, p=S.projects[sh.pid], k=sh.k; if(!p) 
     const ppl=dwPeople(p,!lead);
     const row=d=>{ const mine=d.who===S.uid, step=dwStep(d), chk=dwCanChk(d,p), ret=sh.dwRet===d.id, late=d.due&&d.due<td&&['todo','doing'].includes(d.st);
       const whoEl=(lead||(dl&&(!d.who||isDraftMember(d.who))))&&['todo','doing'].includes(d.st)?(()=>{ const s=h('select',{'aria-label':'Who does '+d.title,onchange:e=>dwSave(d.id,{who:e.target.value||null},e.target.value?`Given to ${shortName(e.target.value)}`:'Nobody has it now')},
-          h('option',{value:'',text:'Nobody yet'}),(d.who&&!ppl.includes(d.who)?[d.who]:[]).concat(ppl).map(id=>h('option',{value:id,text:shortName(id)+(isDraftMember(id)?' · Drafting':'')}))); s.value=d.who||''; return s; })()
+          h('option',{value:'',text:'Nobody yet'}),(d.who&&!ppl.includes(d.who)?[d.who]:[]).concat(ppl).map(id=>h('option',{value:id,text:shortName(id)+(isDraftMember(id)?' · Drafting':isShared(id)?' · Shared':'')}))); s.value=d.who||''; return s; })()
         :d.who?h('span',{text:shortName(d.who)}):S.canWrite&&!window.slateReview&&d.st==='todo'?h('button',{class:'linkish',type:'button',onclick:()=>dwSave(d.id,{who:S.uid},'It’s yours'),text:'Take it'}):h('span',{class:'muted',text:'—'});
       const dueEl=lead||(dl&&d.who&&isDraftMember(d.who))?h('input',{type:'date',class:'dw-date','aria-label':'Finish by',value:d.due||'',onchange:e=>dwSave(d.id,{due:e.target.value||null},'Finish-by date set')})
         :h('span',{class:late?'late':'',text:d.due?fmtD(d.due):'—'});
@@ -12990,6 +13042,13 @@ function sheetEmp(){ const sh=S.sheet, d=sh.d, F=S.feeFin, st=sh.sid?(F.staff||[
     h('div',{},h('div',{class:'lbl',text:'Designation'}),h('div',{class:'v',text:(uid?roleOf(uid):'')||(st&&st.designation)||'—'}),h('div',{class:'s',text:uid?teamLabel(uid):(st&&st.team)||''})),
     h('div',{},h('div',{class:'lbl',text:'Joined'}),h('div',{class:'v',text:st&&st.joinDate?fmtD(st.joinDate):'—'}),h('div',{class:'s',text:st&&st.joinDate?expLen(st.joinDate)+' at SLATE':''})),
     h('div',{},h('div',{class:'lbl',text:'Status'}),h('div',{class:'v',style:probDue?'color:var(--overdue)':'',text:st&&st.active===false?'Left':onProb?'On probation':st&&st.confirmedOn?'Confirmed':'—'}),h('div',{class:'s',text:onProb?'until '+fmtD(st.probationEnd):st&&st.confirmedOn?'since '+fmtD(st.confirmedOn):''}))));
+  /* shared architects (10 Nov 2026): no fixed POD; a POD leader mentors them (feedback, reviews, their whole day log) */
+  if(uid&&isShared(uid)){ const leads=people().filter(id=>!isLeft(id)&&pods().some(pd=>isPodLead(id,pd))), m=mentorOf(uid);
+    out.push(h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:'Shared by all PODs'}),h('span',{class:'muted',text:m?'Mentor: '+nameOf(m):'No mentor yet'})),
+      h('div',{class:'f-hint',style:'margin:0',text:'Every POD leader gives them work on the POD’s projects, sets its dates and checks it. The mentor gives feedback, joins their reviews and sees their whole day log. You are told only if they are overloaded.'}),
+      S.canWrite&&amApprover()?field('Mentor',(()=>{ const el=h('select',{onchange:e=>run(()=>settingsRef().update({roster:{[uid]:{mentor:e.target.value}}}),e.target.value?'Mentor set':'Mentor removed').then(()=>renderSheet())},
+        h('option',{value:'',text:'No mentor'}),leads.map(id=>h('option',{value:id,text:nameOf(id)+' · '+podLabel(teamOf(id))}))); el.value=m||''; return el; })()):null,
+      (()=>{ shLoadGet(); const t=shLoadText(uid); return h('div',{class:'f-hint',style:'margin:0',text:'Open work now: '+t}); })())); }
   if(!st){ out.push(h('div',{class:'callout'},h('div',{text:'No HR record yet for this person.'}),h('button',{class:'btn btn-sm btn-primary',type:'button',style:'justify-self:start',onclick:()=>openSal(null,uid),text:'Set up their HR record'}))); return out; }
   /* work, last 90 days */
   if(uid){ const sc=empScore(uid); out.push(h('div',{class:'card',style:'gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Work in the last 90 days'}),h('b',{style:'color:'+(sc.pct==null?'var(--muted)':sc.pct>=85?'var(--ontime)':sc.pct>=60?'var(--late)':'var(--overdue)'),text:sc.pct==null?'—':sc.pct+'%'})),
