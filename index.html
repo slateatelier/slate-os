@@ -2104,8 +2104,11 @@ function roleGroup(id){ const r=roleOf(id)||'', t=teamOf(id);
   if(/intern/i.test(r)) return 'intern';
   if(/visual/i.test(r)||/visual/i.test(t)) return 'viz';
   if(/draft|design associate/i.test(r)||/draft/i.test(t)) return /lead|head/i.test(r)?'dhead':'draft';
-  if(/^pod\b/i.test(t)) return isPodLead(id,t)?'lead':(!r||/junior|architect/i.test(r))?'junior':'other';
+  if(/^pod\b/i.test(t)||isSharedTeam(t)) return isPodLead(id,t)?'lead':(!r||/junior|architect/i.test(r))?'junior':'other';
   return 'other'; }
+/* junior architects who can be named on a project: the shared ones and any POD's juniors (10 Nov 2026) */
+const juniorPeople=()=>people().filter(id=>!isLeft(id)&&roleGroup(id)==='junior');
+const projJunior=p=>{ const j=p&&p.junior; return j&&S.members[j]&&!isLeft(j)?j:''; };
 const unscored=id=>['intern','other','boss'].includes(roleGroup(id));
 const myHeadTeam=()=>S.uid&&roleGroup(S.uid)==='dhead'?teamOf(S.uid):'';
 const isSupport=id=>!!id&&supportTeams().includes(teamOf(id));
@@ -4018,9 +4021,10 @@ function kFollow(td,ap){ const rows=[];
   return rows; }
 function giveSel(t){ const team=people().filter(id=>id!==S.uid&&teamOf(id)===myPod()&&(S.members[id]||{}).active!==false);
   const pool=isProjLead(S.projects[t.projectId])?people().filter(id=>id!==S.uid&&isDraftMember(id)&&!isLeft(id)&&draftDirect(id,t.projectId)):[];
-  const shared=sharedPeople().filter(id=>id!==S.uid&&sharedDirect(id,t.projectId));
+  const pj=projJunior(S.projects[t.projectId]);
+  const shared=sharedPeople().filter(id=>id!==S.uid&&sharedDirect(id,t.projectId)).sort((a,b)=>(b===pj)-(a===pj));
   const load0=id=>`${shortName(id)} · ${activeTasks().filter(x=>x.assignee===id&&!x.doneAt&&x.target&&x.target<=addDays(today(),7)).length} this week`;
-  const load=id=>isShared(id)?`${shortName(id)} · ${shLoadText(id,true)}`:load0(id);
+  const load=id=>(isShared(id)?`${shortName(id)} · ${shLoadText(id,true)}`:load0(id))+(id===pj?' · project junior':'');
   const el=h('select',{class:'h-sel','aria-label':'Give to',style:'width:auto;max-width:100%',onchange:e=>{ const to=e.target.value; if(!to) return;
       run(()=>taskUpdate(t.id,{assignee:to,checker:S.uid,assignReq:null},[{type:'reassigned',from:t.assignee,to,note:`${nameOf(S.uid)} checks it before it goes on`}]),`Given to ${shortName(to)}. It comes back to you to check`); }},
     h('option',{value:'',text:'Give to…'}),pool.length||shared.length?[h('optgroup',{label:podLabel(myPod())||'Your POD'},team.map(id=>h('option',{value:id,text:load(id)}))),
@@ -4386,10 +4390,10 @@ function wlMyProjects(){ const dp=isDraftMember(S.uid)||isShared(S.uid);   /* th
   .sort((a,b)=>String(a.name||a.code).localeCompare(String(b.name||b.code))); }
 /* the project list in the plan: the Drafting Pool sees the projects the pool is working on first */
 function wlProjOpts(ps){ const opt=p=>h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')});
-  if(isShared(S.uid)){ const mine=new Set(activeTasks().filter(t=>!t.doneAt&&!t.archived&&t.assignee===S.uid).map(t=>t.projectId));
+  if(isShared(S.uid)){ const mine=new Set([...activeTasks().filter(t=>!t.doneAt&&!t.archived&&t.assignee===S.uid).map(t=>t.projectId),...ps.filter(p=>p.junior===S.uid).map(p=>p.id)]);
     const a=ps.filter(p=>mine.has(p.id)), b=ps.filter(p=>!mine.has(p.id));
     const lbl=p=>{ const pd=podsOfProject(p)[0]; return pd?h('option',{value:p.id,text:(p.code?p.code+' · ':'')+(p.name||'')+' · '+pd.replace(/^pod/i,'POD')}):opt(p); };
-    return [a.length?h('optgroup',{label:'You have tasks on'},a.map(lbl)):null,b.length?h('optgroup',{label:a.length?'All other projects':'All projects'},b.map(lbl)):null]; }
+    return [a.length?h('optgroup',{label:'Your projects'},a.map(lbl)):null,b.length?h('optgroup',{label:a.length?'All other projects':'All projects'},b.map(lbl)):null]; }
   if(!isDraftMember(S.uid)) return ps.map(opt);
   const pool=new Set(activeTasks().filter(t=>!t.doneAt&&!t.archived&&t.assignee&&isDraftMember(t.assignee)).map(t=>t.projectId));
   const a=ps.filter(p=>pool.has(p.id)), b=ps.filter(p=>!pool.has(p.id));
@@ -7291,7 +7295,7 @@ const siteReq=(id,d)=>{ const p=id&&S.projects[id]; return p?!(p.closed||p.legac
 /* typed as "C" or "4": a letter reads as a block (Bashundhara), a number as a sector (Uttara); anything named in full stays as typed */
 const siteBlock=b=>!b?'':/^[A-Z]{1,2}$/i.test(b)?'Block '+b:/^\d+[A-Z]?$/i.test(b)?'Sector '+b:b.replace(/^(BLOCK|SECTOR|SECTION)\b/i,m=>m[0].toUpperCase()+m.slice(1).toLowerCase());
 const siteAddr=p=>!p?'':[p.plotNo?'Plot '+p.plotNo:'',p.roadNo?'Road '+p.roadNo:'',siteBlock(p.blockSector),p.location||''].filter(Boolean).join(', ');
-const PFIELDS=['intBuilding','intUnit','intFloor','intArea','intSpace','intExec','intHandover','plan','entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note','briefMix','briefParking','briefBudget','briefLo','briefNotes'];
+const PFIELDS=['intBuilding','intUnit','intFloor','intArea','intSpace','intExec','intHandover','plan','entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note','briefMix','briefParking','briefBudget','briefLo','briefNotes','junior'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
 const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
 /* outsourced services: the consultant or vendor doing the work */
@@ -7682,7 +7686,7 @@ function sheetNewTask(){
       const ap0=amApprover()||leadFree(d.projectId), apOf=id=>ap0||sharedDirect(id,d.projectId), ap=who.every(apOf); run(async()=>{ for(const id of who) await createTask({...d,assignee:id,target:apOf(id)?d.target:'',proposed:apOf(id)?'':d.target,joint:jt}); },who.length>1?(jt?`Joint task added for ${who.length} people`:`Task added for ${who.length} people`):'Task added').then(ok=>{ if(ok){ savePref('lastProject',d.projectId); savePref('lastAssignee',d.assignee); S.sheet.added.unshift(`${title} → ${who.map(id=>nameOf(id)+(needsAssignApproval(id,d.projectId)?' (awaiting COO)':'')).join(', ')}`+(d.target?`, ${ap?'':'proposed '}${fmtD(d.target)}${d.time?' '+fmtTime(d.time):''}`:'')); d.title=''; d.phase=''; d.start=''; d.note=''; d.also=[]; d.time=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('sh-title'); el&&el.focus(); } });
     }},
       (()=>{ const tf=titleField(d); return tf[0]; })(),
-      h('div',{class:'form-row'},field('Project',sel('projectId',projectOpts())),field('Assign to',(()=>{ const el=sel('assignee',newTaskPeople()); el.addEventListener('change',()=>renderSheet()); return el; })())),
+      h('div',{class:'form-row'},field('Project',(()=>{ const el=sel('projectId',projectOpts()); el.addEventListener('change',()=>{ const j=projJunior(S.projects[d.projectId]); if(j&&amMgr()&&(!d.assignee||d.assignee===S.uid)&&canAssignTo(j)) d.assignee=j; renderSheet(); }); return el; })()),field('Assign to',(()=>{ const el=sel('assignee',newTaskPeople()); el.addEventListener('change',()=>renderSheet()); return el; })())),
       alsoPeople(d),
       amApprover()?null:shClashNote(d.assignee,d.projectId,d.target),
       (d.also||[]).filter(id=>id&&id!==d.assignee).length?field('Several people',h('div',{style:'display:grid;gap:8px'},
@@ -7883,6 +7887,7 @@ function sheetProject(){
         d.entry==='completed'?h('label',{class:'field'},h('span',{class:'lbl',text:'Completed in (optional)'}),h('input',{id:'sh-completedOn',type:'month',max:today().slice(0,7),value:d.completedOn||'',oninput:e=>{d.completedOn=e.target.value}})):null)):null,
       field('Project type'+(isStudio?'':' *'),typeSel(d,'Select project type…')),
       internal?teamPickers(d,id):field('POD (optional)',(()=>{ const lockPod=!amApprover()&&!!myPod(); const el=sel('pod',lockPod?[[d.pod||myPod(),podLabel(d.pod||myPod())]]:[['','Choose later (no POD yet)'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)'],...(!id&&canChalkEdit()?[['__chalk','Chalk Create (separate unit) →']]:[])]); if(lockPod) el.disabled=true; el.addEventListener('change',()=>{ if(el.value==='__chalk'){ D().pod=''; openChalkProject(); return; } renderSheet(); }); return el; })(),!amApprover()&&myPod()?'Your pod. You request projects for your own pod; the COO approves them.':d.pod?'The lead POD: its leader is accountable for the project.':'You can choose the POD later on the project. Phases are set up once it has one.'),
+      !internal&&d.type!=='proposal'?field('Junior architect (optional)',sel('junior',[['','None yet'],...juniorPeople().map(x=>[x,nameOf(x)+(isShared(x)?' · shared':' · '+podLabel(teamOf(x)))])]),'Works on this project with the POD leader. Suggested first when the POD leader gives out its work.'):null,
       !isStudio&&[
         ...(d.type==='interior'||(!d.type&&id&&(S.projects[id]||{}).type==='interior')?[intFormSection(d,sec,id)]:[
         d.type==='proposal'?h('div',{class:'callout',style:'font-size:13.5px',text:'Design proposal (R&D): only the name, POD, client and area are needed now. Land size, FAR, plot and road, agreement and scope can wait until the project is confirmed; fill them in then (Edit project), or when you create the real project.'}):null,
@@ -7989,9 +7994,15 @@ function teamSection(p){
   if(!ps.length&&!ms.length&&!ap&&!lead) return null;
   const sh=S.sheet, add=sh.addMember||null, td=today();
   const leadOf=pd=>people().find(id=>isPodLead(id,pd));
+  const jr=projJunior(p), jrCan=(ap||lead)&&!p.closed&&!isInternalP(p)&&ps.length>0;
+  const jrRow=jrCan||jr?h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},
+      h('div',{class:'pc-row'},h('b',{text:'Junior architect'}),jr?h('span',{class:'who',style:'font-weight:600'},avaEl(jr,false,'sm'),nameOf(jr)):h('span',{class:'f-hint',text:'None yet'})),
+      jrCan?(()=>{ const el=h('select',{'aria-label':'Junior architect',style:'background:#fff',onchange:e=>{ const v=e.target.value; run(()=>S.db.doc('projects/'+p.id).update({junior:v}),v?`${shortName(v)} is the project's junior architect`:'Junior architect removed').then(()=>renderSheet()); }},
+          h('option',{value:'',text:'None'}),juniorPeople().map(x=>h('option',{value:x,text:nameOf(x)+(isShared(x)?' · shared':' · '+podLabel(teamOf(x)))}))); el.value=jr; return el; })():null,
+      h('div',{class:'f-hint',text:'Suggested first when this project’s work is given out. The POD leader still gives each task and checks it.'})):null;
   const rows=[...ps.map(pd=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:4px'},
       h('div',{class:'pc-row'},h('b',{text:podLabel(pd)}),h('span',{class:'f-hint',text:leadOf(pd)?'Lead: '+nameOf(leadOf(pd)):''})),
-      h('div',{class:'f-hint',text:people().filter(id=>teamOf(id)===pd).map(nameOf).join(', ')||'No one in this pod yet'}))),
+      h('div',{class:'f-hint',text:people().filter(id=>teamOf(id)===pd).map(nameOf).join(', ')||'No one in this pod yet'}))),jrRow,
     ...ms.sort((a,b)=>nameOf(a[0]).localeCompare(nameOf(b[0]))).map(([pid,m])=>{ const exp=m.until&&m.until<td, pend=m.status==='pending';
       const tag=pend?h('span',{class:'pill s-late',text:'Waiting for the COO'}):exp?h('span',{class:'pill s-overdue',text:'Ended '+fmtD(m.until)}):h('span',{class:'pill s-ontime',text:m.temp?(m.until?'Temporary · until '+fmtD(m.until):'Temporary'):'Project member'});
       const btns=[];
