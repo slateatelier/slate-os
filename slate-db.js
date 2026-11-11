@@ -34,8 +34,30 @@
   /* No call waits for ever on a weak signal: a save gives up after 15 seconds, a load after 30,
      so the app never stays locked and the person is told to try again. */
   const TIMEOUT_MSG = 'Not saved: the connection is too slow. Check your signal and try again.';
+  /* View as (11 Nov 2026): the Principal or the COO sees Studio as a team member sees it. Read-only: every
+     call that would change something stops here, before it leaves the device. Reads and sign-in refresh pass;
+     background "seen"/presence calls are answered quietly; anything else gets VA_MSG. */
+  const VA_KEY = 'slate.viewAs';
+  let viewAs = null;   // { id, name, by, byName } once confirmed after sign-in
+  const VA_MSG = 'View only: nothing is saved while you are viewing as someone else.';
+  const VA_READ = new Set(['my_review', 'temp_password_pending', 'fin_role', 'books_role', 'shared_load', 'review_list', 'project_dues',
+    'pin_status', 'open_accounts', 'fin_private_people', 'fin_pick_lists', 'fin_ledger', 'drafting_board', 'dash_rows', 'books_rc_due',
+    'biz_books_money', 'adoption_stats', 'my_adoption', 'push_public_key', 'view_as_list']);
+  const VA_QUIET = new Set(['touch_seen', 'review_seen', 'notifications_seen', 'log_day_in', 'pin_touch', 'message_read']);
+  const jsonRes = (status, body) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+  function vaBlock(input, init, method) {
+    if (!viewAs || method === 'GET' || method === 'HEAD') return null;
+    const url = String((input && input.url) || input || '');
+    if (/\/auth\/v1\/(token|logout)/.test(url) || /\/storage\/v1\/object\/sign\//.test(url)) return null;
+    const rpc = (url.match(/\/rest\/v1\/rpc\/([a-z0-9_]+)/) || [])[1];
+    if (rpc && VA_READ.has(rpc)) return null;
+    if (/\/functions\/v1\/drive-upload/.test(url)) { try { if (JSON.parse(init.body || '{}').act === 'get') return null; } catch (_) {} }
+    if (rpc && VA_QUIET.has(rpc)) return jsonRes(200, null);
+    return jsonRes(403, { message: VA_MSG, code: 'VIEWONLY' });
+  }
   const timedFetch = (input, init = {}) => {
     const method = String(init.method || (input && input.method) || 'GET').toUpperCase();
+    const blocked = vaBlock(input, init, method); if (blocked) return blocked;
     const ms = method === 'GET' || method === 'HEAD' ? 30000 : 15000;
     const ctl = new AbortController(), outer = init.signal;
     if (outer) { if (outer.aborted) ctl.abort(); else outer.addEventListener('abort', () => ctl.abort(), { once: true }); }
@@ -229,8 +251,8 @@
     let peopleChanged = people.size !== ppl.length;
     for (const r of ppl) { if (JSON.stringify(people.get(r.id)) !== JSON.stringify(r)) peopleChanged = true; people.set(r.id, r); }
     for (const id of [...people.keys()]) if (!ppl.some(r => r.id === id)) { people.delete(id); peopleChanged = true; }
-    me = people.get(authUser.id) || null;
-    if (me && review) me = { ...me, active: true };   // a review login's profile stays inactive so the team never meets it
+    me = people.get(viewAs ? viewAs.id : authUser.id) || null;   // View as: every check in this file sees the person viewed
+    if (me && review && !viewAs) me = { ...me, active: true };   // a review login's profile stays inactive so the team never meets it
     if (peopleChanged) touchPeople();
   }
   async function loadDelta() {
@@ -276,6 +298,7 @@
 
   /* ---------------- writes ---------------- */
   async function rpcWrite(path, data, mode) {
+    if (viewAs && /^data\/users\//.test(path)) return;   // their own small states (read marks, drafts): skipped quietly
     const { error } = await sb.rpc('doc_write', { p_path: path, p_data: clone(data) || {}, p_mode: mode });
     if (error) throw friendly(error);
     const cur = store.get(path);
@@ -333,6 +356,7 @@
         return rpcWrite(path, patch, 'update');
       },
       async delete() {
+        if (viewAs && /^data\/users\//.test(path)) return;
         const { error } = await sb.from('docs').delete().eq('path', path);
         if (error) throw friendly(error);
         if (store.delete(path)) touch(path);
@@ -356,10 +380,12 @@
   const displayName = p => (p && (p.label || p.full_name || (p.email || '').split('@')[0])) || 'Team member';
   const user = {
     async me() {
+      if (viewAs) { const p = people.get(viewAs.id); return { id: viewAs.id, name: displayName(p), email: p && p.email, isOwner: false }; }
       return me ? { id: me.id, name: displayName(me), email: me.email, isOwner: me.designation === 'principal' && (me.active || !!(review && review.live && review.kind === 'principal')) }
                 : { id: authUser ? authUser.id : null, name: authUser && authUser.email, isOwner: false };
     },
-    async can(what) { return what === 'data.write' ? !!(me && me.active) && !review : true; },
+    async can(what) { if (viewAs) return true;   // their buttons show as they see them; the saves themselves stop in vaBlock
+      return what === 'data.write' ? !!(me && me.active) && !review : true; },
     async profiles(ids) {
       const out = {};
       for (const id of ids || []) { const p = people.get(id); if (p) out[id] = { id, name: displayName(p) }; }
@@ -1822,6 +1848,43 @@
     place();
   }
 
+  /* ---------------- View as (11 Nov 2026) ---------------- */
+  const vaReal = () => !!(me && me.active && ['principal', 'coo'].includes(me.designation)) || !!(review && review.live);
+  const vaCan = p => !!p && p.active && !['principal', 'coo'].includes(p.designation) && !(authUser && p.id === authUser.id);
+  async function vaStart() {
+    let want = null; try { want = JSON.parse(sessionStorage.getItem(VA_KEY) || 'null'); } catch (_) {}
+    if (!want || !want.id) return;
+    const p = people.get(want.id);
+    if (!vaReal() || !vaCan(p)) { try { sessionStorage.removeItem(VA_KEY); } catch (_) {} return; }
+    if (!want.logged) {   // one quiet log line per start; if the log isn't set up yet, viewing still works
+      try { await sb.rpc('view_as_start', { p_who: want.id, p_device: innerWidth < 760 ? 'mobile' : 'computer' }); } catch (_) {}
+      try { sessionStorage.setItem(VA_KEY, JSON.stringify({ ...want, logged: 1 })); } catch (_) {}
+    }
+    viewAs = { id: p.id, name: displayName(p), by: authUser.id, byName: displayName(me) };
+    window.slateViewAs = viewAs;
+    me = p;
+  }
+  window.slateViewAsStart = id => { const p = people.get(id); if (!vaReal() || !vaCan(p)) return false;
+    try { sessionStorage.setItem(VA_KEY, JSON.stringify({ id })); } catch (_) { return false; }
+    location.reload(); return true; };
+  window.slateViewAsExit = () => { try { sessionStorage.removeItem(VA_KEY); } catch (_) {} location.reload(); };
+  window.slateViewAsWho = () => [...people.values()].filter(vaCan);
+  window.slateViewAsLog = async () => { const { data, error } = await sb.rpc('view_as_list', { p_limit: 30 }); if (error) throw friendly(error);
+    return (data || []).map(r => ({ ...r, by: displayName(people.get(r.by_id)), who: displayName(people.get(r.who_id)) })); };
+  function vaBar() {
+    const p = people.get(viewAs.id) || {};
+    const role = p.role_label || ({ pod_leader: 'POD leader' })[p.designation] || '';
+    const bar = el('div', { id: 'slate-va', role: 'status' },
+      el('span', {}, el('b', {}, 'Viewing as ' + viewAs.name), role ? el('span', { class: 'va-r' }, ' · ' + role) : '', ' · read-only'),
+      (() => { const b = el('button', { type: 'button' }, 'Exit'); b.addEventListener('click', () => window.slateViewAsExit()); return b; })());
+    const st = el('style', {}, '#slate-va{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;gap:14px;'
+      + 'padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:#231f20;color:#fff;font:500 14px system-ui;box-shadow:0 -4px 16px rgba(0,0,0,.25)}'
+      + '#slate-va b{font-weight:700}#slate-va button{font:600 14px system-ui;padding:7px 16px;border-radius:999px;border:0;background:#E2231A;color:#fff;cursor:pointer}'
+      + '@media(max-width:480px){#slate-va .va-r{display:none}#slate-va{gap:10px;font-size:13.5px}}'
+      + 'body.va-on{padding-bottom:58px}body.va-on #fab,body.va-on #fbell{margin-bottom:58px}');
+    whenBody(() => { document.head.appendChild(st); document.body.appendChild(bar); document.body.classList.add('va-on'); });
+  }
+
   let resolveReady;
   const ready = new Promise(r => { resolveReady = r; });
   let started = false;
@@ -1833,10 +1896,14 @@
     if (review && !review.live) { alert('This review login has ended. Ask the Principal to open it again.'); try { await sb.auth.signOut(); } catch (_) {} return; }
     window.slateReview = review;
     try { await loadAll(); } catch (e) { started = false; authScreen('signin'); return; }
+    await vaStart();
     hideAuth(); goLive(); addCss(); window.slateAccount = accountPanel;
+    if (viewAs) { vaBar(); window.slateMsgCount = () => 0; window.slateMsgCards = () => null; window.slateReminders = () => []; window.slateMsgCal = () => []; }
+    else {
     setupNotifications();
     setupPresence(session);
     setupMessages();
+    }
     setupReports();
     setupBackup();
     setupDayLog();

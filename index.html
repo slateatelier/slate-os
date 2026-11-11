@@ -1758,6 +1758,8 @@ const isMgr=id=>!!id&&(id===ownerId()||((S.settings&&S.settings.managers)||[]).i
 const amMgr=()=>S.isOwner||isMgr(S.uid);
 /* a live review login (read-only) stands in for the Principal or the COO it mirrors */
 const revKind=()=>{ const r=window.slateReview; return r&&r.live?r.kind:null; };
+/* View as (11 Nov 2026): the Principal or the COO sees Studio as a team member sees it, read-only (saves stop in slate-db.js) */
+const VA=()=>window.slateViewAs||null;
 const canView=()=>S.canWrite||!!revKind();
 const isApprover=id=>!!id&&(id===ownerId()||((S.settings&&S.settings.approvers)||[]).includes(id)||(id===S.uid&&revKind()==='coo'));
 const amApprover=()=>S.isOwner||isApprover(S.uid);
@@ -2843,7 +2845,7 @@ function mergeTasks(){
 }
 function syncPrivate(){
   if(!S.db) return;
-  const want=new Set(seePriv()?privIds():privIds().filter(id=>id===S.uid));
+  const want=new Set(VA()?[]:seePriv()?privIds():privIds().filter(id=>id===S.uid));   /* View as: their private tasks stay theirs */
   for(const id of Object.keys(S.privSubs)) if(!want.has(id)){ S.privSubs[id](); delete S.privSubs[id]; delete S.priv[id]; }
   for(const id of want) if(!S.privSubs[id]){
     S.privSubs[id]=S.db.collection(`lead/${id}/tasks`).onSnapshot(q=>{ S.priv[id]={}; q.docs.forEach(d=>{S.priv[id][d.id]=d.data()}); mergeTasks(); },()=>{});
@@ -2979,10 +2981,10 @@ async function boot(){
   db.doc(`data/users/${S.uid}/notif`).onSnapshot(snap=>{ S.nst=snap.exists?snap.data():{}; schedule(); },()=>{ S.nst={}; });
   db.collection('proposals').onSnapshot(q=>{ S.props={}; S.sign=''; q.docs.forEach(d=>{ if(d.id==='__signature'){ const x=d.data()||{}; S.sign=x.b64?'data:image/png;base64,'+x.b64:''; return; } S.props[d.id]=d.data(); }); schedule(); },()=>{ S.props={}; });
   db.collection('clients').onSnapshot(q=>{ S.clients={}; q.docs.forEach(d=>{S.clients[d.id]=d.data()}); schedule(); },()=>{ S.clients={}; });
-  db.doc(`data/users/${S.uid}/todo`).onSnapshot(snap=>{ S.todo=(snap.exists&&snap.data().items)||[]; schedule(); },()=>{ S.todo=[]; });
-  db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
-  db.doc(`data/users/${S.uid}/formDrafts`).onSnapshot(snap=>{ S.fdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.fdrafts={}; });
-  db.doc(`data/users/${S.uid}/planAhead`).onSnapshot(snap=>{ S.ahead=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.ahead={}; });
+  if(VA()) S.todo=[]; else db.doc(`data/users/${S.uid}/todo`).onSnapshot(snap=>{ S.todo=(snap.exists&&snap.data().items)||[]; schedule(); },()=>{ S.todo=[]; });
+  if(VA()) S.pdrafts={}; else db.doc(`data/users/${S.uid}/projDrafts`).onSnapshot(snap=>{ S.pdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.pdrafts={}; });
+  if(VA()) S.fdrafts={}; else db.doc(`data/users/${S.uid}/formDrafts`).onSnapshot(snap=>{ S.fdrafts=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.fdrafts={}; });
+  if(VA()) S.ahead={}; else db.doc(`data/users/${S.uid}/planAhead`).onSnapshot(snap=>{ S.ahead=(snap.exists&&snap.data().items)||{}; schedule(); },()=>{ S.ahead={}; });
   db.collection('tasks').onSnapshot(q=>{ S.shared={}; q.docs.forEach(d=>{S.shared[d.id]=d.data()}); mergeTasks(); },onSubErr);
 
   try{ const m=db.doc('members/'+S.uid); const g=await m.get(); if(!g.exists) await m.set({joinedAt:new Date().toISOString()}); }catch(e){}
@@ -3056,7 +3058,7 @@ function weekendGate(){
   fit(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit);
 }
 function daySplash(){
-  if(S.state!=='ready'||!S.uid||document.getElementById('day-splash')) return;
+  if(VA()||S.state!=='ready'||!S.uid||document.getElementById('day-splash')) return;
   const now=new Date(), td=today(), wkend=[5,6].includes(now.getDay());
   if(wkend) return weekendGate();
   const key=td+':'+S.uid; if(pref.daySplash===key) return;
@@ -3217,7 +3219,7 @@ function renderHeader(){
   const spaces=!cmem&&canProps()&&canView(), inBiz=spaces&&S.view==='biz';
   if(spaces){ const i=list.findIndex(x=>x[0]==='biz'); if(i>=0) list.splice(i,1); }
   if(!inBiz&&S.view!=='biz') S.lastStudio=S.view;
-  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','worklog','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk','drafting','review'];
+  const TASKV=['all','board','gantt'], MOREV=cmem?['notice','conv']:['more','notice','activity','worklog','setup','std','help','far','conv','reports','backup','entries','people','tlstatus','holidays','risk','drafting','review','viewas'];
   if(S.view==='setup'&&!amApprover()) S.view='mine';
   if(![...list.map(x=>x[0]),...TASKV,...MOREV,...(cmem?[]:['meet','team','dash']),...(spaces?['biz']:[])].includes(S.view)) S.view='mine';
   const cur=k=>S.view===k||(k==='all'&&TASKV.includes(S.view))||(k==='more'&&MOREV.includes(S.view))||(k==='cal'&&S.view==='meet'&&!cmem);
@@ -3260,9 +3262,10 @@ function buildView(){
   if(S.state==='signedout') return h('div',{class:'state'},h('strong',{text:'Sign in to continue'}),h('span',{text:'Sign in with your studio email, then your tasks appear here.'}));
   if(wlGated()) return viewPlanGate();
   if(pwGated()) return viewPodGate();
+  if(S.view==='viewas'&&!((S.isOwner||isCOO(S.uid))&&!VA())) S.view='mine';   /* View as opens on their Home */
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,worklog:viewWorklog,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={viewas:viewViewAs,queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,worklog:viewWorklog,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ const tv=seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); });
     if(S.view==='all'&&!fullView()&&myPod()&&!amChalkMember()) out.push(h('div',{class:'seg-row'},tv,h('div',{class:'seg seg-mine',role:'group','aria-label':'Whose tasks'},[[true,'Mine'],[false,'Whole POD']].map(([v,l])=>h('button',{type:'button','aria-pressed':String(!!S.f.mine===v),onclick:()=>{ S.f.mine=v; render(true); },text:l})))));
     else out.push(tv); }
@@ -3446,6 +3449,28 @@ function verLine(){ verCheck(false); const n=appVerN(), at=/^\d{4}-/.test(APP_AT
     newer?h('button',{class:'linkish',type:'button',onclick:()=>appReload(),text:`${verName(verLive)} is out · Reload`}):n&&verLive?h('span',{style:'color:var(--ontime)',text:'Up to date'}):null); }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') verCheck(false); });
 setTimeout(()=>verCheck(true),8000);
+/* More › View as a team member: pick someone; SLATE OS reloads as they see it, with a black bar and Exit at the bottom.
+   Their messages, inbox, private to-dos and drafts are not shown; nothing can be saved. Each start is logged for the Principal and the COO. */
+const VA_GRP=[['lead','POD leaders'],['junior','POD members and shared juniors'],['dhead','Drafting Pool'],['draft','Drafting Pool'],['viz','Visualisation'],['intern','Interns'],['other','Others']];
+function viewViewAs(){
+  const ppl=(window.slateViewAsWho?window.slateViewAsWho():[]).filter(p=>p.id!==ownerId()&&!isCOO(p.id));
+  const q=((S.va&&S.va.q)||'').toLowerCase(), m=p=>!q||(nameOf(p.id)+' '+(roleOf(p.id)||'')+' '+teamOf(p.id)).toLowerCase().includes(q);
+  const byG={}; for(const p of ppl.filter(m)){ const g=VA_GRP.find(x=>x[0]===roleGroup(p.id))||VA_GRP[6]; (byG[g[1]]=byG[g[1]]||[]).push(p); }
+  const row=p=>h('button',{class:'more-i',type:'button',onclick:()=>{ if(!window.slateViewAsStart(p.id)) toast('That person can’t be viewed.'); }},
+    h('div',{},h('div',{class:'mi-t',text:nameOf(p.id)}),h('div',{class:'mi-d',text:[roleOf(p.id),podLabel(teamOf(p.id))].filter(x=>x&&x!=='No team set').join(' · ')})),h('span',{class:'mi-a',text:'View ›'}));
+  if(!S.va) S.va={q:''};
+  if(!S.va.log&&!S.va.loading&&window.slateViewAsLog){ S.va.loading=1; window.slateViewAsLog().then(r=>{ S.va.log=r; },()=>{ S.va.log=[]; S.va.noLog=1; }).finally(()=>{ S.va.loading=0; if(S.view==='viewas') render(true); }); }
+  const groups=[...new Set(VA_GRP.map(x=>x[1]))].filter(g=>byG[g]).flatMap(g=>[h('div',{class:'more-g',text:g}),h('div',{class:'list'},...byG[g].sort((a,b)=>nameOf(a.id).localeCompare(nameOf(b.id))).map(row))]);
+  const when=t=>{ try{ return new Date(t).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}); }catch(e){ return ''; } };
+  const log=S.va.log||[];
+  return [h('div',{class:'page-h'},h('div',{},h('h1',{class:'h1',text:'View as a team member'}),h('div',{class:'f-hint',text:'Studio opens as they see it: their Home, POD tasks, projects, calendar, bell and menu. Read-only: nothing can be saved. Their messages, private to-dos and drafts stay hidden. Tap Exit on the black bar to come back.'}))),
+    h('div',{class:'field',style:'margin:8px 0'},h('input',{type:'search',id:'va-q',placeholder:'Search by name, role or POD',value:S.va.q,oninput:e=>{ S.va.q=e.target.value; render(true); }})),
+    ...(groups.length?groups:[h('p',{class:'f-hint',text:'No one matches.'})]),
+    h('div',{class:'more-g',text:'Views · only you and '+(S.isOwner?'the COO':'the Principal')+' see this'}),
+    S.va.noLog?h('p',{class:'f-hint',text:'The view log isn’t set up yet (m_view_as.sql). Viewing works meanwhile; views aren’t recorded.'})
+    :log.length?h('div',{class:'list'},...log.map(r=>h('div',{class:'more-i'},h('div',{},h('div',{class:'mi-t',text:`${r.by} viewed as ${r.who}`}),h('div',{class:'mi-d',text:when(r.at)+(r.device?' · '+r.device:'')})))))
+    :h('p',{class:'f-hint',text:S.va.loading?'Loading…':'No views yet.'})];
+}
 function viewMore(){
   if(convApprover()) loadConv();
   const full=fullView(), item=(k,t,d,n)=>h('button',{class:'more-i',type:'button',onclick:()=>{S.view=k;render(true);window.scrollTo(0,0)}},h('div',{},h('div',{class:'mi-t',text:t}),h('div',{class:'mi-d',text:d})),n?h('span',{class:'badge',text:String(n)}):h('span',{class:'mi-a',text:'›'}));
@@ -3463,6 +3488,7 @@ function viewMore(){
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
     ...grp('Admin',canSeeScoring()?item('risk','Risk and grace',(()=>{ try{ const r=riskScanC(), n=r.grace.length+r.risk.length+r.deem.length+r.shift.length; return n?`${n} decision${n===1?'':'s'} waiting · workload, grace and projects at risk`:'Workload, grace used and every project at risk'; }catch(_){ return 'Workload, grace used and every project at risk'; } })()):null,amApprover()?item('holidays','Holidays','Public holidays and office closures: no timeline counts them as working days'):null,amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null,
+      (S.isOwner||isCOO(S.uid))&&!VA()&&window.slateViewAsWho?item('viewas','View as a team member','See Studio exactly as a POD leader, member or drafter sees it · read-only · only you and '+(S.isOwner?'the COO':'the Principal')):null,
       S.isOwner&&!window.slateReview&&window.slateReviewView?item('review','Review logins','Read-only Principal and COO views for an outside reviewer · only you'):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'}))),verLine(),perfLine()];
 }
@@ -4311,7 +4337,7 @@ const needPlan=id=>!!id&&!isLeft(id)&&wlTeam(id)&&!isChalkP(id);
 const wlGateCfg=()=>(S.settings&&S.settings.planGate)||null;
 const wlGateOn=(td=today())=>{ const g=wlGateCfg(); return !!g&&!!g.from&&g.from<=td&&!g.off; };
 const wlGateOpenFor=(id,td=today())=>{ const v=((wlGateCfg()||{}).open||{})[td]; return v==='all'||(Array.isArray(v)&&v.includes(id)); };
-const wlGated=()=>{ const td=today(); return S.state==='ready'&&WL.loaded&&wlGateOn(td)&&S.canWrite&&!window.slateReview&&needPlan(S.uid)&&isWorkDay(td)&&!wlGet(S.uid,td)&&!wlGateOpenFor(S.uid,td); };
+const wlGated=()=>{ const td=today(); return !VA()&&S.state==='ready'&&WL.loaded&&wlGateOn(td)&&S.canWrite&&!window.slateReview&&needPlan(S.uid)&&isWorkDay(td)&&!wlGet(S.uid,td)&&!wlGateOpenFor(S.uid,td); };
 /* working days after a and up to b (b counted, a not) */
 const wlWorkDays=(a,b)=>{ let n=0,x=a; for(let i=0;i<90&&x<b;i++){ x=addDays(x,1); if(isWorkDay(x)) n++; } return n; };
 /* why a finish-by date passed, and who a line is waiting on (7 Nov 2026) */
@@ -4339,7 +4365,7 @@ function wlLive(){ if(WL.on||S.state!=='ready'||!window.slateSupabase) return; W
    however it was closed (Later, ×, or tapping outside) (4 Nov 2026) */
 const WL_NAG=15*60000;
 function wlMaybePrompt(){
-  if(!WL.loaded||!S.canWrite||window.slateReview||!needPlan(S.uid)) return; const td=today();
+  if(VA()||!WL.loaded||!S.canWrite||window.slateReview||!needPlan(S.uid)) return; const td=today();
   if(isWorkDay(td)&&wlGet(S.uid,td)&&pwGated()){ if(!S.sheet&&!document.getElementById('day-splash')&&!document.hidden) openPodWeek(); return; }
   if(!isWorkDay(td)||wlGet(S.uid,td)) return;
   if(S.sheet||document.getElementById('day-splash')||document.hidden){ clearTimeout(WL.t); WL.t=setTimeout(wlMaybePrompt,20000); return; }
@@ -4674,7 +4700,7 @@ function pwLive(){ if(PW.on||S.state!=='ready'||!window.slateSupabase) return; P
 function pwProjects(pod){ return Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>isLive(p)&&podsOfProject(p).includes(pod)&&(!p.closed||isOnHold(p)))
   .sort((a,b)=>(isOnHold(a)-isOnHold(b))||String(a.code||a.name).localeCompare(String(b.code||b.name))); }
 const pwMine=()=>amPodLead()&&!isLeft(S.uid);
-const pwGated=()=>{ const td=today(); return S.state==='ready'&&PW.loaded&&WL.loaded&&wlGateOn(td)&&S.canWrite&&!window.slateReview&&pwMine()&&isWorkDay(td)&&!!wlGet(S.uid,td)&&!wlGateOpenFor(S.uid,td)&&!pwGet(myPod(),pwWeek(td))&&pwProjects(myPod()).length>0; };
+const pwGated=()=>{ const td=today(); return !VA()&&S.state==='ready'&&PW.loaded&&WL.loaded&&wlGateOn(td)&&S.canWrite&&!window.slateReview&&pwMine()&&isWorkDay(td)&&!!wlGet(S.uid,td)&&!wlGateOpenFor(S.uid,td)&&!pwGet(myPod(),pwWeek(td))&&pwProjects(myPod()).length>0; };
 /* what SLATE OS knows about a project this week: phase, last day-plan work, open tasks, drawings */
 function pwCtx(p){ const td=today(); let last='', who='';
   for(const r of Object.values(WL.rows)) for(const l of (r.lines||[])) if(l.projectId===p.id&&r.day<=td&&r.day>last){ last=r.day; who=r.user_id; }
@@ -5921,7 +5947,7 @@ function workloadW(){ if(!canSeeScoring()) return null; const td=today(), cap=+(
 const CI_MS=120000;
 function ciItems(){ const td=today(), soon=addWorkDays(td,2);
   return activeTasks().filter(t=>t.assignee===S.uid&&!t.doneAt&&!t.verify&&!t.legacy&&!t.held&&(stageOf(t)==='doing'||(t.target&&t.target<=soon))).sort((a,b)=>(a.target||'9').localeCompare(b.target||'9')); }
-function checkinArm(){ if(S.state!=='ready'||!S.uid||S.isOwner||needPlan(S.uid)) return;   /* POD people write the day's plan instead */ const key=today()+':'+S.uid;
+function checkinArm(){ if(VA()||S.state!=='ready'||!S.uid||S.isOwner||needPlan(S.uid)) return;   /* POD people write the day's plan instead */ const key=today()+':'+S.uid;
   if(pref.checkin===key||pref.daySplash!==key||window.slateCiTimer||[5,6].includes(new Date().getDay())) return;
   const at=+(pref.ciArm&&pref.ciArm.k===key?pref.ciArm.at:0)||Date.now(); if(!(pref.ciArm&&pref.ciArm.k===key)) savePref('ciArm',{k:key,at});
   window.slateCiTimer=setTimeout(function fire(){ window.slateCiTimer=null;
@@ -15290,7 +15316,7 @@ function sheetChalkProj(){
    Back on Home asks once before closing SLATE OS. The on-screen ‹ and × buttons take the same path, so the phone's
    back and the buttons never disagree. */
 const NAV={i:0,stack:[],snap:[],ready:false,applying:false,pending:0,pendT:0,hintAt:0};
-const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','worklog','tlstatus','holidays','risk','drafting','review'];   /* pages reached from More */
+const NAV_SUB=['notice','activity','setup','std','help','far','conv','reports','backup','entries','worklog','tlstatus','holidays','risk','drafting','review','viewas'];   /* pages reached from More */
 const NAV_TASKV=['all','board','gantt'];                                                      /* one tab, three layouts */
 const NAV_VIEWER=['task','projView','notif','profile','myprofile','meeting','pmeet','timeline','chalkProj','rota'];  /* sheets that open other sheets */
 const NAV_OV='.slate-sheet:not(#slate-auth),#share-card';                                     /* popups laid over everything */
