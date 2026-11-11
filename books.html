@@ -1283,7 +1283,7 @@ const uidShort = () => Date.now().toString(36) + Math.random().toString(36).slic
 const S = {
   state: 'loading', uid: null, me: null, isOwner: false, admin: false, canWriteShared: null, readonly: false,
   settings: {}, catalog: {}, ledgers: {}, projects: {}, assets: {}, vouchers: {}, invoices: {}, files: {}, members: {}, signs: {},
-  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, parties: {}, staff: {}, payroll: {}, recurring: {}, rcmonth: {}, rcLive: false, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
+  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, parties: {}, staff: {}, payroll: {}, hrfiles: {}, letters: {}, recurring: {}, rcmonth: {}, rcLive: false, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
   view: 'home', sub: '', f: { period: 'fy', kind: 'all', acc: '', proj: '', q: '', month: '' },
   rep: { id: '', from: '', to: '', asAt: '', ledger: '', fy: '' }, reqTab: 'mine', invTab: 'open', docKind: '', docQ: '',
   sheet: null, fabOpen: false, busy: false, pendingRender: false, pendingSheet: false
@@ -1811,7 +1811,7 @@ const pdfFontsReady = (async () => {
   } catch (e) { PDF_FONTS = null; }
 })();
 function PDFDoc(landscape, size) {
-  const A3 = size === 'a3', W = A3 ? (landscape ? 1190.55 : 841.89) : (landscape ? 841.89 : 595.28), H = A3 ? (landscape ? 841.89 : 1190.55) : (landscape ? 595.28 : 841.89), pages = [], imgs = []; let ops = [];
+  const A3 = size === 'a3', cu = size && typeof size === 'object', W = cu ? size.w : A3 ? (landscape ? 1190.55 : 841.89) : (landscape ? 841.89 : 595.28), H = cu ? size.h : A3 ? (landscape ? 841.89 : 1190.55) : (landscape ? 595.28 : 841.89), pages = [], imgs = []; let ops = [];
   const rgb = c => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c || '#000000'); return m ? [1, 2, 3].map(i => (parseInt(m[i], 16) / 255).toFixed(3)).join(' ') : '0 0 0'; };
   const doc = {
     W, H,
@@ -1889,7 +1889,7 @@ function letterhead(doc) {
   const land = doc.W > doc.H;
   if (!doc.plain) {
     const tabX = doc.W - 32.4 * MM, tabW = 19.7 * MM, tabH = (land ? 30 : 37.9) * MM;
-    PAD_ADDR.forEach((ln, i) => doc.text(PAD.l, 22.9 * MM + 7.6 * 0.78 + i * 3.07 * MM, ln, { size: 7.6, color: '#545454', font: 'jost' }));
+    (doc.ent ? [doc.ent === 'atelier' ? PAD_ADDR[0].replace(/^SLATE,/, 'SLATE ATELIER,') : PAD_ADDR[0]].concat(PAD_ADDR.slice(1, 4), ['info@slate-atelier.com']) : PAD_ADDR).forEach((ln, i) => doc.text(PAD.l, 22.9 * MM + 7.6 * 0.78 + i * 3.07 * MM, ln, { size: 7.6, color: '#545454', font: 'jost' }));
     doc.rect(tabX, 0, tabW, tabH, { fill: '#231f20' });
     const mw = 10.6 * MM, k = mw / 106, mx = tabX + 4.7 * MM, my = tabH - 17.3 * MM;
     PAD_MARK.forEach(([x, y, w, h]) => doc.rect(mx + x * k, my + y * k, w * k, h * k, { fill: '#FFFFFF' }));
@@ -4478,7 +4478,7 @@ function moreConv() {
 function moreItem(t, d, onclick, right) { return h('button', { class: 'more-i', type: 'button', onclick }, h('div', {}, h('div', { class: 'mi-t', text: t }), d ? h('div', { class: 'mi-d', text: d }) : null), right ? h('span', { class: 'mi-r', text: right }) : h('span', { class: 'mi-a', 'aria-hidden': 'true', text: '›' })); }
 function viewMore() {
   if (S.sub) {
-    const fn = { recon: moreRecon, recurring: moreRecurring, payroll: morePayroll, paymonth: morePayMonth, staff: moreStaff, conv: moreConv, accounts: moreAccounts, projects: moreProjects, assets: moreAssets, people: morePeople, rules: moreRules, settings: moreSettings, help: moreHelp, data: moreData }[S.sub];
+    const fn = { recon: moreRecon, recurring: moreRecurring, payroll: morePayroll, paymonth: morePayMonth, staff: moreStaff, letters: moreLetters, conv: moreConv, accounts: moreAccounts, projects: moreProjects, assets: moreAssets, people: morePeople, rules: moreRules, settings: moreSettings, help: moreHelp, data: moreData }[S.sub];
     if (fn) return [backBtn('More', () => go('more'))].concat(fn());
   }
   const role = myRole(), out = [pageH('More', `Signed in as ${nameOf(S.uid)} · ${role}`)];
@@ -4497,7 +4497,8 @@ function viewMore() {
     moreItem('Expense claims', 'Transport, meals and client costs approved in SLATE OS, paid once a month', () => go('more', 'conv')))));
   if (canPayroll()) out.push(h('div', { class: 'sec' }, secH('Salaries'), h('div', { class: 'list' },
     moreItem('Salary sheets', Object.keys(S.payroll).length ? 'Latest: ' + monthName(Object.keys(S.payroll).sort().slice(-1)[0]) + ' · ' + (PAY_ST[(S.payroll[Object.keys(S.payroll).sort().slice(-1)[0]] || {}).status] || '') : 'Prepare, check, approve and pay salaries', () => go('more', 'payroll')),
-    moreItem('Staff', Object.values(S.staff).filter(x => x.active !== false).length + ' on the salary sheet', () => go('more', 'staff')))));
+    moreItem('Staff', Object.values(S.staff).filter(x => x.active !== false).length + ' on the salary sheet' + (canLetters() ? ' · letters and cards' : ''), () => go('more', 'staff')),
+    canLetters() ? moreItem('Letters issued', Object.keys(S.letters).length ? Object.keys(S.letters).length + ' NOCs, certificates and cards, with reference numbers' : 'NOCs, salary certificates, statements and cards', () => go('more', 'letters')) : null)));
   if (canSign()) out.push(h('div', { class: 'sec' }, secH('Signature'), h('div', { class: 'list' },
     moreItem('My signature', mySign() ? `${mySign().name}, ${mySign().desig} · used on invoices you sign` : 'Add your signature to sign invoices digitally', () => openMySign()))));
   out.push(h('div', { class: 'sec' }, secH('Set-up'), h('div', { class: 'list' },
@@ -4906,12 +4907,331 @@ function sheetStaff() {
     h('div', { class: 'form-row' }, field('Gross salary a month (Tk)', inp('gross', { inputmode: 'decimal', disabled: ro })), field('Usually paid by bank (Tk)', inp('bank', { inputmode: 'decimal', disabled: ro, placeholder: '0' }), 'The rest is paid in cash.'), field('Usual tax a month (Tk)', inp('tax', { inputmode: 'decimal', disabled: ro, placeholder: '0' }))),
     field('Remarks', inp('remarks', { disabled: ro, placeholder: 'e.g. On probation for 6 months, contractual' })),
     h('div', { class: 'form-row' }, chk('active', 'On the salary sheet'), field('Left on', inp('left', { type: 'date', disabled: ro })))];
-  return [head('Staff', id ? S.staff[id].name : 'New staff'), id && S.staff[id].src === 'os' ? h('div', { class: 'callout ok' }, 'From SLATE OS › Business › HR & salaries' + (S.staff[id].account ? ' (the ' + S.staff[id].account + ' account)' : '') + '. Change the salary there; the salary sheet picks it up.') : null, ro ? h('div', { class: 'form' }, fields) : form(null, fields, 'Save', () => {
+  const out = [head('Staff', id ? S.staff[id].name : 'New staff'), id && S.staff[id].src === 'os' ? h('div', { class: 'callout ok' }, 'From SLATE OS › Business › HR & salaries' + (S.staff[id].account ? ' (the ' + S.staff[id].account + ' account)' : '') + '. Change the salary there; the salary sheet picks it up.') : null, ro ? h('div', { class: 'form' }, fields) : form(null, fields, 'Save', () => {
     const d = D(); if (!(d.name || '').trim()) return fail('Enter the name.'); if (!(parseAmt(d.gross) > 0)) return fail('Enter the gross salary.');
     const nid = id || nextId('s', S.staff);
     run(() => Store.put('staff', nid, Object.assign({}, S.staff[id] || {}, { empId: (d.empId || '').trim(), name: d.name.trim(), designation: (d.designation || '').trim(), joined: d.joined || '', left: d.left || '', gross: r2(parseAmt(d.gross)), bank: r2(parseAmt(d.bank) || 0), tax: r2(parseAmt(d.tax) || 0), remarks: (d.remarks || '').trim(), active: d.active !== false && !(d.left && d.left < today()), sl: (S.staff[id] || {}).sl || Object.keys(S.staff).length + 1 })), 'Saved').then(ok => { if (ok) closeSheet(); });
   })];
+  if (id && S.staff[id] && canLetters()) out.push(lettersSec(id));
+  return out;
 }
+
+/* ---------- More › Staff › Letters and cards (Principal and COO only).
+   NOC for travel, salary certificate, salary statement, employment certificate, office ID card and visiting card,
+   made from what the books hold. Each one is issued by the person signed in, carries a reference number and is kept in the
+   register (letters/<id>) with the exact content printed, so it can be downloaded again or checked later.
+   Passport number, title and photo for letters are kept per staff member in hrfiles/<staff id>.
+   The database lets only the Principal and the COO read or write either (m_hr_letters.sql). ---------- */
+const canLetters = () => S.admin && !S.readonly && ['Principal', 'COO'].includes(myRole());
+const LT = {
+  noc: { code: 'NOC', t: 'NOC for travel', d: 'No objection to travel abroad, for a visa application' },
+  salcert: { code: 'SC', t: 'Salary certificate', d: 'Current salary with its breakdown' },
+  salstmt: { code: 'SS', t: 'Salary statement', d: 'Salary paid month by month, from the salary sheets in the books' },
+  empcert: { code: 'EC', t: 'Employment certificate', d: 'Confirms the job and the dates; for staff who have left, an experience certificate' },
+  idcard: { code: 'ID', t: 'Office ID card', d: 'CR80 card, front and back, with the photo' },
+  vcard: { code: 'VC', t: 'Visiting card', d: '90 × 55 mm, front and back' }
+};
+const ENTS = [['slate', 'SLATE'], ['atelier', 'SLATE ATELIER']];
+const entName = k => k === 'atelier' ? 'SLATE ATELIER' : 'SLATE';
+const hrOf = sid => S.hrfiles[sid] || {};
+const PRON = { Mr: ['he', 'his', 'him'], Ms: ['she', 'her', 'her'], Mrs: ['she', 'her', 'her'] };
+const cap1 = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+const longD = s => { if (!s) return ''; const [y, m, d] = s.slice(0, 10).split('-').map(Number); return `${d} ${MONL[m - 1]} ${y}`; };
+/* the salary in force now, split the way the salary sheet splits it */
+function salNow(x) {
+  const m = today().slice(0, 7), r = x.src === 'os' ? osRate(x, m) : { gross: +x.gross || 0, tax: +x.tax || 0 };
+  const c = calcRow({ gross: r.gross, tax: r.tax, bank: 0 }, 30);
+  return { gross: c.grossPay, basic: c.basic, hr: c.hr, med: c.med, conv: c.conv, tax: c.tax, net: c.net };
+}
+/* months in a range, and what the posted salary sheets paid this person in each */
+function monthsBetween(a, b) { const out = []; let m = a; while (m <= b && out.length < 36) { out.push(m); m = SB.addMonths(m, 1); } return out; }
+function paidMonths(sid, from, to) {
+  return monthsBetween(from, to).map(m => {
+    const p = S.payroll[m] || Object.values(S.payroll).find(z => z.month === m);
+    const row = p && p.status === 'posted' ? (p.rows || []).find(r => r.staffId === sid) : null;
+    if (!row) return { month: m, none: true, draft: !!(p && (p.rows || []).some(r => r.staffId === sid)) };
+    const c = calcRow(row, p.days || daysInMonth(m));
+    return { month: m, gross: c.gross, payDays: c.payDays, days: p.days || daysInMonth(m), earned: c.grossPay, tax: c.tax, ded: c.otherDed, net: c.net, bank: c.bank, cash: c.cash, voucherNo: p.voucherNo || '' };
+  });
+}
+function letterRef(kind) {
+  const y = today().slice(0, 4), mo = today().slice(5, 7);
+  const n = Object.values(S.letters).filter(l => (l.date || '').slice(0, 4) === y).length + 1;
+  return `SLATE/HR/${LT[kind].code}/${y}/${mo}/${String(n).padStart(3, '0')}`;
+}
+function mySignerInfo() {
+  const g = S.signs[S.uid] || {}, r = myRole();
+  return { uid: S.uid, name: g.name || nameOf(S.uid), desig: g.desig || (r === 'Principal' ? 'Principal & CEO' : 'Chief Operating Officer') };
+}
+
+/* the section on a staff member's sheet */
+function lettersSec(sid) {
+  const x = Object.assign({ id: sid }, S.staff[sid] || {}), hf = hrOf(sid), mine = Object.entries(S.letters).filter(([, l]) => l.staffId === sid).sort((a, b) => (b[1].at || '').localeCompare(a[1].at || ''));
+  const self = x.userId && x.userId === S.uid;
+  return h('div', { class: 'sec', style: 'margin-top:22px' }, secH('Letters and cards', mine.length ? mine.length + ' issued' : ''),
+    self ? h('div', { class: 'callout', text: `Letters about yourself are issued by the ${myRole() === 'Principal' ? 'COO' : 'Principal'}, so nobody signs for themself.` }) : null,
+    h('div', { style: 'display:flex;gap:14px;align-items:center;margin:4px 0 12px' },
+      hf.photo ? h('img', { src: hf.photo, alt: 'Photo of ' + x.name, style: 'width:60px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border)' }) : h('div', { class: 'w-empty', style: 'width:60px;height:72px;display:grid;place-items:center;font-size:11px', text: 'No photo' }),
+      h('div', { style: 'min-width:0' }, h('div', { class: 'f-hint', style: 'margin:0', text: [hf.title ? hf.title + ' ' + x.name : '', hf.passport ? 'Passport ' + hf.passport : 'No passport number', hf.phone || ''].filter(Boolean).join(' · ') }),
+        h('button', { class: 'btn btn-sm', type: 'button', style: 'margin-top:6px', onclick: () => openSheet({ type: 'hrfile', id: sid, d: Object.assign({ title: '', passport: '', phone: '', email: '', photo: '', pw: 0, ph: 0 }, hf), back: () => openSheet({ type: 'staffm', id: sid, d: {} }) }), text: 'Photo, passport and contact' }))),
+    self ? null : h('div', { class: 'list' }, Object.entries(LT).map(([k, v]) => h('button', { class: 'row', type: 'button', onclick: () => openLetter(sid, k) },
+      h('div', { class: 'row-main' }, h('div', { class: 'row-title', text: v.t }), h('div', { class: 'row-meta', text: v.d })), h('span', { class: 'mi-a', 'aria-hidden': 'true', text: '›' })))),
+    mine.length ? h('div', { style: 'margin-top:14px' }, h('div', { class: 'f-hint', text: 'Issued' }), h('div', { class: 'list' }, mine.map(([id, l]) => letterRow(id, l, false)))) : null);
+}
+function letterRow(id, l, withName) {
+  return h('div', { class: 'row', style: 'cursor:default' },
+    h('div', { class: 'row-main' }, h('div', { class: 'row-title', text: (withName ? l.name + ' · ' : '') + (LT[l.kind] || {}).t }),
+      h('div', { class: 'row-meta', text: [l.ref, longD(l.date), entName(l.ent), 'by ' + (l.signer && l.signer.name || nameOf(l.by, l.at)) + (l.signer && l.signer.digital ? ' (signed digitally)' : '')].join(' · ') })),
+    downloadsCap ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end' },
+      h('button', { class: 'btn btn-sm', type: 'button', onclick: () => savePDF(() => letterPDF(l), letterFile(l)), text: 'PDF' }),
+      ['idcard', 'vcard'].includes(l.kind) ? null : h('button', { class: 'btn btn-sm', type: 'button', title: 'Without the letterhead, to print on the SLATE pad at 100%', onclick: () => savePDF(() => letterPDF(l, true), letterFile(l, 'print on pad')), text: 'Pad copy' })) : null);
+}
+const letterFile = (l, extra) => safeName(`${entName(l.ent)} ${(LT[l.kind] || {}).t} ${l.name}${extra ? ' (' + extra + ')' : ''}`) + '.pdf';
+
+/* photo, passport, title and contact for letters and cards */
+function cropPhoto(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const W = 500, H = 600, k = Math.max(W / img.width, H / img.height), sw = W / k, sh = H / k;
+      const sx = (img.width - sw) / 2, sy = Math.max(0, Math.min(img.height - sh, (img.height - sh) * 0.3));
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      res({ photo: c.toDataURL('image/jpeg', 0.86), pw: W, ph: H });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej({ userMsg: 'That file isn’t a photo the browser can read. Use a JPG or PNG.' }); };
+    img.src = url;
+  });
+}
+function sheetHrFile() {
+  const sid = S.sheet.id, x = S.staff[sid] || {}, d = D();
+  const pick = h('input', { type: 'file', accept: 'image/*', style: 'display:none', onchange: async e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    try { Object.assign(d, await cropPhoto(f)); S.sheet.err = ''; } catch (er) { S.sheet.err = (er && er.userMsg) || 'Couldn’t read that photo.'; }
+    renderSheet(); } });
+  const fields = [
+    h('div', { style: 'display:flex;gap:14px;align-items:flex-end' },
+      d.photo ? h('img', { src: d.photo, alt: 'Photo', style: 'width:100px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border)' }) : h('div', { class: 'w-empty', style: 'width:100px;height:120px;display:grid;place-items:center', text: 'No photo' }),
+      h('div', {}, pick, h('button', { class: 'btn', type: 'button', onclick: () => pick.click(), text: d.photo ? 'Replace the photo' : 'Upload a passport photo' }),
+        h('p', { class: 'f-hint', text: 'A plain passport-size photo. It is cropped to 5 × 6 for the ID card.' }))),
+    h('div', { class: 'form-row' }, field('Title', sel('title', [['', 'Choose…'], ['Mr', 'Mr'], ['Ms', 'Ms'], ['Mrs', 'Mrs']]), 'Used in letters: Mr gives he/his, Ms or Mrs she/her.'), field('Passport number', inp('passport', { autocomplete: 'off' }))),
+    h('div', { class: 'form-row' }, field('Phone for the visiting card', inp('phone', { inputmode: 'tel', placeholder: '+88 01749 390 284' })), field('Email for the visiting card', inp('email', { inputmode: 'email', placeholder: 'name@slate-atelier.com' }))),
+    h('p', { class: 'f-hint', text: 'Only the Principal and the COO see these.' })];
+  return [head('Letters and cards', x.name || 'Staff'), form(null, fields, 'Save', () => {
+    const rec = { title: d.title || '', passport: (d.passport || '').trim().toUpperCase(), phone: (d.phone || '').trim(), email: (d.email || '').trim(), photo: d.photo || '', pw: d.pw || 0, ph: d.ph || 0, at: new Date().toISOString(), by: S.uid };
+    run(() => Store.put('hrfiles', sid, rec), 'Saved').then(ok => { if (ok) S.sheet.back ? S.sheet.back() : closeSheet(); });
+  })];
+}
+
+/* the issue form */
+function openLetter(sid, kind) {
+  const x = S.staff[sid] || {}, hf = hrOf(sid), m = today().slice(0, 7), nx = new Date().getFullYear() + 1;
+  const sal = salNow(Object.assign({ id: sid }, x));
+  openSheet({ type: 'letter', id: sid, back: () => openSheet({ type: 'staffm', id: sid, d: {} }), d: {
+    kind, ent: S.settings.letterEnt || 'atelier', title: hf.title || '', passport: hf.passport || '', digital: !!mySign(),
+    country: '', purpose: 'tourism', purposeOther: '', from: '', to: '', addr: '', showSal: true,
+    sfrom: SB.addMonths(m, -6), sto: SB.addMonths(m, -1), forWhat: '',
+    valid: nx + '-12-31', phone: hf.phone || '+88 01749 390 284', email: hf.email || '', desig: x.designation || '', gross: sal.gross } });
+}
+function sheetLetter() {
+  const sid = S.sheet.id, x = Object.assign({ id: sid }, S.staff[sid] || {}), d = D(), k = d.kind, hf = hrOf(sid), card = ['idcard', 'vcard'].includes(k);
+  const sal = salNow(x), pm = k === 'salstmt' && d.sfrom && d.sto && d.sfrom <= d.sto ? paidMonths(sid, d.sfrom, d.sto) : [];
+  const fields = [h('div', { class: 'form-row' }, field('Issued as', sel('ent', ENTS), 'The name at the top of the letterhead. Use SLATE ATELIER where it must match the trade licence.'),
+    card ? null : field('Title', sel('title', [['', 'Choose…'], ['Mr', 'Mr'], ['Ms', 'Ms'], ['Mrs', 'Mrs']])))];
+  if (k === 'noc') fields.push(
+    h('div', { class: 'form-row' }, field('Country', inp('country', { placeholder: 'e.g. Thailand' })), field('Passport number', inp('passport', { autocomplete: 'off' }))),
+    h('div', { class: 'form-row' }, field('Purpose', sel('purpose', [['tourism', 'Tourism / holiday'], ['business', 'Business'], ['family', 'Family visit'], ['medical', 'Medical treatment'], ['other', 'Other…']])), d.purpose === 'other' ? field('Purpose in a few words', inp('purposeOther')) : null),
+    h('div', { class: 'form-row' }, field('Leaving on', inp('from', { type: 'date' })), field('Back by', inp('to', { type: 'date' }))),
+    field('Addressed to', ta('addr', { rows: 3, placeholder: 'The Visa Officer\nEmbassy of …\nDhaka' }), 'Leave empty for "The Visa Officer, Embassy of <country>, Dhaka".'),
+    chk('showSal', 'Mention the monthly salary (Tk ' + fmt(sal.gross) + ')'));
+  if (k === 'salcert') fields.push(h('div', { class: 'facts' }, fact('Gross a month', tk(sal.gross)), fact('Tax at source', tk(sal.tax)), fact('Net a month', tk(sal.net))),
+    field('Issued for', inp('forWhat', { placeholder: 'e.g. a visa application, a bank loan' })), field('Passport number (optional)', inp('passport', { autocomplete: 'off' })));
+  if (k === 'salstmt') {
+    const got = pm.filter(p => !p.none), miss = pm.filter(p => p.none);
+    fields.push(h('div', { class: 'form-row' }, field('From', inp('sfrom', { type: 'month' })), field('To', inp('sto', { type: 'month' }))),
+      got.length ? h('div', { class: 'callout ok', text: `${got.length} month${got.length === 1 ? '' : 's'} paid through a salary sheet: ${got.map(p => monthName(p.month)).join(', ')}.` }) : h('div', { class: 'callout', text: 'No salary paid through a salary sheet in these months.' }),
+      miss.length ? h('div', { class: 'callout', text: `Not on a paid salary sheet in the books, so left out: ${miss.map(p => monthName(p.month) + (p.draft ? ' (sheet not yet paid)' : '')).join(', ')}. Record those months’ salary sheets first if they were paid.` }) : null,
+      field('Issued for', inp('forWhat', { placeholder: 'e.g. a visa application' })), field('Passport number (optional)', inp('passport', { autocomplete: 'off' })));
+  }
+  if (k === 'empcert') fields.push(chk('showSal', 'Mention the monthly salary (Tk ' + fmt(sal.gross) + ')'), field('Issued for', inp('forWhat', { placeholder: 'Leave empty for "at his/her request"' })));
+  if (k === 'idcard') fields.push(hf.photo ? null : h('div', { class: 'callout', text: 'Add a photo first: Photo, passport and contact on the staff sheet.' }), h('div', { class: 'form-row' }, field('Designation on the card', inp('desig')), field('Valid to', inp('valid', { type: 'date' }))));
+  if (k === 'vcard') fields.push(field('Designation', inp('desig')), h('div', { class: 'form-row' }, field('Phone', inp('phone', { inputmode: 'tel' })), field('Email', inp('email', { inputmode: 'email' }))));
+  if (!card) fields.push(mySign() ? chk('digital', 'Sign with my digital signature') : h('p', { class: 'f-hint', text: 'No digital signature saved, so the letter leaves a line to sign by hand. Add one under More › My signature.' }));
+  const me = mySignerInfo();
+  fields.push(h('p', { class: 'f-hint', text: card ? `Logged in the register as issued by ${me.name}.` : `Signed by ${me.name}, ${me.desig}. It goes in the register with a reference number.` }));
+  if (!downloadsCap) fields.push(h('div', { class: 'callout', text: 'Downloads aren’t available in this view, so the letter can be issued but not saved as a PDF here.' }));
+  return [head((LT[k] || {}).t, x.name), form(null, fields, card ? 'Make the PDF' : 'Issue and download', () => {
+    if (x.userId && x.userId === S.uid) return fail('Letters about yourself are issued by the ' + (myRole() === 'Principal' ? 'COO' : 'Principal') + '.');
+    if (!card && !d.title) return fail('Choose Mr, Ms or Mrs.');
+    const rec = { kind: k, staffId: sid, name: x.name, empId: x.empId || '', ent: d.ent, date: today(), by: S.uid, at: new Date().toISOString(),
+      signer: { name: me.name, desig: me.desig, uid: S.uid, digital: !card && !!d.digital && !!mySign() }, title: d.title || '',
+      desig: (d.desig || x.designation || '').trim(), joined: x.joined || '', left: x.active === false ? (x.left || '') : '' };
+    const pass = (d.passport || '').trim().toUpperCase();
+    if (k === 'noc') {
+      if (!(d.country || '').trim()) return fail('Enter the country.');
+      if (!d.from) return fail('Enter the date of leaving.');
+      if (d.to && d.to < d.from) return fail('The return date is before the date of leaving.');
+      if (!pass) return fail('Enter the passport number.');
+      Object.assign(rec, { country: d.country.trim(), purpose: d.purpose === 'other' ? (d.purposeOther || '').trim() : d.purpose, from: d.from, to: d.to || '', addr: (d.addr || '').trim(), passport: pass, sal: d.showSal ? sal : null });
+    }
+    if (k === 'salcert') { if (!(sal.gross > 0)) return fail('No salary is set for this person.'); Object.assign(rec, { sal, forWhat: (d.forWhat || '').trim(), passport: pass }); }
+    if (k === 'salstmt') {
+      if (!d.sfrom || !d.sto || d.sfrom > d.sto) return fail('Choose the months.');
+      const got = pm.filter(p => !p.none); if (!got.length) return fail('No salary paid through a salary sheet in these months.');
+      Object.assign(rec, { sfrom: d.sfrom, sto: d.sto, months: got, missing: pm.filter(p => p.none).map(p => p.month), forWhat: (d.forWhat || '').trim(), passport: pass });
+    }
+    if (k === 'empcert') Object.assign(rec, { sal: d.showSal ? sal : null, forWhat: (d.forWhat || '').trim() });
+    if (k === 'idcard') { if (!hf.photo) return fail('Add a photo first.'); if (!d.valid) return fail('Enter the valid-to date.'); rec.valid = d.valid; }
+    if (k === 'vcard') { if (!(d.phone || '').trim() && !(d.email || '').trim()) return fail('Enter a phone or an email.'); Object.assign(rec, { phone: (d.phone || '').trim(), email: (d.email || '').trim() }); }
+    rec.ref = letterRef(k);
+    const id = nextId('hl', S.letters);
+    const hfPatch = {}; if (d.title && d.title !== hf.title) hfPatch.title = d.title; if (pass && pass !== hf.passport) hfPatch.passport = pass;
+    run(async () => {
+      await Store.put('letters', id, rec);
+      if (Object.keys(hfPatch).length) await Store.put('hrfiles', sid, Object.assign({}, hf, hfPatch, { at: new Date().toISOString(), by: S.uid }));
+      if (d.ent !== (S.settings.letterEnt || 'atelier') && S.isOwner) { try { await Store.patch('settings', 'main', { letterEnt: d.ent }); } catch (e) {} }
+    }, rec.ref + ' issued').then(ok => { if (ok) { if (downloadsCap) savePDF(() => letterPDF(rec), letterFile(rec)); S.sheet.back(); } });
+  })];
+}
+
+/* ---------- the PDFs ---------- */
+function letterPDF(l, plain) {
+  if (l.kind === 'idcard') return idCardPDF(l);
+  if (l.kind === 'vcard') return vCardPDF(l);
+  const doc = PDFDoc(), M = PAD.l + 12, R = doc.W - PAD.r - 12, W = R - M;
+  doc.plain = !!plain; doc.ent = l.ent;
+  const [he, his, him] = PRON[l.title] || ['they', 'their', 'them'], He = cap1(he), His = cap1(his);
+  const who = `${l.title ? l.title + ' ' : ''}${String(l.name || '').toUpperCase()}`, firm = entName(l.ent);
+  const body = { size: 10.5, lh: 16 }, gap = 9;
+  let y = letterhead(doc) + 4;
+  doc.text(M, y, 'Ref: ' + l.ref, { size: 10 }); doc.text(R, y, 'Date: ' + longD(l.date), { size: 10, align: 'right' }); y += 28;
+  const P = s => { y += doc.para(M, y, s, W, body) + gap; };
+  const title = t => { y += 6; doc.text(M + W / 2, y, t, { size: 13, bold: true, align: 'center', spacing: 1 }); y += 26; };
+  const amt = n => 'BDT ' + fmt(n);
+  const pass = l.passport ? `, holder of Bangladesh passport no. ${l.passport},` : '';
+  const since = `since ${longD(l.joined)}`;
+  const forLine = l.forWhat ? `This certificate is issued at ${his} request for ${l.forWhat.replace(/\.$/, '')}.` : `This certificate is issued at ${his} request.`;
+  if (l.kind === 'noc') {
+    const addr = (l.addr || `The Visa Officer\nEmbassy of ${l.country}\nDhaka, Bangladesh`).split(/\n/);
+    doc.text(M, y, 'To', { size: 10.5 }); y += 16; addr.forEach(a => { doc.text(M, y, a, { size: 10.5 }); y += 15; }); y += 8;
+    title('NO OBJECTION CERTIFICATE');
+    P('Dear Sir or Madam,');
+    P(`This is to certify that ${who}${pass} is employed with ${firm} as ${l.desig}${l.empId ? ' (Employee ID ' + l.empId + ')' : ''} ${since}, and continues in this position.`);
+    if (l.sal) P(`${His} monthly gross salary is ${amt(l.sal.gross)} (${words(l.sal.gross)}).`);
+    const purp = { tourism: 'for tourism', business: 'on business', family: 'to visit family', medical: 'for medical treatment' }[l.purpose] || (l.purpose ? 'for ' + l.purpose : '');
+    const when = l.to ? `from ${longD(l.from)} to ${longD(l.to)}` : `on ${longD(l.from)}`;
+    P(`${He} intends to travel to ${l.country}${purp ? ' ' + purp : ''} ${when}. ${firm} has no objection to this travel and has granted ${him} leave for the period. ${He} will resume ${his} duties at ${firm} on ${his} return to Bangladesh.`);
+    P(`We request you to kindly grant ${him} the visa. For any further information, please contact us at +88 01749 390 284 or info@slate-atelier.com.`);
+  }
+  if (l.kind === 'salcert') {
+    doc.text(M, y, 'TO WHOM IT MAY CONCERN', { size: 10.5, bold: true }); y += 22; title('SALARY CERTIFICATE');
+    P(`This is to certify that ${who}${pass} is employed with ${firm} as ${l.desig}${l.empId ? ', Employee ID ' + l.empId + ',' : ''} ${since}. ${His} current monthly salary is as follows:`);
+    y += 2; const s = l.sal;
+    [['Basic pay', s.basic], ['House rent allowance', s.hr], ['Medical allowance', s.med], ['Conveyance allowance', s.conv], ['Gross monthly salary', s.gross, 1], ['Less: tax deducted at source', s.tax], ['Net monthly salary', s.net, 1]].forEach(([a, v, b]) => {
+      if (!v && !b) return; y += 15; doc.text(M, y, a, { size: 10.5, bold: !!b }); doc.text(R, y, amt(v), { size: 10.5, bold: !!b, align: 'right' }); y += 6; doc.line(M, y, R, y, { color: b ? '#231f20' : '#CFCFCF', w: b ? 0.8 : 0.4 }); });
+    y += 22; P(`Gross monthly salary in words: ${words(s.gross)}.`); P(forLine);
+  }
+  if (l.kind === 'salstmt') {
+    title('SALARY STATEMENT');
+    [['Name', `${l.title ? l.title + ' ' : ''}${l.name}`], ['Designation', l.desig], l.empId ? ['Employee ID', l.empId] : null, l.passport ? ['Passport no.', l.passport] : null, ['Joined ' + firm, longD(l.joined)], ['Period', `${monthName(l.sfrom)} to ${monthName(l.sto)}`]].filter(Boolean).forEach(([a, v]) => {
+      doc.text(M, y, a, { size: 10, color: '#545454' }); doc.text(M + 120, y, v || '—', { size: 10 }); y += 15; });
+    y += 10; doc.text(M, y, 'Amounts in BDT', { size: 8, color: '#545454' }); y += 6;
+    const cols = [['Month', 0, 'left'], ['Gross salary', 150, 'right'], ['Pay days', 200, 'right'], ['Earned', 265, 'right'], ['Tax', 315, 'right'], ['Net paid', 380, 'right'], ['By bank', 440, 'right'], ['In cash', W, 'right']];
+    doc.rect(M, y, W, 20, { fill: '#231f20' });
+    cols.forEach(([t, x, al]) => doc.text(M + (al === 'left' ? 6 : x - (x === W ? 6 : 0)), y + 13.5, t, { size: 8, bold: true, color: '#FFFFFF', align: al })); y += 20;
+    const tot = { earned: 0, tax: 0, net: 0, bank: 0, cash: 0 };
+    l.months.forEach(p => {
+      y += 15; const v = [monthName(p.month), fmt(p.gross), `${p.payDays}/${p.days}`, fmt(p.earned), fmt(p.tax), fmt(p.net), fmt(p.bank), fmt(p.cash)];
+      cols.forEach(([, x, al], i) => doc.text(M + (al === 'left' ? 6 : x - (x === W ? 6 : 0)), y, v[i], { size: 9 , align: al }));
+      y += 6; doc.line(M, y, R, y, { color: '#CFCFCF', w: 0.4 });
+      ['earned', 'tax', 'net', 'bank', 'cash'].forEach(q => { tot[q] += +p[q] || 0; });
+    });
+    y += 15; const tv = { 3: tot.earned, 4: tot.tax, 5: tot.net, 6: tot.bank, 7: tot.cash };
+    doc.text(M + 6, y, `Total (${l.months.length} month${l.months.length === 1 ? '' : 's'})`, { size: 9, bold: true });
+    Object.entries(tv).forEach(([i, v]) => { const [, x] = cols[i]; doc.text(M + x - (x === W ? 6 : 0), y, fmt(v), { size: 9, bold: true, align: 'right' }); });
+    y += 6; doc.line(M, y, R, y, { w: 0.9 }); y += 24;
+    P(`We confirm that the salary shown above was paid to ${him} by ${firm} for each month listed, after deduction of tax at source.` + (l.missing && l.missing.length ? ` Months in the period not listed above were not paid through a salary sheet: ${l.missing.map(monthName).join(', ')}.` : ''));
+    if (l.forWhat) P(`This statement is issued at ${his} request for ${l.forWhat.replace(/\.$/, '')}.`);
+  }
+  if (l.kind === 'empcert') {
+    doc.text(M, y, 'TO WHOM IT MAY CONCERN', { size: 10.5, bold: true }); y += 22;
+    title(l.left ? 'EXPERIENCE CERTIFICATE' : 'EMPLOYMENT CERTIFICATE');
+    if (l.left) P(`This is to certify that ${who} worked with ${firm} as ${l.desig} from ${longD(l.joined)} to ${longD(l.left)}.`);
+    else P(`This is to certify that ${who} is employed with ${firm} as ${l.desig}${l.empId ? ' (Employee ID ' + l.empId + ')' : ''} ${since}, and continues in this position.`);
+    if (l.sal) P(`${His} ${l.left ? 'last' : 'current'} monthly gross salary ${l.left ? 'was' : 'is'} ${amt(l.sal.gross)} (${words(l.sal.gross)}).`);
+    if (l.left) P(`We wish ${him} every success in ${his} future career.`);
+    P(forLine);
+  }
+  /* signature */
+  y = Math.max(y + 8, Math.min(y + 40, PAD.b - 110));
+  P('Sincerely,'); y += 4;
+  const g = l.signer && l.signer.digital ? signImg(l.signer.uid) : null;
+  if (g) { const w = Math.min(130, g.w * 46 / g.h); doc.image(g.bin, g.w, g.h, M, y, w); y += 50; } else y += 44;
+  doc.line(M, y, M + 170, y, { w: 0.6 }); y += 14;
+  doc.text(M, y, l.signer.name, { size: 10.5, bold: true }); y += 14;
+  doc.text(M, y, l.signer.desig, { size: 10 }); y += 14; doc.text(M, y, firm, { size: 10 });
+  if (l.signer.digital) { y += 16; doc.text(M, y, 'Signed digitally in SLATE Books, ' + longD(l.date) + '.', { size: 7.5, color: '#545454' }); }
+  padFoot(doc, l.ref);
+  return doc.output();
+}
+function pdfMark(doc, x, y, w, fill) { const k = w / 106; PAD_MARK.forEach(([a, b, c, d]) => doc.rect(x + a * k, y + b * k, c * k, d * k, { fill: fill || '#FFFFFF' })); }
+function idCardPDF(l) {
+  const doc = PDFDoc(false, { w: 54 * MM, h: 85.6 * MM }), W = doc.W, H = doc.H, hf = hrOf(l.staffId), INK = '#231f20', GREY = '#545454';
+  doc.rect(0, 0, W, H, { fill: '#FFFFFF' });
+  doc.rect(0, 0, W, 20 * MM, { fill: INK }); pdfMark(doc, 6 * MM, 5 * MM, 8 * MM);
+  doc.text(17 * MM, 10.6 * MM, 'SLATE', { size: 9, color: '#FFFFFF', font: 'jost', spacing: 2.9 });
+  doc.text(17 * MM, 13.6 * MM, 'DESIGN WITH PURPOSE', { size: 5.2, color: '#BDBDBD', font: 'jost' });
+  doc.text(W - 5 * MM, 17.6 * MM, 'STAFF ID', { size: 5.2, color: '#FFFFFF', font: 'jost', align: 'right' });
+  const pw = 24 * MM, ph = 28.8 * MM, px = (W - pw) / 2, py = 23 * MM;
+  if (hf.photo) { try { doc.image(atob(hf.photo.split(',')[1]), hf.pw || 500, hf.ph || 600, px, py, pw); } catch (e) {} }
+  doc.frame(px, py, pw, ph, { color: INK, w: 0.4 });
+  let y = py + ph + 6.5 * MM;
+  doc.text(W / 2, y, String(l.name || '').toUpperCase(), { size: l.name.length > 24 ? 7.6 : 9.4, color: INK, bold: true, align: 'center' });
+  doc.text(W / 2, y + 4.2 * MM, l.desig || '', { size: 7.2, color: GREY, font: 'jost', align: 'center' });
+  doc.line(8 * MM, y + 7 * MM, W - 8 * MM, y + 7 * MM, { color: '#BDBDBD', w: 0.3 });
+  y += 11 * MM;
+  [['ID no.', l.empId || '—'], ['Joined', fmtD(l.joined, true)], ['Valid to', fmtD(l.valid, true)]].forEach(([a, b]) => {
+    doc.text(10 * MM, y, a, { size: 6.4, color: GREY, font: 'jost' }); doc.text(W - 10 * MM, y, b, { size: 6.8, color: INK, bold: true, align: 'right' }); y += 3.8 * MM; });
+  doc.rect(0, H - 2.2 * MM, W, 2.2 * MM, { fill: INK });
+  doc.page();
+  doc.rect(0, 0, W, H, { fill: '#FFFFFF' }); doc.rect(0, 0, W, 2.2 * MM, { fill: INK });
+  y = 12 * MM; doc.text(W / 2, y, 'SLATE', { size: 7.4, bold: true, align: 'center' }); y += 5 * MM;
+  y += doc.para(W / 2, y, 'This card is the property of SLATE and must be shown on request. It is not transferable.', W - 10 * MM, { size: 6.4, lh: 9, align: 'center' }) + 4 * MM;
+  [ 'If found, please return to:', entName(l.ent), 'Flat B2, Level 02, House SW (I) 3/A', 'Road 02, Gulshan 01, Dhaka 1212', '+88 01749 390 284', 'info@slate-atelier.com'].forEach(s => { doc.text(W / 2, y, s, { size: 6.4, align: 'center' }); y += 9; });
+  doc.line(14 * MM, H - 20 * MM, W - 14 * MM, H - 20 * MM, { w: 0.4 });
+  doc.text(W / 2, H - 16.8 * MM, 'Authorised signature', { size: 5.6, color: GREY, font: 'jost', align: 'center' });
+  doc.rect(0, H - 9 * MM, W, 9 * MM, { fill: INK }); pdfMark(doc, W / 2 - 2.5 * MM, H - 7.2 * MM, 5 * MM);
+  doc.text(W / 2, H - 25 * MM, l.ref, { size: 4.6, color: '#9A9A9A', align: 'center' });
+  return doc.output();
+}
+function vCardPDF(l) {
+  const doc = PDFDoc(false, { w: 90 * MM, h: 55 * MM }), W = doc.W, H = doc.H, INK = '#231f20', GREY = '#545454';
+  doc.rect(0, 0, W, H, { fill: INK }); pdfMark(doc, W / 2 - 7 * MM, H / 2 - 10 * MM, 14 * MM);
+  doc.text(W / 2, H / 2 + 9 * MM, 'SLATE', { size: 11, color: '#FFFFFF', font: 'jost', align: 'center', spacing: 3.5 });
+  doc.text(W / 2, H - 8 * MM, 'DESIGN WITH PURPOSE', { size: 5.8, color: '#9A9A9A', font: 'jost', align: 'center' });
+  doc.page();
+  doc.rect(0, 0, W, H, { fill: '#FFFFFF' });
+  doc.rect(W - 13 * MM, 0, 9 * MM, 20 * MM, { fill: INK }); pdfMark(doc, W - 13 * MM + 1.9 * MM, 9 * MM, 5.2 * MM);
+  doc.text(8 * MM, 14 * MM, l.name, { size: 11, bold: true });
+  doc.text(8 * MM, 19 * MM, l.desig || '', { size: 7.6, color: GREY, font: 'jost' });
+  doc.line(8 * MM, 22.5 * MM, 18 * MM, 22.5 * MM, { w: 0.6 });
+  let y = 29 * MM; [l.phone, l.email, 'slate-atelier.com'].filter(Boolean).forEach(s => { doc.text(8 * MM, y, s, { size: 7.2 }); y += 3.9 * MM; });
+  doc.text(8 * MM, H - 9 * MM, (l.ent === 'atelier' ? 'SLATE ATELIER · ' : '') + 'Flat B2, Level 02, House SW (I) 3/A', { size: 6.4, color: GREY });
+  doc.text(8 * MM, H - 6 * MM, 'Road 02, Gulshan 01, Dhaka 1212', { size: 6.4, color: GREY });
+  return doc.output();
+}
+
+/* More › Letters issued: the register */
+function moreLetters() {
+  const all = Object.entries(S.letters).sort((a, b) => (b[1].at || '').localeCompare(a[1].at || ''));
+  const out = [pageH('Letters issued', 'Every NOC, certificate, statement and card issued from SLATE Books, with its reference number. Only the Principal and the COO see this.')];
+  if (!all.length) out.push(emptyBox('No letters yet', 'Open a person under More › Staff and pick a letter or card.', h('button', { class: 'btn', type: 'button', onclick: () => go('more', 'staff'), text: 'Go to Staff' })));
+  else out.push(h('div', { class: 'list' }, all.map(([id, l]) => letterRow(id, l, true))));
+  return out;
+}
+Object.assign(SHEETS, { hrfile: sheetHrFile, letter: sheetLetter });
+
 
 /* salary sheet PDF, landscape, in the layout of SLATE's paper statement */
 function salaryPDF(month) {
@@ -6181,7 +6501,7 @@ async function holderAutoApprove(key, body) {
 }
 
 /* ---------- start-up: capabilities, roles, live data ---------- */
-const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'rcmonth', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs', 'parties'];
+const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'rcmonth', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs', 'parties', 'hrfiles', 'letters'];
 const NEED = ['settings', 'ledgers', 'vouchers', 'projects'];
 let loaded = {}, profTimer = null, catTimer = null, lastProfKey = '';
 function changed() { S.ver++; render(); renderSheet(true); scheduleProfiles(); scheduleCatalog(); }
