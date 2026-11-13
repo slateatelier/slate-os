@@ -151,6 +151,20 @@ button.wlf-need .wlf-l{color:var(--overdue,#D0453C);font-weight:600}
 /* the Important icon sits inside the bell button: it keeps its own look (grey when nothing waits, red ring when it does) */
 .bell .imp .bi,.bell.has .imp .bi{background:var(--group);box-shadow:none;color:var(--muted,#6e6e73)}.bell .imp.has .bi{background:#fff;box-shadow:0 0 0 2px #d7262b;color:#d7262b}.bell .imp{background:transparent}
 .bell .imp .bn,.imp .bn{margin:0;color:#fff;font-size:11px;position:absolute;top:-2px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#d7262b;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+/* Principal / COO phone Home */
+.tp-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 12px}
+.tp-t{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:14px;padding:10px 10px 9px;font:inherit;color:inherit;text-align:left;display:grid;gap:2px;cursor:pointer}
+.tp-t b{font-size:24px;line-height:1.1}.tp-t span{font-size:12px;color:var(--muted)}.tp-t.warn b{color:var(--overdue)}
+.tp-seg{display:flex;background:var(--group,#F2F2F7);border-radius:12px;padding:3px;margin:14px 0 8px}
+.tp-seg button{flex:1;appearance:none;border:0;background:transparent;font:inherit;font-size:14px;font-weight:600;color:var(--muted);padding:8px 0;border-radius:9px;cursor:pointer}.tp-seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.tp-p{appearance:none;width:100%;border:0;border-bottom:1px solid var(--line,#EEE);background:transparent;font:inherit;color:inherit;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 2px;text-align:left;cursor:pointer}
+.tp-pn{display:grid;line-height:1.3;min-width:0}.tp-pn .f-hint{font-size:12.5px}.tp-ps{font-size:18px}
+.tp-sub{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin:2px 2px 4px}
+.tp-act{margin:16px 0 0}
+body.fab-off #fbell,body.fab-off #fab,body.fab-off #fbell-pop,body.rep-off #slate-report{display:none!important}
+.pf-list input.pf-sw,input.pf-sw{appearance:none;-webkit-appearance:none;flex:none;width:46px!important;height:28px!important;min-height:0!important;padding:0!important;margin:0 0 0 8px!important;border:0!important;border-radius:14px!important;background:#E5E5EA!important;position:relative;cursor:pointer;transition:background .2s}
+input.pf-sw::before{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+input.pf-sw:checked{background:#34C759!important}input.pf-sw:checked::before{transform:translateX(18px)}
 .msg-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
 .cp-r{border-bottom:1px solid var(--line,#EEE)}.cp-r summary{list-style:none;display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr 34px;grid-template-areas:"n b s" "m m m";gap:2px 10px;align-items:center;padding:8px 2px;cursor:pointer}.cp-r summary::-webkit-details-marker{display:none}
@@ -5593,8 +5607,53 @@ function progEl(o){ const P=progOf(o.key,o.keys,o.done); if(!P.tot) return null;
 function sheetHomeList(){ const sh=S.sheet; return [h('div',{class:'sh-head'},h('h2',{class:'sh-title sh-ht',text:sh.title||'All'}),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})),
   h('div',{class:'h-list'},...[].concat(sh.build()).filter(Boolean))]; }
 window.addEventListener('resize',()=>{ const was=!!document.querySelector('.desk'); if(S.view==='mine'&&was!==deskOn()) render(true); else fitDesk(); });
+/* Principal / COO on a phone (Principal, 13 Nov 2026): one screen, then Team · Projects · Me.
+   Top: three tiles and at most five things that need you. Below, one tab at a time. */
+function viewTopPhone(){
+  const td=today(), hr=new Date().getHours(), first=(nameOf(S.uid)||'').split(' ')[0], tab=S.tpTab||'team';
+  document.body.classList.add('top-phone');
+  const X=cpCalc(), avg=X&&X.length?Math.round(X.reduce((a,x)=>a+x.score,0)/X.length):null;
+  const qn=queueCount(), late=activeTasks().filter(t=>t&&!t.archived&&!t.legacy&&!t.doneAt&&!t.verify&&t.target&&t.target<td&&t.assignee!==S.uid);
+  const tile=(n,l,go,warn)=>h('button',{type:'button',class:'tp-t'+(warn?' warn':''),onclick:go},h('b',{text:n==null?'–':String(n)}),h('span',{text:l}));
+  const lateSheet=()=>{ S.sheet={type:'homeList',title:`Late · ${late.length}`,build:()=>late.slice().sort(byTarget).map(t=>deskTask(t,{person:true,done:false}))}; renderSheet(); };
+  const need=[];
+  if(qn){ const oldest=queueGroups().map(g=>g.oldest).filter(Boolean).sort()[0]; need.push(hRow({dot:'var(--overdue)',strong:`${qn} waiting on you`,meta:`Approvals · oldest ${ageTxt(ageOf(oldest))}`,onclick:()=>goView('queue')})); }
+  kFollow(td,true).forEach(r=>need.push(r));
+  const mine=activeTasks().filter(t=>t.assignee===S.uid&&!t.archived&&!t.doneAt&&!t.verify);
+  mine.filter(t=>t.target&&t.target<=td).sort(byTarget).forEach(t=>need.push(deskTask(t,{done:true})));
+  const needEl=need.length?deskSub('Needs you now',need.slice(0,5),need.length,need.length>5?()=>goView('queue'):null):h('p',{class:'f-hint',style:'margin:4px 2px 0',text:'Nothing needs you right now.'});
+  const seg=h('div',{class:'tp-seg',role:'tablist'},[['team','Team'],['proj','Projects'],['me','Me']].map(([k,l])=>h('button',{type:'button',role:'tab',class:tab===k?'on':'','aria-selected':String(tab===k),onclick:()=>{ S.tpTab=k; render(true); },text:l})));
+  let body=[];
+  if(tab==='team'){ const rows=presRows(mwRange())||S.mwRows, m0=mwMonthStart(td);
+    const list=(X||[]).slice().sort((a,b)=>({lead:0,dlead:1,junior:2,draft:3}[a.L]-{lead:0,dlead:1,junior:2,draft:3}[b.L])||b.score-a.score);
+    body=list.map(x=>{ const id=x.id, M=rows?mwMonth(id,rows,m0):null, svg=M?mwRingsEl(M):null; if(svg){ svg.setAttribute('width','34'); svg.setAttribute('height','34'); }
+      const opn=activeTasks().filter(t=>t.assignee===id&&!t.archived&&!t.doneAt&&!t.verify), lt=opn.filter(t=>t.target&&t.target<td).length, col=x.score>=75?'#2E9E5B':x.score>=50?'#C98A16':'#D0453C';
+      return h('button',{type:'button',class:'tp-p',onclick:()=>{ S.sheet={type:'homeList',title:`${nameOf(id)} · ${new Date(m0+'T00:00:00').toLocaleString('en-GB',{month:'long'})}`,build:()=>[howDoingEl(id,false),rows?h('div',{class:'mw',style:'padding:4px 2px'},...myMonthEl(id,rows)):null,h('div',{class:'tr-g',text:`Contribution points · ${x.score}`}),cpDetail(x)]}; renderSheet(); }},
+        svg||h('span'),h('span',{class:'tp-pn'},h('b',{text:shortName(id)}),h('span',{class:'f-hint',text:`${x.C.n} · habits ${M&&M.N?M.p+'%':'–'} · ${opn.length} open`+(lt?` · `:'')},lt?h('span',{style:'color:var(--overdue)',text:`${lt} late`}):null)),
+        h('b',{class:'tp-ps',style:'color:'+col,text:String(x.score)})); });
+    if(!body.length) body=[h('p',{class:'f-hint',text:'Loading…'})];
+    body.unshift(h('div',{class:'tp-sub'},h('span',{text:'Habits ring · open work · Contribution points (only you and the COO)'}),h('button',{class:'linkish',type:'button',onclick:cpSheet,text:'Table'}))); }
+  if(tab==='proj'){ const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p));
+    const nx=p=>gateTasks(p.id).filter(t=>!t.doneAt&&t.target).sort(byTarget)[0];
+    const hot=ps.filter(p=>{ const g=nx(p), st=projStats(p); return (g&&g.target<=addDays(td,7))||['off','risk'].includes(st.health); });
+    const nod=ps.filter(p=>!nx(p)).length, g=projGateSec(hot,true,0,true);
+    body=[hot.length?g:h('p',{class:'f-hint',text:'No project needs you this week.'}),
+      hRow({dot:'var(--faint)',strong:`${ps.length-hot.length} more running project${ps.length-hot.length===1?'':'s'}`,meta:(nod?`${nod} with no gate date yet · `:'')+'open all',onclick:()=>goView('projects')})]; }
+  if(tab==='me'){ const ms=nextMeets().slice(0,3);
+    body=[deskSub('My work',mine.sort(byTarget).slice(0,6).map(t=>deskTask(t,{done:true})),mine.length,mine.length>6?goMine('active'):null),todoSec(),
+      ms.length?deskSub('Meetings',ms.map(m=>hRow({dot:'var(--early)',strong:`${m.date===td?'Today':wd(m.date)+' '+fmtD(m.date)}${m.time?' · '+fmtTime(m.time):''}`,title:m.title,onclick:()=>{ if(m.id) openPMeet(m.id); else if(m.weekly) openMeeting(m.date); else goView('meet'); }})),ms.length):null]; }
+  return [h('div',{class:'page-h home-h tp-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${S.isOwner?'Principal':'COO'}`}),
+      h('h1',{class:'h1',text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),nextMeetLine())),
+    h('div',{class:'tp-tiles'},tile(qn,'waiting on you',()=>goView('queue'),qn>0),tile(late.length,'late in the studio',lateSheet,late.length>0),tile(avg,'studio score',cpSheet,false)),
+    needEl,seg,h('div',{class:'tp-body'},...body.filter(Boolean)),
+    h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'})),
+    canProps()&&S.canWrite?h('div',{class:'actions home-biz tp-act'},seeCooWork()?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openCooTask(),text:'+ COO task'}):null,
+      h('button',{class:'btn btn-sm',type:'button',onclick:()=>openLead(),text:'+ New lead'}),h('button',{class:'btn btn-sm',type:'button',onclick:()=>openProp(),text:'+ New proposal'})):null];
+}
 function viewMineBody(){
   if(deskOn()) return viewDesk();
+  if(cpSee()&&!pref.fullHome) return viewTopPhone();
+  document.body.classList.remove('top-phone');
   const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const first=(nameOf(S.uid)||'').split(' ')[0];
@@ -6935,6 +6994,10 @@ function sheetMyProfile(){
     else { const openE=()=>{ S.sheet={...sh,mode:'emerg',err:'',d:{ename:em.v?em.v.name:'',ephone:em.v?em.v.phone:''}}; renderSheet(); setTimeout(()=>{ const f=$('#pf-ename'); f&&f.focus(); },30); };
       g.append(h('div',{class:'pf-list'},em.loading?h('div',{class:'pf-row'},h('span',{class:'pf-v',style:'text-align:left',text:'Loading…'})):em.v?row(em.v.name,em.v.phone,null,openE):h('button',{class:'pf-row tap',type:'button',onclick:openE},h('span',{class:'pf-add',text:'+ Add emergency contact'})))); }
     g.append(h('div',{class:'pf-hint',text:'Only you, the Principal and the COO can see this. It is never shared in your contact card.'})); out.push(g); }
+  /* floating buttons on or off, each on its own (Principal, 13 Nov 2026) */
+  const sw=(t,sub,on,k)=>h('label',{class:'pf-row tap',style:'cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px'},h('span',{style:'display:grid;line-height:1.3;min-width:0'},h('span',{text:t}),h('span',{class:'f-hint',style:'font-size:12.5px',text:sub})),
+    h('input',{type:'checkbox',class:'pf-sw',checked:on,onchange:e=>{ savePref(k,e.target.checked?1:0); applyFloat(); }}));
+  out.push(h('div',{class:'pf-gh',text:'Floating buttons'}),h('div',{class:'pf-list'},sw('+ button','The round + and the floating bell, bottom right',floatAddOn(),'floatAdd'),sw('Report an issue','The red ! button, bottom left',floatRepOn(),'floatReport')));
   out.push(h('div',{class:'pf-list'},h('button',{class:'pf-row tap',type:'button',onclick:()=>{ closeSheet(); window.slateAccount&&window.slateAccount(); }},h('span',{class:'pf-l',style:'width:auto',text:'Password and notifications'}),h('span',{class:'pf-v'}),h('span',{class:'pf-go','aria-hidden':'true',text:'›'})),
     h('button',{class:'pf-row tap pf-out',type:'button',onclick:()=>{ if(confirm('Sign out of SLATE OS on this device?')) api.signOut(); },text:'Sign out'})));
   return out;
@@ -7667,7 +7730,9 @@ const FB_ICO=()=>svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentCol
 const impCount=()=>{ let n=msgCount(); try{ n+=window.slateMsgOpenN?Number(window.slateMsgOpenN())||0:0; }catch(_){} return n; };
 function openImportant(){ fbellClose(); S.sheet={type:'homeList',imp:1,title:'Important',build:()=>{ const a=window.slateMsgCards&&window.slateMsgCards(), b=window.slateMsgCommits&&window.slateMsgCommits();
   return a||b?[h('p',{class:'f-hint',style:'margin:0 0 8px',text:'Messages from the Principal and the COO. Answer each within 1 working day, or SLATE OS locks until you do.'}),a,b].filter(Boolean):[h('p',{class:'f-hint',style:'padding:8px',text:'Nothing waiting. All answered.'})]; }}; renderSheet(); }
-function renderFloatBell(){
+const floatAddOn=()=>pref.floatAdd!==0, floatRepOn=()=>pref.floatReport!==0;
+function applyFloat(){ document.body.classList.toggle('fab-off',!floatAddOn()); document.body.classList.toggle('rep-off',!floatRepOn()); }
+function renderFloatBell(){ applyFloat();
   let b=document.getElementById('fbell');
   if(S.state!=='ready'){ if(b) b.hidden=true; fbellClose(); return; }
   if(!b){ b=h('button',{id:'fbell',type:'button','aria-haspopup':'dialog','aria-expanded':'false',onclick:fbellToggle}); document.body.append(b); }
@@ -7733,6 +7798,8 @@ function sheetNotifs(){
     !arch&&h('div',{class:'n-sum'},sum.map(([l,n])=>h('div',l==='Waiting for you'&&n?{role:'button',tabindex:'0',style:'cursor:pointer',title:'Open Approvals',onclick:()=>goView('queue')}:{},h('b',{text:String(n),style:n&&(l==='Overdue'||l==='Waiting for you')?'color:var(--overdue)':''}),h('span',{text:l})))),
     seg('Box',[['inbox',`Inbox${unread?' · '+unread:''}`],['archive','Archive']],v.tab,x=>{v.tab=x;renderSheet()}),
     h('label',{class:'n-snd'},h('input',{type:'checkbox',checked:soundOn(),onchange:e=>{ savePref('nSound',e.target.checked); if(e.target.checked) chime(); }}),h('span',{text:'Play a sound for new notifications'})),
+    h('label',{class:'n-snd'},h('input',{type:'checkbox',checked:floatAddOn(),onchange:e=>{ savePref('floatAdd',e.target.checked?1:0); applyFloat(); }}),h('span',{text:'Show the floating + and bell'})),
+    h('label',{class:'n-snd'},h('input',{type:'checkbox',checked:floatRepOn(),onchange:e=>{ savePref('floatReport',e.target.checked?1:0); applyFloat(); }}),h('span',{text:'Show the Report an issue button'})),
     h('label',{class:'n-snd'},h('input',{type:'checkbox',checked:uiSoundOn(),onchange:e=>{ savePref('uiSound',e.target.checked); if(e.target.checked) sfx('confirm'); }}),h('span',{text:'Play sounds for taps and clicks'})),
     h('div',{class:'chips'},[['','All'],...Object.entries(NCAT)].map(([k,l])=>h('button',{type:'button',class:'chip'+(k?' c-'+k:''),style:'padding-right:12px;border:0;cursor:pointer;'+(v.cat===k?'background:var(--ink);color:#fff':''),onclick:()=>{v.cat=k;renderSheet()},text:l}))),
     !arch&&inbox.length?h('div',{class:'actions'},unreadN?h('button',{class:'btn btn-sm',type:'button',onclick:()=>nSave({seenAt:new Date().toISOString(),read:{}}),text:'Mark all read'}):null,
