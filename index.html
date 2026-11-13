@@ -145,8 +145,9 @@ button.nm-line:hover b{text-decoration:underline}.nm-dot{width:8px;height:8px;bo
 .pg-r.pg-1{grid-template-areas:'d n ph'}.pg-note{font-size:12.5px;color:var(--muted,#6e6e73);margin:-2px 4px 8px;line-height:1.4}
 .pd-sub .h-t{font-weight:500}.pd-sub{padding-left:22px!important}.mw-tag{color:var(--muted,#6e6e73);font-weight:400;font-size:12px}
 .mw-pastb{justify-self:start;font-size:12.5px;margin-top:4px}.cl-open{border-top:1px solid var(--line);padding:4px 0}
-.mr-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}.mr-row button.mr-home{margin:0}
-.tk-l{display:inline-flex;gap:10px;font-size:12px;color:var(--muted,#6e6e73);margin-left:4px}.tk-i{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.tk-i i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.mr-wrap{margin:0 0 10px;display:grid;gap:6px}.mr-row{display:flex;flex-wrap:wrap;gap:8px}
+p.howd{display:block;margin:0;font-size:13px;line-height:1.45;color:var(--ink,#1d1d1f);max-width:920px}p.howd b{font-weight:600}p.howd .howd-n{color:#B42318;font-weight:500}p.howd.ok .howd-n{color:#2E7D45}.mr-row button.mr-home{margin:0}
+.tk-l{display:inline-flex;gap:10px;font-size:12px;color:var(--muted,#6e6e73);margin-left:4px}.tk-i{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.tk-warn{color:#B42318;font-weight:600}.tk-i i{width:8px;height:8px;border-radius:50%;display:inline-block}
 button.mr-home{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:14px;padding:4px 14px 4px 6px;font:inherit;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:10px;text-align:left;justify-self:start;margin:0 0 10px}
 button.mr-home:hover{background:#F7F7F9}.mr-hp{font-size:16px;font-weight:700}.mr-hl{font-size:13px;color:var(--ink,#1d1d1f)}.mr-hg{color:var(--muted,#6e6e73);font-size:12px}
 button.my-score{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0;display:grid}
@@ -4291,22 +4292,46 @@ function nextMeetLine(){ const m=nextMeets()[0]; if(!m) return null; const td=to
   if(m.date>nw) return null; const day=m.date===td?'Today':m.date===addDays(td,1)?'Tomorrow':`${wd(m.date)} ${fmtD(m.date)}`;
   return h('button',{type:'button',class:'nm-line',onclick:()=>{ if(m.id) openPMeet(m.id); else if(m.weekly) openMeeting(m.date); else { S.mhub='up'; goView('meet'); } }},h('i',{class:'nm-dot'}),h('b',{text:'Next meeting'}),` ${day}${m.time?' · '+fmtTime(m.time):''} · ${m.title}${m.where?' · '+m.where:''}`); }
 /* beside the habit rings (Principal, 13 Nov 2026): my tasks as one ring: done this month, ongoing, planned, late */
-function homeChips(){ const a=myMonthRingEl(), b=myTaskRingEl(); return a||b?h('div',{class:'mr-row'},a,b):null; }
-const TK_COL={done:'#8FD19E',going:'#7FB3F5',plan:'#D1D1D6',late:'#F07C7C'};
+function homeChips(){ const a=myMonthRingEl(), b=myTaskRingEl(), c=howDoingEl(S.uid,true); return a||b?h('div',{class:'mr-wrap'},h('div',{class:'mr-row'},a,b),c):null; }
+/* "How you're doing" (Principal, 13 Nov 2026): the rings in plain words, one line, then the one thing to do next.
+   The same sentence opens each person's month on the Principal / COO Home. */
+function howDoing(uid,self){ const td=today(), m0=mwMonthStart(td), rows=presRows(mwRange())||S.mwRows;
+  const M=rows&&needPlan(uid)?mwMonth(uid,rows,m0):null, cnt=M?M.H.filter(o=>o.n):[], weak=cnt.length?cnt.reduce((a,b)=>b.p<a.p?b:a):null;
+  const mine=activeTasks().filter(t=>t&&t.assignee===uid&&!t.archived&&!t.legacy), open=mine.filter(t=>!t.doneAt&&!t.verify);
+  const done=mine.filter(t=>t.doneAt&&String(t.doneAt).slice(0,10)>=m0).length, lateL=open.filter(t=>t.target&&t.target<td).sort(byTarget), nod=open.filter(t=>!t.target).length;
+  const unans=self?(()=>{ try{ return window.slateMsgCount?window.slateMsgCount():0; }catch(_){ return 0; } })():0;
+  const bits=[];
+  if(M&&M.N) bits.push(`Habits ${M.p}% (${MR_LBL(M.p).toLowerCase()}, goal ${Math.round(MW_GOAL*100)}%)`+(weak&&weak.p<MR_ON?`, weakest: ${weak.l.toLowerCase()} ${weak.p}%`:''));
+  const doneLate=mine.filter(t=>t.doneAt&&String(t.doneAt).slice(0,10)>=m0&&t.target&&String(t.doneAt).slice(0,10)>t.target).length;
+  bits.push(`${done} task${done===1?'':'s'} done this month`+(doneLate?` (${doneLate} after their date)`:'')+(lateL.length?`, ${lateL.length} overdue now`:', none overdue now')+(nod?`, ${nod} with no date yet`:''));
+  if(unans) bits.push(`${unans} message${unans>1?'s':''} not answered`);
+  const short=t=>{ t=String(t||''); return t.length>50?t.slice(0,48).trim()+'…':t; };
+  const next=unans?`Answer ${unans>1?'the messages':'the message'} first.`:lateL.length?`Finish “${short(lateL[0].title)}” (${diff(lateL[0].target,td)} days late).`:weak&&weak.p<MR_ON?MR_TIP[weak.k]:nod?`Give dates to the ${nod} tasks with none, so they count as planned.`:'Keep going: everything is on track.';
+  const good=!unans&&!lateL.length&&(!weak||weak.p>=MR_ON);
+  return {text:bits.join(' · ')+'.',next,good}; }
+function howDoingEl(uid,self){ const H=howDoing(uid,self); return h('p',{class:'howd'+(H.good?' ok':'')},h('b',{text:self?'How you’re doing: ':'How they’re doing: '}),H.text,' ',h('span',{class:'howd-n',text:'Next: '+H.next})); }
+const TK_COL={done:'#8FD19E',going:'#7FB3F5',plan:'#B9C6DA',late:'#F07C7C',nodate:'#E5E5EA'};
 function myTaskRingEl(){ if(!S.uid||window.slateReview) return null; const td=today(), m0=mwMonthStart(td);
   const mine=activeTasks().filter(t=>t&&t.assignee===S.uid&&!t.archived&&!t.legacy);
   const done=mine.filter(t=>t.doneAt&&String(t.doneAt).slice(0,10)>=m0).length, open=mine.filter(t=>!t.doneAt);
   const going=open.filter(t=>t.verify||['doing','review'].includes(stageOf(t))&&!(t.target&&t.target<td)).length;
-  /* planned = open with a date from today; undated items (gates not dated yet) are left out so the ring shows real plans */
-  const late=open.filter(t=>!t.verify&&t.target&&t.target<td).length, plan=open.filter(t=>!t.verify&&!['doing','review'].includes(stageOf(t))&&t.target&&t.target>=td).length, tot=done+going+plan+late; if(!tot) return null;
+  /* planned = open with a date from today; "no date" = open and not planned yet (Principal, 13 Nov 2026: an overall picture) */
+  const late=open.filter(t=>!t.verify&&t.target&&t.target<td).length, plan=open.filter(t=>!t.verify&&!['doing','review'].includes(stageOf(t))&&t.target&&t.target>=td).length;
+  const nodate=open.filter(t=>!t.verify&&!['doing','review'].includes(stageOf(t))&&!t.target).length, tot=done+going+plan+late+nodate;
+  /* not assigned (POD leader: their POD's projects; Principal / COO: the studio) and messages not answered */
+  const ap=amApprover()||S.isOwner, lead=amPodLead();
+  const unas=ap||lead?activeTasks().filter(t=>t&&!t.assignee&&!t.archived&&!t.doneAt&&(ap||inMyPodProject(S.projects[t.projectId]))).length:0;
+  const unans=(()=>{ try{ return window.slateMsgCount?window.slateMsgCount():0; }catch(_){ return 0; } })();
+  if(!tot&&!unas&&!unans) return null;
   const ns='http://www.w3.org/2000/svg', svg=document.createElementNS(ns,'svg'); svg.setAttribute('width','34'); svg.setAttribute('height','34'); svg.setAttribute('viewBox','0 0 40 40'); svg.setAttribute('aria-hidden','true');
   const r=15, c=2*Math.PI*r; let off=0;
   const ring=(n,col)=>{ if(!n) return; const e=document.createElementNS(ns,'circle'), L=c*n/tot; Object.entries({cx:20,cy:20,r,fill:'none',stroke:col,'stroke-width':7,'stroke-dasharray':`${Math.max(0,L-1).toFixed(1)} ${c.toFixed(1)}`,'stroke-dashoffset':(-off).toFixed(1),transform:'rotate(-90 20 20)'}).forEach(([k,v])=>e.setAttribute(k,v)); svg.appendChild(e); off+=L; };
-  ring(done,TK_COL.done); ring(going,TK_COL.going); ring(plan,TK_COL.plan); ring(late,TK_COL.late);
+  if(tot){ ring(done,TK_COL.done); ring(going,TK_COL.going); ring(plan,TK_COL.plan); ring(late,TK_COL.late); ring(nodate,TK_COL.nodate); }
   const it=(n,l,col)=>n?h('span',{class:'tk-i'},h('i',{style:'background:'+col}),`${n} ${l}`):null;
-  return h('button',{type:'button',class:'mr-home tk-home',title:'My tasks: done this month, ongoing, planned and late. Tap to open them.',
+  return h('button',{type:'button',class:'mr-home tk-home',title:'My tasks: done this month, ongoing, planned (dated), late and no date yet; plus work not assigned to anyone and messages not answered. Tap to open my tasks.',
     onclick:()=>{ Object.assign(S.f,{person:S.uid,mine:true,project:'',q:'',status:late?'overdue':'active'}); S.fInit=1; goView('all'); }},
-    svg,h('b',{class:'mr-hp',text:String(tot)}),h('span',{class:'mr-hl',text:'tasks'}),h('span',{class:'tk-l'},it(done,'done',TK_COL.done),it(going,'ongoing',TK_COL.going),it(plan,'planned',TK_COL.plan),it(late,'late',TK_COL.late))); }
+    svg,h('b',{class:'mr-hp',text:String(tot)}),h('span',{class:'mr-hl',text:'tasks'}),h('span',{class:'tk-l'},it(done,'done',TK_COL.done),it(going,'ongoing',TK_COL.going),it(plan,'planned',TK_COL.plan),it(late,'late',TK_COL.late),it(nodate,'no date',TK_COL.nodate),
+      unas?h('span',{class:'tk-i tk-warn'},`${unas} not assigned`):null,unans?h('span',{class:'tk-i tk-warn'},`${unans} not answered`):null)); }
 function myMonthRingEl(){ if(!S.uid||window.slateReview||!needPlan(S.uid)) return null; const rows=presRows(mwRange())||S.mwRows; if(!rows) return null;
   const td=today(), M=mwMonth(S.uid,rows,mwMonthStart(td)); if(!M.N) return null;
   const svg=mwRingsEl(M); svg.setAttribute('width','34'); svg.setAttribute('height','34');
@@ -5244,7 +5269,7 @@ function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=
   const drafts=live.filter(id=>isDraftMember(id)&&!leads.includes(id));
   const members=live.filter(id=>!leads.includes(id)&&!drafts.includes(id));
   const tile=id=>{ const M=mwMonth(id,rows,m0); const svg=mwRingsEl(M); svg.setAttribute('width','40'); svg.setAttribute('height','40');
-    return h('button',{type:'button',class:'tr-t',title:`${nameOf(id)} · ${mn}`,onclick:()=>{ S.sheet={type:'homeList',title:`${nameOf(id)} · ${mn}`,build:()=>[h('div',{class:'mw',style:'padding:4px 2px'},...myMonthEl(id,rows))]}; renderSheet(); }},
+    return h('button',{type:'button',class:'tr-t',title:`${nameOf(id)} · ${mn}`,onclick:()=>{ S.sheet={type:'homeList',title:`${nameOf(id)} · ${mn}`,build:()=>[howDoingEl(id,false),h('div',{class:'mw',style:'padding:4px 2px'},...myMonthEl(id,rows))]}; renderSheet(); }},
       svg,h('span',{class:'tr-n'},h('b',{text:shortName(id)}),h('span',{style:M.N?'color:'+MR_TXT(M.p):'',text:M.N?`${M.p}% · ${MR_LBL(M.p).toLowerCase()}`:'nothing yet'}))); };
   const grp=(l,ids)=>ids.length?[h('div',{class:'tr-g',text:l}),h('div',{class:'tr-grid'},...ids.map(tile))]:[];
   return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:`Team this month · ${mn}`}),h('b',{text:String(live.length)}),h('span',{class:'f-hint',style:'margin-left:auto;font-weight:400',text:`goal ${Math.round(MW_GOAL*100)}%`})),
