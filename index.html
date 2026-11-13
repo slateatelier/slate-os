@@ -5324,13 +5324,15 @@ function viewDeskToday(){
       const r=hRow({dot:late.length?'var(--overdue)':ts.length?'var(--ontime)':'var(--faint)',strong:shortName(id),
         title:ts.length?`${ts.length} open`+(late.length?` · ${late.length} late`:'')+(wait?` · ${wait} to check`:''):'nothing on your POD',
         onclick:go}); if(nx) r.title=`Next: ${nx.title} · ${nx.target<td?diff(nx.target,td)+'d late':fmtD(nx.target)}`; return r; };
-    const goPerson=id=>()=>{ Object.assign(S.f,{person:id,mine:false,project:'',q:'',status:'active'}); S.fInit=1; goView('all'); };
+    /* only this POD's projects (Principal, 13 Nov 2026): a row opens that person's open work on them, not their whole list */
+    const podList=(title,ids)=>()=>{ S.sheet={type:'homeList',title,build:()=>{ const ts=ids.flatMap(myW).sort(byTarget); return ts.length?ts.map(t=>deskTask(t,{person:ids.length>1,done:false})):[h('p',{class:'f-hint',style:'padding:8px',text:'Nothing open on your POD’s projects.'})]; }}; renderSheet(); };
+    const goPerson=id=>podList(`${shortName(id)} · work on ${podLabel(mp)}`,[id]);
     const jrs=people().filter(id=>!isLeft(id)&&(isShared(id)||(teamOf(id)===mp&&id!==S.uid&&roleGroup(id)!=='dhead'&&!isPodLead(id,mp))));
     const drs=dbDrafters().filter(id=>!isLeft(id));
     const fixed=(title,ids,go,more)=>h('div',{class:'desk-sub fit-fixed'},h('div',{class:'desk-st'},h('span',{text:title}),h('b',{text:String(ids.length)}),h('button',{class:'linkish',type:'button',onclick:more,text:'All'})),
       h('div',{class:'h-list'},ids.length?ids.map(id=>teamRow(id,go(id))):[h('div',{class:'f-hint',style:'padding:6px 8px',text:'No one yet'})]));
-    right_.push(fixed('Junior architects',jrs,goPerson,()=>goView('team')));
-    right_.push(fixed('Drafting team',drs,id=>()=>{ S.dbF={pod:'',who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); },()=>{ S.dbF={pod:mp,who:''}; S.view='drafting'; render(true); }));
+    right_.push(fixed('Junior architects',jrs,goPerson,podList(`Junior architects · work on ${podLabel(mp)}`,jrs)));
+    right_.push(fixed('Drafting team',drs,id=>()=>{ S.dbF={pod:mp,who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); },()=>{ S.dbF={pod:mp,who:''}; S.view='drafting'; render(true); }));
   }
   { const pw=podWeekEl(); if(pw) right_.push(fitSec(pw,4,{title:'My POD this week'})); }
   if(lead){ const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)&&inMyPodProject(p));
@@ -10469,7 +10471,10 @@ function dbRow(r){ const [l,c]=DB_ST[r.st], mine=r.project_id&&S.projects[r.proj
     h('div',{class:'db-st'},h('b',{style:`color:${r.st==='later'?'var(--muted)':c}`,text:l}),h('span',{text:r.st==='done'?fmtD(String(r.done_at).slice(0,10)):r.target?(r.st==='late'?diff(r.target,today())+'d late':fmtD(r.target)):'no date'}))); }
 function viewDrafting(){
   if(!canDBoard()) return [h('p',{text:'Only POD leaders, the drafting team, the COO and the Principal see this.'})];
-  const F=S.dbF||(S.dbF={pod:'',who:''}), rows=dbRows(), st=dbStats(rows), ord={late:0,week:1,review:2,ask:3,later:4,done:5};
+  /* a POD leader sees only the drafting work on their own POD's projects (Principal, 13 Nov 2026) */
+  const podOnly=amPodLead()&&!amApprover()&&!S.isOwner?myPod():'';
+  const F=S.dbF||(S.dbF={pod:'',who:''}); if(podOnly) F.pod=podOnly;
+  const rows=dbRows().filter(r=>!podOnly||r.pod===podOnly), st=dbStats(rows), ord={late:0,week:1,review:2,ask:3,later:4,done:5};
   const podsHere=[...new Set(rows.map(r=>r.pod||''))].sort((a,b)=>podNum(a)-podNum(b));
   const xs=rows.filter(r=>(!F.pod||r.pod===F.pod)&&(!F.who||r.who===F.who)).sort((a,b)=>ord[a.st]-ord[b.st]||String(a.target||'9').localeCompare(String(b.target||'9')));
   const q=dbMyQueue(), B=S.dboard||{};
@@ -10480,7 +10485,7 @@ function viewDrafting(){
   const groups=F.who?[[F.who,xs]]:dbDrafters().map(id=>[id,xs.filter(r=>r.who===id)]).concat([['',xs.filter(r=>!dbDrafters().includes(r.who))]]).filter(([,l])=>l.length);
   return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Tools'}),h('h1',{class:'h1',text:'Drafting board'}),h('p',{class:'lead',text:'What the drafting team is doing for every POD: open work, late items and what was finished in the last 14 days. Read-only: the Design Associate Lead gives drafting work out.'}))),
     h('div',{class:'db-grid'},dbDrafters().map(card)),
-    h('div',{class:'bar db-pods'},seg('POD',[['','All'],...podsHere.filter(Boolean).map(pd=>[pd,podLabel(pd).split(' · ')[0]])],F.pod,v=>{ F.pod=v; render(true); })),
+    podOnly?null:h('div',{class:'bar db-pods'},seg('POD',[['','All'],...podsHere.filter(Boolean).map(pd=>[pd,podLabel(pd).split(' · ')[0]])],F.pod,v=>{ F.pod=v; render(true); })),
     B.err?h('div',{class:'err',text:'Couldn’t load the other PODs’ drafting work: '+B.err}):null,
     ...groups.map(([id,l])=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:id?shortName(id):'Others'}),h('span',{class:'cnt',text:`${l.filter(r=>r.st!=='done').length} open`})),h('div',{class:'list'},hMore('db-'+(id||'x'),l,8,dbRow)))),
     !xs.length?h('div',{class:'empty'},h('h3',{text:'Nothing here'}),h('p',{class:'muted',style:'margin:0',text:B.at?'No drafting work matches.':'Loading…'})):null,
