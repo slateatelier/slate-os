@@ -4298,7 +4298,7 @@ function homeChips(){ const a=myMonthRingEl(), b=myTaskRingEl(), c=howDoingEl(S.
 function howDoing(uid,self){ const td=today(), m0=mwMonthStart(td), rows=presRows(mwRange())||S.mwRows;
   const M=rows&&needPlan(uid)?mwMonth(uid,rows,m0):null, cnt=M?M.H.filter(o=>o.n):[], weak=cnt.length?cnt.reduce((a,b)=>b.p<a.p?b:a):null;
   const mine=activeTasks().filter(t=>t&&t.assignee===uid&&!t.archived&&!t.legacy), open=mine.filter(t=>!t.doneAt&&!t.verify);
-  const done=mine.filter(t=>t.doneAt&&String(t.doneAt).slice(0,10)>=m0).length, lateL=open.filter(t=>t.target&&t.target<td).sort(byTarget), nod=open.filter(t=>!t.target).length;
+  const done=mine.filter(t=>t.doneAt&&String(t.doneAt).slice(0,10)>=m0).length, lateL=open.filter(t=>t.target&&t.target<td).sort(byTarget), nod=open.filter(t=>!t.target&&!['doing','review'].includes(stageOf(t))).length;
   const unans=self?(()=>{ try{ return window.slateMsgCount?window.slateMsgCount():0; }catch(_){ return 0; } })():0;
   const bits=[];
   if(M&&M.N) bits.push(`Habits ${M.p}% (${MR_LBL(M.p).toLowerCase()}, goal ${Math.round(MW_GOAL*100)}%)`+(weak&&weak.p<MR_ON?`, weakest: ${weak.l.toLowerCase()} ${weak.p}%`:''));
@@ -4306,7 +4306,7 @@ function howDoing(uid,self){ const td=today(), m0=mwMonthStart(td), rows=presRow
   bits.push(`${done} task${done===1?'':'s'} done this month`+(doneLate?` (${doneLate} after their date)`:'')+(lateL.length?`, ${lateL.length} overdue now`:', none overdue now')+(nod?`, ${nod} with no date yet`:''));
   if(unans) bits.push(`${unans} message${unans>1?'s':''} not answered`);
   const short=t=>{ t=String(t||''); return t.length>50?t.slice(0,48).trim()+'…':t; };
-  const next=unans?`Answer ${unans>1?'the messages':'the message'} first.`:lateL.length?`Finish “${short(lateL[0].title)}” (${diff(lateL[0].target,td)} days late).`:weak&&weak.p<MR_ON?MR_TIP[weak.k]:nod?`Give dates to the ${nod} tasks with none, so they count as planned.`:'Keep going: everything is on track.';
+  const next=unans?`Answer ${unans>1?'the messages':'the message'} first.`:lateL.length?`Finish “${short(lateL[0].title)}” (${diff(lateL[0].target,td)} day${diff(lateL[0].target,td)===1?'':'s'} late).`:weak&&weak.p<MR_ON?MR_TIP[weak.k]:nod?`Give dates to the ${nod} tasks with none, so they count as planned.`:'Keep going: everything is on track.';
   const good=!unans&&!lateL.length&&(!weak||weak.p>=MR_ON);
   return {text:bits.join(' · ')+'.',next,good}; }
 function howDoingEl(uid,self){ const H=howDoing(uid,self); return h('p',{class:'howd'+(H.good?' ok':'')},h('b',{text:self?'How you’re doing: ':'How they’re doing: '}),H.text,' ',h('span',{class:'howd-n',text:'Next: '+H.next})); }
