@@ -120,6 +120,13 @@ main.wrap.wrap-desk{max-width:1480px}
 .mw-ew{display:grid;gap:0;margin-top:4px;border-top:1px solid var(--line,#E5E5EA);padding-top:8px}.mw-ewh{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding-bottom:4px}
 .mw-er{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:96px auto 1fr;gap:10px;align-items:center;padding:7px 2px;border-top:1px solid var(--group,#F2F2F7);font-size:13.5px}
 .mw-er.on{background:var(--group,#F2F2F7);border-radius:6px}.mw-er.pre{color:var(--muted);cursor:default}.mw-er .mw-pd .mw-d{width:13px;height:13px}.mw-er .mw-pg{text-align:right}.mw-open{padding:4px 2px 10px}
+.mw-seg{display:inline-flex;background:var(--group,#F2F2F7);border-radius:8px;padding:2px}.mw-seg button{appearance:none;border:0;background:none;font:inherit;font-size:12.5px;padding:3px 12px;border-radius:6px;color:#3C3C43;cursor:pointer}.mw-seg button.on{background:#fff;color:#000;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.mw-h{align-items:center}.mw-tap{appearance:none;border:0;background:none;padding:2px;cursor:pointer;border-radius:50%}.mw-tap:hover{background:var(--group,#F2F2F7)}.mw-tap.on{box-shadow:0 0 0 2px #1d1d1f inset}
+.mw-peek{grid-column:1/-1;display:grid;gap:4px;margin-top:4px;padding:8px 10px;border-radius:8px;background:var(--group,#F2F2F7)}.mw-ph{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.mw-pl{appearance:none;border:0;background:none;font:inherit;text-align:left;display:grid;gap:1px;padding:4px 0;font-size:13px}.mw-pl.go{cursor:pointer}.mw-pl.go span:first-child{text-decoration:underline;text-underline-offset:3px}.mw-pm{font-size:12px;color:var(--muted)}
+.mr{display:grid;grid-template-columns:132px 1fr;gap:14px;align-items:center}.mr-l{display:grid;gap:9px}.mr-r{display:grid;grid-template-columns:10px 1fr auto 34px;gap:8px;align-items:center;font-size:13px}.mr-r b{font-weight:600}
+.mr-sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}.mr-r .mr-sw{margin:0}.mr-n{display:grid;line-height:1.3}.mr-st{font-size:11.5px;color:var(--muted)}.mr-c{font-size:12px;color:var(--muted);text-align:right}
+.mr-focus{font-size:10px;font-weight:600;color:#C41E29;border:1px solid #C41E29;border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:1px}
 .mw-pr{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:8px;align-items:center;padding:6px 2px;border-top:1px solid var(--line,#E5E5EA)}.mw-pd{display:flex;gap:4px}.mw-pd .mw-d{width:12px;height:12px}.mw-pd .mw-x{width:8px;height:8px}.mw-pg{font-size:12.5px;color:var(--muted);text-align:right}
 button.my-score{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0;display:grid}
 .dctx{display:grid;gap:3px;font-size:12.5px}.dctx-l{color:var(--ink)}.dctx-l.muted{color:var(--muted)}.dctx-f{display:flex;flex-wrap:wrap;gap:4px 10px;color:#B25E00;font-weight:600}
@@ -4073,9 +4080,12 @@ function weekendLine(td){
    Rows: In office (opened SLATE OS or wrote the plan; approved leave amber) · Plan by 11:00 (11:01–12:00 amber) ·
    Clear entries (no line under 20 characters; one amber) · Updates on time (the day's lines closed by the next working day;
    2 working days amber) · Work on time (tasks due that day done on time; up to 2 days late amber; overdue red). */
-const MW_ROWS=[['in','In office'],['plan','Plan by 11:00'],['clear','Clear entries'],['upd','Updates on time'],['work','Work on time']];
-const MW_GOAL=0.8;
-function mwRange(){ const td=today(); return {s:addDays(weekStart(td),-7*(S.mwBack||4)),e:td}; }
+/* four rows (Principal, 13 Nov 2026): Updates on time dropped from the card; the day-plan gate already enforces it and the
+   score's discipline marks still count late updates */
+const MW_ROWS=[['in','In office'],['plan','Plan by 11:00'],['clear','Clear entries'],['work','Work on time']];
+const MW_GOAL=0.9;   /* goal 90% green (Principal, 13 Nov 2026) */
+function mwRange(){ const td=today(), pm=mwMonthStart(mwMonthStart(td)<td?addDays(mwMonthStart(td),-1):td), a=addDays(weekStart(td),-7*(S.mwBack||4)); return {s:a<pm?a:pm,e:td}; }
+const mwMonthStart=d=>String(d).slice(0,8)+'01';
 function mwDays(ws){ const out=[]; for(let i=0;i<7;i++){ const d=addDays(ws,i); if(isWorkDay(d)) out.push(d); } return out; }
 function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by.get(d)||null, here=!!(x&&(x.opened||x.plan));
   const nowHM=dhakaHM(new Date().toISOString());
@@ -4092,7 +4102,7 @@ function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by
 function mwWeek(uid,ws,rows){ const by=new Map((rows||[]).filter(x=>x.user_id===uid).map(x=>[x.day,x])), days=mwDays(ws);
   const grid=MW_ROWS.map(([k])=>days.map(d=>mwCell(uid,k,d,by)));
   const cells=grid.flat(), g=cells.filter(c=>c==='g').length, n=cells.filter(c=>['g','a','r'].includes(c)).length;
-  return {days,grid,g,n,a:cells.filter(c=>c==='a').length,r:cells.filter(c=>c==='r').length}; }
+  return {uid,rows,days,grid,g,n,a:cells.filter(c=>c==='a').length,r:cells.filter(c=>c==='r').length}; }
 function mwStreak(uid,rows){ const by=new Map((rows||[]).filter(x=>x.user_id===uid).map(x=>[x.day,x])), td=today(); let n=0, d=td;
   for(let i=0;i<40;i++,d=addDays(d,-1)){ if(!isWorkDay(d)) continue; const all=MW_ROWS.map(([k])=>mwCell(uid,k,d,by)), cs=all.filter(c=>!['x','f','n'].includes(c));
     if(d===td&&all.includes('n')) continue; if(!cs.length) continue; if(cs.every(c=>c==='g')) n++; else break; }
@@ -4108,7 +4118,21 @@ const mwDot=(c,sz)=>h('i',{class:'mw-d mw-'+c,style:sz?`width:${sz}px;height:${s
 function mwGridEl(W,td){ const DN=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
   return h('div',{class:'mw-grid',style:`grid-template-columns:minmax(0,1fr) repeat(${W.days.length},24px)`},
     h('span'),...W.days.map(d=>h('span',{class:'mw-dh'+(d===td?' on':''),text:DN(d)})),
-    ...MW_ROWS.flatMap(([k,l],i)=>[h('span',{class:'mw-rl',text:l}),...W.grid[i].map(c=>h('span',{class:'mw-c'},c==='x'?h('i',{class:'mw-d mw-x'}):mwDot(c)))])); }
+    ...MW_ROWS.flatMap(([k,l],i)=>[h('span',{class:'mw-rl',text:l}),...W.grid[i].map((c,j)=>{ const d=W.days[j], on=S.mwPeek&&S.mwPeek.row===k&&S.mwPeek.d===d&&S.mwPeek.uid===W.uid;
+      return c==='x'||c==='f'?h('span',{class:'mw-c'},h('i',{class:'mw-d mw-x'})):h('button',{type:'button',class:'mw-c mw-tap'+(on?' on':''),'aria-label':`${l}, ${fmtD(d)}`,onclick:()=>{ S.mwPeek=on?null:{uid:W.uid,row:k,d}; render(true); }},mwDot(c)); })]),
+    S.mwPeek&&S.mwPeek.uid===W.uid&&W.days.includes(S.mwPeek.d)?mwPeekEl(W.uid,S.mwPeek,W.rows):null); }
+/* what is behind a dot (Principal, 13 Nov 2026) */
+function mwPeekEl(uid,pk,rows){ const x=(rows||[]).find(r=>r.user_id===uid&&r.day===pk.d)||null, l=(MW_ROWS.find(r=>r[0]===pk.row)||[])[1]||'';
+  const line=(t,m,go)=>h(go?'button':'div',{type:go?'button':undefined,class:'mw-pl'+(go?' go':''),onclick:go||undefined},h('span',{text:t}),m?h('span',{class:'mw-pm',text:m}):null);
+  let body=[];
+  if(pk.row==='in') body=[line(x&&(x.opened||x.plan)?(x.opened?'Came in: SLATE OS opened':'Came in: day plan written'):x&&x.leave?'Approved leave':'No entry this day',x&&x.leave&&!(x.opened||x.plan)?'counts as half an absence':null)];
+  if(pk.row==='plan') body=[line(x&&x.plan?`Day plan written at ${dhakaHM(x.plan_at)||'—'}`:'No day plan written','green by 11:00 · amber to 12:00')];
+  if(pk.row==='clear') body=[line(!(x&&x.short_n)?'Every line written in full':`${x.short_n} short line${x.short_n>1?'s':''} (under 20 characters)`,`${(x&&x.lines_n)||0} line${(x&&x.lines_n)===1?'':'s'} in the plan`)];
+  if(pk.row==='work'){ const ts=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.assignee===uid&&!t.archived&&!t.legacy&&!t.unscored&&t.target===pk.d);
+    body=ts.length?ts.map(t=>{ const late=t.doneAt?diff(t.target,String(t.doneAt).slice(0,10)):diff(t.target,today()), p=S.projects[t.projectId];
+      const m=t.doneAt?(late<=0?`done ${fmtD(String(t.doneAt).slice(0,10))} · on time`:`done ${fmtD(String(t.doneAt).slice(0,10))} · ${late} day${late>1?'s':''} late`):(late>0?`not done · ${late} day${late>1?'s':''} late`:'not done yet');
+      return line(t.title,[m,p?(p.code||p.name):''].filter(Boolean).join(' · '),()=>openTask(t.id)); }):[line('Nothing was due this day')]; }
+  return h('div',{class:'mw-peek'},h('div',{class:'mw-ph'},h('b',{text:`${l} · ${fmtD(pk.d)}`}),h('button',{type:'button',class:'linkish',onclick:()=>{ S.mwPeek=null; render(true); },text:'Close'})),...body); }
 const mwWorst=cs=>{ const v=cs.filter(c=>!['x','f'].includes(c)); return !v.length?'x':v.includes('r')?'r':v.includes('a')?'a':v.includes('n')?'n':'g'; };
 /* earlier weeks (Principal, 13 Nov 2026): one line a week under this week's grid, each day's worst dot and the green count;
    tap a line to open its full grid; "Show older weeks" loads 8 more weeks */
@@ -4121,12 +4145,42 @@ function mwEarlier(uid,rows){ const td=today(), ws=weekStart(td), n=S.mwBack||4,
     if(open&&!pre) out.push(h('div',{class:'mw-open'},mwGridEl(W,''))); if(pre) break; }
   return h('div',{class:'mw-ew'},h('div',{class:'mw-ewh'},h('span',{text:'Earlier weeks · tap to open'}),h('span',{text:'green'})),...out,
     addDays(ws,-7*n)>=goLive()?h('button',{type:'button',class:'linkish',style:'justify-self:start;font-size:12.5px',onclick:()=>{ S.mwBack=n+8; render(true); },text:'Show older weeks'}):null); }
+/* ---------- Month view (Principal, 13 Nov 2026): habit rings ----------
+   One ring per habit = share of green days this month so far (dots counted as in the week grid). Light green when on track
+   (90%+, the goal), yellow when slipping (60–89%), light red when behind (below 60%); the weakest habit is marked FOCUS with one tip. A dotted line
+   marks the 90% goal. Week / Month switch on the same card. */
+const MR_ON=90, MR_SLIP=60;   /* on track = at the 90% goal; slipping 60–89%; behind below 60% */
+const MR_COL=p=>p>=MR_ON?'#8FD19E':p>=MR_SLIP?'#F5C443':'#F07C7C', MR_TXT=p=>p>=MR_ON?'#2E7D45':p>=MR_SLIP?'#8A6400':'#B42318', MR_LBL=p=>p>=MR_ON?'On track':p>=MR_SLIP?'Slipping':'Behind';
+const MR_TIP={in:'Come in every working day: absent days count against you.',plan:'Write your day plan before 11:00 every morning.',clear:'Write each plan line in full, at least 20 characters.',work:'Finish work by its date, or ask for a new date before it is late.'};
+function mwMonth(uid,rows,m0){ const td=today(), end=(()=>{ const [y,m]=m0.split('-').map(Number); return m0.slice(0,8)+String(new Date(y,m,0).getDate()).padStart(2,'0'); })(), last=end<td?end:td;
+  const by=new Map((rows||[]).filter(x=>x.user_id===uid).map(x=>[x.day,x])), H=MW_ROWS.map(([k,l])=>({k,l,g:0,n:0}));
+  for(let d=m0>goLive()?m0:goLive();d<=last;d=addDays(d,1)){ if(!isWorkDay(d)) continue; H.forEach(o=>{ const c=mwCell(uid,o.k,d,by); if(['g','a','r'].includes(c)){ o.n++; if(c==='g') o.g++; } }); }
+  H.forEach(o=>{ o.p=o.n?Math.round(o.g/o.n*100):null; });
+  const G=H.reduce((a,o)=>a+o.g,0), N=H.reduce((a,o)=>a+o.n,0); return {H,G,N,p:N?Math.round(G/N*100):null}; }
+function mwRingsEl(M){ const ns='http://www.w3.org/2000/svg', svg=document.createElementNS(ns,'svg'); svg.setAttribute('width','132'); svg.setAttribute('height','132'); svg.setAttribute('viewBox','0 0 140 140'); svg.setAttribute('aria-hidden','true');
+  const C=(attrs)=>{ const e=document.createElementNS(ns,attrs.tag||'circle'); Object.entries(attrs).forEach(([k,v])=>{ if(k!=='tag') e.setAttribute(k,v); }); svg.appendChild(e); };
+  M.H.forEach((o,i)=>{ const r=62-i*14, c=2*Math.PI*r, p=o.n?o.g/o.n:0;
+    C({cx:70,cy:70,r,fill:'none',stroke:'#F1F2F4','stroke-width':11});
+    if(p>0) C({cx:70,cy:70,r,fill:'none',stroke:MR_COL(o.p||0),'stroke-width':11,'stroke-linecap':'round','stroke-dasharray':`${(c*p).toFixed(1)} ${c.toFixed(1)}`,transform:'rotate(-90 70 70)'}); });
+  const a=-Math.PI/2+2*Math.PI*MW_GOAL; C({tag:'line',x1:(70+20*Math.cos(a)).toFixed(1),y1:(70+20*Math.sin(a)).toFixed(1),x2:(70+69*Math.cos(a)).toFixed(1),y2:(70+69*Math.sin(a)).toFixed(1),stroke:'#1d1d1f','stroke-width':1.5,'stroke-dasharray':'2 3',opacity:.4});
+  return svg; }
+function myMonthEl(uid,rows){ const td=today(), m0=mwMonthStart(td), M=mwMonth(uid,rows,m0), pm=mwMonthStart(addDays(m0,-1)), P=pm>=mwMonthStart(goLive())?mwMonth(uid,rows,pm):null;
+  const cnt=M.H.filter(o=>o.n), weak=cnt.length?cnt.reduce((a,b)=>(b.p<a.p?b:a)):null, mn=new Date(m0+'T00:00:00').toLocaleString('en-GB',{month:'long'});
+  return [h('div',{class:'mw-num'},h('b',{text:M.p==null?'—':M.p+'%'}),h('span',{text:` green so far · ${M.G} of ${M.N}`})),
+    h('div',{class:'mw-sub',text:`${mn} · goal ${Math.round(MW_GOAL*100)}%`+(P&&P.N?` · last month ${P.p}%`:'')}),
+    h('div',{class:'mr'},mwRingsEl(M),h('div',{class:'mr-l'},...M.H.map(o=>h('div',{class:'mr-r'},h('i',{class:'mr-sw',style:'background:'+(o.n?MR_COL(o.p):'#E5E5EA')}),
+      h('span',{class:'mr-n'},h('span',{},o.l,weak&&weak.k===o.k&&o.p<MR_ON?h('span',{class:'mr-focus',text:'FOCUS'}):null),o.n?h('span',{class:'mr-st',style:'color:'+MR_TXT(o.p),text:MR_LBL(o.p)}):h('span',{class:'mr-st',text:'Nothing yet'})),
+      h('b',{text:o.n?o.p+'%':'—'}),h('span',{class:'mr-c',text:o.n?`${o.g}/${o.n}`:''}))))),
+    weak&&weak.p<MR_ON?h('div',{class:'mw-tip warn',text:`Focus: ${weak.l}. ${MR_TIP[weak.k]}`}):M.N?h('div',{class:'mw-tip',text:'Every habit is on track this month. Keep it going.'}):null,
+    h('div',{class:'mw-leg'},h('span',{},h('i',{class:'mr-sw',style:'background:#8FD19E'}),'On track 90%+'),h('span',{},h('i',{class:'mr-sw',style:'background:#F5C443'}),'Slipping 60–89%'),h('span',{},h('i',{class:'mr-sw',style:'background:#F07C7C'}),'Behind'),h('span',{},'┆ goal'))]; }
 function myWeekEl(){ if(!S.uid||window.slateReview||!needPlan(S.uid)) return null; const td=today(), got=presRows(mwRange()); if(got) S.mwRows=got; const rows=got||S.mwRows; if(!rows) return null;
   const ws=weekStart(td), W=mwWeek(S.uid,ws,rows), L=mwWeek(S.uid,addDays(ws,-7),rows), st=mwStreak(S.uid,rows), tip=mwTip(S.uid,rows), max=W.days.length*MW_ROWS.length, goal=Math.ceil(max*MW_GOAL);
   const DN=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
   const tot=W.n||1;
+  const mode=S.mwMode==='month'?'month':'week', sw=h('span',{class:'mw-seg',role:'group','aria-label':'Week or month'},...[['week','Week'],['month','Month']].map(([k,l])=>h('button',{type:'button',class:mode===k?'on':'',onclick:()=>{ S.mwMode=k; S.mwPeek=null; render(true); },text:l})));
+  if(mode==='month') return h('div',{class:'mw'},h('div',{class:'mw-h'},sw,h('span',{text:'My month'+(td<scoreFrom()?' · practice':'')})),...myMonthEl(S.uid,rows));
   return h('div',{class:'mw'},
-    h('div',{class:'mw-h'},h('span',{text:`My week · ${fmtD(W.days[0]||ws)}–${fmtD(W.days[W.days.length-1]||td)}`+(td<scoreFrom()?' · practice':'')}),st>=2?h('span',{class:'mw-st',text:`${st} green days in a row`}):null),
+    h('div',{class:'mw-h'},sw,h('span',{text:`${fmtD(W.days[0]||ws)}–${fmtD(W.days[W.days.length-1]||td)}`+(td<scoreFrom()?' · practice':'')}),st>=2?h('span',{class:'mw-st',text:`${st} green days in a row`}):null),
     h('div',{class:'mw-num'},h('b',{text:String(W.g)}),h('span',{text:` of ${W.n} green so far`})),
     h('div',{class:'mw-sub',text:`Last week ${L.g} · goal ${goal} of ${max}`}),
     h('div',{class:'mw-bar','aria-hidden':'true'},h('i',{style:`width:${W.g/tot*100}%;background:${MW_COL.g}`}),h('i',{style:`width:${W.a/tot*100}%;background:${MW_COL.a}`}),h('i',{style:`width:${W.r/tot*100}%;background:${MW_COL.r}`})),
