@@ -4288,11 +4288,17 @@ function podWeekEl(){ if(!amPodLead()||window.slateReview) return null; const mp
   const helps=id=>(isDraftMember(id)||isShared(id))&&Object.values(S.tasks).some(t=>t&&t.assignee===id&&!t.archived&&inMyPodProject(S.projects[t.projectId])&&(!t.doneAt||String(t.doneAt).slice(0,10)>=ws));
   const tag=id=>teamOf(id)===mp?'':isShared(id)?'shared':'drafting';
   const ids=people().filter(id=>id!==S.uid&&!isLeft(id)&&needPlan(id)&&(teamOf(id)===mp||(helps(id)&&seen.has(id)))); if(!ids.length) return null;
-  const worst=cs=>{ const v=cs.filter(c=>!['x','f'].includes(c)); return !v.length?'x':v.includes('r')?'r':v.includes('a')?'a':v.includes('n')?'n':'g'; };
+  /* a day's dot (Principal, 13 Nov 2026): red only when the person was not in, or missed 2+ habits; one miss is amber */
+  const worst=cs=>{ const v=cs.filter(c=>!['x','f'].includes(c)); if(!v.length) return 'x'; const r=v.filter(c=>c==='r').length;
+    return cs[0]==='r'||r>=2?'r':r===1||v.includes('a')?'a':v.includes('n')?'n':'g'; };
+  const open1=(id,W)=>{ S.sheet={type:'homeList',title:`${nameOf(id)} · this week`,build:()=>[h('div',{class:'mw',style:'padding:4px 2px'},mwGridEl(W,today()),
+      h('div',{class:'mw-leg'},h('span',{},mwDot('g',9),'Good'),h('span',{},mwDot('a',9),'Slipped'),h('span',{},mwDot('r',9),'Missed'),h('span',{},mwDot('n',9),'Today, open')))]}; renderSheet(); };
   const list=ids.map(id=>({id,W:mwWeek(id,ws,rows)})).sort((a,b)=>(b.W.r-a.W.r)||nameOf(a.id).localeCompare(nameOf(b.id)));
-  return deskSub('My POD this week',list.map(({id,W})=>h('div',{class:'mw-pr'},h('span',{class:'mw-rl'},shortName(id),tag(id)?h('span',{class:'mw-tag',text:' · '+tag(id)}):null),
+  return deskSub('My POD this week',list.map(({id,W})=>h('div',{class:'mw-pr',role:'button',tabindex:'0',style:'cursor:pointer',title:'Tap to see which habit',onclick:()=>open1(id,W)},h('span',{class:'mw-rl'},shortName(id),tag(id)?h('span',{class:'mw-tag',text:' · '+tag(id)}):null),
+    /* no entry record visible for this person (e.g. a login that cannot read their office entries): grey, never red */
+    !rows.some(x=>x.user_id===id&&x.opened)?h('span',{class:'mw-pd f-hint',style:'font-size:12px',text:'entries not visible'}):
     h('span',{class:'mw-pd'},...W.days.map((d,i)=>{ const c=worst(W.grid.map(r=>r[i])); return c==='x'||c==='f'?h('i',{class:'mw-d mw-x'}):mwDot(c); })),
-    h('span',{class:'mw-pg',text:`${W.g}/${W.n}`}))),ids.length); }
+    h('span',{class:'mw-pg',text:rows.some(x=>x.user_id===id&&x.opened)?`${W.g}/${W.n}`:''}))),ids.length); }
 /* Home: the month's result as small habit rings beside the greeting (Principal, 13 Nov 2026); tap = the Month view */
 function nextMeetLine(){ const m=nextMeets()[0]; if(!m) return null; const td=today(); let nw=addDays(td,1); while(!isWorkDay(nw)) nw=addDays(nw,1);
   if(m.date>nw) return null; const day=m.date===td?'Today':m.date===addDays(td,1)?'Tomorrow':`${wd(m.date)} ${fmtD(m.date)}`;
@@ -5490,9 +5496,10 @@ function viewDeskToday(){
   /* fixed sections on every POD leader's Home (Principal, 13 Nov 2026): the drafting team and the junior architects, each
      with their work on this POD's projects. Always shown, never cut by fitHome; a row opens that person's work. */
   if(lead){ const myW=id=>activeTasks().filter(t=>t.assignee===id&&!t.archived&&!t.doneAt&&inMyPodProject(S.projects[t.projectId]));
-    const teamRow=(id,go)=>{ const ts=myW(id), late=ts.filter(t=>t.target&&t.target<td), nx=ts.filter(t=>t.target).sort(byTarget)[0], wait=ts.filter(t=>t.verify).length;
-      const r=hRow({dot:late.length?'var(--overdue)':ts.length?'var(--ontime)':'var(--faint)',strong:shortName(id),
-        title:ts.length?`${ts.length} open`+(late.length?` · ${late.length} late`:'')+(wait?` · ${wait} to check`:''):'nothing on your POD',
+    /* red = their own late work; work they sent for checking is waiting on the POD leader, not late on them (blue) (Principal, 13 Nov 2026) */
+    const teamRow=(id,go)=>{ const ts=myW(id), late=ts.filter(t=>t.target&&t.target<td&&!t.verify), nx=ts.filter(t=>t.target&&!t.verify).sort(byTarget)[0], wait=ts.filter(t=>t.verify).length;
+      const r=hRow({dot:late.length?'var(--overdue)':wait?'#4A8FE7':ts.length?'var(--ontime)':'var(--faint)',strong:shortName(id),
+        title:ts.length?`${ts.length} open`+(late.length?` · ${late.length} late`:'')+(wait?` · ${wait} waiting for your check`:''):'nothing on your POD',
         onclick:go}); if(nx) r.title=`Next: ${nx.title} · ${nx.target<td?diff(nx.target,td)+'d late':fmtD(nx.target)}`; return r; };
     /* only this POD's projects (Principal, 13 Nov 2026): a row opens that person's open work on them, not their whole list */
     const podList=(title,ids)=>()=>{ S.sheet={type:'homeList',title,build:()=>{ const ts=ids.flatMap(myW).sort(byTarget); return ts.length?ts.map(t=>deskTask(t,{person:ids.length>1,done:false})):[h('p',{class:'f-hint',style:'padding:8px',text:'Nothing open on your POD’s projects.'})]; }}; renderSheet(); };
