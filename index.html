@@ -4988,7 +4988,7 @@ function sheetWlog(){
       for(const l of sh.lines) if(l.newTitle!=null&&l.projectId&&!l.taskId){ const id=await wlCreateTask(l); if(id){ l.taskId=id; delete l.newTitle; delete l.offList; delete l.parent; } }
       const lines=sh.lines.map(l=>({id:l.id,projectId:l.projectId||'',taskId:l.taskId||'',...(l.clRef&&!l.taskId?{clRef:l.clRef}:{}),...(l.dwRef&&!l.taskId?{dwRef:l.dwRef}:{}),text:l.text.trim(),status:l.status||'planned',due:l.due,due0:l.due0||l.due,since:l.since||td,
         ...(l.from?{from:l.from}:{}),...(l.note?{note:l.note}:{}),...(l.closedAt?{closedAt:l.closedAt}:{}),...(l.ask?{ask:{to:l.ask.to||askTo,at:l.ask.at||nowIso}}:{}),
-        ...((l.part||'').trim()?{part:l.part.trim()}:{}),...(l.wait?{wait:l.wait}:{}),...(l.moved?{moved:l.moved}:{}),...(l.lateWhy?{lateWhy:l.lateWhy}:{}),...(l.extra?{extra:1}:{})}));
+        ...((l.part||'').trim()?{part:l.part.trim()}:{}),...(l.wait?{wait:l.wait}:{}),...(l.moved?{moved:l.moved}:{}),...(l.lateWhy?{lateWhy:l.lateWhy}:{}),...(l.extra?{extra:1}:{}),...(l.pre?{ahead:1}:{})}));   /* ahead:1 = planned the day before (Plan ahead) */
       if(yLog&&(yOpen.length||sh.ex.length)){ const st={done:'done',today:'carried',ongoing:'carried',waiting:'carried',stopped:'stopped'};
         fin=yOpen.filter(l=>sh.y[l.id]==='done');
         const yl=(yLog.lines||[]).map(l=>{ const v=sh.y[l.id]; if(!v) return l;
@@ -5299,7 +5299,7 @@ function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=
     ...grp('POD leaders',leads),...grp('Members',members),...grp('Drafting',drafts)); }
 /* Contribution points v2 (Principal, 13 Nov 2026): SHADOW MODE, only the Principal and the COO see it.
    Four plain parts, each a %, nothing counted twice. Levels differ only in their Output and Load norms.
-   Reliable 25%   came in, planned the day, closed the day (the habit rings without "work on time"; an absent day is a missed "in").
+   Reliable 25%   came in, planned the day, closed the day, planned the day ahead (from 15 Nov) (the habit rings without "work on time"; an absent day is a missed "in").
    Promises 30%   (rolling 30 days) work finished by its ORIGINAL date: tasks, and day-plan lines given a later finish-by date (a line's date defaults to the
                   same day, so a plain carried line is not a broken promise; a carried line is fine until its chosen date passes).
                   Only dates set at least a day before count; late = half; waiting on client/consultant = left out; a date moved for a
@@ -5309,7 +5309,7 @@ function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=
                   Created and closed the same day, or dated on the day it was done = 0.
    Load 20%       live work now: current-phase gates 5, tasks dated in the next 30 days 1 (meetings 0.25), against the level's full load. */
 const CP_LV={lead:{n:'POD leader',out:1.5,load:60},dlead:{n:'Drafting lead',out:1.0,load:25},draft:{n:'Drafting',out:0.8,load:20},junior:{n:'Junior architect',out:0.8,load:20}};
-const CP_W={rel:25,pro:30,out:25,load:20};
+const CP_W={rel:25,pro:30,out:25,load:20}, CP_AHEAD0='2026-11-15';
 const cpSee=()=>!!S.uid&&(S.uid===ownerId()||isCOO(S.uid));
 const cpMeet=t=>/meeting|coordinat|\bcall\b|site visit|discussion/i.test((t.title||'')+' '+(t.kind||''));
 function cpOrig(t){ /* the first date ever promised, and when it was set */
@@ -5343,7 +5343,9 @@ function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(t
   const pct=P=>{ const W=P.reduce((a,x)=>a+(x.w||1),0); return W?Math.round(P.reduce((a,x)=>a+x.v,0)/W*100):null; };
   const cnt=(P,k)=>P.filter(x=>x.k===k).length;
   const out=ids.map(id=>{ const L=lvl(id), C=CP_LV[L], M=mwMonth(id,rows,m0), H3=M.H.filter(o=>o.k!=='work'), hg=H3.reduce((a,o)=>a+o.g,0), hn=H3.reduce((a,o)=>a+o.n,0);
-    const rel=hn?Math.round(hg/hn*100):null, inP=(M.H.find(o=>o.k==='in')||{}).p;
+    /* Planned ahead (Principal, 13 Nov 2026): a day whose plan was made the day before (Plan ahead) is a green; counted from 15 Nov */
+    let ag=0, an=0; wd.forEach(d=>{ if(d<CP_AHEAD0||d>=td) return; an++; const r=wlGet(id,d); if(r&&(r.lines||[]).some(l=>l.ahead)) ag++; });
+    const rel=hn+an?Math.round((hg+ag)/(hn+an)*100):null, inP=(M.H.find(o=>o.k==='in')||{}).p, aheadTxt=an?`Planned ahead ${Math.round(ag/an*100)}% (${ag} of ${an} days)`:'';
     const mine=all.filter(t=>t.assignee===id);
     const lp=lineProm(id), tp=taskProm(mine), ownP=[...lp,...tp]; let pro=ownP.length>=5?pct(ownP):null, podP=null, podPct=null;
     if(L==='lead'){ podP=taskProm(all.filter(t=>podsT(t).includes(teamOf(id))&&t.assignee!==id)); podPct=podP.length>=5?pct(podP):null;
@@ -5363,13 +5365,13 @@ function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(t
     const parts=[['rel',rel],['pro',pro],['out',outI],['load',loadI]].filter(([,v])=>v!=null), wsum=parts.reduce((a,[k])=>a+CP_W[k],0);
     const score=wsum?Math.round(parts.reduce((a,[k,v])=>a+CP_W[k]*v,0)/wsum):0;
     const r1=x=>Math.round(x*10)/10;
-    return {id,L,C,score:Math.min(100,score),rel,inP,pro,ownN:ownP.length,ownPct:pct(ownP),lp,tp,podP,podPct,O,outPts:r1(outPts),outT:r1(outT),outI:Math.round(outI),
+    return {id,L,C,score:Math.min(100,score),rel,inP,aheadTxt,pro,ownN:ownP.length,ownPct:pct(ownP),lp,tp,podP,podPct,O,outPts:r1(outPts),outT:r1(outT),outI:Math.round(outI),
       loadPts:r1(loadPts),loadI:Math.round(loadI),liveN:live.length,open:opn.length,noDate:opn.filter(t=>!t.target).length,wdays:wd.length,M}; });
   return out.sort((a,b)=>b.score-a.score); }
 function cpDetail(x){ const P=(l,v)=>h('div',{class:'cp-l'},h('span',{text:l}),h('b',{text:v})), H=t=>h('p',{class:'f-hint',text:t}), pc=v=>v==null?'not enough yet':v+'%';
   const ks=Ps=>`${cnt(Ps,'kept')} kept, ${cnt(Ps,'late')} late, ${cnt(Ps,'missed')} missed`, cnt=(Ps,k)=>Ps.filter(y=>y.k===k).length, O=x.O;
   return h('div',{class:'cp-d'},
-    P(`Reliable · ${CP_W.rel}%`,pc(x.rel)),H(x.M.H.filter(o=>o.k!=='work').map(o=>`${o.l} ${o.p==null?'–':o.p+'%'}`).join(' · ')),
+    P(`Reliable · ${CP_W.rel}%`,pc(x.rel)),H([...x.M.H.filter(o=>o.k!=='work').map(o=>`${o.l} ${o.p==null?'–':o.p+'%'}`),x.aheadTxt||'Planned ahead: counts from 15 Nov'].join(' · ')),
     P(`Keeps promises · ${CP_W.pro}%`,pc(x.pro)),H(`Own: ${x.ownN} promise${x.ownN===1?'':'s'} due so far (${x.lp.length} day-plan, ${x.tp.length} task) — ${ks([...x.lp,...x.tp])}.`+
       (x.podP?` POD: ${x.podP.length} task${x.podP.length===1?'':'s'} due — ${ks(x.podP)}.`:'')+' Last 30 days, judged on the first date set; fewer than 5 is not judged yet.'),
     P(`Output · ${CP_W.out}%`,x.outI+'%'),H(`${x.outPts} of ${x.outT} (${x.C.out} a day × ${x.wdays} days): `+[O.gateN?`${O.gateN} approved gate${O.gateN>1?'s':''}`:'',O.nodN?`${O.nodN} undated gate${O.nodN>1?'s':''} (half)`:'',O.taskN?`${O.taskN} design task${O.taskN>1?'s':''}`:'',O.meetN?`${O.meetN} meeting${O.meetN>1?'s':''} (¼ each)`:'',O.lineN?`${O.lineN} day-plan line${O.lineN>1?'s':''} (½ each)`:''].filter(Boolean).join(', ')+'.'+
