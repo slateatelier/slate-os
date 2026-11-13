@@ -117,6 +117,9 @@ main.wrap.wrap-desk{max-width:1480px}
 .mw-d{display:inline-block;width:16px;height:16px;border-radius:50%;vertical-align:middle}.mw-g{background:#34C759}.mw-a{background:#FF9500}.mw-r{background:#FF3B30}.mw-d.mw-n{background:transparent;border:1.5px dashed #AEAEB2;box-sizing:border-box}.mw-x{background:transparent;border:1px solid var(--line,#E5E5EA);box-sizing:border-box;width:8px;height:8px}
 .mw-tip{font-size:13px;line-height:1.45;padding:8px 10px;border-radius:8px;background:#E8F7EC;color:#1E6B34}.mw-tip.warn{background:#FFF4E5;color:#8A4B00}
 .mw-leg{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--muted)}.mw-leg span{display:inline-flex;gap:4px;align-items:center}
+.mw-ew{display:grid;gap:0;margin-top:4px;border-top:1px solid var(--line,#E5E5EA);padding-top:8px}.mw-ewh{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding-bottom:4px}
+.mw-er{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:96px auto 1fr;gap:10px;align-items:center;padding:7px 2px;border-top:1px solid var(--group,#F2F2F7);font-size:13.5px}
+.mw-er.on{background:var(--group,#F2F2F7);border-radius:6px}.mw-er.pre{color:var(--muted);cursor:default}.mw-er .mw-pd .mw-d{width:13px;height:13px}.mw-er .mw-pg{text-align:right}.mw-open{padding:4px 2px 10px}
 .mw-pr{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:8px;align-items:center;padding:6px 2px;border-top:1px solid var(--line,#E5E5EA)}.mw-pd{display:flex;gap:4px}.mw-pd .mw-d{width:12px;height:12px}.mw-pd .mw-x{width:8px;height:8px}.mw-pg{font-size:12.5px;color:var(--muted);text-align:right}
 button.my-score{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0;display:grid}
 .dctx{display:grid;gap:3px;font-size:12.5px}.dctx-l{color:var(--ink)}.dctx-l.muted{color:var(--muted)}.dctx-f{display:flex;flex-wrap:wrap;gap:4px 10px;color:#B25E00;font-weight:600}
@@ -4072,7 +4075,7 @@ function weekendLine(td){
    2 working days amber) · Work on time (tasks due that day done on time; up to 2 days late amber; overdue red). */
 const MW_ROWS=[['in','In office'],['plan','Plan by 11:00'],['clear','Clear entries'],['upd','Updates on time'],['work','Work on time']];
 const MW_GOAL=0.8;
-function mwRange(){ const td=today(); return {s:addDays(weekStart(td),-28),e:td}; }
+function mwRange(){ const td=today(); return {s:addDays(weekStart(td),-7*(S.mwBack||4)),e:td}; }
 function mwDays(ws){ const out=[]; for(let i=0;i<7;i++){ const d=addDays(ws,i); if(isWorkDay(d)) out.push(d); } return out; }
 function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by.get(d)||null, here=!!(x&&(x.opened||x.plan));
   const nowHM=dhakaHM(new Date().toISOString());
@@ -4080,7 +4083,7 @@ function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by
     const c=ts.map(t=>{ if(t.doneAt){ const late=diff(t.target,String(t.doneAt).slice(0,10)); return late<=0?'g':late<=2?'a':'r'; } return d<td?'r':'n'; });
     return c.includes('r')?'r':c.includes('a')?'a':c.includes('n')?'n':'g'; }
   if(row==='in') return here?'g':(x&&x.leave)?'a':d===td?'n':'r';
-  if(!here) return 'x';
+  if(!here||d<DISC_FROM) return 'x';   /* no plan dots before day plans started */
   if(row==='plan'){ if(!x.plan) return d===td&&nowHM<=PLAN_BY?'n':'r'; const t=dhakaHM(x.plan_at||''); const sd=x.plan_at?dhakaD(x.plan_at):d; if(sd>d) return 'r'; return !t||t<=PLAN_BY?'g':t<='12:00'?'a':'r'; }
   if(!x.plan) return 'x';
   if(row==='clear') return !(x.short_n>0)?'g':x.short_n===1?'a':'r';
@@ -4102,7 +4105,23 @@ function mwTip(uid,rows){ const td=today(), by=new Map((rows||[]).filter(x=>x.us
   return null; }
 const MW_COL={g:'#34C759',a:'#FF9500',r:'#FF3B30'};
 const mwDot=(c,sz)=>h('i',{class:'mw-d mw-'+c,style:sz?`width:${sz}px;height:${sz}px`:''});
-function myWeekEl(){ if(!S.uid||window.slateReview||!needPlan(S.uid)) return null; const td=today(), rows=presRows(mwRange()); if(!rows) return null;
+function mwGridEl(W,td){ const DN=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
+  return h('div',{class:'mw-grid',style:`grid-template-columns:minmax(0,1fr) repeat(${W.days.length},24px)`},
+    h('span'),...W.days.map(d=>h('span',{class:'mw-dh'+(d===td?' on':''),text:DN(d)})),
+    ...MW_ROWS.flatMap(([k,l],i)=>[h('span',{class:'mw-rl',text:l}),...W.grid[i].map(c=>h('span',{class:'mw-c'},c==='x'?h('i',{class:'mw-d mw-x'}):mwDot(c)))])); }
+const mwWorst=cs=>{ const v=cs.filter(c=>!['x','f'].includes(c)); return !v.length?'x':v.includes('r')?'r':v.includes('a')?'a':v.includes('n')?'n':'g'; };
+/* earlier weeks (Principal, 13 Nov 2026): one line a week under this week's grid, each day's worst dot and the green count;
+   tap a line to open its full grid; "Show older weeks" loads 8 more weeks */
+function mwEarlier(uid,rows){ const td=today(), ws=weekStart(td), n=S.mwBack||4, out=[];
+  for(let i=1;i<=n;i++){ const w=addDays(ws,-7*i), W=mwWeek(uid,w,rows), pre=addDays(w,6)<goLive(), open=S.mwOpen===w;
+    const lbl=`${fmtD(W.days[0]||w)}–${fmtD(W.days[W.days.length-1]||addDays(w,4))}`;
+    out.push(h('button',{type:'button',class:'mw-er'+(pre?' pre':'')+(open?' on':''),disabled:pre,onclick:()=>{ S.mwOpen=open?'':w; render(true); }},
+      h('span',{text:lbl}),h('span',{class:'mw-pd'},...W.days.map((d,j)=>{ const c=pre?'x':mwWorst(W.grid.map(r=>r[j])); return c==='x'||c==='f'?h('i',{class:'mw-d mw-x'}):mwDot(c); })),
+      h('span',{class:'mw-pg',text:pre?'before SLATE OS':`${W.g} / ${W.n}`})));
+    if(open&&!pre) out.push(h('div',{class:'mw-open'},mwGridEl(W,''))); if(pre) break; }
+  return h('div',{class:'mw-ew'},h('div',{class:'mw-ewh'},h('span',{text:'Earlier weeks · tap to open'}),h('span',{text:'green'})),...out,
+    addDays(ws,-7*n)>=goLive()?h('button',{type:'button',class:'linkish',style:'justify-self:start;font-size:12.5px',onclick:()=>{ S.mwBack=n+8; render(true); },text:'Show older weeks'}):null); }
+function myWeekEl(){ if(!S.uid||window.slateReview||!needPlan(S.uid)) return null; const td=today(), got=presRows(mwRange()); if(got) S.mwRows=got; const rows=got||S.mwRows; if(!rows) return null;
   const ws=weekStart(td), W=mwWeek(S.uid,ws,rows), L=mwWeek(S.uid,addDays(ws,-7),rows), st=mwStreak(S.uid,rows), tip=mwTip(S.uid,rows), max=W.days.length*MW_ROWS.length, goal=Math.ceil(max*MW_GOAL);
   const DN=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
   const tot=W.n||1;
@@ -4111,11 +4130,10 @@ function myWeekEl(){ if(!S.uid||window.slateReview||!needPlan(S.uid)) return nul
     h('div',{class:'mw-num'},h('b',{text:String(W.g)}),h('span',{text:` of ${W.n} green so far`})),
     h('div',{class:'mw-sub',text:`Last week ${L.g} · goal ${goal} of ${max}`}),
     h('div',{class:'mw-bar','aria-hidden':'true'},h('i',{style:`width:${W.g/tot*100}%;background:${MW_COL.g}`}),h('i',{style:`width:${W.a/tot*100}%;background:${MW_COL.a}`}),h('i',{style:`width:${W.r/tot*100}%;background:${MW_COL.r}`})),
-    h('div',{class:'mw-grid',style:`grid-template-columns:minmax(0,1fr) repeat(${W.days.length},24px)`},
-      h('span'),...W.days.map(d=>h('span',{class:'mw-dh'+(d===td?' on':''),text:DN(d)})),
-      ...MW_ROWS.flatMap(([k,l],i)=>[h('span',{class:'mw-rl',text:l}),...W.grid[i].map(c=>h('span',{class:'mw-c'},c==='x'?h('i',{class:'mw-d mw-x'}):mwDot(c)))])),
+    mwGridEl(W,td),
     tip?h('div',{class:'mw-tip'+(tip[1]==='warn'?' warn':''),text:tip[0]}):W.n&&W.g===W.n?h('div',{class:'mw-tip',text:'All green so far. Keep it going.'}):null,
-    h('div',{class:'mw-leg'},h('span',{},mwDot('g',9),'Good'),h('span',{},mwDot('a',9),'Slipped'),h('span',{},mwDot('r',9),'Missed'),h('span',{},mwDot('n',9),'Today, open'))); }
+    h('div',{class:'mw-leg'},h('span',{},mwDot('g',9),'Good'),h('span',{},mwDot('a',9),'Slipped'),h('span',{},mwDot('r',9),'Missed'),h('span',{},mwDot('n',9),'Today, open')),
+    mwEarlier(S.uid,rows)); }
 /* POD leader: the POD's week, one row a person, each day's worst dot, and greens so far */
 function podWeekEl(){ if(!amPodLead()||window.slateReview) return null; const mp=myPod(); const ids=people().filter(id=>id!==S.uid&&!isLeft(id)&&teamOf(id)===mp&&needPlan(id)); if(!ids.length) return null;
   const rows=presRows(mwRange()); if(!rows) return null; const ws=weekStart(today());
