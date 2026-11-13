@@ -4087,12 +4087,12 @@ const MW_GOAL=0.9;   /* goal 90% green (Principal, 13 Nov 2026) */
 function mwRange(){ const td=today(), pm=mwMonthStart(mwMonthStart(td)<td?addDays(mwMonthStart(td),-1):td), a=addDays(weekStart(td),-7*(S.mwBack||4)); return {s:a<pm?a:pm,e:td}; }
 const mwMonthStart=d=>String(d).slice(0,8)+'01';
 function mwDays(ws){ const out=[]; for(let i=0;i<7;i++){ const d=addDays(ws,i); if(isWorkDay(d)) out.push(d); } return out; }
-function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by.get(d)||null, here=!!(x&&(x.opened||x.plan));
+function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by.get(d)||null, here=!!(x&&!x.absent&&(x.opened||x.plan));   /* an absent mark overrides an entry */
   const nowHM=dhakaHM(new Date().toISOString());
   if(row==='work'){ const ts=Object.values(S.tasks).filter(t=>t&&t.assignee===uid&&!t.archived&&!t.legacy&&!t.unscored&&t.target===d&&!unplanned(t)); if(!ts.length) return 'x';
     const c=ts.map(t=>{ if(t.doneAt){ const late=diff(t.target,String(t.doneAt).slice(0,10)); return late<=0?'g':late<=2?'a':'r'; } return d<td?'r':'n'; });
     return c.includes('r')?'r':c.includes('a')?'a':c.includes('n')?'n':'g'; }
-  if(row==='in') return here?'g':(x&&x.leave)?'a':d===td?'n':'r';
+  if(row==='in') return here?'g':(x&&x.leave&&!x.absent)?'a':(d===td&&!(x&&x.absent))?'n':'r';
   if(!here||d<DISC_FROM) return 'x';   /* no plan dots before day plans started */
   if(row==='plan'){ if(!x.plan) return d===td&&nowHM<=PLAN_BY?'n':'r'; const t=dhakaHM(x.plan_at||''); const sd=x.plan_at?dhakaD(x.plan_at):d; if(sd>d) return 'r'; return !t||t<=PLAN_BY?'g':t<='12:00'?'a':'r'; }
   if(!x.plan) return row==='clear'&&d<td?'r':'x';   /* in with no plan: nothing written, so not clear either */
@@ -4125,7 +4125,7 @@ function mwGridEl(W,td){ const DN=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 function mwPeekEl(uid,pk,rows){ const x=(rows||[]).find(r=>r.user_id===uid&&r.day===pk.d)||null, l=(MW_ROWS.find(r=>r[0]===pk.row)||[])[1]||'';
   const line=(t,m,go)=>h(go?'button':'div',{type:go?'button':undefined,class:'mw-pl'+(go?' go':''),onclick:go||undefined},h('span',{text:t}),m?h('span',{class:'mw-pm',text:m}):null);
   let body=[];
-  if(pk.row==='in') body=[line(x&&(x.opened||x.plan)?(x.opened?'Came in: SLATE OS opened':'Came in: day plan written'):x&&x.leave?'Approved leave':'No entry this day',x&&x.leave&&!(x.opened||x.plan)?'counts as half an absence':null)];
+  if(pk.row==='in') body=[line(x&&x.absent?'Marked absent by the Principal or the COO':x&&(x.opened||x.plan)?(x.opened?'Came in: SLATE OS opened':'Came in: day plan written'):x&&x.leave?'Approved leave':'No entry this day',x&&x.leave&&!(x.opened||x.plan)?'counts as half an absence':null)];
   if(pk.row==='plan') body=[line(x&&x.plan?`Day plan written at ${dhakaHM(x.plan_at)||'—'}`:'No day plan written','green by 11:00 · amber to 12:00')];
   if(pk.row==='clear') body=[line(!(x&&x.short_n)?'Every line written in full':`${x.short_n} short line${x.short_n>1?'s':''} (under 20 characters)`,`${(x&&x.lines_n)||0} line${(x&&x.lines_n)===1?'':'s'} in the plan`)];
   if(pk.row==='work'){ const ts=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.assignee===uid&&!t.archived&&!t.legacy&&!t.unscored&&t.target===pk.d);
@@ -5648,9 +5648,9 @@ function presenceOf(id,r,rows){ if(!rows) return null; const pr=rows.filter(x=>x
   const first=pr.length?pr.map(x=>x.day).sort()[0]:null, td=today(); let d=[r.s,goLive()].sort()[1];
   const pm=(S.members&&S.members[id])||null; const joined=pm&&pm.joinedAt?String(pm.joinedAt).slice(0,10):null; if(joined&&joined>d) d=joined;
   const end=r.e<td?r.e:td; let wd=0,inD=0,leave=0,absent=0,plan=0,late=0,noPlan=0,shortN=0,stale=0,dDays=0;
-  for(;d<=end;d=addDays(d,1)){ if(!isWorkDay(d)) continue; const x=by.get(d), here=!!(x&&(x.opened||x.plan));
+  for(;d<=end;d=addDays(d,1)){ if(!isWorkDay(d)) continue; const x=by.get(d), here=!!(x&&!x.absent&&(x.opened||x.plan));
     if(d===td&&!here) continue; wd++;
-    if(!here){ if(x&&x.leave) leave++; else absent++; continue; }
+    if(!here){ if(x&&x.leave&&!x.absent) leave++; else absent++; continue; }
     inD++; if(x.plan) plan++;
     if(d<DISC_FROM) continue; dDays++;
     const sd=x.plan_at?dhakaD(x.plan_at):'';

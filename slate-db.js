@@ -1543,9 +1543,9 @@
     const { data, error } = await sb.from('day_log').select('user_id,device,in_at,out_at,out_src').eq('day', day);
     if (EL.day !== day) return;
     let lv = [];
-    try { const r = await sb.rpc('perf_presence', { p_from: day, p_to: day }); lv = (r.data || []).filter(x => x.leave).map(x => x.user_id); } catch (_) {}
+    let ab = []; try { const r = await sb.rpc('perf_presence', { p_from: day, p_to: day }); lv = (r.data || []).filter(x => x.leave && !x.absent).map(x => x.user_id); ab = (r.data || []).filter(x => x.absent).map(x => x.user_id); } catch (_) {}
     if (EL.day !== day) return;
-    EL.leave = new Set(lv);
+    EL.leave = new Set(lv); EL.absent = new Set(ab);
     EL.loading = false; EL.err = error ? friendly(error).message : ''; EL.rows = error ? [] : (data || []);
     try { if (S.view === 'entries') render(true); } catch (_) {}
   }
@@ -1571,8 +1571,19 @@
     const outTxt = r => !r || !r.out_at ? '—' : live(r) ? 'Active now' : hm(r.out_at) + (r.out_src === 'active' ? ' *' : r.out_src === 'noreply' ? ' †' : '');
     /* absent on a working day: no computer or phone entry. The Principal or the COO can mark approved leave
        (half an absence in the performance index) or take it off again. */
+    /* an entry made by someone else on a PC left signed in: the Principal or the COO marks the day absent (13 Nov 2026) */
+    const markCell = (id) => { const on = EL.absent && EL.absent.has(id);
+      const b = el('button', { class: 'btn btn-sm', type: 'button', title: on ? 'Counted as absent. Tap to undo.' : 'Someone else used this login? Mark the day absent.' }, on ? 'Absent ✓' : 'Mark absent');
+      b.addEventListener('click', async () => { b.disabled = true;
+        const { error } = await sb.rpc('perf_mark_set', { p_user: id, p_day: day, p_kind: on ? null : 'absent' });
+        if (error) { b.disabled = false; b.title = friendly(error).message; b.textContent = 'Couldn’t save'; return; }
+        if (!EL.absent) EL.absent = new Set(); on ? EL.absent.delete(id) : EL.absent.add(id);
+        try { window.slatePerfPresenceReset && window.slatePerfPresenceReset(); render(true); } catch (_) {} });
+      return el('span', { style: 'display:inline-flex;gap:8px;align-items:center' }, on ? el('span', { style: 'color:var(--overdue);font-size:13px' }, 'Absent') : null, b); };
     const absentCell = (id, c, m) => {
-      if (weekend || day >= td || (c && c.in_at) || (m && m.in_at)) return '';
+      if (weekend || day > td) return '';
+      if ((c && c.in_at) || (m && m.in_at)) return markCell(id);
+      if (day >= td) return '';
       const on = EL.leave && EL.leave.has(id);
       const b = el('button', { class: 'btn btn-sm', type: 'button', title: on ? 'Approved leave: counts as half an absence. Tap to undo.' : 'No entry this day: counts as a full absence. Tap if it was approved leave.' }, on ? 'Leave ✓' : 'Mark leave');
       b.addEventListener('click', async () => { b.disabled = true;
