@@ -135,6 +135,11 @@ main.wrap.wrap-desk{max-width:1480px}
 .fit-more{appearance:none;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--accent,#007AFF);cursor:pointer;padding:0 2px;margin-left:auto}.desk-st .linkish+.fit-more{margin-left:12px}
 .fit-pg{display:inline-flex;align-items:center;gap:6px;margin-left:6px;font-weight:400}.fit-pgb{width:64px;height:5px;border-radius:3px;background:#E5E5EA;overflow:hidden}
 .fit-pgb i{display:block;height:100%;background:#34C759;border-radius:3px}.fit-pgt{font-size:11.5px;color:var(--muted,#6e6e73);white-space:nowrap}
+/* team rings (Principal / COO) */
+.tr-g{font-size:11.5px;font-weight:600;color:var(--muted,#6e6e73);text-transform:uppercase;letter-spacing:.06em;margin:4px 4px 0}
+.tr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+button.tr-t{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:6px 10px 6px 6px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;min-width:0}
+button.tr-t:hover{background:#F7F7F9}.tr-n{display:grid;min-width:0;line-height:1.25}.tr-n b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tr-n span{font-size:12px}
 button.nm-line{appearance:none;border:0;background:none;font:inherit;font-size:13.5px;color:var(--ink,#1d1d1f);cursor:pointer;padding:6px 0 0;display:flex;align-items:center;gap:6px;text-align:left}
 button.nm-line:hover b{text-decoration:underline}.nm-dot{width:8px;height:8px;border-radius:50%;background:#007AFF;flex:none}
 .pg-r.pg-1{grid-template-areas:'d n ph'}.pg-note{font-size:12.5px;color:var(--muted,#6e6e73);margin:-2px 4px 8px;line-height:1.4}
@@ -4494,14 +4499,14 @@ function viewDesk(){
   /* the Principal and the COO on a PC: Do now and the plan on the left; the studio on the right: who is doing what, then every project's next gate */
   if(ap&&sideOn()){
     const left2=deskCol('Do now',null,[...[...left.querySelector('.desk-b').children],nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
-    const right2=deskCol('Studio now',null,[whoDoingSec(),projGateSec(projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)),true)],'desk-wide');
+    const right2=deskCol('Studio now',null,[teamRingsSec(),whoDoingSec(),projGateSec(projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)),true)],'desk-wide');
     return [top,h('div',{class:'desk desk-studio'},left2,right2),
       h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
   }
   /* the Week / Month card on every Home that writes day plans (Principal, 13 Nov 2026): drafting lead and pool included;
      the old "Your score this month" bar is gone, its deadlines are the card's "Work on time" row */
   const mwc=(()=>{ const mw=myWeekEl(); return mw?h('div',{class:'desk-sub'},mw):null; })();
-  const right=deskCol('Plan',null,[mwc,nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,dbsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
+  const right=deskCol('Plan',null,[ap?teamRingsSec():null,mwc,nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,dbsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
   return [top,h('div',{class:'desk'},left,mid,right),
     h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
 }
@@ -5211,6 +5216,20 @@ function viewWorklog(){
 
 /* ---------- Studio now (Principal and COO, and a POD leader's own POD) ---------- */
 /* who is doing what: each person in the PODs and support teams, the task they are on now, and their open, late and waiting counts */
+/* Principal and COO Home (13 Nov 2026): this month's habit rings for every POD leader, member and drafter, grouped.
+   A tile shows the month's green % with the same small rings as each person's own Home; tap = that person's month detail. */
+function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=presRows(mwRange())||S.mwRows; if(!rows) return null;
+  const td=today(), m0=mwMonthStart(td), mn=new Date(m0+'T00:00:00').toLocaleString('en-GB',{month:'long'});
+  const live=people().filter(id=>!isLeft(id)&&needPlan(id));
+  const leads=live.filter(id=>pods().some(pd=>isPodLead(id,pd))).sort((a,b)=>podNum(teamOf(a))-podNum(teamOf(b)));
+  const drafts=live.filter(id=>isDraftMember(id)&&!leads.includes(id));
+  const members=live.filter(id=>!leads.includes(id)&&!drafts.includes(id));
+  const tile=id=>{ const M=mwMonth(id,rows,m0); const svg=mwRingsEl(M); svg.setAttribute('width','40'); svg.setAttribute('height','40');
+    return h('button',{type:'button',class:'tr-t',title:`${nameOf(id)} · ${mn}`,onclick:()=>{ S.sheet={type:'homeList',title:`${nameOf(id)} · ${mn}`,build:()=>[h('div',{class:'mw',style:'padding:4px 2px'},...myMonthEl(id,rows))]}; renderSheet(); }},
+      svg,h('span',{class:'tr-n'},h('b',{text:shortName(id)}),h('span',{style:M.N?'color:'+MR_TXT(M.p):'',text:M.N?`${M.p}% · ${MR_LBL(M.p).toLowerCase()}`:'nothing yet'}))); };
+  const grp=(l,ids)=>ids.length?[h('div',{class:'tr-g',text:l}),h('div',{class:'tr-grid'},...ids.map(tile))]:[];
+  return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:`Team this month · ${mn}`}),h('b',{text:String(live.length)}),h('span',{class:'f-hint',style:'margin-left:auto;font-weight:400',text:`goal ${Math.round(MW_GOAL*100)}%`})),
+    ...grp('POD leaders',leads),...grp('Members',members),...grp('Drafting',drafts)); }
 function whoDoingSec(){
   const td=today(), ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&(/^pod\b/i.test(teamOf(id)||'')||isShared(id)||isSupport(id))&&!isChalkP(id)&&!isPriv(id)&&!isOfficeStaff(id));
   if(!ids.length) return null;
