@@ -4095,7 +4095,7 @@ function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by
   if(row==='in') return here?'g':(x&&x.leave)?'a':d===td?'n':'r';
   if(!here||d<DISC_FROM) return 'x';   /* no plan dots before day plans started */
   if(row==='plan'){ if(!x.plan) return d===td&&nowHM<=PLAN_BY?'n':'r'; const t=dhakaHM(x.plan_at||''); const sd=x.plan_at?dhakaD(x.plan_at):d; if(sd>d) return 'r'; return !t||t<=PLAN_BY?'g':t<='12:00'?'a':'r'; }
-  if(!x.plan) return 'x';
+  if(!x.plan) return row==='clear'&&d<td?'r':'x';   /* in with no plan: nothing written, so not clear either */
   if(row==='clear') return !(x.short_n>0)?'g':x.short_n===1?'a':'r';
   if(row==='upd'){ if((x.open_n||0)>0){ const w=wdBetween(d,td); return w>=2?'r':'n'; } if(!x.closed_max) return 'g'; const w=wdBetween(d,x.closed_max); return w<=1?'g':w===2?'a':'r'; }
   return 'x'; }
@@ -4110,7 +4110,7 @@ function mwStreak(uid,rows){ const by=new Map((rows||[]).filter(x=>x.user_id===u
 function mwTip(uid,rows){ const td=today(), by=new Map((rows||[]).filter(x=>x.user_id===uid).map(x=>[x.day,x])), x=by.get(td);
   if(isWorkDay(td)&&!(x&&x.plan)&&dhakaHM(new Date().toISOString())<=PLAN_BY) return ['Write today’s plan before 11:00 to keep “Plan by 11:00” green.','warn'];
   const od=Object.values(S.tasks).filter(t=>t&&t.assignee===uid&&!t.archived&&!t.legacy&&!t.doneAt&&!t.verify&&t.target&&t.target<td).sort((a,b)=>a.target.localeCompare(b.target))[0];
-  if(od){ const n=diff(od.target,td); return [`${od.title} is ${n} day${n===1?'':'s'} late. Finish it to turn “Work on time” green.`,'warn']; }
+  if(od){ const n=diff(od.target,td), tt=String(od.title||'').length>48?String(od.title).slice(0,46).trim()+'…':od.title; return [`${tt} is ${n} day${n===1?'':'s'} late. Finish it to turn “Work on time” green.`,'warn']; }
   const y=wlPrevDay(td), yx=by.get(y); if(yx&&yx.plan&&(yx.open_n||0)>0) return ['Close yesterday’s plan lines today to keep “Updates on time” green.','warn'];
   return null; }
 const MW_COL={g:'#34C759',a:'#FF9500',r:'#FF3B30'};
@@ -4172,7 +4172,7 @@ function myMonthEl(uid,rows){ const td=today(), m0=mwMonthStart(td), M=mwMonth(u
       h('span',{class:'mr-n'},h('span',{},o.l,weak&&weak.k===o.k&&o.p<MR_ON?h('span',{class:'mr-focus',text:'FOCUS'}):null),o.n?h('span',{class:'mr-st',style:'color:'+MR_TXT(o.p),text:MR_LBL(o.p)}):h('span',{class:'mr-st',text:'Nothing yet'})),
       h('b',{text:o.n?o.p+'%':'—'}),h('span',{class:'mr-c',text:o.n?`${o.g}/${o.n}`:''}))))),
     weak&&weak.p<MR_ON?h('div',{class:'mw-tip warn',text:`Focus: ${weak.l}. ${MR_TIP[weak.k]}`}):M.N?h('div',{class:'mw-tip',text:'Every habit is on track this month. Keep it going.'}):null,
-    h('div',{class:'mw-leg'},h('span',{},h('i',{class:'mr-sw',style:'background:#8FD19E'}),'On track 90%+'),h('span',{},h('i',{class:'mr-sw',style:'background:#F5C443'}),'Slipping 60–89%'),h('span',{},h('i',{class:'mr-sw',style:'background:#F07C7C'}),'Behind'),h('span',{},'┆ goal'))]; }
+    h('div',{class:'mw-leg'},h('span',{},h('i',{class:'mr-sw',style:'background:#8FD19E'}),'On track 90%+'),h('span',{},h('i',{class:'mr-sw',style:'background:#F5C443'}),'Slipping 60–89%'),h('span',{},h('i',{class:'mr-sw',style:'background:#F07C7C'}),'Behind')),h('div',{class:'mr-st',text:`Dotted line on the rings: the ${Math.round(MW_GOAL*100)}% goal`})]; }
 function myWeekEl(){ if(!S.uid||window.slateReview||!needPlan(S.uid)) return null; const td=today(), got=presRows(mwRange()); if(got) S.mwRows=got; const rows=got||S.mwRows; if(!rows) return null;
   const ws=weekStart(td), W=mwWeek(S.uid,ws,rows), L=mwWeek(S.uid,addDays(ws,-7),rows), st=mwStreak(S.uid,rows), tip=mwTip(S.uid,rows), max=W.days.length*MW_ROWS.length, goal=Math.ceil(max*MW_GOAL);
   const DN=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
