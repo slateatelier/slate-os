@@ -128,7 +128,7 @@ main.wrap.wrap-desk{max-width:1480px}
 .mr-sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}.mr-r .mr-sw{margin:0}.mr-n{display:grid;line-height:1.3}.mr-st{font-size:11.5px;color:var(--muted)}.mr-c{font-size:12px;color:var(--muted);text-align:right}
 .mr-focus{font-size:10px;font-weight:600;color:#C41E29;border:1px solid #C41E29;border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:1px}
 .mw-pr{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:8px;align-items:center;padding:6px 2px;border-top:1px solid var(--line,#E5E5EA)}.mw-pd{display:flex;gap:4px}.mw-pd .mw-d{width:12px;height:12px}.mw-pd .mw-x{width:8px;height:8px}.mw-pg{font-size:12.5px;color:var(--muted);text-align:right}
-#day-splash .ds-notme{position:absolute;right:20px;bottom:18px;appearance:none;border:0;background:none;font:inherit;font-size:13px;color:#8E8E93;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px}
+#day-splash .ds-notme{display:block;margin:18px auto 0;appearance:none;border:0;background:none;font:inherit;font-size:13px;color:#8E8E93;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px}
 button.my-score{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0;display:grid}
 .dctx{display:grid;gap:3px;font-size:12.5px}.dctx-l{color:var(--ink)}.dctx-l.muted{color:var(--muted)}.dctx-f{display:flex;flex-wrap:wrap;gap:4px 10px;color:#B25E00;font-weight:600}
 .grp-ppl{display:flex;flex-wrap:wrap;gap:6px 14px}.grp-p{display:inline-flex;align-items:center;gap:6px;font-size:13.5px}.grp-p .muted{font-size:12.5px}
@@ -3116,8 +3116,8 @@ function weekendGate(){
   const skip=h('button',{class:'wg-skip',type:'button',onclick:()=>{ window.slateWeekendSkip=key; close(); },text:'Not working today'});
   const el=h('div',{id:'day-splash',class:'wg',role:'dialog','aria-modal':'true','aria-label':`Hey ${first}, are you working today?`},
     h('div',{class:'ds-mid'},h('div',{class:'ds-hello',text:'Hey,'}),h('div',{class:'ds-name'},...[...first.toUpperCase()].map((c,i)=>h('span',{style:`animation-delay:${.3+i*.05}s`,text:c}))),
-      h('div',{class:'wg-q',text:'Are you working today?'}),hold),
-    h('div',{class:'ds-hint wg-foot'},skip),notMe(first,()=>{ done=true; }));
+      h('div',{class:'wg-q',text:'Are you working today?'}),hold,notMe(first,()=>{ done=true; })),
+    h('div',{class:'ds-hint wg-foot'},skip));
   document.body.append(el); document.documentElement.style.overflow='hidden'; document.addEventListener('keydown',kd); document.addEventListener('keyup',ku);
   const name=el.querySelector('.ds-name'), fit=()=>{ name.style.fontSize=''; let f=parseFloat(getComputedStyle(name).fontSize); for(let k=0;k<30&&name.scrollWidth>name.clientWidth+1&&f>40;k++){ f*=.94; name.style.fontSize=f+'px'; } };
   fit(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit);
@@ -3144,8 +3144,8 @@ function daySplash(){
   const kd=e=>{ if(['Enter',' ','Escape'].includes(e.key)){ e.preventDefault(); go(); } };
   const name=h('div',{class:'ds-name'},...[...first.toUpperCase()].map((c,i)=>h('span',{style:`animation-delay:${.3+i*.05}s`,text:c})));
   const el=h('div',{id:'day-splash',role:'dialog','aria-modal':'true','aria-label':`${hello}, ${first}. Tap anywhere to continue.`,onclick:go},
-    h('div',{class:'ds-mid'},dsIcon(hr),h('div',{class:'ds-hello',text:hello+','}),name),
-    h('div',{class:'ds-hint','aria-hidden':'true',text:'Tap anywhere'}),notMe(first,()=>{ done=true; }));
+    h('div',{class:'ds-mid'},dsIcon(hr),h('div',{class:'ds-hello',text:hello+','}),name,notMe(first,()=>{ done=true; })),
+    h('div',{class:'ds-hint','aria-hidden':'true',text:'Tap anywhere'}));
   document.body.append(el); document.documentElement.style.overflow='hidden'; document.addEventListener('keydown',kd);
   const fit=()=>{ name.style.fontSize=''; let f=parseFloat(getComputedStyle(name).fontSize);
     for(let k=0;k<30&&name.scrollWidth>name.clientWidth+1&&f>40;k++){ f*=.94; name.style.fontSize=f+'px'; } };
