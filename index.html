@@ -148,6 +148,8 @@ button.wlf-need .wlf-l{color:var(--overdue,#D0453C);font-weight:600}
 @media (max-width:760px){#slate-messages .msg-cmp{grid-template-columns:1fr}#slate-messages .msg-cmp>.actions{justify-content:flex-start}}
 .imp{position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);width:var(--hic,38px);height:var(--hic,38px);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--muted,#6e6e73);background:var(--group,#F2F2F7);cursor:pointer}.imp .bi svg{width:22px;height:22px}
 .imp.has{color:#d7262b;background:#FDECEC}#bell-slot .bell.bell-left .imp{right:auto;left:calc(100% + 10px)}   /* bell on the left (phones): Important sits to its right */
+/* the Important icon sits inside the bell button: it keeps its own look (grey when nothing waits, red ring when it does) */
+.bell .imp .bi,.bell.has .imp .bi{background:var(--group);box-shadow:none;color:var(--muted,#6e6e73)}.bell .imp.has .bi{background:#fff;box-shadow:0 0 0 2px #d7262b;color:#d7262b}.bell .imp{background:transparent}
 .bell .imp .bn,.imp .bn{margin:0;color:#fff;font-size:11px;position:absolute;top:-2px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#d7262b;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
 .msg-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
@@ -162,6 +164,7 @@ button.nm-line:hover b{text-decoration:underline}.nm-dot{width:8px;height:8px;bo
 .pd-sub .h-t{font-weight:500}.pd-sub{padding-left:22px!important}.mw-tag{color:var(--muted,#6e6e73);font-weight:400;font-size:12px}
 .mw-pastb{justify-self:start;font-size:12.5px;margin-top:4px}.cl-open{border-top:1px solid var(--line);padding:4px 0}
 .mr-wrap{margin:0 0 10px;display:grid;gap:6px}.mr-row{display:flex;flex-wrap:wrap;gap:8px}
+.mr-row>*{max-width:100%;min-width:0;box-sizing:border-box}@media (max-width:560px){.mr-row>*,.mr-row>* *{flex-wrap:wrap;white-space:normal}.mr-row>*{row-gap:2px}}
 p.howd{display:block;margin:0;font-size:13px;line-height:1.45;color:var(--ink,#1d1d1f);max-width:920px}p.howd b{font-weight:600}p.howd .howd-n{color:#B42318;font-weight:500}p.howd.ok .howd-n{color:#2E7D45}.mr-row button.mr-home{margin:0}
 .tk-l{display:inline-flex;gap:10px;font-size:12px;color:var(--muted,#6e6e73);margin-left:4px}.tk-i{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.tk-warn{color:#B42318;font-weight:600}.tk-i i{width:8px;height:8px;border-radius:50%;display:inline-block}
 button.mr-home{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:14px;padding:4px 14px 4px 6px;font:inherit;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:10px;text-align:left;justify-self:start;margin:0 0 10px}
@@ -458,15 +461,15 @@ body.space-books .space-b.on{background:#3F7F5A;color:#fff;box-shadow:none}
 body.space-books{overflow:hidden}
 #books-pane .bk-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:14px}
 @media (max-width:640px){.space-b{font-size:12px;padding:5px 9px}.space-sw{padding:2px}}
-/* phones with the space switch: SLATE | OS on the left, bell and your icon on the right; the switch on its own row below */
+/* phones (everyone, 13 Nov 2026): SLATE | OS on the left; Important, bell and your icon on the right; the space switch (if any) on its own row below */
 .mini-logo{display:none}
 @media (max-width:560px){
-  body.has-spaces .top-in{flex-wrap:wrap;justify-content:flex-start;row-gap:10px;padding-top:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));--hic:34px}
-  body.has-spaces .top-in .logo{height:30px;margin-block:2px}
-  body.has-spaces .top-in .divider{display:block;height:22px}
-  body.has-spaces .top-in .product{display:inline-flex}
-  body.has-spaces .mebtn{left:auto;right:max(16px,env(safe-area-inset-right,0px));top:10px;transform:none}
-  body.has-spaces #bell-slot .bell{left:auto;right:calc(max(16px,env(safe-area-inset-right,0px)) + var(--hic) + 10px);top:10px;transform:none}
+  body .top-in{flex-wrap:wrap;justify-content:flex-start;row-gap:10px;padding-top:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));--hic:34px}
+  body .top-in .logo{height:30px;margin-block:2px}
+  body .top-in .divider{display:block;height:22px}
+  body .top-in .product{display:inline-flex}
+  body .mebtn{left:auto;right:max(16px,env(safe-area-inset-right,0px));top:10px;transform:none}
+  body #bell-slot .bell{left:auto;right:calc(max(16px,env(safe-area-inset-right,0px)) + var(--hic) + 10px);top:10px;transform:none}
   body.has-spaces #space-slot{position:static;transform:none;flex:0 0 100%;order:9;display:flex}
   body.has-spaces .space-sw{flex:1 1 auto;display:flex;padding:3px}
   body.has-spaces .space-b{flex:1 1 0;justify-content:center;font-size:13.5px;padding:7px 8px}
