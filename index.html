@@ -2094,7 +2094,7 @@ async function createTask(d){
   await ref.set({projectId:d.projectId,title:d.title.trim(),kind:dReq?'Task':(d.kind||'Task'),...(dReq?{delivReq:{by:S.uid,at:now}}:{}),assignee:ask?'':d.assignee,assignReq:ask?{to:d.assignee,by:S.uid,at:now,...(d.support||{})}:gReq,...(gSet?{checker:d.guideTo,checkerGuide:true}:!ask&&d.assignee&&d.assignee!==S.uid&&draftDirect(d.assignee,d.projectId)?{checker:S.uid}:{}),support:d.support?{...d.support,by:S.uid,at:now}:null,
     target:tg,originalTarget:tg,phase:d.phase||'',gate:d.gate||null,revisions:0,doneAt:null,doneBy:null,
     request:pr?{date:pr,reason:'',by:S.uid,at:now,initial:true}:null,archived:false,
-    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),...(d.clRef?{clRef:d.clRef}:{}),...(d.clHelp?{clHelp:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
+    repeat:d.repeat||'',start:d.start||null,...(d.time?{time:d.time}:{}),stage:'todo',nextId:null,parentId:d.parentId||null,...(d.fromMsg?{fromMsg:String(d.fromMsg)}:{}),...(d.meet?{meet:d.meet}:{}),...(d.ongoing?{ongoing:true}:{}),...(d.site?{site:d.site}:{}),...(d.unscored?{unscored:true}:{}),...(d.joint?{joint:d.joint}:{}),...(d.clRef?{clRef:d.clRef}:{}),...(d.clHelp?{clHelp:true}:{}),...(d.libParent?{libParent:d.libParent,offList:true}:{}),revNo:d.revNo||null,feedback:d.feedback||'',feedbackAt:d.feedbackAt||'',createdAt:now,createdBy:S.uid,history:hist,...(lg||{})});
   return ref.id;
 }
 const settingsRef=()=>S.db.doc('config/settings');
@@ -2487,17 +2487,21 @@ const STD_DEF={
   share:{name:'Land share',note:'Launch: phases 0 to 3 and 5, without STR/MEP consultants or coordination. Resume 6 to 10 months later: consultants appointed and phase 3 again with STR/MEP coordination, then 4 and 6 to 9',phases:['0','1','2','3','5','3r','4','6','7','8','9'],off:['3r','4','6','7','8','9'],offNote:'Resume phase: switch on when the project resumes'},
   private:{name:'Private client',note:'No marketing phase; 3D for the client sits inside phase 2; as-built drawings (phase 9) only if agreed',phases:['0','1','2','3','4','6','7','8','9'],off:['9'],offNote:'Only if agreed with the client'},
   interior:{name:'Interior design',interior:true,note:'MODO interiors: brief and survey, concept, design development, working drawings, procurement, then execution and handover when SLATE builds it too',phases:['i0','i1','i2','i3','i4','i5'],off:['i5'],offNote:'Only for design + build'},
-  proposal:{name:'Design proposal (R&D)',note:'Pre-contract design proposal, also called R&D. Phases 0 and 1 only; phase 1 closes when the proposal is presented. If won, create the real project',phases:['0','1']}};
+  proposal:{name:'Building proposal (R&D)',note:'Pre-contract design proposal for a building, also called R&D. Phases 0 and 1 only; phase 1 closes when the proposal is presented. If won, create the real project',phases:['0','1']},
+  /* interior proposal (Principal, 13 Nov 2026): an unconfirmed interior job worked on before the client signs */
+  iproposal:{name:'Interior proposal (R&D)',interior:true,note:'Pre-contract interior proposal, also called R&D. Interior phases I0 and I1 only; I1 closes when the proposal is presented. If won, create the real interior project',phases:['i0','i1']}};
+/* both proposal types: building (proposal) and interior (iproposal) */
+const isPropK=t=>t==='proposal'||t==='iproposal';
 /* pace: set at phase setup; fast track only by the Principal or the COO. For a design proposal, fast track is the proposal sprint */
 const PACE={fast:'Fast track',std:'Standard',relaxed:'Relaxed'};
 /* how pace weighs in the scores is shown only to the Principal and the COO */
 const paceNote=k=>PACE_NOTE[k]+(typeof canSeeScoring==='function'&&canSeeScoring()?({fast:' Gate deliverables and tasks count ×1.25.',relaxed:' Finishing early earns no extra points.'}[k]||''):'');
 const paceOf=p=>(p&&p.std&&PACE[p.std.pace])?p.std.pace:'std';
-const paceName=(p,k)=>{ k=k||paceOf(p); return k==='fast'&&p&&(p.type==='proposal'||(p.std&&p.std.type==='proposal'))?'Proposal sprint':PACE[k]; };
+const paceName=(p,k)=>{ k=k||paceOf(p); return k==='fast'&&p&&(isPropK(p.type)||(p.std&&isPropK(p.std.type)))?'Proposal sprint':PACE[k]; };
 const canPace=()=>S.canWrite&&(S.isOwner||amApprover());
 const SPRINT_NA=['1-0','1-2','1-6','1-8','1-11','1-12','1-13'];
 const PACE_NOTE={fast:'Shorter dates agreed with the COO, decided the same day, other work gives way.',std:'Standard target days.',relaxed:'Longer dates.',sprint:'Proposal due within days: one pod lead and one junior, one design option, renders only if asked. Phase 0 is folded into phase 1 and the checklist is cut to essentials. Counts ×1.25.'};
-const stepsOf=(type,k)=>type==='proposal'&&k==='1'?[['sub','Proposal design submitted for internal review'],['final','Proposal presented to the client']]:(PH[k]?PH[k].steps:[]);
+const stepsOf=(type,k)=>type==='proposal'&&k==='1'?[['sub','Proposal design submitted for internal review'],['final','Proposal presented to the client']]:type==='iproposal'&&k==='i1'?[['sub','Interior proposal submitted for internal review'],['final','Interior proposal presented to the client']]:(PH[k]?PH[k].steps:[]);
 const TEMPLATES=Object.fromEntries([...Object.entries(STD_DEF).map(([key,d])=>[key,{...d,std:true,items:d.phases.flatMap(k=>stepsOf(key,k).map(([s,txt])=>[txt,'lead',phLabel(k),0,1]))}])]);
 function personFor(role,pod){
   const ids=people(), r=id=>roster(id);
@@ -2681,6 +2685,10 @@ function taskLib(){ const m=new Map();
   return [...m.values()]; }
 const isStudioProj=pid=>{ const p=S.projects[pid]; return !!p&&p.pod==='Studio'; };
 const canWriteTitle=pid=>amApprover()||isStudioProj(pid);
+/* a free title on a client project, written by someone other than the Principal or the COO, needs a standard parent task */
+const needOff=d=>{ const t=String((d&&d.title)||'').trim(); if(!t||amApprover()||!d.projectId) return false; const p=S.projects[d.projectId]; if(!p||isInternalP(p)||p.pod==='Studio') return false;
+  return !taskLib().some(x=>{ const k=x.title.toLowerCase(), tl=t.toLowerCase(); return tl===k||tl.startsWith(k+' › '); }); };
+const offTaskTitle=d=>(d.libParent?d.libParent+' › '+String(d.title||'').trim():String(d.title||'').trim()).slice(0,160);
 const inLib=title=>taskLib().some(x=>x.title.toLowerCase()===(title||'').trim().toLowerCase());
 /* task title: typed freely, with suggestions from earlier tasks and the standard lists */
 /* tasks already on a project that look like a name being typed (4 Nov 2026): shown under a new task's name so the same
@@ -2717,11 +2725,17 @@ function titleField(d){
     box.replaceChildren(...list.map(x=>h('button',{type:'button',class:'sg',onmousedown:e=>e.preventDefault(),onclick:()=>pick(x)},h('span',{text:x.title}),h('span',{class:'sg-c',text:[x.cat,x.del?'deliverable':''].filter(Boolean).join(' · ')}))));
     box.hidden=!list.length; };
   const sim=simBox(d.projectId,()=>d.title,t=>{ closeSheet(); openTask(t.id); });
+  /* a title that isn't in the SLATE list goes under the closest standard task (13 Nov 2026) */
+  const offWrap=h('div',{class:'field'}), offFill=()=>{ if(!needOff(d)){ offWrap.hidden=true; offWrap.replaceChildren(); return; } offWrap.hidden=false;
+    const lib=taskLib(), cats=[...new Set(lib.map(x=>x.cat))];
+    const el=h('select',{'aria-label':'Closest standard task',onchange:e=>{ d.libParent=e.target.value; const x=libByTitle(d.libParent); if(x) d.kind=x.del?'Deliverable':'Task'; offFill(); }},h('option',{value:'',text:'Choose the closest standard task…'}),
+      cats.map(c=>h('optgroup',{label:c},lib.filter(x=>x.cat===c).map(x=>{ const o=h('option',{value:x.title,text:x.title}); if(x.title===d.libParent) o.selected=true; return o; }))));
+    offWrap.replaceChildren(h('span',{class:'lbl',text:'Not in the SLATE task list: put it under *'}),el,h('span',{class:'f-hint',text:d.libParent?'Saved as: '+offTaskTitle(d):'Pick the standard task it belongs to, or choose a title from the list above.'})); };
   const input=h('input',{id:'sh-title',maxlength:160,autocomplete:'off',placeholder:'Type the task, e.g. Site visit',value:d.title||'',
-    oninput:e=>{ d.title=e.target.value; fill(); sim.fill(); },onfocus:fill,onblur:()=>setTimeout(()=>{box.hidden=true},150),
+    oninput:e=>{ d.title=e.target.value; fill(); sim.fill(); offFill(); },onfocus:fill,onblur:()=>setTimeout(()=>{box.hidden=true},150),
     onkeydown:e=>{ if(e.key==='Escape') box.hidden=true; }});
-  sim.fill();
-  return [h('label',{class:'field',style:'position:relative'},h('span',{class:'lbl',text:'Task or deliverable'}),input,box),sim.box,
+  sim.fill(); offFill();
+  return [h('label',{class:'field',style:'position:relative'},h('span',{class:'lbl',text:'Task or deliverable'}),input,box,offWrap),sim.box,
     field('Category (optional)',inp('phase',{maxlength:40,list:'cat-list',placeholder:'e.g. Design development'})),
     h('datalist',{id:'cat-list'},cats.map(c=>h('option',{value:c})))]; }
 function libRequestBox(){
@@ -2740,6 +2754,37 @@ function libRequestBox(){
       h('button',{class:'btn btn-sm',type:'button',onclick:()=>{sh.libReq=null;renderSheet()},text:'Cancel'})),pend); }
 function decideLib(id,x,ok){ const key='lb:'+id, note=(S.declineNote[key]||'').trim(), now=new Date().toISOString();
   return run(()=>S.db.doc('tasklib/'+id).update(ok?{status:'active',approvedBy:S.uid,approvedAt:now,decisionNote:note}:{status:'declined',decidedBy:S.uid,decidedAt:now,decisionNote:note}),ok?'Added to the task list':'Request declined').then(r=>{ if(r) delete S.declineNote[key]; }); }
+/* ---------- Task list review (Principal, 13 Nov 2026) ----------
+   Tasks written outside the SLATE standard list sit under their closest standard task (libParent, title "Parent › words").
+   Each month the Principal or the COO goes through them: add a name to the standard list (it then shows in every picker),
+   or keep it as a one-off under its parent. Decisions sit in settings.offReview[key] = {d:'added'|'kept', at, by}. */
+const offKey=(parent,detail)=>(String(parent||'').trim()+'|'+String(detail||'').trim().toLowerCase().replace(/\s+/g,' '));
+function offGroups(){ const rv=(S.settings&&S.settings.offReview)||{}, m=new Map();
+  Object.entries(S.tasks).forEach(([id,t])=>{ if(!t||!t.offList||!t.libParent||t.archived) return; const pre=t.libParent+' › ', detail=String(t.title||'').startsWith(pre)?t.title.slice(pre.length):t.title;
+    const k=offKey(t.libParent,detail); if(!m.has(k)) m.set(k,{k,parent:t.libParent,detail:detail.trim(),tasks:[],rv:rv[k]||null}); m.get(k).tasks.push({...t,id}); });
+  return [...m.values()].map(g=>({...g,n:g.tasks.length,first:g.tasks.map(t=>t.createdAt||'').sort()[0]||'',last:g.tasks.map(t=>t.createdAt||'').sort().pop()||''}))
+    .sort((a,b)=>(a.rv?1:0)-(b.rv?1:0)||b.n-a.n||b.last.localeCompare(a.last)); }
+/* shown as waiting once an unreviewed entry is a month old, so the list builds up for a while before it is reviewed */
+const offDue=()=>offGroups().some(g=>!g.rv&&g.first&&diff(g.first.slice(0,10),today())>=30);
+function offDecide(g,d){ const cur={...((S.settings&&S.settings.offReview)||{})}; cur[g.k]={d,at:new Date().toISOString(),by:S.uid};
+  return run(async()=>{ if(d==='added'&&!inLib(g.detail)){ const par=libByTitle(g.parent); const t=g.detail.charAt(0).toUpperCase()+g.detail.slice(1);
+      await S.db.collection('tasklib').doc().set({title:t,cat:(par&&par.cat)||'General',del:!!(par&&par.del),status:'active',requestedBy:S.uid,requestedAt:new Date().toISOString(),approvedBy:S.uid,approvedAt:new Date().toISOString(),from:'review',parent:g.parent}); }
+    await settingsRef().update({offReview:cur}); },d==='added'?'Added to the SLATE task list':'Kept as a one-off'); }
+function offUndo(g){ const cur={...((S.settings&&S.settings.offReview)||{})}; delete cur[g.k]; return run(()=>settingsRef().update({offReview:cur}),'Back in the list to review'); }
+function viewTaskReview(){
+  const gs=offGroups(), open=gs.filter(g=>!g.rv), done=gs.filter(g=>g.rv), parents=[...new Set(open.map(g=>g.parent))];
+  const card=g=>h('div',{class:'card',style:'border-radius:0;border-bottom:1px solid var(--line);gap:6px'},
+    h('div',{class:'row-title'},h('span',{text:g.detail||'(no words)'}),h('span',{class:'tag',text:`${g.n}×`})),
+    h('div',{class:'row-meta'},h('span',{text:[...new Set(g.tasks.map(t=>{ const p=S.projects[t.projectId]; return p?(p.code||p.name):''; }).filter(Boolean))].slice(0,4).join(', ')}),h('span',{text:'·'}),
+      h('span',{text:[...new Set(g.tasks.map(t=>shortName(t.createdBy||t.assignee)).filter(Boolean))].join(', ')}),h('span',{text:'·'}),h('span',{text:g.first?('since '+fmtD(g.first.slice(0,10))):''})),
+    g.rv?h('div',{class:'bar'},h('span',{class:'f-hint',style:'margin:0',text:(g.rv.d==='added'?'Added to the list':'Kept as a one-off')+' · '+shortName(g.rv.by)+' · '+fmtD(String(g.rv.at).slice(0,10))}),S.canWrite?h('button',{class:'linkish',type:'button',onclick:()=>offUndo(g),text:'Undo'}):null)
+      :S.canWrite?h('div',{class:'bar'},inLib(g.detail)?h('span',{class:'f-hint',style:'margin:0',text:'Already in the list under that name.'}):h('button',{class:'btn btn-primary btn-sm',type:'button',disabled:S.busy,onclick:()=>offDecide(g,'added'),text:'Add to the SLATE list'}),
+        h('button',{class:'btn btn-sm',type:'button',disabled:S.busy,onclick:()=>offDecide(g,'kept'),text:'Keep under '+g.parent})):null);
+  return [h('div',{class:'page-h'},h('div',{},h('div',{class:'eyebrow',text:'Only you and '+(S.isOwner?'the COO':'the Principal')}),h('h1',{class:'h1',text:'Task list review'}),
+      h('p',{class:'lead',text:'Tasks the team wrote outside the SLATE standard list, grouped under the standard task they chose. Review them every month or two: add names that keep coming up to the list, keep the rest as one-offs.'}))),
+    open.length?parents.map(par=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:par}),h('span',{class:'cnt',text:String(open.filter(g=>g.parent===par).length)})),
+      h('div',{class:'list'},open.filter(g=>g.parent===par).map(card)))):h('div',{class:'w-empty',text:'Nothing to review: every new task so far is from the SLATE list.'}),
+    done.length?h('details',{class:'sec'},h('summary',{text:`Reviewed (${done.length})`}),h('div',{class:'list'},done.map(card))):null]; }
 function libReqs(){ return Object.entries(S.lib).filter(([k,x])=>x&&x.status==='pending').sort((a,b)=>(a[1].requestedAt||'').localeCompare(b[1].requestedAt||'')); }
 function libReqCards(){
   const xs=libReqs(); if(!xs.length) return null;
@@ -3265,7 +3310,7 @@ function buildView(){
   if(S.view==='viewas'&&!((S.isOwner||isCOO(S.uid))&&!VA())) S.view='mine';   /* View as opens on their Home */
   const out=[];
   if(!S.canWrite) out.push(h('div',{class:'banner'},h('span',{text:'You have view-only access. Ask the owner to share SLATE OS with you as an Editor so you can update tasks.'})));
-  const v={viewas:viewViewAs,queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,worklog:viewWorklog,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
+  const v={viewas:viewViewAs,tasklist:()=>amApprover()?viewTaskReview():viewMine(),queue:()=>amApprover()?viewQueue():viewMine(),chalk:viewChalk,far:viewFar,cal:viewCal,help:viewHelp,std:viewStd,tlstatus:viewTlStatus,risk:viewRisk,drafting:viewDrafting,worklog:viewWorklog,holidays:viewHolidays,mine:viewMine,all:viewAll,projects:viewProjects,biz:viewBiz,team:viewTeam,meet:viewMeetHub,notice:viewNotices,board:viewBoard,gantt:viewGantt,dash:viewDash,activity:viewActivity,reports:()=>window.slateReportView?window.slateReportView():h('div',{}),backup:()=>amApprover()&&window.slateBackupView?window.slateBackupView():viewMine(),entries:()=>window.slateEntryLogView&&window.slateCanSeeEntryLog&&window.slateCanSeeEntryLog()?window.slateEntryLogView():viewMine(),setup:viewSetup,conv:viewConv,more:viewMore,review:()=>S.isOwner&&!window.slateReview&&window.slateReviewView?window.slateReviewView():viewMine(),people:()=>window.slatePeopleView?window.slatePeopleView():h('div',{})}[S.view]||viewMine;
   if(['all','board','gantt'].includes(S.view)){ const tv=seg('Task view',[['all','List'],['board','Board'],['gantt','Timeline']],S.view,x=>{ S.view=x; savePref('taskView',x); render(true); });
     if(S.view==='all'&&!fullView()&&myPod()&&!amChalkMember()) out.push(h('div',{class:'seg-row'},tv,h('div',{class:'seg seg-mine',role:'group','aria-label':'Whose tasks'},[[true,'Mine'],[false,'Whole POD']].map(([v,l])=>h('button',{type:'button','aria-pressed':String(!!S.f.mine===v),onclick:()=>{ S.f.mine=v; render(true); },text:l})))));
     else out.push(tv); }
@@ -3488,6 +3533,7 @@ function viewMore(){
       amApprover()?item('backup','Backup',window.slateBackupDue&&window.slateBackupDue()?'Weekly backup due · download all data':'Download all data · weekly',window.slateBackupDue&&window.slateBackupDue()?1:0):null),
     ...grp('Admin',canSeeScoring()?item('risk','Risk and grace',(()=>{ try{ const r=riskScanC(), n=r.grace.length+r.risk.length+r.deem.length+r.shift.length; return n?`${n} decision${n===1?'':'s'} waiting · workload, grace and projects at risk`:'Workload, grace used and every project at risk'; }catch(_){ return 'Workload, grace used and every project at risk'; } })()):null,amApprover()?item('holidays','Holidays','Public holidays and office closures: no timeline counts them as working days'):null,amApprover()&&S.canWrite&&adjOpen()?item('tlstatus','Project status','Where every project stands now; apply the standard days in one tap · until '+fmtD(adjUntil())):null,
       amApprover()?item('setup','Settings','People, roles, approvers, project types and targets',S.isOwner?roleProposals().length:0):null,
+      amApprover()?item('tasklist','Task list review',(()=>{ const n=offGroups().filter(g=>!g.rv).length; return n?`${n} task name${n===1?'':'s'} written outside the SLATE list · review monthly`:'Tasks written outside the SLATE list · review monthly'; })(),offDue()?offGroups().filter(g=>!g.rv).length:0):null,
       (S.isOwner||isCOO(S.uid))&&!VA()&&window.slateViewAsWho?item('viewas','View as a team member','See Studio exactly as a POD leader, member or drafter sees it · read-only · only you and '+(S.isOwner?'the COO':'the Principal')):null,
       S.isOwner&&!window.slateReview&&window.slateReviewView?item('review','Review logins','Read-only Principal and COO views for an outside reviewer · only you'):null),
     h('div',{class:'list'},h('button',{class:'more-i',type:'button',onclick:()=>window.slateAccount&&window.slateAccount()},h('div',{},h('div',{class:'mi-t',text:'Account'}),h('div',{class:'mi-d',text:'Change password or sign out'})),h('span',{class:'mi-a',text:'›'}))),verLine(),perfLine()];
@@ -3732,6 +3778,7 @@ function queueGroups(){
     ['pods','Pod team',podRequests().length,mn(podRequests().map(x=>x.d.at)),podReqCards],
     ['nicks','Pod names',nickProposals().length,mn(nickProposals().map(x=>x.d.at)),nickCards],
     ['lib','Standard tasks',libReqs().length,mn(libReqs().map(([k,x])=>x.requestedAt)),libReqCards],
+    ['offlist','Task list review',offDue()?offGroups().filter(g=>!g.rv).length:0,mn(offGroups().filter(g=>!g.rv).map(g=>g.first)),()=>h('div',{style:'display:grid;gap:16px'},...viewTaskReview().slice(1))],
     ['extra','Extra rounds',extraReqs().length,mn(extraReqs().map(x=>x.m.extra.at)),extraReqCards],
     ['delete','Deletions',dels.length+clientDelReqs().length,mn([...dels.map(p=>p.delReq.at),...clientDelReqs().map(([i,c])=>c.delReq.at)]),()=>h('div',{style:'display:grid;gap:16px'},delReqCards(),clientDelCards())],
     ['chalk','Chalk Create dates',cr.length,mn(cr.map(t=>t.request.at)),()=>h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Chalk Create dates to approve'}),h('span',{class:'cnt',text:String(cr.length)})),S.canWrite?approvalCards(cr):h('div',{class:'list'},cr.map(t=>row(t))))],
@@ -4408,8 +4455,21 @@ function wlAskTo(u){ const t=teamOf(u)||''; let to='';
 const wlAskWho=u=>{ const to=wlAskTo(u); return !to?'the COO':to===cooId()?'the COO':roleGroup(to)==='dhead'?'the Design Associate Lead':isShared(u)?'your mentor ('+shortName(to)+')':'your POD leader'; };
 /* a request is answered once a task reaches the person after it was made */
 const wlAskDone=(u,at)=>Object.values(S.tasks).some(t=>t.assignee===u&&!t.archived&&((t.createdAt||'')>at||(t.history||[]).some(e=>e.at>at&&(e.to===u||e.assignee===u)&&/created|reassigned|assignApproved/.test(e.type))));
+/* Studio work stays Studio work (Principal, 13 Nov 2026), but a Studio work line that names a project in SLATE OS is asked
+   "Is this project work?" with that project offered. Words shared by many project names (Edison, Navana, katha…) don't count. */
+const PM_STOP=new Set(['katha','interior','project','projects','building','tower','residence','house','plan','plans','floor','studio','work','design','proposal','office','site','phase','block','road','sector','properties','homes','heights']);
+function wlProjHits(text){ const words=String(text||'').toLowerCase().split(/[^a-z0-9ঀ-৿]+/).filter(w=>w.length>=4&&!PM_STOP.has(w)); if(!words.length) return [];
+  const ps=wlMyProjects().filter(p=>p&&p.name&&!isInternalP(p)), freq={}, wordsOf=p=>[...new Set(String(p.name).toLowerCase().split(/[^a-z0-9ঀ-৿]+/).filter(w=>w.length>=4&&!PM_STOP.has(w)))];
+  ps.forEach(p=>wordsOf(p).forEach(w=>{ freq[w]=(freq[w]||0)+1; }));
+  const same=(a,b)=>a===b||(a.length>=5&&b.length>=5&&a.slice(0,5)===b.slice(0,5));
+  return ps.map(p=>({p,k:wordsOf(p).filter(w=>freq[w]<3&&words.some(x=>same(x,w))).length+((p.code&&String(text).toUpperCase().includes(p.code))?2:0)})).filter(x=>x.k>0).sort((a,b)=>b.k-a.k).slice(0,3).map(x=>x.p); }
+function wlStudioHint(l,sh){ const hits=wlProjHits(l.text); if(!hits.length) return null;
+  return h('div',{class:'wlf',style:'display:grid;gap:6px;padding:8px 10px;border-radius:8px;background:#FFF4E5'},
+    h('span',{style:'font-size:13.5px',text:'Is this project work? It names '+hits.map(p=>p.name).join(', ')+'.'}),
+    h('div',{style:'display:flex;flex-wrap:wrap;gap:8px'},...hits.map(p=>h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ l.projectId=p.id; wlClearPick(l); sh.pick=l.id; sh.err=''; renderSheet(); },text:'Use '+(p.code||p.name)})),
+      h('button',{class:'linkish',type:'button',onclick:()=>{ l.studioOk=true; sh.err=''; renderSheet(); },text:'No, it is Studio work'}))); }
 const wlNewLine=(x={})=>({id:Math.random().toString(36).slice(2,10),projectId:x.projectId==null?null:x.projectId,taskId:x.taskId||'',text:x.text||'',status:'planned',due:x.due||today(),
-  ...(x.clRef?{clRef:x.clRef}:{}),...(x.dwRef?{dwRef:x.dwRef}:{}),...(x.due0?{due0:x.due0}:{}),...(x.since?{since:x.since}:{}),...(x.from?{from:x.from}:{}),...(x.ask?{ask:x.ask}:{}),...(x.newTitle!=null?{newTitle:x.newTitle}:{}),
+  ...(x.clRef?{clRef:x.clRef}:{}),...(x.dwRef?{dwRef:x.dwRef}:{}),...(x.due0?{due0:x.due0}:{}),...(x.since?{since:x.since}:{}),...(x.from?{from:x.from}:{}),...(x.ask?{ask:x.ask}:{}),...(x.newTitle!=null?{newTitle:x.newTitle}:{}),...(x.offList?{offList:true,parent:x.parent||''}:{}),...(x.studioOk?{studioOk:true}:{}),
   ...(x.wait?{wait:x.wait}:{}),...(x.moved?{moved:x.moved}:{}),...(x.lateWhy?{lateWhy:x.lateWhy}:{})});
 function wlMyProjects(){ const dp=isDraftMember(S.uid)||isShared(S.uid);   /* the Drafting Pool and the shared architects work for every POD, so they can pick any open project */
   return projects().filter(p=>!p.closed&&(fullView()||dp||inMyPodProject(p)||isMemberOk(p,S.uid)||activeTasks().some(t=>t.projectId===p.id&&t.assignee===S.uid)))
@@ -4435,7 +4495,7 @@ async function wlStartTasks(lines){ for(const l of lines){ const d=l.dwRef&&DW.i
 /* a new task from the plan: in the project's current phase, for the person writing it; members propose the date */
 async function wlCreateTask(l){ const p=S.projects[l.projectId]; if(!p) return '';
   const k=p.std?curPhase(p):null, ap=amApprover()||leadFree(l.projectId);
-  const id=await createTask({projectId:l.projectId,title:String(l.newTitle||'').trim().slice(0,120),kind:l.newKind==='Deliverable'?'Deliverable':'Task',assignee:S.uid,phase:k?phLabel(k,p):'',note:'Added from the day plan',
+  const id=await createTask({projectId:l.projectId,title:l.offList?offTitle(l):String(l.newTitle||'').trim().slice(0,120),kind:l.newKind==='Deliverable'?'Deliverable':'Task',assignee:S.uid,phase:k?phLabel(k,p):'',note:'Added from the day plan',...(l.offList&&l.parent?{libParent:l.parent}:{}),
     target:ap?l.due:'',proposed:ap?'':l.due});
   return id||''; }
 /* the line is finished: finish its task on the project list too (or send it for checking) */
@@ -4459,8 +4519,14 @@ const WL_KIND={task:['Task','Work you do and finish yourself; your POD leader ch
    checklist step or a drawing (or a new task written into the project), so no work happens off the record. Studio work and a
    request for a task are free text. */
 const wlNeedsPick=l=>{ if(!l||l.ask||!l.projectId) return false; const p=S.projects[l.projectId]; if(!p||isInternalP(p)) return false;
-  return !(l.taskId||l.clRef||l.dwRef||(l.newTitle!=null&&String(l.newTitle).trim())); };
-const wlClearPick=l=>{ l.taskId=''; delete l.clRef; delete l.dwRef; delete l.newTitle; delete l.newKind; };
+  return !(l.taskId||l.clRef||l.dwRef||(l.newTitle!=null&&(l.offList?l.parent:String(l.newTitle).trim()))); };
+const wlClearPick=l=>{ l.taskId=''; delete l.clRef; delete l.dwRef; delete l.newTitle; delete l.newKind; delete l.offList; delete l.parent; };
+/* one task list (Principal, 13 Nov 2026): a task that isn't in the SLATE standard list is written under the closest standard
+   task, e.g. "Working drawings › Slab outline", so every new task links to the list. Only the Principal and the COO type a free
+   title. The Principal and the COO review these entries (More › Task list review) and grow the standard list from them. */
+const freeTitle=()=>amApprover();
+const libByTitle=t=>taskLib().find(x=>x.title.toLowerCase()===String(t||'').trim().toLowerCase())||null;
+const offTitle=l=>{ const d=String(l.newTitle||'').trim(); return l.parent?(l.parent+(d?' › '+d:'')).slice(0,120):d; };
 function wlNewWhere(l){ const p=S.projects[l.projectId], k=p&&p.std?curPhase(p):null;
   return `It goes on the project’s task list${k?' under '+phLabel(k,p):''}, given to you`+(amApprover()||leadFree(l.projectId)?'.':'; your finish-by date goes to your POD leader to approve.'); }
 const wlClItem=(k,id)=>clItems(k).find(x=>x.id===id)||clItems(k).find(x=>x.parts.includes(id))||null;
@@ -4477,19 +4543,20 @@ function wlSugg(l){ const p=S.projects[l.projectId]; if(!p) return []; const td=
     out.push({g:'Checklist steps · '+phLabel(k,p),kind:'step',title:it.t,desc:['Checklist step',x.who?(x.who===S.uid?'yours':shortName(x.who)):clRole(it.r)||'',x.st==='doing'?'in progress':x.st==='paused'?'paused':'',it.chk?clRole(it.chk)+' checks':''].filter(Boolean).join(' · '),clRef:{k,id:it.id}}); }));
   ts.filter(t=>t.assignee!==S.uid).forEach(t=>out.push({g:t.assignee&&isDraftMember(t.assignee)&&isDraftMember(S.uid)?'Drafting Pool tasks':'Others’ tasks on this project',kind:t.kind==='Deliverable'?'deliverable':'task',title:t.title,desc:tdesc(t),taskId:t.id}));
   if(S.canWrite){ const k=p.std?curPhase(p):null, phn=k?phName(k,p).toLowerCase():'', have=new Set(ts.map(t=>t.title.toLowerCase()));
-    taskLib().filter(x=>!have.has(x.title.toLowerCase())&&(x.cat==='General'||(phn&&String(x.cat).toLowerCase().includes(phn.split(' ')[0])))).slice(0,30)
+    const near=x=>x.cat==='General'||(phn&&String(x.cat).toLowerCase().includes(phn.split(' ')[0]));
+    taskLib().filter(x=>!have.has(x.title.toLowerCase())).sort((a,b)=>(near(b)?1:0)-(near(a)?1:0))
       .forEach(x=>out.push({g:'Standard tasks to add',kind:x.del?'deliverable':'task',title:x.title,desc:`New ${x.del?'deliverable':'task'} · ${x.cat}`,newTitle:x.title,newKind:x.del?'Deliverable':'Task'})); }
   return out; }
 /* what the line has picked, in the same words as the picker */
 function wlPicked(l){ if(l.dwRef){ const d=DW.items[l.dwRef.id]; if(d) return {title:(d.no?d.no+' · ':'')+d.title,desc:'Drawing · '+DWG_NAME[d.phase]+' · '+DWG_ST[d.st][0]}; }
-  if(l.newTitle!=null) return {title:l.newTitle,desc:`New ${(l.newKind||'Task')==='Deliverable'?'deliverable':'task'}`};
+  if(l.newTitle!=null) return {title:l.offList?(offTitle(l)||'Not in the list'):l.newTitle,desc:`New ${(l.newKind||'Task')==='Deliverable'?'deliverable':'task'}`+(l.offList?' · under a standard task':'')};
   const t=wlTaskOf(l), p=S.projects[l.projectId];
   if(t) return {title:t.title,desc:[t.kind==='Deliverable'?'Deliverable':'Task',t.assignee!==S.uid?shortName(t.assignee):'',t.doneAt?'done':t.verify||stageOf(t)==='review'?'sent for checking':stageOf(t)==='doing'?'in progress':'not started'].filter(Boolean).join(' · ')};
   if(l.clRef&&p){ const it=wlClItem(l.clRef.k,l.clRef.id), x=clOf(p,l.clRef.k,l.clRef.id); if(it) return {title:it.t,desc:'Checklist step · '+phLabel(l.clRef.k,p)+(x.done?' · ticked':x.st==='doing'?' · in progress':'')}; }
   return null; }
 function wlPicker(l,sh){ const all=wlSugg(l), q=(sh.q||'').trim().toLowerCase(), words=q.split(/\s+/).filter(Boolean);
   const list=all.filter(x=>words.every(w=>(x.title+' '+x.desc).toLowerCase().includes(w)));
-  const pick=x=>{ wlClearPick(l); if(x.taskId) l.taskId=x.taskId; else if(x.clRef) l.clRef=x.clRef; else if(x.dwRef) l.dwRef=x.dwRef; else { l.newTitle=x.newTitle||''; l.newKind=x.newKind||'Task'; }
+  const pick=x=>{ wlClearPick(l); if(x.taskId) l.taskId=x.taskId; else if(x.clRef) l.clRef=x.clRef; else if(x.dwRef) l.dwRef=x.dwRef; else { l.newTitle=x.newTitle||''; l.newKind=x.newKind||'Task'; if(x.offList){ l.offList=true; l.parent=''; } }
     sh.pick=''; sh.err=''; renderSheet(); };
   const groups=[...new Set(list.map(x=>x.g))];
   return h('div',{class:'wlf-pk'},
@@ -4500,7 +4567,7 @@ function wlPicker(l,sh){ const all=wlSugg(l), q=(sh.q||'').trim().toLowerCase(),
       return h('div',{class:'wlf-g'},h('div',{class:'wlf-gh',text:g}),xs.slice(0,q?40:lim).map(x=>h('button',{type:'button',class:'wlf-s k-'+x.kind,onclick:()=>pick(x)},h('span',{class:'wlf-k',text:WL_KIND[x.kind][0]}),h('b',{text:x.title}),h('span',{class:'wlf-d',text:x.desc}))),
         !q&&xs.length>lim?h('div',{class:'wl-sub',text:`${xs.length-lim} more: search to find them`}):null); })
       :h('div',{class:'wl-sub',text:q?'Nothing matches.':'No open tasks on this project yet.'}),
-    h('div',{class:'wlf-pa'},S.canWrite?h('button',{class:'linkish',type:'button',onclick:()=>pick({newTitle:sh.q||''}),text:'+ Write a new task for this project'}):null,
+    h('div',{class:'wlf-pa'},S.canWrite?h('button',{class:'linkish',type:'button',onclick:()=>pick(freeTitle()?{newTitle:sh.q||''}:{newTitle:sh.q||'',offList:true}),text:freeTitle()?'+ Write a new task for this project':'Not in the list? Add it under a standard task'}):null,
       (l.taskId||l.clRef||l.dwRef||l.newTitle!=null)&&!wlNeedsPick({projectId:l.projectId})?h('button',{class:'linkish',type:'button',onclick:()=>{ wlClearPick(l); sh.pick=''; renderSheet(); },text:'No particular task'}):null)); }
 function sheetWlog(){
   const sh=S.sheet, td=today(), ahead=sh.mode==='ahead', yLog=ahead?null:wlLastLog(S.uid,td), y=yLog?yLog.day:wlPrevDay(td), cur=ahead?null:wlGet(S.uid,td);
@@ -4567,8 +4634,12 @@ function sheetWlog(){
     return h('div',{class:'wl-line'+(l.ask?' wlf-ask':'')},
       h('div',{class:'wl-sel'},pSel,tBtn,sh.lines.length>1?h('button',{class:'icon-btn',type:'button','aria-label':'Remove this line',title:'Remove',onclick:()=>{ sh.lines.splice(i,1); if(l.from) sh.y[l.from]=''; if(!sh.lines.length) sh.lines=[wlNewLine()]; renderSheet(); },text:'×'}):null),
       open?wlPicker(l,sh):null,
-      l.newTitle!=null?(()=>{ const sim=simBox(l.projectId,()=>l.newTitle,t=>{ wlClearPick(l); l.taskId=t.id; sh.err=''; renderSheet(); }); sim.fill();
-        return h('div',{class:'wlf-new'},h('input',{type:'text',maxlength:120,class:'wlf-nt',placeholder:'Name of the new task, e.g. 4th floor kitchen layout',value:l.newTitle,oninput:e=>{ l.newTitle=e.target.value; sim.fill(); }}),sim.box,
+      l.newTitle!=null?(()=>{ const sim=simBox(l.projectId,()=>l.offList?offTitle(l):l.newTitle,t=>{ wlClearPick(l); l.taskId=t.id; sh.err=''; renderSheet(); }); sim.fill();
+        const lib=l.offList?taskLib():[], cats=[...new Set(lib.map(x=>x.cat))];
+        const parentSel=l.offList?h('select',{class:'wlf-nt','aria-label':'Closest standard task',onchange:e=>{ l.parent=e.target.value; const x=libByTitle(l.parent); if(x) l.newKind=x.del?'Deliverable':'Task'; sh.err=''; renderSheet(); }},
+          h('option',{value:'',text:'Closest standard task…'}),cats.map(c=>h('optgroup',{label:c},lib.filter(x=>x.cat===c).map(x=>{ const o=h('option',{value:x.title,text:x.title}); if(x.title===l.parent) o.selected=true; return o; })))):null;
+        return h('div',{class:'wlf-new'},parentSel,h('input',{type:'text',maxlength:l.offList?80:120,class:'wlf-nt',placeholder:l.offList?'What exactly, in short, e.g. slab outline':'Name of the new task, e.g. 4th floor kitchen layout',value:l.newTitle,oninput:e=>{ l.newTitle=e.target.value; sim.fill(); const sv=e.target.parentNode.querySelector('.wlf-sv'); if(sv) sv.textContent='Saved as: '+offTitle(l); }}),
+          l.offList&&l.parent?h('span',{class:'wl-sub wlf-sv',text:'Saved as: '+offTitle(l)}):null,sim.box,
         h('div',{class:'ci-seg wlf-kind',role:'radiogroup','aria-label':'Task or deliverable'},[['Task','Task'],['Deliverable','Deliverable']].map(([k,lb])=>h('button',{type:'button',role:'radio','aria-checked':String((l.newKind||'Task')===k),class:'ci-opt'+((l.newKind||'Task')===k?' on doing':''),onclick:()=>{ l.newKind=k; renderSheet(); },text:lb}))),
         h('span',{class:'wl-sub',text:WL_KIND[(l.newKind||'Task')==='Deliverable'?'deliverable':'task'][1]+' '+wlNewWhere(l)})); })():null,
       l.pre&&!ahead?h('span',{class:'wlf-tag',text:'Planned ahead: check it is still right'}):null,
@@ -4577,6 +4648,7 @@ function sheetWlog(){
       h('textarea',{class:'wl-text',rows:2,maxlength:400,placeholder:l.from?'The task, in your own words':'What exactly will you do on it today? e.g. 4th floor plan: kitchen and toilet layout, revise after client comments',value:l.text||'',
         oninput:e=>{ l.text=e.target.value; const c=e.target.parentNode.querySelector('.wl-cnt'); const k2=e.target.value.trim().length; if(c){ c.textContent=k2<10?`${10-k2} more characters`:'✓'; c.classList.toggle('ok',k2>=10); } }}),
       h('div',{class:'wl-cnt'+(n>=10?' ok':''),text:n<10?`${10-n} more characters`:'✓'}),
+      l.projectId===''&&!l.studioOk&&!l.ask?wlStudioHint(l,sh):null,
       /* a task running for days: what today's part of it is, so the log shows progress, not the same words again */
       l.from&&!l.wait&&!l.ask&&!ahead?h('div',{class:'wl-part'},h('span',{class:'lbl',text:`Today’s part${l.since?` · day ${wlWorkDays(l.since,td)+1}${l.due&&l.due>td?' of '+(wlWorkDays(l.since,l.due)+1):''}`:''}`}),
         h('input',{type:'text',class:'wlf-nt',maxlength:200,placeholder:'e.g. ground and 1st floor done, starting typical floors',value:l.part||'',oninput:e=>{ l.part=e.target.value; }})):null,
@@ -4586,13 +4658,13 @@ function sheetWlog(){
   const addAsk=()=>{ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
     sh.lines.push(wlNewLine({projectId:'',text:'No task for today: please give me one.',ask:{to:askTo},due:td})); sh.err=''; renderSheet(); };
   const saveAhead=()=>{
-    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<base||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (that day or later).':'';
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.projectId===''&&!l.studioOk&&!l.ask&&wlProjHits(l.text).length)?'A Studio work line names a project: choose the project, or say it is Studio work.':sh.lines.find(l=>l.offList&&l.newTitle!=null&&!l.parent)?'Choose the closest standard task for each new task.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Say in short what the new task is.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<base||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (that day or later).':'';
     if(bad){ sh.err=bad; renderSheet(); return; }
     const lines=sh.lines.map(l=>{ const x={...l,text:l.text.trim()}; delete x.pre; delete x.ask; return x; });
     run(()=>wlAheadWrite({...(S.ahead||{}),[base]:lines}),`Planned for ${wd(base)} ${fmtD(base)}. It comes into that morning’s plan`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const dropAhead=()=>{ const it={...(S.ahead||{})}; delete it[base]; run(()=>wlAheadWrite(it),`Plan for ${wd(base)} ${fmtD(base)} removed`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const save=()=>{ if(ahead) return saveAhead();
-    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Give the new task a name.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing, Waiting or Stopped.`
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.projectId===''&&!l.studioOk&&!l.ask&&wlProjHits(l.text).length)?'A Studio work line names a project: choose the project, or say it is Studio work.':sh.lines.find(l=>l.offList&&l.newTitle!=null&&!l.parent)?'Choose the closest standard task for each new task.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Say in short what the new task is.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing, Waiting or Stopped.`
       :yOpen.find(l=>sh.y[l.id]==='waiting'&&!sh.yw[l.id])?'Say who each waiting line is waiting on.'
       :yOpen.find(l=>sh.y[l.id]==='stopped'&&(sh.ys[l.id]||'').trim().length<3)?'Say in a few words why each stopped line stopped.'
       :yOpen.find(l=>(sh.y[l.id]==='today'||sh.y[l.id]==='ongoing')&&l.due&&l.due<td&&!sh.yr[l.id])?'Say why the finish-by date passed on each line that carries on.'
@@ -4603,7 +4675,7 @@ function sheetWlog(){
     if(!cur) sh.lines.forEach(l=>{ const o=l.from&&yOpen.find(x=>x.id===l.from); if(o&&o.due&&o.due<td&&(sh.y[o.id]==='today'||sh.y[o.id]==='ongoing')){ l.moved=(o.moved||0)+1; l.lateWhy=sh.yr[o.id]; } });
     const sb=window.slateSupabase, nowIso=new Date().toISOString(); let fin=[];
     run(async()=>{
-      for(const l of sh.lines) if(l.newTitle!=null&&l.projectId&&!l.taskId){ const id=await wlCreateTask(l); if(id){ l.taskId=id; delete l.newTitle; } }
+      for(const l of sh.lines) if(l.newTitle!=null&&l.projectId&&!l.taskId){ const id=await wlCreateTask(l); if(id){ l.taskId=id; delete l.newTitle; delete l.offList; delete l.parent; } }
       const lines=sh.lines.map(l=>({id:l.id,projectId:l.projectId||'',taskId:l.taskId||'',...(l.clRef&&!l.taskId?{clRef:l.clRef}:{}),...(l.dwRef&&!l.taskId?{dwRef:l.dwRef}:{}),text:l.text.trim(),status:l.status||'planned',due:l.due,due0:l.due0||l.due,since:l.since||td,
         ...(l.from?{from:l.from}:{}),...(l.note?{note:l.note}:{}),...(l.closedAt?{closedAt:l.closedAt}:{}),...(l.ask?{ask:{to:l.ask.to||askTo,at:l.ask.at||nowIso}}:{}),
         ...((l.part||'').trim()?{part:l.part.trim()}:{}),...(l.wait?{wait:l.wait}:{}),...(l.moved?{moved:l.moved}:{}),...(l.lateWhy?{lateWhy:l.lateWhy}:{}),...(l.extra?{extra:1}:{})}));
@@ -7777,6 +7849,8 @@ function sheetNewTask(){
       if(!title) return fail('Write the task or deliverable.');
       if(!d.assignee) return fail('Choose who it’s assigned to.');
       if(d.start&&d.target&&d.start>d.target) return fail('The start date can’t be after the target date.');
+      if(needOff(d)&&!d.libParent) return fail('This task isn’t in the SLATE list: choose the closest standard task to put it under.');
+      if(needOff(d)){ d.title=offTaskTitle(d); } else if(!(d.libParent&&String(d.title||'').startsWith(d.libParent+' › '))) delete d.libParent;
       /* several people: each gets their own copy, scored on their own finish date. A joint task (the default) goes for
          verification only when everyone has finished; separate tasks go one by one */
       const who=[d.assignee,...(d.also||[]).filter(id=>id&&id!==d.assignee)];
@@ -7928,7 +8002,7 @@ function sheetProject(){
     if(!isStudio){
       if(!v.client) return fail('Add the client.');
       if(!v.location) return fail('Add the area or locality, e.g. Bashundhara R/A.');
-      const isInt=v.type==='interior'||(!v.type&&id&&(S.projects[id]||{}).type==='interior'), isPropT=v.type==='proposal'||(!v.type&&id&&(S.projects[id]||{}).type==='proposal');
+      const isInt=v.type==='interior'||(!v.type&&id&&(S.projects[id]||{}).type==='interior'), isPropT=isPropK(v.type)||(!v.type&&id&&isPropK((S.projects[id]||{}).type));
       if(isInt){ ['intBuilding','intUnit','intFloor'].forEach(f=>{ if(v[f]) v[f]=v[f].toUpperCase().replace(/\s+/g,' ').trim(); });
         if(!v.intBuilding) return fail('Add the building or project the interior is in, e.g. Desdemona.');
         if(!v.intUnit) return fail('Add the apartment or unit number, e.g. C10.');
@@ -7972,8 +8046,8 @@ function sheetProject(){
       else v.phasePlan={sel:phaseOrder(d.type,d.ph.sel),ed:edFull((id&&S.projects[id]&&S.projects[id].phasePlan&&S.projects[id].phasePlan.ed)||{},d.ph.ed,d.type)}; }
     const fn=id?async()=>{ await ref.update(v); if(phNow) await applyPhaseChanges(id,d.ph); }:()=>ref.set({...v,closed:v.entry==='completed',...(v.entry==='completed'?{legacy:true}:{}),createdAt:now,createdBy:S.uid,...(ap?{status:'active',approvedBy:S.uid,approvedAt:now}:{status:'pending',requestedBy:S.uid,requestedAt:now})});
     const plan=!id&&ap&&v.type&&!internal&&v.pod&&v.entry!=='completed'?{pid:ref.id,type:v.type,pod:v.pod}:null;
-    const dft=!id&&S.sheet.draftId, fp=!id&&S.sheet.fromProp;
-    run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(dft) delProjDraft(dft).catch(()=>{}); if(fp) propWon(fp,ref.id).catch(()=>{}); if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
+    const dft=!id&&S.sheet.draftId, fp=!id&&S.sheet.fromProp, dfor=!id&&S.sheet.designFor;
+    run(fn,id?'Project updated':ap?'Project added':'Sent to the COO for approval').then(ok=>{ if(!ok) return; if(dft) delProjDraft(dft).catch(()=>{}); if(fp) propWon(fp,ref.id).catch(()=>{}); if(dfor&&(S.props||{})[dfor]) propWrite(dfor,{...S.props[dfor],designPid:ref.id}).catch(()=>{}); if(plan) openPlan(plan.pid,plan.type,plan.pod); else closeSheet(); });
   };
   return [head(id?'Edit project':ap?'New project':'Request a project',id?(d.name||'Project'):ap?'Add to the project list':'New project for the list'),
     !id&&!ap&&h('p',{class:'lead',style:'margin:0',text:'Projects come from one studio list. Fill in what you know; the COO checks it and approves it before it appears in the menus.'}),
@@ -7985,15 +8059,16 @@ function sheetProject(){
         d.entry==='completed'?h('label',{class:'field'},h('span',{class:'lbl',text:'Completed in (optional)'}),h('input',{id:'sh-completedOn',type:'month',max:today().slice(0,7),value:d.completedOn||'',oninput:e=>{d.completedOn=e.target.value}})):null)):null,
       field('Project type'+(isStudio?'':' *'),typeSel(d,'Select project type…')),
       internal?teamPickers(d,id):field('POD (optional)',(()=>{ const lockPod=!amApprover()&&!!myPod(); const el=sel('pod',lockPod?[[d.pod||myPod(),podLabel(d.pod||myPod())]]:[['','Choose later (no POD yet)'],...pods().map(x=>[x,podLabel(x)]),['Studio','Studio / internal (no pod)'],...(!id&&canChalkEdit()?[['__chalk','Chalk Create (separate unit) →']]:[])]); if(lockPod) el.disabled=true; el.addEventListener('change',()=>{ if(el.value==='__chalk'){ D().pod=''; openChalkProject(); return; } renderSheet(); }); return el; })(),!amApprover()&&myPod()?'Your pod. You request projects for your own pod; the COO approves them.':d.pod?'The lead POD: its leader is accountable for the project.':'You can choose the POD later on the project. Phases are set up once it has one.'),
-      !internal&&d.type!=='proposal'?field('Junior architect (optional)',sel('junior',[['','None yet'],...juniorPeople().map(x=>[x,nameOf(x)+(isShared(x)?' · shared':' · '+podLabel(teamOf(x)))])]),'Works on this project with the POD leader. Suggested first when the POD leader gives out its work.'):null,
+      !internal&&!isPropK(d.type)?field('Junior architect (optional)',sel('junior',[['','None yet'],...juniorPeople().map(x=>[x,nameOf(x)+(isShared(x)?' · shared':' · '+podLabel(teamOf(x)))])]),'Works on this project with the POD leader. Suggested first when the POD leader gives out its work.'):null,
       !isStudio&&[
         ...(d.type==='interior'||(!d.type&&id&&(S.projects[id]||{}).type==='interior')?[intFormSection(d,sec,id)]:[
-        d.type==='proposal'?h('div',{class:'callout',style:'font-size:13.5px',text:'Design proposal (R&D): only the name, POD, client and area are needed now. Land size, FAR, plot and road, agreement and scope can wait until the project is confirmed; fill them in then (Edit project), or when you create the real project.'}):null,
-        h('div',{class:'form-row'},field(d.type==='proposal'?'Land size (katha)':'Land size (katha) *',h('input',{id:'sh-katha',type:'number',min:0,step:'any',inputmode:'decimal',value:d.katha||'',oninput:e=>{const was=parseFloat(d.katha)>30;d.katha=e.target.value;if((parseFloat(d.katha)>30)!==was)renderSheet()}})),
+        d.type==='iproposal'?h('div',{class:'callout',style:'font-size:13.5px',text:'Interior proposal (R&D): only the name, POD, client and area are needed now. The building, unit, area and rooms can wait until the client confirms; then create the real interior project.'}):null,
+        d.type==='proposal'?h('div',{class:'callout',style:'font-size:13.5px',text:'Building proposal (R&D): only the name, POD, client and area are needed now. Land size, FAR, plot and road, agreement and scope can wait until the project is confirmed; fill them in then (Edit project), or when you create the real project.'}):null,
+        h('div',{class:'form-row'},field(isPropK(d.type)?'Land size (katha)':'Land size (katha) *',h('input',{id:'sh-katha',type:'number',min:0,step:'any',inputmode:'decimal',value:d.katha||'',oninput:e=>{const was=parseFloat(d.katha)>30;d.katha=e.target.value;if((parseFloat(d.katha)>30)!==was)renderSheet()}})),
           field(parseFloat(d.katha)>30?'Second pod *':'Second pod (optional)',sel('pod2',[['','None'],...pods().filter(x=>x!==d.pod).map(x=>[x,podLabel(x)])]))),
-        d.type==='proposal'?null:farFormSection(d,sec),
+        isPropK(d.type)?null:farFormSection(d,sec),
         /* design brief (Principal, 7 Nov 2026): the COO fills it in when setting up the project; phase 0 checks it */
-        d.type==='proposal'?null:[sec('Design brief'),
+        isPropK(d.type)?null:[sec('Design brief'),
           h('div',{class:'f-hint',text:'Filled in by the COO when the project is set up. The phase 0 checklist item “Design brief” can be ticked only once the unit mix and parking are here.'}),
           h('div',{class:'form-row'},field('Unit mix',inp('briefMix',{maxlength:200,placeholder:'e.g. 2 units per floor: 3 bed 1,450 sft and 3 bed 1,250 sft'})),field('Parking',inp('briefParking',{maxlength:120,placeholder:'e.g. 1 car per unit, 18 cars, 1 basement'}))),
           h('div',{class:'form-row'},field('Budget',inp('briefBudget',{maxlength:120,placeholder:'e.g. construction Tk 4,500 per sft'})),field('Landowner needs',inp('briefLo',{maxlength:200,placeholder:'e.g. LO wants the 2nd and 3rd floors, south units'}))),
@@ -8002,13 +8077,13 @@ function sheetProject(){
         h('div',{class:'form-row'},field('Client *',clientPick(d,{ph:'Company or owner'})),field('Contact person (optional)',inp('contact',{maxlength:60,style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row'},field('Contact phone (optional)',inp('phone',{type:'tel',maxlength:20})),field('Area / locality *',inp('location',{maxlength:120,placeholder:'e.g. Bashundhara R/A, Dhaka',style:'text-transform:uppercase',autocapitalize:'characters'}))),
         h('div',{class:'form-row',style:'grid-template-columns:repeat(3,minmax(0,1fr))'},
-          field(siteReq(id,d)&&!['interior','proposal'].includes(d.type)?'Plot no. *':'Plot no.',inp('plotNo',{maxlength:20,placeholder:'e.g. 24A',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
-          field(siteReq(id,d)&&!['interior','proposal'].includes(d.type)?'Road no. *':'Road no.',inp('roadNo',{maxlength:20,placeholder:'e.g. 7',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
+          field(siteReq(id,d)&&!['interior','proposal','iproposal'].includes(d.type)?'Plot no. *':'Plot no.',inp('plotNo',{maxlength:20,placeholder:'e.g. 24A',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
+          field(siteReq(id,d)&&!['interior','proposal','iproposal'].includes(d.type)?'Road no. *':'Road no.',inp('roadNo',{maxlength:20,placeholder:'e.g. 7',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'})),
           field('Block / Sector',inp('blockSector',{maxlength:30,placeholder:'e.g. C',style:'text-transform:uppercase',autocapitalize:'characters',autocomplete:'off'}))),
         h('div',{class:'form-row'},field('Technical person at the client’s end',(()=>{ const el=sel('tech',[['','Not known yet'],['yes','Yes, available'],['no','No, not available']]); el.addEventListener('change',()=>renderSheet()); return el; })(),
             d.tech==='no'?'The project and its tasks show a caution mark, so the team expects to explain more and check more on site.':'An engineer or technical person who can read drawings and answer site questions.'),
           field(d.tech==='yes'?'Name and role (optional)':'Note (optional)',inp('techNote',{maxlength:80,placeholder:d.tech==='yes'?'e.g. Eng. Rahman, site engineer':d.tech==='no'?'e.g. Owner decides; no engineer on site':''}))),
-        ...(d.type==='proposal'?[]:[sec('Agreement'),
+        ...(isPropK(d.type)?[]:[sec('Agreement'),
         h('div',{class:'form-row'},field('Agreement status *',(()=>{ const el=sel('agStatus',AGS); el.addEventListener('change',()=>renderSheet()); return el; })()),field(d.agStatus==='signed'?'Agreement date *':'Agreement date (optional)',inp('agDate',{type:'date'}))),
         h('div',{class:'form-row'},field('Agreement or reference no. (optional)',inp('agRef',{maxlength:40,style:'text-transform:uppercase',autocapitalize:'characters'})),
           field('Fee',sel('proBono',[['','Paid project'],['yes','Pro bono (no fee)']]),d.proBono==='yes'?'No fee is expected; Finance and the Clients dashboard won’t look for one.':null)),
@@ -11861,7 +11936,7 @@ function sheetPropQuick(){
         h('button',{class:'btn',type:'button',onclick:()=>openPropView(sh.done),text:'Done'}))]; }
   const {doc,guide,fee,fm,fv,addons,addSum,total,nv,dLead,dSen,vatP,aitP,tterm}=pqDoc(sh), area=+doc.area||0, gRate=area&&guide?Math.round(guide/area*10)/10:0;
   const reArea=()=>{ if(!sh.areaSet){ d.area=pqArea(d.katha); const a=document.getElementById('pq-area'); if(a) a.value=d.area; } };
-  const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>k!=='proposal'&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
+  const ty=h('select',{id:'pq-type',class:'tl-num qs-in','aria-label':'Project type',onchange:e=>{ d.type=e.target.value; sh.adj=null; renderSheet(); }},Object.entries(STD_DEF).filter(([k])=>!isPropK(k)&&k!=='interior').map(([k,t])=>h('option',{value:k,text:t.name}))); ty.value=d.type;
   const sel=pqSel(sh), all=[...new Set([...PQ_GROUPS.flatMap(g=>g[1]),...PB_SERVICES.map(x=>x[0]),...Object.keys(sel.on).filter(l=>sel.on[l])])].filter(l=>!PQ_PKG.includes(l)), n=all.filter(l=>sel.on[l]).length, ck=pqCheck(sel.on);
   const ed=!!(sh.id&&!sh.convert&&((S.props||{})[sh.id]||{}).doc), vs0=ed?((S.props[sh.id].versions)||[]):[], nx=vs0.length?(+vs0[vs0.length-1].rev||0)+1:0;
   return [head('Only you and the COO see this',sh.convert?'Make a proposal':ed?'Edit proposal':sh.copyOf?'New proposal from a copy':'New proposal'),
@@ -11983,7 +12058,7 @@ function sheetProp(){
       sec('Project'),
       field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'})),
       field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'})),
-      h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Project type',sel('type',[['','Not decided'],...Object.entries(STD_DEF).filter(([k])=>k!=='proposal').map(([k,t])=>[k,t.name])]))),
+      h('div',{class:'form-row'},field('Land size (katha)',inp('katha',{type:'number',min:0,step:'any',inputmode:'decimal'})),field('Project type',sel('type',[['','Not decided'],...Object.entries(STD_DEF).filter(([k])=>!isPropK(k)).map(([k,t])=>[k,t.name])]))),
       quick?null:field('Email',inp('email',{type:'email',maxlength:120})),
       quick?null:field('Source',sel('src',[['','Not recorded'],...LEAD_SRC])),
       quick?null:field('Scope proposed',h('div',{class:'chips'},SCOPES.map(chip))),
@@ -12219,7 +12294,7 @@ function spCompare(d){ const i=SP_MAIN.indexOf(d.plan), keys=i<0?[d.plan,'comp']
 
 /* the client is promised SLATE's standard days + 30% (Principal, 1 Nov 2026); the team works to the standard. Client review days stay as they are. */
 const PROP_BUF=0.3, propDays=n=>n?Math.ceil(n*(1+PROP_BUF)):n;
-function pbTlRows(type,katha,table){ const t=STD_DEF[type]&&type!=='proposal'?type:'dev', off=STD_DEF[t].off||[], tb=table||pbDaysTable(t), bi=pbBand(tb,katha), D=DAYS_T[tb];
+function pbTlRows(type,katha,table){ const t=STD_DEF[type]&&!isPropK(type)?type:'dev', off=STD_DEF[t].off||[], tb=table||pbDaysTable(t), bi=pbBand(tb,katha), D=DAYS_T[tb];
   return STD_DEF[t].phases.filter(k=>!off.includes(k)&&PH[k]&&PH[k].d).map(k=>{ const dd=D[k]; return {label:PH[k].n,w:String(propDays(dd?dd[1][bi]:PH[k].d[0])),r:String(dd?dd[0]:PH[k].d[1]),del:PB_TL_DEL[k]||'',...(k==='5'?{par:true}:{})}; }); }
 /* timeline: the work order date, then setup days, then the stages (working days, five a week) */
 function pbTl(d){ const tl=d.tl||{}, setup=tl.setup==null||tl.setup===''?3:Math.max(0,+tl.setup||0), rows=(tl.rows||[]).filter(x=>x.label||+x.w||+x.r); let at=setup;
@@ -12967,7 +13042,7 @@ function sheetPropView(){
       step(4,'Client confirmed',gaps.length?'Before you confirm, add: '+gaps.join(', ')+'.':'Everything is in. The project form and the fee are filled in from this proposal.',false,B('Make it a client project →',confirmIt,!!p.doc))];
     const nx=propNext(p);
     out.splice(3,0,h('div',{class:'card',style:'gap:0;padding-top:8px;padding-bottom:4px'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-bottom:2px',text:'Next steps'}),nx?h('div',{class:'pc-next u',style:'margin:2px 0 4px',text:'Now: '+nx.t}):null,...steps),
-      h('div',{class:'card',style:'gap:8px'},fuMoveEl(id))); }
+      h('div',{class:'card',style:'gap:8px'},fuMoveEl(id)),propDesignCard(p,id,open)); }
   { const tks=(p.tasks||[]).slice().reverse();
     if(tks.length||open) out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:'Tasks'}),open&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openPropTask(id,''),text:'+ Give someone a task'}):h('span',{class:'cnt',text:String(tks.length)})),
       tks.length?h('div',{class:'list'},tks.map(k=>{ const t=S.tasks[k.id], done=t&&t.doneAt;
@@ -13009,6 +13084,18 @@ function sheetPropTask(){ const sh=S.sheet, d=sh.d, id=sh.id, p=(S.props||{})[id
       h('div',{class:'form-row'},field('Who',sel('to',propPeople().map(x=>[x,nameOf(x)+(x===cooUid()?' (COO)':x===ownerId()?' (Principal)':'')]))),field('By',inp('date',{type:'date',min:today()}))),
       h('div',{class:'form-row'},field('Time (optional)',timeSel('sh-time',D().time,v=>{D().time=v},true)),field('Note (optional)',inp('note',{maxlength:200}))),
       h('div',{class:'actions sticky-acts'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Give the task'}),h('button',{class:'btn',type:'button',onclick:()=>openPropView(id),text:'Cancel'})))]; }
+/* design work on a proposal (Principal, 13 Nov 2026): the team can't see Business proposals, so design work before the client
+   confirms runs on a Studio R&D project (Building or Interior proposal) made from the proposal, without the fee. */
+function propDesignCard(p,id,open){ const dp=p.designPid&&S.projects[p.designPid];
+  if(dp) return h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em',text:'Design work'}),
+    h('div',{class:'row-meta'},h('b',{text:(dp.code?dp.code+' · ':'')+dp.name}),h('span',{text:(STD_DEF[dp.type]||{}).name||''}),dp.pod?h('span',{text:podLabel(dp.pod)}):null),
+    h('button',{class:'linkish',type:'button',style:'justify-self:start',onclick:()=>openProjectView(dp.id),text:'Open the R&D project ›'}));
+  if(!open||!S.canWrite||isLead(p)) return null;
+  const start=type=>{ openProject(); const d=S.sheet.d; d.type=type; d.name=p.name||''; d.client=p.client||''; d.contact=p.contact||''; d.phone=p.phone||''; d.location=p.location||''; d.katha=p.katha||'';
+    S.sheet.designFor=id; renderSheet(); toast('Choose the POD. The team sees the design work, never the fee.'); };
+  return h('div',{class:'card',style:'gap:6px'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em',text:'Design work before the client confirms'}),
+    h('span',{class:'f-hint',style:'margin:0',text:'Start an R&D project so the POD can plan and log the design work. The fee and this proposal stay with you and the COO.'}),
+    h('div',{style:'display:flex;flex-wrap:wrap;gap:6px'},h('button',{class:'btn btn-sm',type:'button',onclick:()=>start('proposal'),text:'Start building design work'}),h('button',{class:'btn btn-sm',type:'button',onclick:()=>start('iproposal'),text:'Start interior design work'}))); }
 function propWon(id,pid){ const p=(S.props||{})[id]; if(!p) return Promise.resolve();
   return propWrite(id,{...p,status:'won',wonAt:new Date().toISOString(),closedAt:new Date().toISOString(),closedBy:S.uid,projectId:pid,next:'',outcomeNote:p.outcomeNote||'Client confirmed. It is now a client project.'}); }
 /* ---------- Leads: the stage before a proposal ----------
@@ -14378,7 +14465,7 @@ function sheetClient(){ const sh=S.sheet, d=sh.d, id=sh.id, k=cNorm(d.name);
       kv('Phone',tx('phone',{type:'tel',maxlength:40})),
       kv('Email',tx('email',{type:'email',maxlength:120})),
       kv('Address',h('textarea',{id:'cl-address',class:'tl-num qs-in pq-ta',rows:3,maxlength:240,value:d.address||'',oninput:e=>{ d.address=e.target.value; }}),true),
-      kv('Client type',(()=>{ const el=h('select',{id:'cl-type',class:'tl-num qs-in',onchange:e=>{ d.type=e.target.value; }},h('option',{value:'',text:'Not set'}),Object.entries(STD_DEF).filter(([x])=>x!=='proposal'&&x!=='interior').map(([x,t])=>h('option',{value:x,text:t.name}))); el.value=d.type||''; return el; })()),
+      kv('Client type',(()=>{ const el=h('select',{id:'cl-type',class:'tl-num qs-in',onchange:e=>{ d.type=e.target.value; }},h('option',{value:'',text:'Not set'}),Object.entries(STD_DEF).filter(([x])=>!isPropK(x)&&x!=='interior').map(([x,t])=>h('option',{value:x,text:t.name}))); el.value=d.type||''; return el; })()),
       kv('BIN / TIN',h('div',{class:'form-row',style:'gap:8px'},tx('bin',{maxlength:40,placeholder:'BIN (VAT)',inputmode:'numeric'}),tx('tin',{maxlength:40,placeholder:'TIN (tax)',inputmode:'numeric'}))),
       kv('Books accounts',accBox,true),
       kv('Other names',tx('aka',{maxlength:200,placeholder:'e.g. FORTRESS, FORTRESS RE (comma separated)',style:'text-transform:uppercase',autocapitalize:'characters'})),
