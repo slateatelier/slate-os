@@ -909,7 +909,7 @@
   }
   function msgRefresh() { try { schedule(); } catch (_) {} try { if (S.sheet && S.sheet.type === 'notif') renderSheet(); } catch (_) {} }
   const msgNm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
-  function msgCard(m) {
+  function msgCard(m, gate) {
     const msgId = m.kind === 'reminder' ? m.ref_id : m.kind === 'message' ? m.id : null;
     const status = el('div', { class: 'f-hint', role: 'status' });
     const actions = el('div', { class: 'actions' });
@@ -948,9 +948,9 @@
         const i = el('textarea', { maxlength: '300', rows: '2', placeholder: 'What help do you need?', style: 'background:#fff' });
         const go = mini('Send', true); go.addEventListener('click', () => { if (!i.value.trim()) return (status.textContent = 'Write what help you need.'); reply('help', 'Need help', { note: i.value.trim() }); });
         panel('Need help', i, go); }); out.push(hp);
-      const rb = mini('Remind me…'); rb.addEventListener('click', () => {
-        actions.replaceChildren(...remindChoices().map(([l, d]) => { const b = mini(l); b.addEventListener('click', () => reply('remind', l, { remindAt: d })); return b; }), (() => { const b = mini('Back'); b.addEventListener('click', () => actions.replaceChildren(...buttons())); return b; })()); }); out.push(rb);
-      if (typeof window.slateMsgTaskSheet === 'function') { const tk = mini('Make it a task…'); tk.addEventListener('click', () => window.slateMsgTaskSheet({ id: msgId, body: m.kind === 'reminder' ? m.body : m.body, sender: m.sender })); out.push(tk); }
+      if (!gate) { const rb = mini('Remind me…'); rb.addEventListener('click', () => {
+        actions.replaceChildren(...remindChoices().map(([l, d]) => { const b = mini(l); b.addEventListener('click', () => reply('remind', l, { remindAt: d })); return b; }), (() => { const b = mini('Back'); b.addEventListener('click', () => actions.replaceChildren(...buttons())); return b; })()); }); out.push(rb); }
+      if (!gate && typeof window.slateMsgTaskSheet === 'function') { const tk = mini('Make it a task…'); tk.addEventListener('click', () => window.slateMsgTaskSheet({ id: msgId, body: m.kind === 'reminder' ? m.body : m.body, sender: m.sender })); out.push(tk); }
       return out;
     };
     if (msgId) actions.append(...buttons());
@@ -974,7 +974,32 @@
     return el('div', { class: 'n-msgs' }, el('div', { class: 'n-day' }, myMessages.length === 1 ? 'Message for you' : `Messages for you · ${myMessages.length}`),
       ...myMessages.map(m => { if (!bellCards.has(m.id)) bellCards.set(m.id, msgCard(m)); return bellCards.get(m.id); }));
   };
+  /* Messages from the Principal or the COO must be answered within 1 working day (13 Nov 2026). After that SLATE OS is
+     locked behind them until each one has an answer: Done, Already done, Will do it (with a date) or Need help.
+     "Remind me" is not offered here, so the answer can't be put off again. */
+  const fromTop = id => { const p = people.get(id); return !!p && ['principal', 'coo'].includes(p.designation); };
+  const msgDueAt = t => { const d = new Date(t); d.setDate(d.getDate() + 1); while ([5, 6].includes(d.getDay())) d.setDate(d.getDate() + 1); return d; };
+  function msgGate() {
+    const old = document.getElementById('slate-msg-gate');
+    const top = !!me && ['principal', 'coo'].includes(me.designation);
+    const due = (viewAs || top || window.slateReview) ? [] : myMessages.filter(m => m.kind === 'message' && fromTop(m.sender) && msgDueAt(m.created_at) <= new Date());
+    if (!due.length) { if (old) { old.remove(); document.documentElement.style.overflow = ''; } return; }
+    const ids = due.map(m => m.id).join(',');
+    if (old && old.dataset.ids === ids) return;
+    const out = el('button', { class: 'linkish', type: 'button', style: 'font-size:13px;color:#8e8e93' }, 'Not you? Sign out');
+    out.addEventListener('click', async () => { out.disabled = true; try { await sb.auth.signOut(); } catch (_) { location.reload(); } });
+    const box = el('div', { id: 'slate-msg-gate', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Answer your messages first' },
+      el('div', { class: 'mg-box' },
+        el('div', { class: 'mg-h' }, el('b', {}, due.length === 1 ? 'Answer this message first' : `Answer these ${due.length} messages first`),
+          el('p', {}, 'Messages from the Principal or the COO need an answer within 1 working day. SLATE OS opens again once each one has an answer.')),
+        ...due.map(m => { const c = msgCard(m, true); c.querySelector('.f-hint') && (c.querySelector('.bar .f-hint').textContent = when(m.created_at) + ' · answer was due ' + dayOnly(msgDueAt(m.created_at))); return c; }),
+        el('div', { style: 'text-align:center;margin-top:6px' }, out)));
+    box.dataset.ids = ids;
+    if (old) old.replaceWith(box); else document.body.append(box);
+    document.documentElement.style.overflow = 'hidden';
+  }
   function placeMessages(force) {
+    try { msgGate(); } catch (_) {}
     const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
     const old = document.getElementById('slate-messages');
     const open = myAnswered.filter(r => r.reply === 'will' && !r.done_at && r.due_at).sort((a, b) => a.due_at.localeCompare(b.due_at));
@@ -1004,6 +1029,7 @@
     sb.channel('slate-my-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + authUser.id },
       ev => { if (ev.new && ['message', 'reply', 'reminder'].includes(ev.new.kind)) { myMessages = [ev.new, ...myMessages.filter(m => m.id !== ev.new.id)]; placeMessages(true); msgRefresh(); syncBadge(); if (ev.new.kind === 'reply') loadSent(); if (ev.new.kind === 'reminder') loadReminders(); } }).subscribe();
     addDecorator(10, () => placeMessages(false));
+    setInterval(() => { try { msgGate(); } catch (_) {} }, 5 * 60000);   // a message passing its 1-day limit while SLATE OS is open
     addDecorator(5, () => placeMyAdoption(false));
 
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadMessages(); loadReminders(); loadAnswered(); loadMyAdoption(true); } });
@@ -1485,7 +1511,7 @@
   function setupDayLog() {
     window.slateDayIn = dayIn;
     // entry PIN (computers only): the morning greeting checks it; the server writes the computer entry
-    const pinRpc = async (fn, args) => { const { data, error } = await sb.rpc(fn, args || {}); if (error) return { ok: false, msg: friendly(error).message }; return data || {}; };
+    const pinRpc = async (fn, args) => { const { data, error } = await sb.rpc(fn, args || {}); if (error) return (error.code === 'PGRST202' || error.status === 404) ? { missing: true } : { ok: false, msg: friendly(error).message }; return data || {}; };
     window.slateEntryPin = { status: () => pinRpc('entry_pin_status'), set: pin => pinRpc('entry_pin_set', { p_pin: pin }), check: pin => pinRpc('entry_pin_in', { p_pin: pin }) };
     window.slateEntryLogView = entryLogView;
     window.slateCanSeeEntryLog = canSeeLog;
@@ -1624,6 +1650,12 @@
 
   /* ---------------- sign-in gate ---------------- */
   const CSS = `
+  #slate-msg-gate{position:fixed;inset:0;z-index:9990;background:rgba(242,242,247,.97);overflow-y:auto;display:grid;place-items:start center;padding:max(32px,env(safe-area-inset-top)) 16px 40px;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #slate-msg-gate .mg-box{width:min(680px,100%);display:grid;gap:12px}
+  #slate-msg-gate .mg-h b{display:block;font-size:22px;font-weight:700;color:#d7262b}
+  #slate-msg-gate .mg-h p{margin:6px 0 4px;font-size:14px;color:#3a3a3c;line-height:1.45}
+  #slate-msg-gate .callout{background:#fff}
   .slate-sheet{position:fixed;inset:0;z-index:1000;background:#fff;display:grid;place-items:center;
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#000;padding:16px}
   .slate-sheet .box{width:min(360px,100%);display:grid;gap:14px}

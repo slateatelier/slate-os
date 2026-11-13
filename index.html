@@ -3153,6 +3153,7 @@ function pinStep(onOk){
     setTimeout(()=>{ if(mode==='locked'){ inp.disabled=false; load(); } },Math.max(1000,Date.parse(t)-Date.now()+500)); };
   async function load(){ retry.hidden=true; inp.disabled=true; say('Checking…'); clear();
     const r=api?await api.status():{ok:false,msg:'SLATE OS is still loading.'};
+    if(r&&r.missing){ try{ window.slateDayIn&&window.slateDayIn(); }catch(_){} return onOk(); }   // PIN not switched on in the database yet: the old tap-in
     if(!r||r.msg){ say('Entry PIN',(r&&r.msg)||'Couldn’t reach SLATE OS. Check the connection.',true); retry.hidden=false; return; }
     if(r.locked_until) return lock(r.locked_until);
     mode=r.set?'enter':'new'; inp.disabled=false;
