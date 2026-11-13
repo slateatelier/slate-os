@@ -4089,7 +4089,7 @@ const mwMonthStart=d=>String(d).slice(0,8)+'01';
 function mwDays(ws){ const out=[]; for(let i=0;i<7;i++){ const d=addDays(ws,i); if(isWorkDay(d)) out.push(d); } return out; }
 function mwCell(uid,row,d,by){ const td=today(); if(d>td) return 'f'; const x=by.get(d)||null, here=!!(x&&(x.opened||x.plan));
   const nowHM=dhakaHM(new Date().toISOString());
-  if(row==='work'){ const ts=Object.values(S.tasks).filter(t=>t&&t.assignee===uid&&!t.archived&&!t.legacy&&!t.unscored&&t.target===d); if(!ts.length) return 'x';
+  if(row==='work'){ const ts=Object.values(S.tasks).filter(t=>t&&t.assignee===uid&&!t.archived&&!t.legacy&&!t.unscored&&t.target===d&&!unplanned(t)); if(!ts.length) return 'x';
     const c=ts.map(t=>{ if(t.doneAt){ const late=diff(t.target,String(t.doneAt).slice(0,10)); return late<=0?'g':late<=2?'a':'r'; } return d<td?'r':'n'; });
     return c.includes('r')?'r':c.includes('a')?'a':c.includes('n')?'n':'g'; }
   if(row==='in') return here?'g':(x&&x.leave)?'a':d===td?'n':'r';
@@ -4130,7 +4130,7 @@ function mwPeekEl(uid,pk,rows){ const x=(rows||[]).find(r=>r.user_id===uid&&r.da
   if(pk.row==='clear') body=[line(!(x&&x.short_n)?'Every line written in full':`${x.short_n} short line${x.short_n>1?'s':''} (under 20 characters)`,`${(x&&x.lines_n)||0} line${(x&&x.lines_n)===1?'':'s'} in the plan`)];
   if(pk.row==='work'){ const ts=Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.assignee===uid&&!t.archived&&!t.legacy&&!t.unscored&&t.target===pk.d);
     body=ts.length?ts.map(t=>{ const late=t.doneAt?diff(t.target,String(t.doneAt).slice(0,10)):diff(t.target,today()), p=S.projects[t.projectId];
-      const m=t.doneAt?(late<=0?`done ${fmtD(String(t.doneAt).slice(0,10))} · on time`:`done ${fmtD(String(t.doneAt).slice(0,10))} · ${late} day${late>1?'s':''} late`):(late>0?`not done · ${late} day${late>1?'s':''} late`:'not done yet');
+      const m=unplanned(t)?`done ${fmtD(String(t.doneAt).slice(0,10))} · dated on the day itself, not counted`:t.doneAt?(late<=0?`done ${fmtD(String(t.doneAt).slice(0,10))} · on time`:`done ${fmtD(String(t.doneAt).slice(0,10))} · ${late} day${late>1?'s':''} late`):(late>0?`not done · ${late} day${late>1?'s':''} late`:'not done yet');
       return line(t.title,[m,p?(p.code||p.name):''].filter(Boolean).join(' · '),()=>openTask(t.id)); }):[line('Nothing was due this day')]; }
   return h('div',{class:'mw-peek'},h('div',{class:'mw-ph'},h('b',{text:`${l} · ${fmtD(pk.d)}`}),h('button',{type:'button',class:'linkish',onclick:()=>{ S.mwPeek=null; render(true); },text:'Close'})),...body); }
 const mwWorst=cs=>{ const v=cs.filter(c=>!['x','f'].includes(c)); return !v.length?'x':v.includes('r')?'r':v.includes('a')?'a':v.includes('n')?'n':'g'; };
@@ -5569,7 +5569,30 @@ const routineW=t=>(t&&t.kind!=='Deliverable'&&ROUTINE_RE.test(t.title||''))?0.5:
    delay (Risk and grace) aren't counted: they don't raise revisions. */
 const MOVE_FREE=1, MOVE_COST=0.05, MOVE_CAP=0.3;
 const movePenalty=t=>{ if(!t||!t.target||t.target<scoreFrom()) return 0; const n=Math.max(0,(t.revisions||0)-MOVE_FREE); return Math.min(MOVE_CAP,n*MOVE_COST); };
-function creditOf(t){ const c0=creditOf0(t); return c0==null?null:Math.max(0,c0-movePenalty(t)); }
+/* only planned work earns "on time" (Principal, 13 Nov 2026): a task finished on or before a date its own assignee set (or
+   asked for) on the due day itself, or later, was never planned ahead. It still counts as work done (Output), but it neither
+   adds to nor takes from Delivery or the "Work on time" dot. A date given by someone else, or set at least one working day
+   ahead, counts as usual. Work that goes past its date counts as usual too. */
+const DATE_SET_TYPES=new Set(['created','proposed','requested','request','approved','dateApproved','set','scheduled']);
+function unplanned(t){ if(!t||!t.target||!t.doneAt) return false; const dn=String(t.doneAt).slice(0,10); if(dn>t.target) return false;
+  const e=(t.history||[]).filter(x=>x&&DATE_SET_TYPES.has(x.type)&&x.to===t.target&&x.at).sort((a,b)=>String(a.at).localeCompare(String(b.at)))[0];
+  if(!e) return false; const by=e.by||t.createdBy; if(by&&by!==t.assignee) return false;
+  const day=dhakaD(e.at)||String(e.at).slice(0,10); return day>=t.target||wdBetween(day,t.target)<1; }
+/* day-plan trail (Principal, 13 Nov 2026), a quiet note for the Principal, the COO and the assignee's POD leader: when a
+   finished task's words show up in the same person's day plans, on the same project, on days before the task was entered, the
+   task shows "Worked on for n days before this task was entered". Matching is by words, so it is only a note: no score effect.
+   Uses the day plans already loaded (last 3 weeks). */
+const TRAIL_STOP=new Set(['with','from','that','this','plan','plans','floor','drawing','drawings','update','updated','work','prepare','preparing','design','project','check','details','detail']);
+const trailWords=x=>[...new Set(String(x||'').toLowerCase().split(/[^a-z0-9\u0980-\u09ff]+/).filter(w=>w.length>=4&&!TRAIL_STOP.has(w)))];
+function planTrail(t){ if(!t||!t.doneAt||!t.assignee||!t.projectId||!t.createdAt||typeof WL==='undefined'||!WL.rows) return null;
+  if(!(canSeeScoring()||(amPodLead()&&teamOf(t.assignee)===myPod()&&t.assignee!==S.uid))) return null;
+  const made=dhakaD(t.createdAt)||String(t.createdAt).slice(0,10), tw=trailWords(String(t.title).split(' › ').pop()); if(!tw.length) return null;
+  let n=0, first='', sample='';
+  for(let d=addDays(made,-14);d<made;d=addDays(d,1)){ const r=WL.rows[wlKey(t.assignee,d)]; if(!r||!Array.isArray(r.lines)) continue;
+    const hit=r.lines.find(l=>l&&l.projectId===t.projectId&&!l.taskId&&(()=>{ const lw=trailWords((l.text||'')+' '+(l.part||'')); const m=tw.filter(w=>lw.some(x=>x===w||(x.length>=5&&w.length>=5&&x.slice(0,5)===w.slice(0,5)))).length; return m>=2||(tw.length<=2&&m===tw.length); })());
+    if(hit){ n++; if(!first){ first=d; sample=String(hit.text||'').slice(0,80); } } }
+  return n>=2?{n,first,sample,made}:null; }
+function creditOf(t){ if(unplanned(t)) return null; const c0=creditOf0(t); return c0==null?null:Math.max(0,c0-movePenalty(t)); }
 /* realistic scoring (Principal, 13 Nov 2026):
    - the +10% early step needs the work checked (verifiedAt); unchecked early work counts as on time, so ticking gate items
      long before their date earns nothing extra;
@@ -5583,7 +5606,7 @@ function creditOf0(t){ const s=status(t); let c=null;
 /* joint task: the task counts as finished on the day the last person finished (doneAt); whoever finished their part
    earlier (ownDoneAt) earns +0.02 per day ahead of the last person, up to +0.1 (one "early" step) */
 const jointBonus=t=>t&&t.ownDoneAt&&t.doneAt&&t.ownDoneAt<t.doneAt?Math.min(0.1,0.02*diff(t.ownDoneAt,t.doneAt)):0;
-function perf(ts){ let pos=0,earn=0,n=0,fp=0,fe=0,done=0; for(const t of ts){ if(t.legacy||t.unscored) continue; const c=creditOf(t); if(c==null) continue; const w=weightOf(t), wf=weightOf(t,true); pos+=w; earn+=w*c; fp+=wf; fe+=wf*c; if(t.doneAt) done+=w*c; n++; } return {pos,earn,n,fp,fe,done,q:fp?fe/fp:null}; }
+function perf(ts){ let pos=0,earn=0,n=0,fp=0,fe=0,done=0; for(const t of ts){ if(t.legacy||t.unscored) continue; const c=creditOf(t); if(c==null){ if(unplanned(t)) done+=weightOf(t); continue; } const w=weightOf(t), wf=weightOf(t,true); pos+=w; earn+=w*c; fp+=wf; fe+=wf*c; if(t.doneAt) done+=w*c; n++; } return {pos,earn,n,fp,fe,done,q:fp?fe/fp:null}; }
 /* team performance leaves out the Principal, the COO and Chalk Create */
 /* office support staff and the accounts login carry no project work: left out of the workload and team tables (Principal, 3 Nov 2026) */
 const isOfficeStaff=id=>!!id&&(teamOf(id)==='Office Support'||/^accounts$/i.test((nameOf(id)||'').trim()));
@@ -7784,6 +7807,9 @@ function sheetTask(){
   else if(vfReturned(t)){ const r=t.lastReturn;
     out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--late)'},h('div',{class:'lbl',text:`Returned by ${nameOf(r.by)} · ${fmtTs(r.at)}`}),r.note&&h('p',{class:'quote',text:r.note}),h('div',{class:'f-hint',text:'Fix it, then mark it done again.'}))); }
   if(t.assignReq) out.push(assignCard(t,true));
+  { const tr=planTrail(t); if(tr) out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--late);display:grid;gap:3px'},h('div',{class:'lbl',text:'Day-plan trail · seen by the Principal, the COO and the POD leader'}),
+    h('div',{style:'font-weight:500',text:`Worked on for ${tr.n} day${tr.n>1?'s':''} before this task was entered`}),
+    h('div',{class:'f-hint',style:'margin:0',text:`First in ${shortName(t.assignee)}’s day plan on ${fmtD(tr.first)}: “${tr.sample}”. Task entered ${fmtD(tr.made)}. A note only; the score is not changed.`}))); }
   if(t.request){ const r=t.request;
     out.push(h('div',{class:'callout'},h('div',{class:'lbl',text:t.target?`Revised date requested · would be Date ${(t.revisions||0)+2}`:'Date proposed'}),
       t.target?h('div',{class:'req-dates'},h('span',{class:'mono',text:fmtD(t.target)}),h('span',{class:'arrow',text:'→'}),h('span',{class:'mono',style:'font-weight:500',text:fmtD(r.date)}),h('span',{class:'tag tag-rev',text:(diff(t.target,r.date)>0?'+':'')+diff(t.target,r.date)+'d'}))
