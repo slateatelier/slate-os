@@ -4464,7 +4464,10 @@ function viewDesk(){
     return [top,h('div',{class:'desk desk-studio'},left2,right2),
       h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
   }
-  const right=deskCol('Plan',null,[nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,dbsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
+  /* the Week / Month card on every Home that writes day plans (Principal, 13 Nov 2026): drafting lead and pool included;
+     the old "Your score this month" bar is gone, its deadlines are the card's "Work on time" row */
+  const mwc=(()=>{ const mw=myWeekEl(); return mw?h('div',{class:'desk-sub'},mw):null; })();
+  const right=deskCol('Plan',null,[mwc,nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,dbsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
   return [top,h('div',{class:'desk'},left,mid,right),
     h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
 }
@@ -5225,7 +5228,7 @@ function viewDeskToday(){
   const mine=activeTasks().filter(t=>t.assignee===S.uid&&!t.archived);
   const top=h('div',{class:'desk-top'},
     h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||'Member'}`}),
-      h('div',{class:'desk-hi'},h('b',{text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),daySummary(mine,td,false)),myScoreEl()),
+      h('div',{class:'desk-hi'},h('b',{text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),daySummary(mine,td,false))),
     h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap'},S.canWrite?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
   /* returned work: red dot, and the note in orange at the start of the line */
   const red=r=>{ const d=r&&r.querySelector('.h-dot'), m=r&&r.querySelector('.h-m'); if(d) d.style.background='var(--overdue)';
@@ -5289,7 +5292,7 @@ function viewMineBody(){
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const first=(nameOf(S.uid)||'').split(' ')[0];
   const out=[h('div',{class:'page-h home-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
-    h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap),myScoreEl(),myWeekEl(),podWeekEl()))];
+    h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap),myWeekEl(),podWeekEl()))];
   /* the Principal and the COO add a lead or start a proposal straight from Home */
   if(canProps()&&S.canWrite) out.push(h('div',{class:'actions home-biz',style:'margin:-4px 0 0'},
     seeCooWork()?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openCooTask(),text:'+ COO task'}):null,
