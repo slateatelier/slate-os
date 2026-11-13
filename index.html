@@ -5288,7 +5288,8 @@ function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=
    Cuts: absent day 3, leave day 1.5, overdue task 2, undated open task (not a stage gate) outside the current phase and older than 7 days 0.5 (max 10).
    Stage gates of later phases carry no date until phase days are set, so they never cost points. */
 /* Has targets = a full load for the level (gate 5, task 1): POD leader about 3 projects in their current phase */
-const CP_LV={lead:{n:'POD leader',did:1.5,has:60,w:[30,25,25,20]},dlead:{n:'Drafting lead',did:1.2,has:25,w:[45,35,0,20]},draft:{n:'Drafting',did:1.2,has:20,w:[60,20,0,20]},junior:{n:'Junior architect',did:1.2,has:20,w:[60,20,0,20]}};
+/* weights [Did, Has, POD, Habits]; habits raised to 30% (Principal, 13 Nov 2026) */
+const CP_LV={lead:{n:'POD leader',did:1.5,has:60,w:[25,20,25,30]},dlead:{n:'Drafting lead',did:1.2,has:25,w:[40,30,0,30]},draft:{n:'Drafting',did:1.2,has:20,w:[50,20,0,30]},junior:{n:'Junior architect',did:1.2,has:20,w:[50,20,0,30]}};
 const cpSee=()=>!!S.uid&&(S.uid===ownerId()||isCOO(S.uid));
 function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(td), rows=presRows(mwRange())||S.mwRows, pr=presRows({s:m0,e:td}); if(!rows||!pr) return null;
   const d30=addDays(td,30), ids=people().filter(id=>!isLeft(id)&&needPlan(id));
