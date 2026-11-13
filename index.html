@@ -138,7 +138,11 @@ main.wrap.wrap-desk{max-width:1480px}
 /* team rings (Principal / COO) */
 .tr-g{font-size:11.5px;font-weight:600;color:var(--muted,#6e6e73);text-transform:uppercase;letter-spacing:.06em;margin:4px 4px 0}
 .tr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
-button.tr-t{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:6px 10px 6px 6px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;min-width:0}
+button.cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
+.cp-r{border-bottom:1px solid var(--line,#EEE)}.cp-r summary{list-style:none;display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr 34px;grid-template-areas:"n b s" "m m m";gap:2px 10px;align-items:center;padding:8px 2px;cursor:pointer}.cp-r summary::-webkit-details-marker{display:none}
+.cp-n{grid-area:n;display:flex;flex-direction:column}.cp-bar{grid-area:b;height:8px;border-radius:4px;background:#EEF0F3;overflow:hidden}.cp-bar i{display:block;height:100%;border-radius:4px}.cp-s{grid-area:s;text-align:right;font-size:17px}.cp-m{grid-area:m}
+.cp-d{padding:2px 4px 10px}.cp-l{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}.cp-d .f-hint{margin:2px 0 0;font-size:12px}
+.tr-t{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:6px 10px 6px 6px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;min-width:0}
 button.tr-t:hover{background:#F7F7F9}.tr-n{display:grid;min-width:0;line-height:1.25}.tr-n b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tr-n span{font-size:12px}
 button.nm-line{appearance:none;border:0;background:none;font:inherit;font-size:13.5px;color:var(--ink,#1d1d1f);cursor:pointer;padding:6px 0 0;display:flex;align-items:center;gap:6px;text-align:left}
 button.nm-line:hover b{text-decoration:underline}.nm-dot{width:8px;height:8px;border-radius:50%;background:#007AFF;flex:none}
@@ -4543,14 +4547,14 @@ function viewDesk(){
   /* the Principal and the COO on a PC: Do now and the plan on the left; the studio on the right: who is doing what, then every project's next gate */
   if(ap&&sideOn()){
     const left2=deskCol('Do now',null,[...[...left.querySelector('.desk-b').children],nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
-    const right2=deskCol('Studio now',null,[teamRingsSec(),whoDoingSec(),projGateSec(projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)),true)],'desk-wide');
+    const right2=deskCol('Studio now',null,[teamRingsSec(),contribSec(),whoDoingSec(),projGateSec(projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)),true)],'desk-wide');
     return [top,h('div',{class:'desk desk-studio'},left2,right2),
       h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
   }
   /* the Week / Month card on every Home that writes day plans (Principal, 13 Nov 2026): drafting lead and pool included;
      the old "Your score this month" bar is gone, its deadlines are the card's "Work on time" row */
   const mwc=(()=>{ const mw=myWeekEl(); return mw?h('div',{class:'desk-sub'},mw):null; })();
-  const right=deskCol('Plan',null,[ap?teamRingsSec():null,mwc,nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,dbsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
+  const right=deskCol('Plan',null,[ap?teamRingsSec():null,ap?contribSec():null,mwc,nt?h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})):null,tiles,todoSec(),clsum,dbsum,deskSub('Coming meetings',later,null,()=>{ S.mhub='up'; goView('meet'); })]);
   return [top,h('div',{class:'desk'},left,mid,right),
     h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
 }
@@ -5274,6 +5278,80 @@ function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=
   const grp=(l,ids)=>ids.length?[h('div',{class:'tr-g',text:l}),h('div',{class:'tr-grid'},...ids.map(tile))]:[];
   return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:`Team this month · ${mn}`}),h('b',{text:String(live.length)}),h('span',{class:'f-hint',style:'margin-left:auto;font-weight:400',text:`goal ${Math.round(MW_GOAL*100)}%`})),
     ...grp('POD leaders',leads),...grp('Members',members),...grp('Drafting',drafts)); }
+/* Contribution points v1 (Principal, 13 Nov 2026): SHADOW MODE, only the Principal and the COO see it; nobody else's screen shows or builds it.
+   Score out of 100 = Did + Has (+ POD for POD leaders) + Habits, minus cuts. Each part is judged against the person's level.
+   Did: 1 per day with a real day plan (not on absent days) + finished work: stage gate 5, task 1, small routine 0.5, x on-time factor
+        (10% less per late day, floor 40%, no penalty while waiting on client/consultant); dated-on-the-day or created-and-closed same day = 0;
+        each "sent back" = -1. Counts up to 150% of the level target, so extra output shows.
+   Has: weighted open work that is dated in the next 30 days or belongs to the project's current phase.
+   POD (POD leaders only): half POD gates/tasks finished on time (needs 5+ finished, else neutral), half the habits of the people on their POD.
+   Cuts: absent day 3, leave day 1.5, overdue task 2, undated open task (not a stage gate) outside the current phase and older than 7 days 0.5 (max 10).
+   Stage gates of later phases carry no date until phase days are set, so they never cost points. */
+/* Has targets = a full load for the level (gate 5, task 1): POD leader about 3 projects in their current phase */
+const CP_LV={lead:{n:'POD leader',did:1.5,has:60,w:[30,25,25,20]},dlead:{n:'Drafting lead',did:1.2,has:25,w:[45,35,0,20]},draft:{n:'Drafting',did:1.2,has:20,w:[60,20,0,20]},junior:{n:'Junior architect',did:1.2,has:20,w:[60,20,0,20]}};
+const cpSee=()=>!!S.uid&&(S.uid===ownerId()||isCOO(S.uid));
+function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(td), rows=presRows(mwRange())||S.mwRows, pr=presRows({s:m0,e:td}); if(!rows||!pr) return null;
+  const d30=addDays(td,30), ids=people().filter(id=>!isLeft(id)&&needPlan(id));
+  const wd=[]; for(let d=m0;d<=td;d=addDays(d,1)) if(isWorkDay(d)) wd.push(d);
+  const lvl=id=>pods().some(pd=>isPodLead(id,pd))?'lead':roleGroup(id)==='dhead'?'dlead':isDraftMember(id)?'draft':'junior';
+  const size=t=>t.kind==='Deliverable'||t.gate?5:routineW(t)===0.5?0.5:1;
+  const all=activeTasks().filter(t=>t&&!t.archived&&!t.legacy), podsT=t=>podsOfProject(S.projects[t.projectId]);
+  const phKey=t=>t.gate&&t.gate.k?String(t.gate.k):String(t.phase||'').split(' ')[0];
+  const openG={}; all.forEach(t=>{ if(t.gate&&!t.doneAt&&t.projectId) (openG[t.projectId]=openG[t.projectId]||new Set()).add(phKey(t)); });
+  /* current phase = the phases the project has started; if phase days aren't entered yet, the first phase that still has an open gate */
+  const curOf={}; const inCur=t=>{ const p=S.projects[t.projectId]; if(!p||!p.std) return false;
+    if(!(t.projectId in curOf)){ const a=activePhases(p).map(String), og=openG[t.projectId]; curOf[t.projectId]=a.length?a:(()=>{ const k=stdPhases(p).map(String).find(k=>og&&og.has(k)); return k?[k]:[]; })(); }
+    return curOf[t.projectId].includes(phKey(t)); };
+  const wait=new Set(); ids.forEach(id=>wd.forEach(d=>{ const r=wlGet(id,d); (r&&r.lines||[]).forEach(l=>{ if(l.wait&&l.taskId) wait.add(l.taskId); }); }));
+  const pres={}; pr.forEach(r=>{ (pres[r.user_id]=pres[r.user_id]||{})[r.day]=r; });
+  const habit={}; ids.forEach(id=>{ const M=mwMonth(id,rows,m0); habit[id]=M.N?M.p:0; });
+  const r1=x=>Math.round(x*10)/10;
+  const out=ids.map(id=>{ const L=lvl(id), C=CP_LV[L], P=pres[id]||{}, past=wd.filter(d=>d<td);
+    const absD=past.filter(d=>{ const r=P[d]; return r&&!r.leave&&(r.absent||!r.opened); }), leaveD=past.filter(d=>P[d]&&P[d].leave);
+    let days=0; wd.forEach(d=>{ if(absD.includes(d)||leaveD.includes(d)) return; const r=wlGet(id,d); if(r&&(r.lines||[]).some(l=>(l.projectId||l.taskId)&&String((l.text||'')+' '+(l.part||'')).trim().length>=20)) days++; });
+    const done=all.filter(t=>t.assignee===id&&t.doneAt&&String(t.doneAt).slice(0,10)>=m0);
+    let fin=0, zero=0, gates=0, late=0; done.forEach(t=>{ const dn=String(t.doneAt).slice(0,10), same=String(t.createdAt||'').slice(0,10)===dn&&(!t.createdBy||t.createdBy===id);
+      if(unplanned(t)||same){ zero++; return; } if(size(t)===5) gates++; const lt=t.target&&!wait.has(t.id)?Math.max(0,diff(t.target,dn)):0; if(lt>0) late++; fin+=size(t)*(lt<=0?1:Math.max(0.4,1-0.1*lt)); });
+    const back=all.filter(t=>t.assignee===id).reduce((a,t)=>a+(t.history||[]).filter(e=>e.type==='reopened'&&String(e.at||'').slice(0,10)>=m0).length,0);
+    const did=Math.max(0,days+fin-back), didT=C.did*wd.length, didI=Math.min(150,didT?did/didT*100:0);
+    const opn=all.filter(t=>t.assignee===id&&!t.doneAt), cnt=opn.filter(t=>(t.target&&t.target<=d30)||inCur(t));
+    const hasW=cnt.reduce((a,t)=>a+size(t),0), hasI=Math.min(100,hasW/C.has*100);
+    const noDate=opn.filter(t=>!t.target), stale=noDate.filter(t=>!t.gate&&!inCur(t)&&String(t.createdAt||'0000').slice(0,10)<=addDays(td,-7));
+    const over=opn.filter(t=>!t.verify&&t.target&&t.target<td&&!wait.has(t.id)).length;
+    let podI=null, podTxt='';
+    if(L==='lead'){ const mp=teamOf(id), pt=all.filter(t=>podsT(t).includes(mp)&&t.doneAt&&String(t.doneAt).slice(0,10)>=m0&&t.target&&!unplanned(t));
+      const ot=pt.filter(t=>String(t.doneAt).slice(0,10)<=t.target).length;
+      const team=ids.filter(x=>x!==id&&lvl(x)!=='lead'&&all.some(t=>t.assignee===x&&podsT(t).includes(mp)&&(!t.doneAt||String(t.doneAt).slice(0,10)>=m0)));
+      const th=team.length?team.reduce((a,x)=>a+habit[x],0)/team.length:0, enough=pt.length>=5, rate=enough?ot/pt.length*100:th;
+      podI=Math.round(0.5*rate+0.5*th); podTxt=`${ot} of ${pt.length} finished on time${enough?'':' (fewer than 5, not judged yet)'} · team habits ${Math.round(th)}% (${team.length} people)`; }
+    const w=C.w, base=(w[0]*didI+w[1]*hasI+w[2]*(podI||0)+w[3]*habit[id])/100;
+    const cut={abs:3*absD.length,leave:1.5*leaveD.length,over:2*over,nod:Math.min(10,0.5*stale.length)}, cutT=cut.abs+cut.leave+cut.over+cut.nod;
+    return {id,L,C,score:Math.max(0,Math.min(100,Math.round(base-cutT))),didI:Math.round(didI),hasI:Math.round(hasI),podI,podTxt,hab:habit[id],cut,cutT:r1(cutT),
+      days,fin:r1(fin),gates,zero,late,back,did:r1(did),didT:r1(didT),hasW:r1(hasW),hasN:cnt.length,open:opn.length,noDate:noDate.length,stale:stale.length,over,absD,leaveD,wdays:wd.length}; });
+  return out.sort((a,b)=>b.score-a.score); }
+function cpDetail(x){ const w=x.C.w, P=(l,v)=>h('div',{class:'cp-l'},h('span',{text:l}),h('b',{text:v}));
+  const dl=d=>d.map(fmtD).join(', ');
+  return h('div',{class:'cp-d'},
+    P(`Did · ${w[0]}% of score`,`${x.didI}%`),h('p',{class:'f-hint',text:`${x.days} days with a day plan + ${x.fin} from finished work (${x.gates} stage gate${x.gates===1?'':'s'}${x.late?`, ${x.late} finished late`:''})${x.back?` − ${x.back} sent back`:''} = ${x.did} of ${x.didT} target (${x.C.did} a day × ${x.wdays} working days). ${x.zero?`${x.zero} finished task${x.zero>1?'s were':' was'} dated on the day itself, so not counted.`:''}`}),
+    P(`Has · ${w[1]}%`,`${x.hasI}%`),h('p',{class:'f-hint',text:`${x.hasN} open item${x.hasN===1?'':'s'} dated in the next 30 days or in the current phase, worth ${x.hasW} (target ${x.C.has}). Open in all: ${x.open}, ${x.noDate} with no date (most are stage gates of later phases, which don\u2019t count against anyone).`}),
+    x.podI!=null?P(`POD · ${w[2]}%`,`${x.podI}%`):null,x.podI!=null?h('p',{class:'f-hint',text:x.podTxt}):null,
+    P(`Habits · ${w[3]}%`,`${x.hab}%`),
+    P('Cuts',x.cutT?`−${x.cutT}`:'none'),
+    x.cutT?h('p',{class:'f-hint',text:[x.absD.length?`absent ${dl(x.absD)} (−${x.cut.abs})`:'',x.leaveD.length?`leave ${dl(x.leaveD)} (−${x.cut.leave})`:'',x.over?`${x.over} overdue (−${x.cut.over})`:'',x.stale?`${x.stale} undated task${x.stale>1?'s':''} (not stage gates) for 7+ days (−${x.cut.nod})`:''].filter(Boolean).join(' · ')}):null); }
+function cpRowEl(x){ const col=x.score>=75?'#2E9E5B':x.score>=50?'#C98A16':'#D0453C';
+  return h('details',{class:'cp-r'},h('summary',null,h('span',{class:'cp-n'},h('b',{text:shortName(x.id)}),h('span',{class:'f-hint',text:x.C.n})),
+      h('span',{class:'cp-bar'},h('i',{style:`width:${x.score}%;background:${col}`})),h('b',{class:'cp-s',style:'color:'+col,text:String(x.score)}),
+      h('span',{class:'f-hint cp-m',text:`open ${x.open} · no date ${x.noDate} · overdue ${x.over}${x.absD.length?` · absent ${x.absD.length}`:''}`})),cpDetail(x)); }
+function cpSheet(){ const L=cpCalc(), mn=new Date(mwMonthStart(today())+'T00:00:00').toLocaleString('en-GB',{month:'long'});
+  S.sheet={type:'homeList',title:`Contribution points · ${mn}`,build:()=>{ const X=cpCalc()||L; return [
+    h('p',{class:'f-hint',style:'margin:0 0 8px',text:'Shadow month: only you and the COO can see this. Each score is judged against the person’s level. Tap a name to see how it was built.'}),
+    ...(X?['lead','dlead','junior','draft'].map(k=>{ const g=X.filter(x=>x.L===k); return g.length?[h('div',{class:'tr-g',text:{lead:'POD leaders',dlead:'Drafting lead',junior:'Junior architects',draft:'Drafting team'}[k]}),...g.map(cpRowEl)]:[]; }).flat():[h('p',{class:'f-hint',text:'Loading…'})])]; }};
+  renderSheet(); }
+function contribSec(){ if(!cpSee()) return null; const X=cpCalc(); const mn=new Date(mwMonthStart(today())+'T00:00:00').toLocaleString('en-GB',{month:'long'});
+  const avg=X&&X.length?Math.round(X.reduce((a,x)=>a+x.score,0)/X.length):null;
+  return h('div',{class:'desk-sub'},h('button',{type:'button',class:'cp-open',onclick:cpSheet},
+    h('span',null,h('b',{text:`Contribution points · ${mn}`}),h('span',{class:'f-hint',text:' · only you and the COO see this'})),
+    h('span',{class:'f-hint',style:'margin-left:auto',text:avg==null?'loading…':`studio average ${avg} · open the table ›`}))); }
 function whoDoingSec(){
   const td=today(), ids=people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&(/^pod\b/i.test(teamOf(id)||'')||isShared(id)||isSupport(id))&&!isChalkP(id)&&!isPriv(id)&&!isOfficeStaff(id));
   if(!ids.length) return null;
