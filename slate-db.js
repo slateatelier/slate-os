@@ -907,7 +907,7 @@
     myMessages = myMessages.filter(y => y.id !== id); bellCards.delete(id);
     placeMessages(true); syncBadge(); msgRefresh();
   }
-  function msgRefresh() { try { schedule(); } catch (_) {} try { if (S.sheet && S.sheet.type === 'notif') renderSheet(); } catch (_) {} }
+  function msgRefresh() { try { schedule(); } catch (_) {} try { if (S.sheet && (S.sheet.type === 'notif' || S.sheet.imp)) renderSheet(); } catch (_) {} }
   const msgNm = id => { try { return nameOf(id); } catch (_) { return displayName(people.get(id)); } };
   function msgCard(m, gate) {
     const msgId = m.kind === 'reminder' ? m.ref_id : m.kind === 'message' ? m.id : null;
@@ -1003,9 +1003,6 @@
     const home = (() => { try { return S.view === 'mine'; } catch (_) { return false; } })();
     const old = document.getElementById('slate-messages');
     const open = myAnswered.filter(r => r.reply === 'will' && !r.done_at && r.due_at).sort((a, b) => a.due_at.localeCompare(b.due_at));
-    if (!home || (!myMessages.length && !open.length)) { if (old) old.remove(); return; }
-    const main = document.querySelector('main'); if (!main) return;
-    if (old && !force && main.contains(old)) return;
     const nm = msgNm;
     const commit = r => {
       const late = new Date(r.due_at) < new Date();
@@ -1015,6 +1012,17 @@
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', { style: 'overflow-wrap:anywhere;font-weight:500' }, r.body), el('span', { class: 'pill ' + (late ? 's-overdue' : 's-open') }, (late ? 'Overdue · ' : 'Due ') + dayOnly(r.due_at))),
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, 'From ' + nm(r.sender)), b));
     };
+    /* messages live behind the Important icon beside the bell now, not on Home (Principal, 13 Nov 2026) */
+    window.slateMsgOpenN = () => myAnswered.filter(r => r.reply === 'will' && !r.done_at && r.due_at).length;
+    window.slateMsgCommits = () => { const o = myAnswered.filter(r => r.reply === 'will' && !r.done_at && r.due_at).sort((a, b) => a.due_at.localeCompare(b.due_at));
+      return o.length ? el('div', { class: 'n-msgs' }, el('div', { class: 'n-day' }, `Messages you said you’d do · ${o.length}`), el('div', { class: 'list' }, ...o.map(commit))) : null; };
+    if (old) old.remove();
+    try { renderHeader(); renderFloatBell(); } catch (_) {}
+    try { if (S.sheet && S.sheet.imp) renderSheet(); } catch (_) {}
+    return;
+    if (!home || (!myMessages.length && !open.length)) { if (old) old.remove(); return; }
+    const main = document.querySelector('main'); if (!main) return;
+    if (old && !force && main.contains(old)) return;
     /* Home stays on one screen (Principal, 13 Nov 2026): the oldest message in full (text to 2 lines, tap to read all),
        the rest as one line that opens the bell, where each has the same reply buttons */
     const first = myMessages.length ? (() => { const c = msgCard(myMessages[0]); c.classList.add('msg-cmp'); const t = c.children[1]; if (t) { t.classList.add('msg-clamp'); t.title = 'Tap to read all'; t.addEventListener('click', () => t.classList.toggle('msg-clamp')); } return c; })() : null;

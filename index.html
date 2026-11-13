@@ -146,6 +146,9 @@ button.wlf-need .wlf-l{color:var(--overdue,#D0453C);font-weight:600}
 #slate-messages .msg-cmp>.actions{margin:0;flex-wrap:wrap;justify-content:flex-end;gap:6px}#slate-messages .msg-cmp>.actions .btn{padding:4px 10px;font-size:12.5px;min-height:0}
 #slate-messages .msg-cmp>[role=status]{grid-column:1/-1}#slate-messages .msg-cmp>.actions:has(.lbl){grid-column:1/-1}
 @media (max-width:760px){#slate-messages .msg-cmp{grid-template-columns:1fr}#slate-messages .msg-cmp>.actions{justify-content:flex-start}}
+.imp{position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);width:var(--hic,38px);height:var(--hic,38px);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--muted,#6e6e73);background:var(--group,#F2F2F7);cursor:pointer}.imp .bi svg{width:22px;height:22px}
+.imp.has{color:#d7262b;background:#FDECEC}#bell-slot .bell.bell-left .imp{right:auto;left:calc(100% + 10px)}   /* bell on the left (phones): Important sits to its right */
+.bell .imp .bn,.imp .bn{margin:0;color:#fff;font-size:11px;position:absolute;top:-2px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#d7262b;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
 .msg-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
 .cp-r{border-bottom:1px solid var(--line,#EEE)}.cp-r summary{list-style:none;display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr 34px;grid-template-areas:"n b s" "m m m";gap:2px 10px;align-items:center;padding:8px 2px;cursor:pointer}.cp-r summary::-webkit-details-marker{display:none}
@@ -3366,14 +3369,21 @@ function renderHeader(){
   const tabs=$('#tabs'), slot=$('#bell-slot');
   if(S.state!=='ready'){ tabs.replaceChildren(); slot.replaceChildren(); $('#me-slot').replaceChildren(); return; }
   /* one count everywhere: bell, tab and app icon = new notifications + unanswered messages */
-  const bellN=newCount()+msgCount();
+  const bellN=newCount();   /* messages from the Principal / COO have their own Important icon (13 Nov 2026) */
   nSoundCheck(bellN);
   { const ms=$('#me-slot'); const b=h('button',{class:'mebtn',type:'button','aria-label':'My profile icon',title:'My profile icon',onclick:openProfile},avaEl(S.uid,true)); if(!iconOf(S.uid)) b.append(h('span',{class:'me-plus',text:'+'})); ms.replaceChildren(b); }
   try{ localStorage.setItem('slate-hdr',JSON.stringify({uid:S.uid,ava:b.firstChild.outerHTML,plus:!iconOf(S.uid),n:bellN,at:Date.now()})); }catch(e){}
   { const nn=bellN; S.badgeSeen=S.badgeSeen||{}; if(S.badgeSeen.bell!==undefined&&nn>S.badgeSeen.bell) fxMark('badge:bell','pulse'); S.badgeSeen.bell=nn;
+    const imN=impCount();
+    /* the Important icon rides just left of the bell (the bell is placed absolutely by the layout); its own tap opens Important */
+    const imp=h('span',{class:'imp'+(imN?' has':''),role:'button',tabindex:'0','aria-label':imN?`Important: ${imN} message${imN>1?'s':''} to answer`:'Important messages',title:imN?`${imN} message${imN>1?'s':''} from the Principal or COO to answer`:'Important messages',
+      onclick:e=>{ e.stopPropagation(); e.preventDefault(); openImportant(); },onkeydown:e=>{ if(e.key==='Enter'||e.key===' '){ e.stopPropagation(); e.preventDefault(); openImportant(); } }},
+      h('span',{class:'bi'},svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('path',{d:'M4 4h16v12H8l-4 4z'}),svgEl('path',{d:'M12 7v4'}),svgEl('path',{d:'M12 13.5v.01'}))),
+      imN?h('span',{class:'bn',text:imN>99?'99+':String(imN)}):null);
     slot.replaceChildren(h('button',{class:'bell'+(nn?' has':''),type:'button','aria-label':nn?`Notifications, ${nn} new`:'Notifications',onclick:openNotifs},
       h('span',{class:'bi'},svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'}))),
-      nn?h('span',fxA('badge:bell',['pulse'],{class:'bn',text:nn>99?'99+':String(nn)})):null)); }
+      nn?h('span',fxA('badge:bell',['pulse'],{class:'bn',text:nn>99?'99+':String(nn)})):null,imp));
+    requestAnimationFrame(()=>{ const b=slot.querySelector('.bell'); if(b) b.classList.toggle('bell-left',b.getBoundingClientRect().left<window.innerWidth/2); }); }
   const reqs=amApprover()?queueCount():0;
   const full=fullView(), mp=myPod();
   /* Chalk Create is off for now; when its space is built it sits beside Studio and Business in the switch */
@@ -7650,11 +7660,15 @@ function openNotifs(){ fbellClose(); S.sheet={type:'notif'}; nSave({openedAt:new
 /* floating bell: the same count as the top bell; tap shows the last 5 notifications in a small card (no panel needed).
    It sits above the + on every screen, so Books and Business never hide Studio's notifications. */
 const FB_ICO=()=>svgEl('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},svgEl('path',{d:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'}),svgEl('path',{d:'M10.3 21a1.94 1.94 0 0 0 3.4 0'}));
+/* Important (Principal, 13 Nov 2026): messages from the Principal or the COO, and the ones you said you'd do, behind one icon beside the bell */
+const impCount=()=>{ let n=msgCount(); try{ n+=window.slateMsgOpenN?Number(window.slateMsgOpenN())||0:0; }catch(_){} return n; };
+function openImportant(){ fbellClose(); S.sheet={type:'homeList',imp:1,title:'Important',build:()=>{ const a=window.slateMsgCards&&window.slateMsgCards(), b=window.slateMsgCommits&&window.slateMsgCommits();
+  return a||b?[h('p',{class:'f-hint',style:'margin:0 0 8px',text:'Messages from the Principal and the COO. Answer each within 1 working day, or SLATE OS locks until you do.'}),a,b].filter(Boolean):[h('p',{class:'f-hint',style:'padding:8px',text:'Nothing waiting. All answered.'})]; }}; renderSheet(); }
 function renderFloatBell(){
   let b=document.getElementById('fbell');
   if(S.state!=='ready'){ if(b) b.hidden=true; fbellClose(); return; }
   if(!b){ b=h('button',{id:'fbell',type:'button','aria-haspopup':'dialog','aria-expanded':'false',onclick:fbellToggle}); document.body.append(b); }
-  const n=newCount()+msgCount();
+  const n=newCount()+impCount();
   b.hidden=false; b.classList.toggle('has',!!n); b.classList.toggle('on',!!S.fbell);
   b.setAttribute('aria-label',n?`Notifications, ${n} new`:'Notifications'); b.title=n?`${n} new notification${n===1?'':'s'}`:'Notifications';
   b.replaceChildren(...[FB_ICO(),n?h('span',{class:'fb-n',text:n>99?'99+':String(n)}):null].filter(Boolean));
@@ -7674,7 +7688,7 @@ function fbellPaint(){
   let p=document.getElementById('fbell-pop');
   const all=buildNotifs().filter(n=>!isArchived(n)), last=all.slice(0,5), unread=all.filter(isUnread).length, mc=msgCount();
   const rows=[];
-  if(mc) rows.push(h('button',{type:'button',class:'fp-i fp-msg unread c-action',onclick:()=>{ fbellClose(); openNotifs(); }},h('span',{class:'dot'}),h('span',{class:'fp-t',text:`${mc} message${mc===1?'':'s'} waiting for your reply`}),h('span',{class:'fp-m',text:'Open to answer'})));
+  if(mc) rows.push(h('button',{type:'button',class:'fp-i fp-msg unread c-action',onclick:()=>{ fbellClose(); openImportant(); }},h('span',{class:'dot'}),h('span',{class:'fp-t',text:`${mc} message${mc===1?'':'s'} waiting for your reply`}),h('span',{class:'fp-m',text:'Open to answer'})));
   for(const n of last){ const un=isUnread(n), body=(n.body||'').split('\n').filter(Boolean).slice(0,2).join('\n');
     rows.push(h('button',{type:'button',class:'fp-i c-'+n.cat+(un?' unread':''),onclick:()=>fbellGo(n)},
       h('span',{class:'dot'}),h('span',{class:'fp-t',text:n.title}),body?h('span',{class:'fp-b',text:body}):null,
@@ -7707,7 +7721,7 @@ function relTime(iso){ const d=new Date(iso), mins=Math.round((Date.now()-d)/6e4
 function sheetNotifs(){
   const v=S.nview, all=buildNotifs(), arch=v.tab==='archive';
   const list=all.filter(n=>isArchived(n)===arch&&(!v.cat||n.cat===v.cat));
-  const inbox=all.filter(n=>!isArchived(n)), unreadN=inbox.filter(isUnread).length, unread=unreadN+(arch?0:msgCount());
+  const inbox=all.filter(n=>!isArchived(n)), unreadN=inbox.filter(isUnread).length, unread=unreadN;
   const td=today(), me=S.uid, scope=scopeRaw(), boss=isBoss(), mp=myPod();
   const mineS=boss?scope:amPodLead()?scope.filter(t=>podsOf(t).includes(mp)):scope.filter(t=>t.assignee===me);
   const sum=[['Due today',mineS.filter(t=>!t.doneAt&&!t.verify&&t.target===td).length],['Next 7 days',mineS.filter(t=>!t.doneAt&&!t.verify&&t.target&&t.target>td&&t.target<=addDays(td,7)).length],['Overdue',mineS.filter(t=>!t.doneAt&&!t.verify&&t.target&&t.target<td).length]];
@@ -7720,7 +7734,7 @@ function sheetNotifs(){
     h('div',{class:'chips'},[['','All'],...Object.entries(NCAT)].map(([k,l])=>h('button',{type:'button',class:'chip'+(k?' c-'+k:''),style:'padding-right:12px;border:0;cursor:pointer;'+(v.cat===k?'background:var(--ink);color:#fff':''),onclick:()=>{v.cat=k;renderSheet()},text:l}))),
     !arch&&inbox.length?h('div',{class:'actions'},unreadN?h('button',{class:'btn btn-sm',type:'button',onclick:()=>nSave({seenAt:new Date().toISOString(),read:{}}),text:'Mark all read'}):null,
       h('button',{class:'btn btn-sm',type:'button',onclick:()=>{ const st=nst(), a={...(st.archived||{})}; inbox.filter(n=>!isUnread(n)&&(!v.cat||n.cat===v.cat)).forEach(n=>{a[n.id]=1}); nSave({archived:a}); },text:'Archive read'})):null];
-  const showMsgs=!arch&&(!v.cat||v.cat==='action')&&msgCount()>0;
+  const showMsgs=false;   /* messages moved to the Important icon */
   if(showMsgs&&window.slateMsgCards){ const mc=window.slateMsgCards(); if(mc) out.push(mc); }
   if(!list.length){ if(!showMsgs) out.push(h('p',{class:'muted',style:'margin:8px 4px',text:arch?'Nothing archived yet. Items move here when you archive them, or automatically after 14 days. Requests waiting for you stay in the inbox until decided.':'You’re all caught up.'})); return out; }
   let day=null, grp=null;
