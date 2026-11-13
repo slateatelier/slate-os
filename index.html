@@ -129,7 +129,7 @@ main.wrap.wrap-desk{max-width:1480px}
 .mr-focus{font-size:10px;font-weight:600;color:#C41E29;border:1px solid #C41E29;border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:1px}
 .mw-pr{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:8px;align-items:center;padding:6px 2px;border-top:1px solid var(--line,#E5E5EA)}.mw-pd{display:flex;gap:4px}.mw-pd .mw-d{width:12px;height:12px}.mw-pd .mw-x{width:8px;height:8px}.mw-pg{font-size:12.5px;color:var(--muted);text-align:right}
 #day-splash .ds-notme{display:block;margin:18px auto 0;appearance:none;border:0;background:none;font:inherit;font-size:13px;color:#8E8E93;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px}
-button.mr-home{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:14px;padding:6px 14px 6px 8px;font:inherit;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:10px;text-align:left;justify-self:start;margin:6px 0}
+button.mr-home{appearance:none;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:14px;padding:6px 14px 6px 8px;font:inherit;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:10px;text-align:left;justify-self:start;margin:0 0 14px}
 button.mr-home:hover{background:#F7F7F9}.mr-hl{display:grid;line-height:1.25}.mr-hl b{font-size:18px;font-weight:700}.mr-hl span{font-size:12.5px;color:var(--ink,#1d1d1f)}.mr-hl .mr-hg{color:var(--muted,#6e6e73);font-size:11.5px}
 button.my-score{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0;display:grid}
 .dctx{display:grid;gap:3px;font-size:12.5px}.dctx-l{color:var(--ink)}.dctx-l.muted{color:var(--muted)}.dctx-f{display:flex;flex-wrap:wrap;gap:4px 10px;color:#B25E00;font-weight:600}
@@ -4419,9 +4419,9 @@ function viewDesk(){
   const td=today(), ap=amApprover()||S.isOwner, lead=amPodLead()&&!ap, head=!!myHeadTeam(), mine=activeTasks().filter(t=>t.assignee===S.uid&&!t.archived);
   const hr=new Date().getHours(), first=(nameOf(S.uid)||'').split(' ')[0], wk=addDays(td,7);
   const top=h('div',{class:'desk-top'},
-    h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
+    h('div',{style:'min-width:0'},myMonthRingEl(),h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
       h('div',{class:'desk-hi'},h('b',{text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),daySummary(mine,td,ap))),
-    h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap;align-items:center;gap:14px'},myMonthRingEl(),
+    h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap'},
       canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openLead(),text:'+ Lead'}):null,
       canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openProp(),text:'+ Proposal'}):null,
       S.canWrite?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
@@ -5237,9 +5237,9 @@ function viewDeskToday(){
   const td=today(), wk=addDays(td,7), lead=amPodLead(), mp=myPod(), hr=new Date().getHours(), first=(nameOf(S.uid)||'').split(' ')[0];
   const mine=activeTasks().filter(t=>t.assignee===S.uid&&!t.archived);
   const top=h('div',{class:'desk-top'},
-    h('div',{style:'min-width:0'},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||'Member'}`}),
+    h('div',{style:'min-width:0'},myMonthRingEl(),h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||'Member'}`}),
       h('div',{class:'desk-hi'},h('b',{text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),daySummary(mine,td,false))),
-    h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap;align-items:center;gap:14px'},myMonthRingEl(),S.canWrite?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
+    h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap'},S.canWrite?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
   /* returned work: red dot, and the note in orange at the start of the line */
   const red=r=>{ const d=r&&r.querySelector('.h-dot'), m=r&&r.querySelector('.h-m'); if(d) d.style.background='var(--overdue)';
     if(m&&/^Returned/.test(m.textContent)){ const i=m.textContent.indexOf(' · '), a=i<0?m.textContent:m.textContent.slice(0,i), b=i<0?'':m.textContent.slice(i); m.replaceChildren(h('span',{class:'ret-note',text:a}),b); } return r; };
@@ -5301,8 +5301,8 @@ function viewMineBody(){
   const mine=activeTasks().filter(t=>t.assignee===S.uid), td=today(), ap=amApprover();
   const hr=new Date().getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const first=(nameOf(S.uid)||'').split(' ')[0];
-  const out=[h('div',{class:'page-h home-h'},h('div',{},h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
-    h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap),myMonthRingEl(),myWeekEl(),podWeekEl()))];
+  const out=[h('div',{class:'page-h home-h'},h('div',{},myMonthRingEl(),h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
+    h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap),myWeekEl(),podWeekEl()))];
   /* the Principal and the COO add a lead or start a proposal straight from Home */
   if(canProps()&&S.canWrite) out.push(h('div',{class:'actions home-biz',style:'margin:-4px 0 0'},
     seeCooWork()?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openCooTask(),text:'+ COO task'}):null,
