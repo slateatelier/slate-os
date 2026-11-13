@@ -138,7 +138,8 @@ main.wrap.wrap-desk{max-width:1480px}
 /* team rings (Principal / COO) */
 .tr-g{font-size:11.5px;font-weight:600;color:var(--muted,#6e6e73);text-transform:uppercase;letter-spacing:.06em;margin:4px 4px 0}
 .tr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
-button.cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
+button.wlf-need .wlf-l{color:var(--overdue,#D0453C);font-weight:600}
+.cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
 .cp-r{border-bottom:1px solid var(--line,#EEE)}.cp-r summary{list-style:none;display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr 34px;grid-template-areas:"n b s" "m m m";gap:2px 10px;align-items:center;padding:8px 2px;cursor:pointer}.cp-r summary::-webkit-details-marker{display:none}
 .cp-n{grid-area:n;display:flex;flex-direction:column}.cp-bar{grid-area:b;height:8px;border-radius:4px;background:#EEF0F3;overflow:hidden}.cp-bar i{display:block;height:100%;border-radius:4px}.cp-s{grid-area:s;text-align:right;font-size:17px}.cp-m{grid-area:m}
 .cp-d{padding:2px 4px 10px}.cp-l{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}.cp-d .f-hint{margin:2px 0 0;font-size:12px}
@@ -4847,7 +4848,8 @@ function wlPicked(l){ if(l.dwRef){ const d=DW.items[l.dwRef.id]; if(d) return {t
   return null; }
 function wlPicker(l,sh){ const all=wlSugg(l), q=(sh.q||'').trim().toLowerCase(), words=q.split(/\s+/).filter(Boolean);
   const list=all.filter(x=>words.every(w=>(x.title+' '+x.desc).toLowerCase().includes(w)));
-  const pick=x=>{ wlClearPick(l); if(x.taskId) l.taskId=x.taskId; else if(x.clRef) l.clRef=x.clRef; else if(x.dwRef) l.dwRef=x.dwRef; else { l.newTitle=x.newTitle||''; l.newKind=x.newKind||'Task'; if(x.offList){ l.offList=true; l.parent=''; } }
+  const pick=x=>{ wlClearPick(l); if(x.taskId){ l.taskId=x.taskId; /* the line takes the task's own date when it is later (Principal, 13 Nov 2026) */
+      const tt=S.tasks[x.taskId]; if(tt&&tt.target&&tt.target>(l.due||today())&&tt.target<=addDays(today(),WL_MAXD)) l.due=tt.target; } else if(x.clRef) l.clRef=x.clRef; else if(x.dwRef) l.dwRef=x.dwRef; else { l.newTitle=x.newTitle||''; l.newKind=x.newKind||'Task'; if(x.offList){ l.offList=true; l.parent=''; } }
     sh.pick=''; sh.err=''; renderSheet(); };
   const groups=[...new Set(list.map(x=>x.g))];
   return h('div',{class:'wlf-pk'},
@@ -4868,11 +4870,14 @@ function sheetWlog(){
   const yOpen=yLog?(yLog.lines||[]).filter(l=>(l.status||'planned')==='planned'):[];
   const aheadLoad=d=>{ const ls=((S.ahead||{})[d]||[]).map(l=>({...l,due:l.due&&l.due>=d?l.due:d})); return ls.length?ls:[wlNewLine({due:d})]; };
   /* carry a line on: same project, task, words and first finish-by date; a passed finish-by date moves to today */
+  /* a line carried a second time (Principal, 13 Nov 2026): if it still has no later finish-by date, the person must pick one, so it becomes a real promise */
   const carry=(l,due,x={})=>wlNewLine({projectId:l.projectId||'',taskId:l.taskId,clRef:l.clRef,dwRef:l.dwRef,text:l.text,from:l.id,due,due0:l.due0||l.due||y,since:l.since||y,...(l.ask?{ask:l.ask}:{}),...(l.moved?{moved:l.moved}:{}),...x});
   /* yesterday's answer decides the line today: Finish today / Ongoing carry it on; Waiting carries it on as a waiting line */
   const place=(l)=>{ sh.lines=sh.lines.filter(x=>x.from!==l.id); const v=sh.y[l.id];
     if(v==='today'||v==='ongoing'||v==='waiting'){ const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
-      sh.lines.unshift(carry(l,v==='today'?td:(l.due&&l.due>=td?l.due:td),v==='waiting'?{wait:{on:sh.yw[l.id]||'',since:(l.wait&&l.wait.since)||y}}:{})); }
+      const again=v==='ongoing'&&!!l.from&&!(l.due&&l.due>td);
+      const nl=carry(l,v==='today'?td:(l.due&&l.due>=td?l.due:td),v==='waiting'?{wait:{on:sh.yw[l.id]||'',since:(l.wait&&l.wait.since)||y}}:{}); if(again){ nl.due=''; nl.needBy=1; }
+      sh.lines.unshift(nl); }
     if(!sh.lines.length) sh.lines=[wlNewLine()]; };
   if(!sh.init&&ahead){ sh.init=1; sh.y={}; sh.err=''; sh.lines=aheadLoad(sh.day); }
   if(!sh.init){ sh.init=1; sh.y={}; sh.yw={}; sh.yr={}; sh.ys={}; sh.ex=[]; sh.lines=cur?(cur.lines||[]).map(l=>({...l,due:l.due||td})):[]; sh.err='';
@@ -4909,7 +4914,7 @@ function sheetWlog(){
     return null; };
   const dueRow=l=>{ const nw=wlNextDay(base), custom=l.due&&l.due!==base&&l.due!==nw;
     const di=h('input',{type:'date',class:'wlf-date','aria-label':'Pick a finish-by date',min:base,max:addDays(td,WL_MAXD),value:custom?l.due:'',onchange:e=>{ if(e.target.value){ l.due=e.target.value<base?base:e.target.value; sh.err=''; renderSheet(); } }});
-    return h('div',{class:'wlf'},h('span',{class:'wlf-l',text:'Finish by'}),
+    return h('div',{class:'wlf'+(l.needBy&&!l.due?' wlf-need':'')},h('span',{class:'wlf-l',text:l.needBy&&!l.due?'Carried again · finish by?':'Finish by'}),
       h('div',{class:'chips'},[[base,ahead?'Same day':'Today'],[nw,nw===addDays(base,1)?(ahead?'Day after':'Tomorrow'):'Next working day']].map(([d,lb])=>h('button',{type:'button',class:'chip qd'+(l.due===d?' on':''),onclick:()=>{ l.due=d; renderSheet(); }},h('b',{text:lb}),h('span',{text:`${wd(d)} ${+d.slice(8)}`}))),
         h('label',{class:'chip qd wlf-pick'+(custom?' on':'')},h('b',{text:custom?`${wd(l.due)} ${fmtD(l.due)}`:'Pick a date'}),di)),
       l.from&&l.due0&&l.due>l.due0?h('span',{class:'wlf-tag late',text:`first set for ${wd(l.due0)} ${fmtD(l.due0)}`+(l.moved?` · moved ${l.moved}×`:'')}):null,
@@ -4955,7 +4960,7 @@ function sheetWlog(){
     run(()=>wlAheadWrite({...(S.ahead||{}),[base]:lines}),`Planned for ${wd(base)} ${fmtD(base)}. It comes into that morning’s plan`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const dropAhead=()=>{ const it={...(S.ahead||{})}; delete it[base]; run(()=>wlAheadWrite(it),`Plan for ${wd(base)} ${fmtD(base)} removed`).then(ok=>{ if(ok){ closeSheet(); render(true); } }); };
   const save=()=>{ if(ahead) return saveAhead();
-    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.projectId===''&&!l.studioOk&&!l.ask&&wlProjHits(l.text).length)?'A Studio work line names a project: choose the project, or say it is Studio work.':sh.lines.find(l=>l.offList&&l.newTitle!=null&&!l.parent)?'Choose the closest standard task for each new task.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Say in short what the new task is.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing, Waiting or Stopped.`
+    const bad=sh.lines.find(l=>l.projectId==null)?'Choose a project (or Studio work) on every line.':sh.lines.find(l=>l.projectId===''&&!l.studioOk&&!l.ask&&wlProjHits(l.text).length)?'A Studio work line names a project: choose the project, or say it is Studio work.':sh.lines.find(l=>l.offList&&l.newTitle!=null&&!l.parent)?'Choose the closest standard task for each new task.':sh.lines.find(l=>l.newTitle!=null&&String(l.newTitle).trim().length<3)?'Say in short what the new task is.':sh.lines.find(wlNeedsPick)?'Pick what you are working on for every project line: a task, a checklist step or a drawing (or + Write a new task).':sh.lines.find(l=>(l.text||'').trim().length<10)?'Write what you will do on every line (at least 10 characters).':sh.lines.find(l=>l.needBy&&!l.due)?'A line carried again needs a finish-by date: when will it be finished?':sh.lines.find(l=>!l.due||l.due<td||l.due>addDays(td,WL_MAXD))?'Choose a finish-by date on every line (today or later).':yOpen.find(l=>!sh.y[l.id])?`Say how each of ${yName==='yesterday'?'yesterday’s':yName+'’s'} lines went: Finished, Finish today, Ongoing, Waiting or Stopped.`
       :yOpen.find(l=>sh.y[l.id]==='waiting'&&!sh.yw[l.id])?'Say who each waiting line is waiting on.'
       :yOpen.find(l=>sh.y[l.id]==='stopped'&&(sh.ys[l.id]||'').trim().length<3)?'Say in a few words why each stopped line stopped.'
       :yOpen.find(l=>(sh.y[l.id]==='today'||sh.y[l.id]==='ongoing')&&l.due&&l.due<td&&!sh.yr[l.id])?'Say why the finish-by date passed on each line that carries on.'
@@ -5281,7 +5286,7 @@ function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=
 /* Contribution points v2 (Principal, 13 Nov 2026): SHADOW MODE, only the Principal and the COO see it.
    Four plain parts, each a %, nothing counted twice. Levels differ only in their Output and Load norms.
    Reliable 25%   came in, planned the day, closed the day (the habit rings without "work on time"; an absent day is a missed "in").
-   Promises 30%   work finished by its ORIGINAL date: tasks, and day-plan lines given a later finish-by date (a line's date defaults to the
+   Promises 30%   (rolling 30 days) work finished by its ORIGINAL date: tasks, and day-plan lines given a later finish-by date (a line's date defaults to the
                   same day, so a plain carried line is not a broken promise; a carried line is fine until its chosen date passes).
                   Only dates set at least a day before count; late = half; waiting on client/consultant = left out; a date moved for a
                   client delay counts from the new date. POD leaders: half their own, half their POD's tasks. Fewer than 5 = "not enough yet".
@@ -5307,14 +5312,18 @@ function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(t
   const curOf={}; const inCur=t=>{ const p=S.projects[t.projectId]; if(!p||!p.std) return false;
     if(!(t.projectId in curOf)){ const a=activePhases(p).map(String), og=openG[t.projectId]; curOf[t.projectId]=a.length?a:(()=>{ const k=stdPhases(p).map(String).find(k=>og&&og.has(k)); return k?[k]:[]; })(); }
     return curOf[t.projectId].includes(phKey(t)); };
+  const p0=addDays(td,-30), pd=[]; for(let d=p0;d<=td;d=addDays(d,1)) if(isWorkDay(d)) pd.push(d);   /* promises: rolling 30 days */
   const lines={}, wait=new Set();
-  ids.forEach(id=>{ const L=lines[id]={}; wd.forEach(d=>{ const r=wlGet(id,d); (r&&r.lines||[]).forEach(l=>{ if(!l||!l.id) return; if(l.wait&&l.taskId) wait.add(l.taskId); L[l.id]={...l,day:d}; }); }); });
+  ids.forEach(id=>{ const L=lines[id]={}; pd.forEach(d=>{ const r=wlGet(id,d); (r&&r.lines||[]).forEach(l=>{ if(!l||!l.id) return; if(l.wait&&l.taskId) wait.add(l.taskId); L[l.id]={...l,day:d}; }); }); });
   /* one promise per carried chain of day-plan lines */
   const lineProm=id=>{ const L=lines[id], roots={}; Object.values(L).forEach(l=>{ let r=l, n=0; while(r.from&&L[r.from]&&n++<30) r=L[r.from]; (roots[r.id]=roots[r.id]||{r,ls:[]}).ls.push(l); });
     const P=[]; Object.values(roots).forEach(({r,ls})=>{ if(ls.some(l=>l.wait)||ls.some(l=>l.status==='stopped')) return; if(!(r.projectId||r.taskId)) return;
-      const due=r.due0||r.due; if(!due||due<=r.day) return; /* a line's date defaults to the same day; only a chosen later finish-by is a promise */ const fin=ls.find(l=>l.status==='done'), fd=fin?String(fin.closedAt||fin.day).slice(0,10):null;
+      if(r.taskId&&S.tasks[r.taskId]&&S.tasks[r.taskId].target) return;   /* the task's own date is the promise; not counted twice */
+      /* a line's date defaults to the same day; the promise is the first LATER finish-by someone chose on the chain */
+      const ch=ls.slice().sort((a,b)=>a.day.localeCompare(b.day)), pl=ch.find(l=>l.due&&l.due>l.day); if(!pl) return; const due=pl.due;
+      const fin=ls.find(l=>l.status==='done'), fd=fin?String(fin.closedAt||fin.day).slice(0,10):null;
       if(fd&&fd<=due) P.push({v:1,k:'kept'}); else if(fd) P.push({v:0.5,k:'late'}); else if(due<td) P.push({v:0,k:'missed'}); }); return P; };
-  const taskProm=list=>{ const P=[]; list.forEach(t=>{ const o=cpOrig(t); if(!o||!o.d||o.d<m0||o.d>=td||wait.has(t.id)||unplanned(t)) return;
+  const taskProm=list=>{ const P=[]; list.forEach(t=>{ const o=cpOrig(t); if(!o||!o.d||o.d<p0||o.d>=td||wait.has(t.id)||unplanned(t)) return;
       if(o.at&&o.at>=o.d) return; const w=t.gate?3:cpMeet(t)?0.25:1, d=dn(t);
       P.push(d&&d<=o.d?{v:w,w,k:'kept'}:d||t.verify?{v:w/2,w,k:'late'}:{v:0,w,k:'missed'}); }); return P; };
   const pct=P=>{ const W=P.reduce((a,x)=>a+(x.w||1),0); return W?Math.round(P.reduce((a,x)=>a+x.v,0)/W*100):null; };
@@ -5332,7 +5341,7 @@ function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(t
         if(t.target&&diff(d,t.target)>14){ O.catchN++; return; } if(!t.target){ O.gate+=2.5; O.nodN++; } else { O.gate+=5; O.gateN++; } return; }
       if(unplanned(t)||same){ O.zero++; return; }
       if(cpMeet(t)){ O.meet+=0.25; O.meetN++; } else { O.task+=1; O.taskN++; } });
-    Object.values(lines[id]).forEach(l=>{ if(l.status==='done'&&!l.taskId&&l.projectId){ O.line+=0.5; O.lineN++; } });
+    Object.values(lines[id]).forEach(l=>{ if(l.status==='done'&&!l.taskId&&l.projectId&&l.day>=m0){ O.line+=0.5; O.lineN++; } });
     const outPts=O.gate+O.task+O.meet+O.line, outT=C.out*wd.length, outI=Math.min(120,outT?outPts/outT*100:0);
     /* load */
     const opn=mine.filter(t=>!t.doneAt), live=opn.filter(t=>(t.gate&&inCur(t))||(!t.gate&&t.target&&t.target<=d30));
@@ -5348,7 +5357,7 @@ function cpDetail(x){ const P=(l,v)=>h('div',{class:'cp-l'},h('span',{text:l}),h
   return h('div',{class:'cp-d'},
     P(`Reliable · ${CP_W.rel}%`,pc(x.rel)),H(x.M.H.filter(o=>o.k!=='work').map(o=>`${o.l} ${o.p==null?'–':o.p+'%'}`).join(' · ')),
     P(`Keeps promises · ${CP_W.pro}%`,pc(x.pro)),H(`Own: ${x.ownN} promise${x.ownN===1?'':'s'} due so far (${x.lp.length} day-plan, ${x.tp.length} task) — ${ks([...x.lp,...x.tp])}.`+
-      (x.podP?` POD: ${x.podP.length} task${x.podP.length===1?'':'s'} due — ${ks(x.podP)}.`:'')+' Judged on the first date set; fewer than 5 is not judged yet.'),
+      (x.podP?` POD: ${x.podP.length} task${x.podP.length===1?'':'s'} due — ${ks(x.podP)}.`:'')+' Last 30 days, judged on the first date set; fewer than 5 is not judged yet.'),
     P(`Output · ${CP_W.out}%`,x.outI+'%'),H(`${x.outPts} of ${x.outT} (${x.C.out} a day × ${x.wdays} days): `+[O.gateN?`${O.gateN} approved gate${O.gateN>1?'s':''}`:'',O.nodN?`${O.nodN} undated gate${O.nodN>1?'s':''} (half)`:'',O.taskN?`${O.taskN} design task${O.taskN>1?'s':''}`:'',O.meetN?`${O.meetN} meeting${O.meetN>1?'s':''} (¼ each)`:'',O.lineN?`${O.lineN} day-plan line${O.lineN>1?'s':''} (½ each)`:''].filter(Boolean).join(', ')+'.'+
       (O.catchN?` ${O.catchN} gate${O.catchN>1?'s':''} ticked weeks early (catch-up, not counted).`:'')+(O.zero?` ${O.zero} item${O.zero>1?'s':''} dated or created on the day done (not counted).`:'')),
     P(`Load · ${CP_W.load}%`,x.loadI+'%'),H(`${x.liveN} live item${x.liveN===1?'':'s'} (current-phase gates and work dated in the next 30 days), worth ${x.loadPts} of a full ${x.C.load}. Open in all ${x.open}, ${x.noDate} undated.`)); }
@@ -5459,7 +5468,12 @@ function viewDeskToday(){
      behind "+ N more", which opens the whole list in a side panel. Sections that need action carry a progress bar:
      cleared ÷ (cleared + still open), counted from when each item first came (progOf). */
   const tDone=k=>{ const t=S.tasks[k]; return !t||!!t.doneAt||!!t.verify||!!t.archived; };
-  const nowRows=()=>[...now.map(t=>vfReturned(t)?red(deskTask(t,{done:true})):deskTask(t,{done:true})),...kFollow(td,false),...meetToday];
+  /* POD leader (Principal, 13 Nov 2026): tasks on the POD with no date for 7+ days (not stage gates, which wait for the phase days) */
+  const undated=()=>lead?activeTasks().filter(t=>!t.doneAt&&!t.verify&&!t.archived&&!t.legacy&&!t.gate&&!t.target&&t.projectId&&inMyPodProject(S.projects[t.projectId])&&String(t.createdAt||'0000').slice(0,10)<=addDays(td,-7)).sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||''))):[];
+  const undRows=()=>{ const u=undated(); if(!u.length) return [];
+    return [hRow({dot:'var(--late)',strong:`Date ${u.length} task${u.length>1?'s':''}`,meta:['on your POD, no date for 7 days or more','a date makes it count as a promise','tap to date them'].join(' · '),
+      onclick:()=>{ S.sheet={type:'homeList',title:'Tasks with no date',build:()=>{ const l=undated(); return l.length?l.map(t=>deskTask(t,{})):[h('p',{class:'f-hint',text:'All dated. Thank you.'})]; }}; renderSheet(); }})]; };
+  const nowRows=()=>[...now.map(t=>vfReturned(t)?red(deskTask(t,{done:true})):deskTask(t,{done:true})),...undRows(),...kFollow(td,false),...meetToday];
   const waitRows=()=>waitQ.flatMap(x=>[].concat(x.el()));
   const waitKeys=[...sent.map(t=>'t:'+t.id),...acts.map(n=>'n:'+(n.id||n.title)),...shReq.map(t=>'r:'+t.id)];
   const left=deskCol('Today',h('span',{class:'cnt',style:'font-weight:400;font-size:12.5px;color:var(--muted)',text:'in the order to work on it'}),[
