@@ -234,6 +234,7 @@ button.my-score{appearance:none;border:0;background:none;font:inherit;color:inhe
   .desk-today .pg-list{border-radius:12px}
   /* Today Home */
   .desk.desk-today{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)}
+.desk.desk-today.desk-3{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,.95fr)}
   .desk.desk-today.desk-one{grid-template-columns:minmax(0,1fr)}
   .desk-today .desk-b>.sec{margin-top:6px}
 }
@@ -5501,6 +5502,8 @@ function viewDeskToday(){
     fitOpt(todoSec(),8),
     later.length?fitOpt(h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px;margin:2px 6px',onclick:goMine('active'),text:`${later.length} more due later · open My tasks`}),9):null]);
   /* right: only what has something in it */
+  /* POD leader on a wide PC (Principal, 13 Nov 2026): three columns — Today · My POD · My plan */
+  const three=lead&&window.innerWidth>=1280, pod_=[], podP=e=>{ if(e) (three?pod_:right_).push(e); };
   const right_=[]; { const mw=myWeekEl(); if(mw){ [['.mw-pastb,.mw-ew',9],['.mw-leg',8],['.mw-tip',7],['.mw-sub',6.6],['.mw-bar',6.5]]   /* the week grid itself is never cut */.forEach(([q,fp])=>mw.querySelectorAll(q).forEach(e=>fitOpt(e,fp))); right_.push(h('div',{class:'desk-sub'},mw)); } }
   /* fixed sections on every POD leader's Home (Principal, 13 Nov 2026): the drafting team and the junior architects, each
      with their work on this POD's projects. Always shown, never cut by fitHome; a row opens that person's work. */
@@ -5517,12 +5520,12 @@ function viewDeskToday(){
     const drs=dbDrafters().filter(id=>!isLeft(id));
     const fixed=(title,ids,go,more)=>h('div',{class:'desk-sub fit-fixed'},h('div',{class:'desk-st'},h('span',{text:title}),h('b',{text:String(ids.length)}),h('button',{class:'linkish',type:'button',onclick:more,text:'All'})),
       h('div',{class:'h-list'},ids.length?ids.map(id=>teamRow(id,go(id))):[h('div',{class:'f-hint',style:'padding:6px 8px',text:'No one yet'})]));
-    right_.push(fixed('Junior architects',jrs,goPerson,podList(`Junior architects · work on ${podLabel(mp)}`,jrs)));
-    right_.push(fixed('Drafting team',drs,id=>()=>{ S.dbF={pod:mp,who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); },()=>{ S.dbF={pod:mp,who:''}; S.view='drafting'; render(true); }));
+    podP(fixed('Junior architects',jrs,goPerson,podList(`Junior architects · work on ${podLabel(mp)}`,jrs)));
+    podP(fixed('Drafting team',drs,id=>()=>{ S.dbF={pod:mp,who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); },()=>{ S.dbF={pod:mp,who:''}; S.view='drafting'; render(true); }));
   }
-  { const pw=podWeekEl(); if(pw) right_.push(fitSec(pw,4,{title:'My POD this week'})); }
+  { const pw=podWeekEl(); if(pw) podP(fitSec(pw,4,{title:'My POD this week'})); }
   if(lead){ const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)&&inMyPodProject(p));
-    if(ps.length){ const g=projGateSec(ps,false,0,true); g.querySelectorAll('.pg-note').forEach(e=>fitOpt(e,7.5)); right_.push(fitSec(g,5,{more:()=>goView('projects')})); } }
+    if(ps.length){ const g=projGateSec(ps,false,0,true); g.querySelectorAll('.pg-note').forEach(e=>fitOpt(e,7.5)); podP(fitSec(g,5,{more:()=>goView('projects')})); } }
   const nt=nAll().filter(n=>nLive(n)&&!nSeen(n)).sort((a,b)=>(b.important-a.important)||b.created_at.localeCompare(a.created_at))[0];
   if(nt) right_.push(fitOpt(h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})),7));
   if(false){ const W=subsIn('week'), M=subsIn('month'), ts=[['week',W],['month',M]].filter(([k,X])=>X.xs.length);
@@ -5536,8 +5539,8 @@ function viewDeskToday(){
     const clKeys=mcl.map(x=>`${x.p.id}|${x.k}|${x.it.id}`);
     right_.push(fitSec(deskSub('My checklist',rows,mcl.length),6,{title:'My checklist',build:()=>[myChecklistSec(mcl,{grouped:true})],prog:{key:'cl',keys:clKeys}})); } }
   { const later_=meetAll.filter(r=>!meetToday.includes(r)).slice(0,3); if(later_.length) right_.push(fitSec(deskSub('Coming meetings',later_,null,()=>{ S.mhub='up'; goView('meet'); }),9,{more:()=>{ S.mhub='up'; goView('meet'); }})); }
-  const right=right_.length?deskCol(lead?'My POD and plan':'Plan',null,right_):null;
-  return [top,h('div',{class:'desk desk-today'+(right?'':' desk-one')},left,right),
+  const right=right_.length?deskCol(three?'My plan':lead?'My POD and plan':'Plan',null,right_):null, podCol=three&&pod_.length?deskCol('My POD',null,pod_):null;
+  return [top,h('div',{class:'desk desk-today'+(podCol?' desk-3':'')+(right||podCol?'':' desk-one')},left,podCol,right),
     h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
 }
 
