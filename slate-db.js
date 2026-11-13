@@ -1484,6 +1484,9 @@
   }
   function setupDayLog() {
     window.slateDayIn = dayIn;
+    // entry PIN (computers only): the morning greeting checks it; the server writes the computer entry
+    const pinRpc = async (fn, args) => { const { data, error } = await sb.rpc(fn, args || {}); if (error) return { ok: false, msg: friendly(error).message }; return data || {}; };
+    window.slateEntryPin = { status: () => pinRpc('entry_pin_status'), set: pin => pinRpc('entry_pin_set', { p_pin: pin }), check: pin => pinRpc('entry_pin_in', { p_pin: pin }) };
     window.slateEntryLogView = entryLogView;
     window.slateCanSeeEntryLog = canSeeLog;
     ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => window.addEventListener(ev, () => { dlInput = Date.now(); }, { passive: true }));
@@ -1546,6 +1549,8 @@
     let ab = []; try { const r = await sb.rpc('perf_presence', { p_from: day, p_to: day }); lv = (r.data || []).filter(x => x.leave && !x.absent).map(x => x.user_id); ab = (r.data || []).filter(x => x.absent).map(x => x.user_id); } catch (_) {}
     if (EL.day !== day) return;
     EL.leave = new Set(lv); EL.absent = new Set(ab);
+    try { const r = await sb.rpc('entry_pin_list'); EL.pins = new Map((r.data || []).map(x => [x.user_id, x.set_at])); } catch (_) { EL.pins = new Map(); }
+    if (EL.day !== day) return;
     EL.loading = false; EL.err = error ? friendly(error).message : ''; EL.rows = error ? [] : (data || []);
     try { if (S.view === 'entries') render(true); } catch (_) {}
   }
@@ -1559,7 +1564,7 @@
       b.addEventListener('click', () => { EL.rows = null; loadEntryLog(shiftDay(day, n)); try { render(true); } catch (_) {} }); return b; };
     const todayBtn = day === td ? null : (() => { const b = el('button', { class: 'linkish', type: 'button' }, 'Today'); b.addEventListener('click', () => { EL.rows = null; loadEntryLog(td); try { render(true); } catch (_) {} }); return b; })();
     const head = el('div', { class: 'page-h' }, el('div', {}, el('div', { class: 'eyebrow' }, 'Principal and COO'), el('h1', { class: 'h1' }, 'Entry log'),
-      el('p', { class: 'lead' }, 'In: the first tap on the morning greeting. Out: the last time SLATE OS was closed that day. Phone times are kept separate.')));
+      el('p', { class: 'lead' }, 'In: the morning greeting (on a computer, the person’s own 4-digit entry PIN). Out: the last time SLATE OS was closed that day. Phone times are kept separate.')));
     const bar = el('div', { class: 'bar', style: 'justify-content:space-between;align-items:center' },
       el('div', { style: 'display:flex;gap:8px;align-items:center' }, nav(-1, 'Previous day'), el('b', { style: 'font-size:16px;min-width:0' }, label), nav(1, 'Next day', day >= td)), todayBtn || el('span'));
     if (EL.err) return [head, bar, el('p', { class: 'err' }, EL.err)];
@@ -1593,12 +1598,21 @@
         try { window.slatePerfPresenceReset && window.slatePerfPresenceReset(); render(true); } catch (_) {} });
       return el('span', { style: 'display:inline-flex;gap:8px;align-items:center' }, el('span', { style: 'color:var(--overdue);font-size:13px' }, 'Absent'), b);
     };
+    /* entry PIN: set or not, and a reset for a forgotten PIN (they choose a new one at the next morning greeting) */
+    const pinCell = (id) => { if (!EL.pins) return null; const has = EL.pins.has(id);
+      if (!has) return el('div', { class: 'f-hint', style: 'color:var(--faint)' }, 'No entry PIN yet');
+      const b = el('button', { class: 'linkish', type: 'button', style: 'font-size:12px' }, 'Reset PIN');
+      b.addEventListener('click', async () => { if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Tap again to reset'; return; }
+        b.disabled = true; const { error } = await sb.rpc('entry_pin_reset', { p_user: id });
+        if (error) { b.disabled = false; b.textContent = 'Couldn’t reset'; b.title = friendly(error).message; return; }
+        EL.pins.delete(id); try { render(true); } catch (_) {} });
+      return el('div', { class: 'f-hint' }, 'Entry PIN set · ', b); };
     const inN = ppl.filter(x => x.c && x.c.in_at).length, outN = ppl.filter(x => x.c && x.c.out_at).length;
     const tile = (n, l) => el('div', { class: 'slate-ad-t' }, el('b', {}, String(n)), el('span', {}, l));
     const table = el('div', { class: 'tbl-wrap', style: 'overflow-x:auto' }, el('table', { class: 'tbl', style: 'width:100%;border-collapse:collapse' },
       el('thead', {}, el('tr', {}, ...['Person', 'In', 'Out', 'Phone in', 'Phone out', 'Absent'].map((t, i) => el('th', { style: `text-align:${i ? 'right' : 'left'};padding:8px 10px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)` }, t)))),
       el('tbody', {}, ...ppl.map(({ p, c, m }) => el('tr', {},
-        el('td', { style: 'padding:10px;border-bottom:1px solid var(--line)' }, el('b', { style: 'font-weight:600' }, nm(p.id)), el('div', { class: 'f-hint' }, [p.team, p.role_label].filter(Boolean).join(' · '))),
+        el('td', { style: 'padding:10px;border-bottom:1px solid var(--line)' }, el('b', { style: 'font-weight:600' }, nm(p.id)), el('div', { class: 'f-hint' }, [p.team, p.role_label].filter(Boolean).join(' · ')), pinCell(p.id)),
         ...[c && c.in_at ? hm(c.in_at) : '—', outTxt(c), m && m.in_at ? hm(m.in_at) : '—', outTxt(m)].map((t, i) =>
           el('td', { style: `padding:10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap;${i > 1 ? 'color:var(--muted)' : t === '—' ? 'color:var(--faint)' : 'font-weight:500'}` }, t)),
         el('td', { style: 'padding:10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap' }, absentCell(p.id, c, m)))))));
