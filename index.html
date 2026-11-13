@@ -165,6 +165,7 @@ body.fab-off #fbell,body.fab-off #fab,body.fab-off #fbell-pop,body.rep-off #slat
 .pf-list input.pf-sw,input.pf-sw{appearance:none;-webkit-appearance:none;flex:none;width:46px!important;height:28px!important;min-height:0!important;padding:0!important;margin:0 0 0 8px!important;border:0!important;border-radius:14px!important;background:#E5E5EA!important;position:relative;cursor:pointer;transition:background .2s}
 input.pf-sw::before{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
 input.pf-sw:checked{background:#34C759!important}input.pf-sw:checked::before{transform:translateX(18px)}
+.ver-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}.ver-line .ver-up{margin-left:auto}.pf-ver{margin:14px 4px 4px;font-size:13px;color:var(--muted)}
 .msg-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
 .cp-r{border-bottom:1px solid var(--line,#EEE)}.cp-r summary{list-style:none;display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr 34px;grid-template-areas:"n b s" "m m m";gap:2px 10px;align-items:center;padding:8px 2px;cursor:pointer}.cp-r summary::-webkit-details-marker{display:none}
@@ -3638,7 +3639,9 @@ function verLine(){ verCheck(false); const n=appVerN(), at=/^\d{4}-/.test(APP_AT
   const when=at&&!isNaN(at)?at.toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dhaka'}):'';
   const newer=n&&verLive>n;
   return h('div',{class:'ver-line'},h('span',{text:n?`SLATE OS ${verName(n)}`+(when?` · released ${when}`:''):'SLATE OS · version not known (test copy)'}),
-    newer?h('button',{class:'linkish',type:'button',onclick:()=>appReload(),text:`${verName(verLive)} is out · Reload`}):n&&verLive?h('span',{style:'color:var(--ontime)',text:'Up to date'}):null); }
+    newer?h('button',{class:'linkish',type:'button',onclick:()=>appReload(),text:`${verName(verLive)} is out · Reload`}):n&&verLive?h('span',{style:'color:var(--ontime)',text:'Up to date'}):null,
+    /* always there (Principal, 13 Nov 2026): clears the saved copy and loads the newest release, whatever the phone thinks it has */
+    h('button',{class:'btn btn-sm ver-up',type:'button',onclick:e=>{ e.target.disabled=true; e.target.textContent='Updating…'; appReload(); },text:newer?`Update to ${verName(verLive)}`:'Update now'})); }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') verCheck(false); });
 setTimeout(()=>verCheck(true),8000);
 /* More › View as a team member: pick someone; SLATE OS reloads as they see it, with a black bar and Exit at the bottom.
@@ -7000,6 +7003,7 @@ function sheetMyProfile(){
   out.push(h('div',{class:'pf-gh',text:'Floating buttons'}),h('div',{class:'pf-list'},sw('+ button','The round + and the floating bell, bottom right',floatAddOn(),'floatAdd'),sw('Report an issue','The red ! button, bottom left',floatRepOn(),'floatReport')));
   out.push(h('div',{class:'pf-list'},h('button',{class:'pf-row tap',type:'button',onclick:()=>{ closeSheet(); window.slateAccount&&window.slateAccount(); }},h('span',{class:'pf-l',style:'width:auto',text:'Password and notifications'}),h('span',{class:'pf-v'}),h('span',{class:'pf-go','aria-hidden':'true',text:'›'})),
     h('button',{class:'pf-row tap pf-out',type:'button',onclick:()=>{ if(confirm('Sign out of SLATE OS on this device?')) api.signOut(); },text:'Sign out'})));
+  out.push(h('div',{class:'pf-ver'},verLine()));
   return out;
 }
 /* Share contact: a full screen card with the SLATE mark (black or red, the person's choice), their name and a QR of their
