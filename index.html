@@ -5278,74 +5278,87 @@ function teamRingsSec(){ if(!(amApprover()||S.isOwner)) return null; const rows=
   const grp=(l,ids)=>ids.length?[h('div',{class:'tr-g',text:l}),h('div',{class:'tr-grid'},...ids.map(tile))]:[];
   return h('div',{class:'desk-sub'},h('div',{class:'desk-st'},h('span',{text:`Team this month · ${mn}`}),h('b',{text:String(live.length)}),h('span',{class:'f-hint',style:'margin-left:auto;font-weight:400',text:`goal ${Math.round(MW_GOAL*100)}%`})),
     ...grp('POD leaders',leads),...grp('Members',members),...grp('Drafting',drafts)); }
-/* Contribution points v1 (Principal, 13 Nov 2026): SHADOW MODE, only the Principal and the COO see it; nobody else's screen shows or builds it.
-   Score out of 100 = Did + Has (+ POD for POD leaders) + Habits, minus cuts. Each part is judged against the person's level.
-   Did: 1 per day with a real day plan (not on absent days) + finished work: stage gate 5, task 1, small routine 0.5, x on-time factor
-        (10% less per late day, floor 40%, no penalty while waiting on client/consultant); dated-on-the-day or created-and-closed same day = 0;
-        each "sent back" = -1. Counts up to 150% of the level target, so extra output shows.
-   Has: weighted open work that is dated in the next 30 days or belongs to the project's current phase.
-   POD (POD leaders only): half POD gates/tasks finished on time (needs 5+ finished, else neutral), half the habits of the people on their POD.
-   Cuts: absent day 3, leave day 1.5, overdue task 2, undated open task (not a stage gate) outside the current phase and older than 7 days 0.5 (max 10).
-   Stage gates of later phases carry no date until phase days are set, so they never cost points. */
-/* Has targets = a full load for the level (gate 5, task 1): POD leader about 3 projects in their current phase */
-/* weights [Did, Has, POD, Habits]; habits raised to 30% (Principal, 13 Nov 2026) */
-const CP_LV={lead:{n:'POD leader',did:1.5,has:60,w:[25,20,25,30]},dlead:{n:'Drafting lead',did:1.2,has:25,w:[40,30,0,30]},draft:{n:'Drafting',did:1.2,has:20,w:[50,20,0,30]},junior:{n:'Junior architect',did:1.2,has:20,w:[50,20,0,30]}};
+/* Contribution points v2 (Principal, 13 Nov 2026): SHADOW MODE, only the Principal and the COO see it.
+   Four plain parts, each a %, nothing counted twice. Levels differ only in their Output and Load norms.
+   Reliable 25%   came in, planned the day, closed the day (the habit rings without "work on time"; an absent day is a missed "in").
+   Promises 30%   work finished by its ORIGINAL date: tasks, and day-plan lines given a later finish-by date (a line's date defaults to the
+                  same day, so a plain carried line is not a broken promise; a carried line is fine until its chosen date passes).
+                  Only dates set at least a day before count; late = half; waiting on client/consultant = left out; a date moved for a
+                  client delay counts from the new date. POD leaders: half their own, half their POD's tasks. Fewer than 5 = "not enough yet".
+   Output 25%     finished this month: stage gate approved by the COO or Principal 5 (ticked 14+ days before its date = catch-up, 0;
+                  no date = half), design task 1, meeting/coordination 0.25, own day-plan line not tied to a task 0.5.
+                  Created and closed the same day, or dated on the day it was done = 0.
+   Load 20%       live work now: current-phase gates 5, tasks dated in the next 30 days 1 (meetings 0.25), against the level's full load. */
+const CP_LV={lead:{n:'POD leader',out:1.5,load:60},dlead:{n:'Drafting lead',out:1.0,load:25},draft:{n:'Drafting',out:0.8,load:20},junior:{n:'Junior architect',out:0.8,load:20}};
+const CP_W={rel:25,pro:30,out:25,load:20};
 const cpSee=()=>!!S.uid&&(S.uid===ownerId()||isCOO(S.uid));
-function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(td), rows=presRows(mwRange())||S.mwRows, pr=presRows({s:m0,e:td}); if(!rows||!pr) return null;
-  const d30=addDays(td,30), ids=people().filter(id=>!isLeft(id)&&needPlan(id));
+const cpMeet=t=>/meeting|coordinat|\bcall\b|site visit|discussion/i.test((t.title||'')+' '+(t.kind||''));
+function cpOrig(t){ /* the first date ever promised, and when it was set */
+  if(t.clientShift) return {d:t.target,at:null};
+  for(const e of (t.history||[])){ if((e.type==='created'||e.type==='target')&&e.to) return {d:e.to,at:String(e.at||'').slice(0,10)}; }
+  return t.target?{d:t.target,at:String(t.createdAt||'').slice(0,10)}:null; }
+function cpCalc(){ if(!cpSee()) return null; const td=today(), m0=mwMonthStart(td), rows=presRows(mwRange())||S.mwRows; if(!rows) return null;
+  const d30=addDays(td,30), ids=people().filter(id=>!isLeft(id)&&needPlan(id)), tops=new Set([ownerId(),...people().filter(isCOO)]);
   const wd=[]; for(let d=m0;d<=td;d=addDays(d,1)) if(isWorkDay(d)) wd.push(d);
   const lvl=id=>pods().some(pd=>isPodLead(id,pd))?'lead':roleGroup(id)==='dhead'?'dlead':isDraftMember(id)?'draft':'junior';
-  const size=t=>t.kind==='Deliverable'||t.gate?5:routineW(t)===0.5?0.5:1;
-  const all=activeTasks().filter(t=>t&&!t.archived&&!t.legacy), podsT=t=>podsOfProject(S.projects[t.projectId]);
+  const all=activeTasks().filter(t=>t&&!t.archived&&!t.legacy), podsT=t=>podsOfProject(S.projects[t.projectId]), dn=t=>t.doneAt?String(t.doneAt).slice(0,10):null;
   const phKey=t=>t.gate&&t.gate.k?String(t.gate.k):String(t.phase||'').split(' ')[0];
   const openG={}; all.forEach(t=>{ if(t.gate&&!t.doneAt&&t.projectId) (openG[t.projectId]=openG[t.projectId]||new Set()).add(phKey(t)); });
-  /* current phase = the phases the project has started; if phase days aren't entered yet, the first phase that still has an open gate */
   const curOf={}; const inCur=t=>{ const p=S.projects[t.projectId]; if(!p||!p.std) return false;
     if(!(t.projectId in curOf)){ const a=activePhases(p).map(String), og=openG[t.projectId]; curOf[t.projectId]=a.length?a:(()=>{ const k=stdPhases(p).map(String).find(k=>og&&og.has(k)); return k?[k]:[]; })(); }
     return curOf[t.projectId].includes(phKey(t)); };
-  const wait=new Set(); ids.forEach(id=>wd.forEach(d=>{ const r=wlGet(id,d); (r&&r.lines||[]).forEach(l=>{ if(l.wait&&l.taskId) wait.add(l.taskId); }); }));
-  const pres={}; pr.forEach(r=>{ (pres[r.user_id]=pres[r.user_id]||{})[r.day]=r; });
-  const habit={}; ids.forEach(id=>{ const M=mwMonth(id,rows,m0); habit[id]=M.N?M.p:0; });
-  const r1=x=>Math.round(x*10)/10;
-  const out=ids.map(id=>{ const L=lvl(id), C=CP_LV[L], P=pres[id]||{}, past=wd.filter(d=>d<td);
-    const absD=past.filter(d=>{ const r=P[d]; return r&&!r.leave&&(r.absent||!r.opened); }), leaveD=past.filter(d=>P[d]&&P[d].leave);
-    let days=0; wd.forEach(d=>{ if(absD.includes(d)||leaveD.includes(d)) return; const r=wlGet(id,d); if(r&&(r.lines||[]).some(l=>(l.projectId||l.taskId)&&String((l.text||'')+' '+(l.part||'')).trim().length>=20)) days++; });
-    const done=all.filter(t=>t.assignee===id&&t.doneAt&&String(t.doneAt).slice(0,10)>=m0);
-    let fin=0, zero=0, gates=0, late=0; done.forEach(t=>{ const dn=String(t.doneAt).slice(0,10), same=String(t.createdAt||'').slice(0,10)===dn&&(!t.createdBy||t.createdBy===id);
-      if(unplanned(t)||same){ zero++; return; } if(size(t)===5) gates++; const lt=t.target&&!wait.has(t.id)?Math.max(0,diff(t.target,dn)):0; if(lt>0) late++; fin+=size(t)*(lt<=0?1:Math.max(0.4,1-0.1*lt)); });
-    const back=all.filter(t=>t.assignee===id).reduce((a,t)=>a+(t.history||[]).filter(e=>e.type==='reopened'&&String(e.at||'').slice(0,10)>=m0).length,0);
-    const did=Math.max(0,days+fin-back), didT=C.did*wd.length, didI=Math.min(150,didT?did/didT*100:0);
-    const opn=all.filter(t=>t.assignee===id&&!t.doneAt), cnt=opn.filter(t=>(t.target&&t.target<=d30)||inCur(t));
-    const hasW=cnt.reduce((a,t)=>a+size(t),0), hasI=Math.min(100,hasW/C.has*100);
-    const noDate=opn.filter(t=>!t.target), stale=noDate.filter(t=>!t.gate&&!inCur(t)&&String(t.createdAt||'0000').slice(0,10)<=addDays(td,-7));
-    const over=opn.filter(t=>!t.verify&&t.target&&t.target<td&&!wait.has(t.id)).length;
-    let podI=null, podTxt='';
-    if(L==='lead'){ const mp=teamOf(id), pt=all.filter(t=>podsT(t).includes(mp)&&t.doneAt&&String(t.doneAt).slice(0,10)>=m0&&t.target&&!unplanned(t));
-      const ot=pt.filter(t=>String(t.doneAt).slice(0,10)<=t.target).length;
-      const team=ids.filter(x=>x!==id&&lvl(x)!=='lead'&&all.some(t=>t.assignee===x&&podsT(t).includes(mp)&&(!t.doneAt||String(t.doneAt).slice(0,10)>=m0)));
-      const th=team.length?team.reduce((a,x)=>a+habit[x],0)/team.length:0, enough=pt.length>=5, rate=enough?ot/pt.length*100:th;
-      podI=Math.round(0.5*rate+0.5*th); podTxt=`${ot} of ${pt.length} finished on time${enough?'':' (fewer than 5, not judged yet)'} · team habits ${Math.round(th)}% (${team.length} people)`; }
-    const w=C.w, base=(w[0]*didI+w[1]*hasI+w[2]*(podI||0)+w[3]*habit[id])/100;
-    const cut={abs:3*absD.length,leave:1.5*leaveD.length,over:2*over,nod:Math.min(10,0.5*stale.length)}, cutT=cut.abs+cut.leave+cut.over+cut.nod;
-    return {id,L,C,score:Math.max(0,Math.min(100,Math.round(base-cutT))),didI:Math.round(didI),hasI:Math.round(hasI),podI,podTxt,hab:habit[id],cut,cutT:r1(cutT),
-      days,fin:r1(fin),gates,zero,late,back,did:r1(did),didT:r1(didT),hasW:r1(hasW),hasN:cnt.length,open:opn.length,noDate:noDate.length,stale:stale.length,over,absD,leaveD,wdays:wd.length}; });
+  const lines={}, wait=new Set();
+  ids.forEach(id=>{ const L=lines[id]={}; wd.forEach(d=>{ const r=wlGet(id,d); (r&&r.lines||[]).forEach(l=>{ if(!l||!l.id) return; if(l.wait&&l.taskId) wait.add(l.taskId); L[l.id]={...l,day:d}; }); }); });
+  /* one promise per carried chain of day-plan lines */
+  const lineProm=id=>{ const L=lines[id], roots={}; Object.values(L).forEach(l=>{ let r=l, n=0; while(r.from&&L[r.from]&&n++<30) r=L[r.from]; (roots[r.id]=roots[r.id]||{r,ls:[]}).ls.push(l); });
+    const P=[]; Object.values(roots).forEach(({r,ls})=>{ if(ls.some(l=>l.wait)||ls.some(l=>l.status==='stopped')) return; if(!(r.projectId||r.taskId)) return;
+      const due=r.due0||r.due; if(!due||due<=r.day) return; /* a line's date defaults to the same day; only a chosen later finish-by is a promise */ const fin=ls.find(l=>l.status==='done'), fd=fin?String(fin.closedAt||fin.day).slice(0,10):null;
+      if(fd&&fd<=due) P.push({v:1,k:'kept'}); else if(fd) P.push({v:0.5,k:'late'}); else if(due<td) P.push({v:0,k:'missed'}); }); return P; };
+  const taskProm=list=>{ const P=[]; list.forEach(t=>{ const o=cpOrig(t); if(!o||!o.d||o.d<m0||o.d>=td||wait.has(t.id)||unplanned(t)) return;
+      if(o.at&&o.at>=o.d) return; const w=t.gate?3:cpMeet(t)?0.25:1, d=dn(t);
+      P.push(d&&d<=o.d?{v:w,w,k:'kept'}:d||t.verify?{v:w/2,w,k:'late'}:{v:0,w,k:'missed'}); }); return P; };
+  const pct=P=>{ const W=P.reduce((a,x)=>a+(x.w||1),0); return W?Math.round(P.reduce((a,x)=>a+x.v,0)/W*100):null; };
+  const cnt=(P,k)=>P.filter(x=>x.k===k).length;
+  const out=ids.map(id=>{ const L=lvl(id), C=CP_LV[L], M=mwMonth(id,rows,m0), H3=M.H.filter(o=>o.k!=='work'), hg=H3.reduce((a,o)=>a+o.g,0), hn=H3.reduce((a,o)=>a+o.n,0);
+    const rel=hn?Math.round(hg/hn*100):null, inP=(M.H.find(o=>o.k==='in')||{}).p;
+    const mine=all.filter(t=>t.assignee===id);
+    const lp=lineProm(id), tp=taskProm(mine), ownP=[...lp,...tp]; let pro=ownP.length>=5?pct(ownP):null, podP=null, podPct=null;
+    if(L==='lead'){ podP=taskProm(all.filter(t=>podsT(t).includes(teamOf(id))&&t.assignee!==id)); podPct=podP.length>=5?pct(podP):null;
+      pro=pro!=null&&podPct!=null?Math.round((pro+podPct)/2):pro!=null?pro:podPct; }
+    /* output */
+    const O={gate:0,gateN:0,catchN:0,nodN:0,task:0,taskN:0,meet:0,meetN:0,line:0,lineN:0,zero:0};
+    mine.filter(t=>dn(t)&&dn(t)>=m0).forEach(t=>{ const d=dn(t), same=String(t.createdAt||'').slice(0,10)===d&&(!t.createdBy||t.createdBy===id);
+      if(t.gate){ const ok=!t.doneBy||tops.has(t.doneBy)||tops.has(t.verifiedBy); if(!ok){ O.zero++; return; }
+        if(t.target&&diff(d,t.target)>14){ O.catchN++; return; } if(!t.target){ O.gate+=2.5; O.nodN++; } else { O.gate+=5; O.gateN++; } return; }
+      if(unplanned(t)||same){ O.zero++; return; }
+      if(cpMeet(t)){ O.meet+=0.25; O.meetN++; } else { O.task+=1; O.taskN++; } });
+    Object.values(lines[id]).forEach(l=>{ if(l.status==='done'&&!l.taskId&&l.projectId){ O.line+=0.5; O.lineN++; } });
+    const outPts=O.gate+O.task+O.meet+O.line, outT=C.out*wd.length, outI=Math.min(120,outT?outPts/outT*100:0);
+    /* load */
+    const opn=mine.filter(t=>!t.doneAt), live=opn.filter(t=>(t.gate&&inCur(t))||(!t.gate&&t.target&&t.target<=d30));
+    const loadPts=live.reduce((a,t)=>a+(t.gate?5:cpMeet(t)?0.25:1),0), loadI=Math.min(100,loadPts/C.load*100);
+    const parts=[['rel',rel],['pro',pro],['out',outI],['load',loadI]].filter(([,v])=>v!=null), wsum=parts.reduce((a,[k])=>a+CP_W[k],0);
+    const score=wsum?Math.round(parts.reduce((a,[k,v])=>a+CP_W[k]*v,0)/wsum):0;
+    const r1=x=>Math.round(x*10)/10;
+    return {id,L,C,score:Math.min(100,score),rel,inP,pro,ownN:ownP.length,ownPct:pct(ownP),lp,tp,podP,podPct,O,outPts:r1(outPts),outT:r1(outT),outI:Math.round(outI),
+      loadPts:r1(loadPts),loadI:Math.round(loadI),liveN:live.length,open:opn.length,noDate:opn.filter(t=>!t.target).length,wdays:wd.length,M}; });
   return out.sort((a,b)=>b.score-a.score); }
-function cpDetail(x){ const w=x.C.w, P=(l,v)=>h('div',{class:'cp-l'},h('span',{text:l}),h('b',{text:v}));
-  const dl=d=>d.map(fmtD).join(', ');
+function cpDetail(x){ const P=(l,v)=>h('div',{class:'cp-l'},h('span',{text:l}),h('b',{text:v})), H=t=>h('p',{class:'f-hint',text:t}), pc=v=>v==null?'not enough yet':v+'%';
+  const ks=Ps=>`${cnt(Ps,'kept')} kept, ${cnt(Ps,'late')} late, ${cnt(Ps,'missed')} missed`, cnt=(Ps,k)=>Ps.filter(y=>y.k===k).length, O=x.O;
   return h('div',{class:'cp-d'},
-    P(`Did · ${w[0]}% of score`,`${x.didI}%`),h('p',{class:'f-hint',text:`${x.days} days with a day plan + ${x.fin} from finished work (${x.gates} stage gate${x.gates===1?'':'s'}${x.late?`, ${x.late} finished late`:''})${x.back?` − ${x.back} sent back`:''} = ${x.did} of ${x.didT} target (${x.C.did} a day × ${x.wdays} working days). ${x.zero?`${x.zero} finished task${x.zero>1?'s were':' was'} dated on the day itself, so not counted.`:''}`}),
-    P(`Has · ${w[1]}%`,`${x.hasI}%`),h('p',{class:'f-hint',text:`${x.hasN} open item${x.hasN===1?'':'s'} dated in the next 30 days or in the current phase, worth ${x.hasW} (target ${x.C.has}). Open in all: ${x.open}, ${x.noDate} with no date (most are stage gates of later phases, which don\u2019t count against anyone).`}),
-    x.podI!=null?P(`POD · ${w[2]}%`,`${x.podI}%`):null,x.podI!=null?h('p',{class:'f-hint',text:x.podTxt}):null,
-    P(`Habits · ${w[3]}%`,`${x.hab}%`),
-    P('Cuts',x.cutT?`−${x.cutT}`:'none'),
-    x.cutT?h('p',{class:'f-hint',text:[x.absD.length?`absent ${dl(x.absD)} (−${x.cut.abs})`:'',x.leaveD.length?`leave ${dl(x.leaveD)} (−${x.cut.leave})`:'',x.over?`${x.over} overdue (−${x.cut.over})`:'',x.stale?`${x.stale} undated task${x.stale>1?'s':''} (not stage gates) for 7+ days (−${x.cut.nod})`:''].filter(Boolean).join(' · ')}):null); }
-function cpRowEl(x){ const col=x.score>=75?'#2E9E5B':x.score>=50?'#C98A16':'#D0453C';
+    P(`Reliable · ${CP_W.rel}%`,pc(x.rel)),H(x.M.H.filter(o=>o.k!=='work').map(o=>`${o.l} ${o.p==null?'–':o.p+'%'}`).join(' · ')),
+    P(`Keeps promises · ${CP_W.pro}%`,pc(x.pro)),H(`Own: ${x.ownN} promise${x.ownN===1?'':'s'} due so far (${x.lp.length} day-plan, ${x.tp.length} task) — ${ks([...x.lp,...x.tp])}.`+
+      (x.podP?` POD: ${x.podP.length} task${x.podP.length===1?'':'s'} due — ${ks(x.podP)}.`:'')+' Judged on the first date set; fewer than 5 is not judged yet.'),
+    P(`Output · ${CP_W.out}%`,x.outI+'%'),H(`${x.outPts} of ${x.outT} (${x.C.out} a day × ${x.wdays} days): `+[O.gateN?`${O.gateN} approved gate${O.gateN>1?'s':''}`:'',O.nodN?`${O.nodN} undated gate${O.nodN>1?'s':''} (half)`:'',O.taskN?`${O.taskN} design task${O.taskN>1?'s':''}`:'',O.meetN?`${O.meetN} meeting${O.meetN>1?'s':''} (¼ each)`:'',O.lineN?`${O.lineN} day-plan line${O.lineN>1?'s':''} (½ each)`:''].filter(Boolean).join(', ')+'.'+
+      (O.catchN?` ${O.catchN} gate${O.catchN>1?'s':''} ticked weeks early (catch-up, not counted).`:'')+(O.zero?` ${O.zero} item${O.zero>1?'s':''} dated or created on the day done (not counted).`:'')),
+    P(`Load · ${CP_W.load}%`,x.loadI+'%'),H(`${x.liveN} live item${x.liveN===1?'':'s'} (current-phase gates and work dated in the next 30 days), worth ${x.loadPts} of a full ${x.C.load}. Open in all ${x.open}, ${x.noDate} undated.`)); }
+function cpRowEl(x){ const col=x.score>=75?'#2E9E5B':x.score>=50?'#C98A16':'#D0453C', v=n=>n==null?'–':n;
   return h('details',{class:'cp-r'},h('summary',null,h('span',{class:'cp-n'},h('b',{text:shortName(x.id)}),h('span',{class:'f-hint',text:x.C.n})),
       h('span',{class:'cp-bar'},h('i',{style:`width:${x.score}%;background:${col}`})),h('b',{class:'cp-s',style:'color:'+col,text:String(x.score)}),
-      h('span',{class:'f-hint cp-m',text:`open ${x.open} · no date ${x.noDate} · overdue ${x.over}${x.absD.length?` · absent ${x.absD.length}`:''}`})),cpDetail(x)); }
+      h('span',{class:'f-hint cp-m',text:`reliable ${v(x.rel)} · promises ${x.pro==null?'not enough yet':x.pro} · output ${x.outI} · load ${x.loadI}`})),cpDetail(x)); }
 function cpSheet(){ const L=cpCalc(), mn=new Date(mwMonthStart(today())+'T00:00:00').toLocaleString('en-GB',{month:'long'});
   S.sheet={type:'homeList',title:`Contribution points · ${mn}`,build:()=>{ const X=cpCalc()||L; return [
-    h('p',{class:'f-hint',style:'margin:0 0 8px',text:'Shadow month: only you and the COO can see this. Each score is judged against the person’s level. Tap a name to see how it was built.'}),
+    h('p',{class:'f-hint',style:'margin:0 0 8px',text:'Shadow month: only you and the COO can see this. Reliable 25 · Keeps promises 30 · Output 25 · Load 20. Output and load are judged against the person’s level. Tap a name to see how it was built.'}),
     ...(X?['lead','dlead','junior','draft'].map(k=>{ const g=X.filter(x=>x.L===k); return g.length?[h('div',{class:'tr-g',text:{lead:'POD leaders',dlead:'Drafting lead',junior:'Junior architects',draft:'Drafting team'}[k]}),...g.map(cpRowEl)]:[]; }).flat():[h('p',{class:'f-hint',text:'Loading…'})])]; }};
   renderSheet(); }
 function contribSec(){ if(!cpSee()) return null; const X=cpCalc(); const mn=new Date(mwMonthStart(today())+'T00:00:00').toLocaleString('en-GB',{month:'long'});
