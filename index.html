@@ -139,6 +139,7 @@ main.wrap.wrap-desk{max-width:1480px}
 .tr-g{font-size:11.5px;font-weight:600;color:var(--muted,#6e6e73);text-transform:uppercase;letter-spacing:.06em;margin:4px 4px 0}
 .tr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 button.wlf-need .wlf-l{color:var(--overdue,#D0453C);font-weight:600}
+.m-team .tr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.m-team .desk-sub{padding:0}
 .cp-open{appearance:none;width:100%;flex-wrap:wrap;border:1px solid var(--line,#E5E5EA);background:#fff;border-radius:12px;padding:9px 12px;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}.cp-open:hover{background:#F7F7F9}
 .cp-r{border-bottom:1px solid var(--line,#EEE)}.cp-r summary{list-style:none;display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr 34px;grid-template-areas:"n b s" "m m m";gap:2px 10px;align-items:center;padding:8px 2px;cursor:pointer}.cp-r summary::-webkit-details-marker{display:none}
 .cp-n{grid-area:n;display:flex;flex-direction:column}.cp-bar{grid-area:b;height:8px;border-radius:4px;background:#EEF0F3;overflow:hidden}.cp-bar i{display:block;height:100%;border-radius:4px}.cp-s{grid-area:s;text-align:right;font-size:17px}.cp-m{grid-area:m}
@@ -5565,6 +5566,8 @@ function viewMineBody(){
   const first=(nameOf(S.uid)||'').split(' ')[0];
   const out=[h('div',{class:'page-h home-h'},h('div',{},homeChips(),h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
     h('h1',{class:'h1',text:`${hello}${first?', '+first:''}`}),daySummary(mine,td,ap),nextMeetLine(),myWeekEl(),podWeekEl()))];
+  /* Principal and COO on a phone (13 Nov 2026): the team's habit rings and Contribution points, same as the PC Home */
+  if(cpSee()){ const tr=teamRingsSec(), cs=contribSec(); if(tr) out.push(h('div',{class:'m-team'},tr)); if(cs) out.push(cs); }
   /* the Principal and the COO add a lead or start a proposal straight from Home */
   if(canProps()&&S.canWrite) out.push(h('div',{class:'actions home-biz',style:'margin:-4px 0 0'},
     seeCooWork()?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openCooTask(),text:'+ COO task'}):null,
