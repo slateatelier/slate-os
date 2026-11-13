@@ -1015,7 +1015,12 @@
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('b', { style: 'overflow-wrap:anywhere;font-weight:500' }, r.body), el('span', { class: 'pill ' + (late ? 's-overdue' : 's-open') }, (late ? 'Overdue · ' : 'Due ') + dayOnly(r.due_at))),
         el('div', { class: 'bar', style: 'justify-content:space-between' }, el('span', { class: 'f-hint' }, 'From ' + nm(r.sender)), b));
     };
-    const box = el('section', { id: 'slate-messages', class: 'sec' }, ...myMessages.map(m => msgCard(m)),
+    /* Home stays on one screen (Principal, 13 Nov 2026): the oldest message in full (text to 2 lines, tap to read all),
+       the rest as one line that opens the bell, where each has the same reply buttons */
+    const first = myMessages.length ? (() => { const c = msgCard(myMessages[0]); c.classList.add('msg-cmp'); const t = c.children[1]; if (t) { t.classList.add('msg-clamp'); t.title = 'Tap to read all'; t.addEventListener('click', () => t.classList.toggle('msg-clamp')); } return c; })() : null;
+    const more = myMessages.length > 1 ? (() => { const n = myMessages.length - 1, x = el('button', { class: 'linkish', type: 'button', style: 'margin:2px 0 0 4px;font-size:13px' }, `+${n} more message${n > 1 ? 's' : ''} to answer · open`);
+      x.addEventListener('click', () => { try { if (typeof openNotifs === 'function') openNotifs(); else document.querySelector('button.bell').click(); } catch (_) {} }); return x; })() : null;
+    const box = el('section', { id: 'slate-messages', class: 'sec' }, ...(first ? [first] : []), ...(more ? [more] : []),
       ...(open.length ? [el('div', { class: 'sec-h' }, el('h2', {}, 'Messages you said you’d do'), el('span', { class: 'cnt' }, String(open.length))), el('div', { class: 'list' }, ...open.map(commit))] : []));
     if (old) old.replaceWith(box);
     else { // under the page title and the "waiting on you" line, not above them
