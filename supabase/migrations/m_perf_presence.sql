@@ -13,8 +13,12 @@ alter table private.perf_leave enable row level security;
 revoke all on private.perf_leave from public, anon, authenticated;
 
 -- Who may see whose presence: the Principal and the COO everyone; a POD leader their own POD; everyone else only themselves.
+-- Discipline (13 Nov 2026): for each day plan also the time it was written, how many lines were short (under 20
+-- characters of text and today's part together), the latest day any line was closed, and how many lines are still open.
+drop function if exists public.perf_presence(date, date);
 create or replace function public.perf_presence(p_from date, p_to date)
-returns table (user_id uuid, day date, opened boolean, plan boolean, leave boolean)
+returns table (user_id uuid, day date, opened boolean, plan boolean, leave boolean,
+               plan_at timestamptz, short_n int, lines_n int, closed_max date, open_n int)
 language sql stable security definer set search_path to '' as $$
   with me as (select id, designation::text d, pod_id from public.profiles where id = auth.uid()),
   seen as (
@@ -27,10 +31,21 @@ language sql stable security definer set search_path to '' as $$
     select w.user_id, w.day, 0, 1, 0 from public.work_logs w where w.day between p_from and p_to
     union all
     select v.user_id, v.day, 0, 0, 1 from private.perf_leave v where v.day between p_from and p_to
+  ),
+  wl as (
+    select w.user_id, w.day, w.submitted_at,
+      (select count(*) from jsonb_array_elements(w.lines) l
+        where length(trim(coalesce(l->>'text','') || case when coalesce(l->>'part','') <> coalesce(l->>'text','') then ' ' || coalesce(l->>'part','') else '' end)) < 20)::int short_n,
+      jsonb_array_length(w.lines) lines_n,
+      (select max(((l->>'closedAt')::timestamptz at time zone 'Asia/Dhaka')::date) from jsonb_array_elements(w.lines) l where l ? 'closedAt') closed_max,
+      (select count(*) from jsonb_array_elements(w.lines) l where coalesce(l->>'status','planned') = 'planned')::int open_n
+    from public.work_logs w where w.day between p_from and p_to
   )
-  select x.user_id, x.day, max(o) = 1, max(w) = 1, max(v) = 1
-  from x where x.user_id in (select id from seen)
-  group by x.user_id, x.day;
+  select x.user_id, x.day, max(o) = 1, max(w) = 1, max(v) = 1,
+         wl.submitted_at, wl.short_n, wl.lines_n, wl.closed_max, wl.open_n
+  from x left join wl on wl.user_id = x.user_id and wl.day = x.day
+  where x.user_id in (select id from seen)
+  group by x.user_id, x.day, wl.submitted_at, wl.short_n, wl.lines_n, wl.closed_max, wl.open_n;
 $$;
 
 -- Principal or COO: mark (p_on = true) or clear a day of approved leave.

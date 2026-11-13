@@ -5398,14 +5398,34 @@ function presRows(r){ const e=r.e<today()?r.e:today(), k=r.s+'|'+e, c=S.perfPres
 const presSeen=id=>!!id&&!String(id).startsWith('anon:')&&(canSeeScoring()||id===S.uid||(amPodLead()&&teamOf(id)===myPod()));
 const ABSENT_PTS=3, LEAVE_SHARE=0.5, PLAN_DAY_PTS=0.3;
 /* one person's presence over the period: working days from the later of the period start, go-live and their first day, to today */
+/* discipline (Principal, 13 Nov 2026): negative marks on days the person was in, counted from the day plan's start.
+   - plan written after 11:00: 1 mark; no plan at all on a day they were in (or written on a later day): 2 marks;
+   - short entries: a line under 20 characters (text and today's part together); the first in the period is free,
+     each further one is half a mark;
+   - stale updates: a day's lines closed 2 or more working days later, or still open after 2 working days: 1 mark.
+   Discipline = 100 − 10 per mark per 5 working days present (at least 3 days counted; never below 0). Absent days carry no marks: absence is scored
+   separately. */
+const DISC_FROM='2026-11-04', PLAN_BY='11:00', SHORT_FREE=1, SHORT_MARK=0.5;
+const dhakaHM=ts=>{ try{ return new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Dhaka'}); }catch(e){ return ''; } };
+const dhakaD=ts=>{ try{ return new Date(new Date(ts).getTime()+6*3600e3).toISOString().slice(0,10); }catch(e){ return ''; } };
 function presenceOf(id,r,rows){ if(!rows) return null; const pr=rows.filter(x=>x.user_id===id); const by=new Map(pr.map(x=>[x.day,x]));
   const first=pr.length?pr.map(x=>x.day).sort()[0]:null, td=today(); let d=[r.s,goLive()].sort()[1];
   const pm=(S.members&&S.members[id])||null; const joined=pm&&pm.joinedAt?String(pm.joinedAt).slice(0,10):null; if(joined&&joined>d) d=joined;
-  const end=r.e<td?r.e:td; let wd=0,inD=0,leave=0,absent=0,plan=0;
+  const end=r.e<td?r.e:td; let wd=0,inD=0,leave=0,absent=0,plan=0,late=0,noPlan=0,shortN=0,stale=0,dDays=0;
   for(;d<=end;d=addDays(d,1)){ if(!isWorkDay(d)) continue; const x=by.get(d), here=!!(x&&(x.opened||x.plan));
-    if(d===td&&!here) continue; wd++; if(here){ inD++; if(x.plan) plan++; } else if(x&&x.leave) leave++; else absent++; }
-  if(!wd) return {wd:0,inD:0,leave:0,absent:0,plan:0,pct:null,miss:0,first};
-  const miss=absent+LEAVE_SHARE*leave; return {wd,inD,leave,absent,plan,miss,pct:Math.max(0,1-miss/wd),first}; }
+    if(d===td&&!here) continue; wd++;
+    if(!here){ if(x&&x.leave) leave++; else absent++; continue; }
+    inD++; if(x.plan) plan++;
+    if(d<DISC_FROM) continue; dDays++;
+    const sd=x.plan_at?dhakaD(x.plan_at):'';
+    if(!x.plan||(sd&&sd>d)) { if(d!==td||dhakaHM(new Date().toISOString())>PLAN_BY) noPlan++; continue; }
+    if(x.plan_at&&dhakaHM(x.plan_at)>PLAN_BY) late++;
+    shortN+=x.short_n||0;
+    if((x.closed_max&&wdBetween(d,x.closed_max)>=2)||((x.open_n||0)>0&&wdBetween(d,td)>=2)) stale++; }
+  const marks=late+2*noPlan+SHORT_MARK*Math.max(0,shortN-SHORT_FREE)+stale;
+  const disc=dDays?Math.max(0,100-10*marks*5/Math.max(3,dDays)):null;
+  if(!wd) return {wd:0,inD:0,leave:0,absent:0,plan:0,pct:null,miss:0,first,disc,marks,late,noPlan,shortN,stale};
+  const miss=absent+LEAVE_SHARE*leave; return {wd,inD,leave,absent,plan,miss,pct:Math.max(0,1-miss/wd),first,disc,marks,late,noPlan,shortN,stale}; }
 function perfTable(r){
   const raw=periodRaw(r), byP=new Map(), byPod=new Map();
   raw.forEach(t=>{ if(t.assignee){ if(!byP.has(t.assignee)) byP.set(t.assignee,[]); byP.get(t.assignee).push(t);} podsOf(t).filter(p=>/^pod\b/i.test(p)).forEach(p=>{ if(!byPod.has(p)) byPod.set(p,[]); byPod.get(p).push(t); }); });
@@ -5413,7 +5433,8 @@ function perfTable(r){
   const people=mk(byP).filter(x=>!isLeft(x.k)), podsP=mk(byPod); /* people who left aren't ranked; their work still counts for the pod */
   const avg=(a,f)=>a.length?a.reduce((x,y)=>x+f(y),0)/a.length:0;
   /* people: 50% workload + 50% timeliness, against others in the same role; alone in a role → timeliness against the studio */
-  /* people (Principal, 13 Nov 2026): index = 40% delivery + 35% output + 25% presence, less 3 per absent day, plus bonuses.
+  /* people (Principal, 13 Nov 2026): index = 35% project timeline (delivery) + 20% daily work (output) + 20% presence
+     + 25% discipline, less 3 per absent day, plus bonuses.
      Delivery: timeliness against others in the same role; a handful of items is pulled towards the studio average
      (SHRINK points), so two on-time ticks can't outrank a heavy, mostly-on-time load.
      Output: what was actually finished (credited points) plus PLAN_DAY_PTS for every day with a written day plan, against the
@@ -5432,7 +5453,8 @@ function perfTable(r){
     g.forEach(x=>{ x.solo=solo; x.tim=aq?x.qa/aq*100:100; x.vol=ao?Math.min(OUT_CAP,x.out/ao*100):100;
       const pp=x.pr&&x.pr.pct!=null?x.pr.pct*100:100; x.prs=x.pr&&x.pr.pct!=null?pp:null;
       x.absPts=x.pr?ABSENT_PTS*x.pr.miss:0;
-      x.idx=Math.round(0.40*x.tim+0.35*x.vol+0.25*pp-x.absPts); }); }
+      const dd=x.pr&&x.pr.disc!=null?x.pr.disc:100; x.dis=x.pr&&x.pr.disc!=null?dd:null;
+      x.idx=Math.round(0.35*x.tim+0.20*x.vol+0.20*pp+0.25*dd-x.absPts); }); }
   /* pods: ranked on timeliness against the studio average; workload is shown beside it, not blended in */
   { const aq=avg(podsP,x=>x.q); podsP.forEach(x=>{ x.tim=aq?x.q/aq*100:100; x.idx=Math.round(x.tim); }); }
   const pts=t=>{ const c=creditOf(t); return c==null?0:weightOf(t)*c*(((t.target||'')<W2_FROM)?10:2); }; /* bonus: +1 per 0.1 point at 5 katha (new weights are 5× larger, so ×2) */
@@ -5738,14 +5760,15 @@ function viewDash(){
   const pt=perfTable(r), mine=perf(items);
   const idxOf=D.person?(pt.people.find(x=>x.k===D.person)||{}).idx:(D.pod&&/^pod\b/i.test(D.pod)?(pt.pods.find(x=>x.k===D.pod)||{}).idx:null);
   out.push(h('div',{class:'kpis'},
-    h('div',{class:'kpi dark','data-tip':canSeeScoring()?'Index: people against others in the same role (40% delivery + 35% output + 25% presence, less 3 per absent day); pods on timeliness. Points: a task is 0.1 per katha up to 5 katha (0.5), easing to 2.5 at 50 katha (the most); a deliverable is 3×. Then × scope (9–11 scopes ×1.1, 12 or more ×1.2), ×1.25 on fast track, × project priority; studio tasks 0.15 (development 0.3); work begun before scoring started earns only the share done after it (checklist share for gates, days for other work, at least 10%), while lateness still counts in full; full on time, +10% early once checked (not on relaxed projects), less the later it is; overdue starts at 85% and falls 5% a day.':'Your score for work due in this period.'},h('div',{class:'lbl',text:'Performance'}),h('div',{class:'num',text:mine.pos?Math.round(mine.q*100)+'%':'—'}),
+    h('div',{class:'kpi dark','data-tip':canSeeScoring()?'Index: people against others in the same role (35% timeline + 20% daily work + 20% presence + 25% discipline, less 3 per absent day); pods on timeliness. Points: a task is 0.1 per katha up to 5 katha (0.5), easing to 2.5 at 50 katha (the most); a deliverable is 3×. Then × scope (9–11 scopes ×1.1, 12 or more ×1.2), ×1.25 on fast track, × project priority; studio tasks 0.15 (development 0.3); work begun before scoring started earns only the share done after it (checklist share for gates, days for other work, at least 10%), while lateness still counts in full; full on time, +10% early once checked (not on relaxed projects), less the later it is; overdue starts at 85% and falls 5% a day.':'Your score for work due in this period.'},h('div',{class:'lbl',text:'Performance'}),h('div',{class:'num',text:mine.pos?Math.round(mine.q*100)+'%':'—'}),
       h('div',{class:'lbl',text:mine.pos?`${mine.earn.toFixed(2)} of ${mine.pos.toFixed(2)} points`+(idxOf!=null?` · Index ${idxOf}`:''):'Nothing due and past yet'})),
     h('div',{class:'kpi dark'},h('div',{class:'lbl',text:'On-time rate'}),h('div',{class:'num',text:rt==null?'—':Math.round(rt*100)+'%'}),h('div',{class:'lbl',style:rt!=null&&rt*100<tg?'color:#FF6B61':'',text:`Target ${tg}%`+(rt==null?'':rt*100>=tg?' · met':' · below')})),
     kpi('Due',c.total),kpi('In advance',c.early,'early'),kpi('On time',c.ontime,'ontime'),kpi('Late',c.late,'late'),kpi('Overdue',c.overdue,'overdue')));
 
   const W=[];
-  { const presTxt=x=>{ const p=x.pr; if(!p||!p.wd) return '—'; return `${p.inD}/${p.wd}`+(p.absent?` · ${p.absent} absent`:'')+(p.leave?` · ${p.leave} leave`:''); };
-    const row=(name,sub,x,me)=>h('tr',{style:me?'font-weight:600':''},h('td',{},h('div',{text:name}),sub&&h('div',{class:'sub2',text:sub})),h('td',{class:'n',title:x.pr&&x.pr.plan?`${(x.done||0).toFixed(2)} finished + ${x.pr.plan} plan day${x.pr.plan>1?'s':''} × ${PLAN_DAY_PTS}`:null,text:(x.out!=null?x.out:(x.done!=null?x.done:x.earn)).toFixed(2)}),h('td',{class:'n',text:(x.qa!=null?x.qa:x.q)==null?'—':Math.round((x.qa!=null?x.qa:x.q)*100)+'%'}),h('td',{class:'n',style:x.pr&&x.pr.absent?'color:var(--overdue)':'',text:presTxt(x)}),h('td',{class:'n',text:x.bc?'+'+x.bc.toFixed(1):'—'}),h('td',{class:'n',text:x.bs?'+'+x.bs.toFixed(1):'—'}),h('td',{class:'n',style:'font-weight:600'+(x.idx!=null&&x.idx<100?';color:var(--overdue)':''),title:x.empty?'Nothing due in this period yet':x.ns?'Interns and other staff are not scored':x.solo?'Only one person in this role: delivery and output against the studio average':null,text:x.idx==null?(x.ns?'Not scored':'—'):String(x.idx)}));
+  { const discTip=x=>{ const p=x.pr; if(!p||p.disc==null) return null; const b=[]; if(p.late) b.push(`${p.late} plan${p.late>1?'s':''} after 11:00`); if(p.noPlan) b.push(`${p.noPlan} day${p.noPlan>1?'s':''} in with no plan`); if(p.shortN>SHORT_FREE) b.push(`${p.shortN} short entries`); if(p.stale) b.push(`${p.stale} day${p.stale>1?'s':''} updated 2+ days late`); return b.length?b.join('\n')+`\n${p.marks} mark${p.marks===1?'':'s'}`:'No marks'; };
+    const presTxt=x=>{ const p=x.pr; if(!p||!p.wd) return '—'; return `${p.inD}/${p.wd}`+(p.absent?` · ${p.absent} absent`:'')+(p.leave?` · ${p.leave} leave`:''); };
+    const row=(name,sub,x,me)=>h('tr',{style:me?'font-weight:600':''},h('td',{},h('div',{text:name}),sub&&h('div',{class:'sub2',text:sub})),h('td',{class:'n',title:x.pr&&x.pr.plan?`${(x.done||0).toFixed(2)} finished + ${x.pr.plan} plan day${x.pr.plan>1?'s':''} × ${PLAN_DAY_PTS}`:null,text:(x.out!=null?x.out:(x.done!=null?x.done:x.earn)).toFixed(2)}),h('td',{class:'n',text:(x.qa!=null?x.qa:x.q)==null?'—':Math.round((x.qa!=null?x.qa:x.q)*100)+'%'}),h('td',{class:'n',style:x.pr&&x.pr.absent?'color:var(--overdue)':'',text:presTxt(x)}),h('td',{class:'n',style:x.dis!=null&&x.dis<70?'color:var(--overdue)':'',title:discTip(x),text:x.dis==null?'—':String(Math.round(x.dis))}),h('td',{class:'n',text:x.bc?'+'+x.bc.toFixed(1):'—'}),h('td',{class:'n',text:x.bs?'+'+x.bs.toFixed(1):'—'}),h('td',{class:'n',style:'font-weight:600'+(x.idx!=null&&x.idx<100?';color:var(--overdue)':''),title:x.empty?'Nothing due in this period yet':x.ns?'Interns and other staff are not scored':x.solo?'Only one person in this role: delivery and output against the studio average':null,text:x.idx==null?(x.ns?'Not scored':'—'):String(x.idx)}));
     const hdT=myHeadTeam(), ptAll=fullView()?[...pt.people,...people().filter(id=>!isLeft(id)&&id!==ownerId()&&!isCOO(id)&&!isPriv(id)&&!isChalkP(id)&&(/^pod\b/i.test(teamOf(id)||'')||isSupport(id))&&!isOfficeStaff(id)&&!pt.people.some(x=>x.k===id)).map(id=>({k:id,pos:0,earn:0,q:null,idx:null,bc:0,bs:0,rg:rgK(id),empty:true}))]:pt.people,
       peopleRows=fullView()?ptAll.filter(x=>!isCOO(x.k)&&(!isPriv(x.k)||seePriv())):amPodLead()?pt.people.filter(x=>teamOf(x.k)===mp||x.k===S.uid):hdT?pt.people.filter(x=>teamOf(x.k)===hdT||x.k===S.uid):pt.people.filter(x=>x.k===S.uid);
     const podRowsT=fullView()?pt.pods:pt.pods.filter(x=>x.k===mp);
@@ -5762,10 +5785,10 @@ function viewDash(){
     } else
     W.push(widget('Performance index',`${r.label} · 100 = studio average`,
       (podRowsT.length||peopleRows.length)?h('div',{},h('div',{class:'tbl-wrap',style:'background:#fff;border:1px solid var(--line)'},h('table',{},
-        h('thead',{},h('tr',{},h('th',{text:''}),h('th',{class:'n',text:'Output'}),h('th',{class:'n',text:'Delivery'}),h('th',{class:'n',text:'Present'}),h('th',{class:'n',text:'Pod support'}),h('th',{class:'n',text:'Studio'}),h('th',{class:'n',text:'Index'}))),
-        h('tbody',{},podRowsT.length?h('tr',{},h('td',{colspan:7,class:'sub2',style:'padding-top:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600',text:fullView()?'Pods':'Your pod'})):null,podRowsT.map(x=>row(podLabel(x.k),null,x,x.k===myPod())),
-          peopleRows.length?h('tr',{},h('td',{colspan:7,class:'sub2',style:'padding-top:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600',text:fullView()||amPodLead()?'People':hdT?'Your team':'You'})):null,peopleRows.map(x=>row(nameOf(x.k),/^pod\b/i.test(teamOf(x.k))?teamLabel(x.k)+(RG[x.rg]?' · '+RG[x.rg]:''):(RG[x.rg]||teamLabel(x.k)),x,x.k===S.uid))))),
-        h('p',{class:'f-hint',style:'margin:10px 0 0',text:!canSeeScoring()?'100 = average for your role.':'People: index = 40% delivery + 35% output + 25% presence, less 3 for every absent day (approved leave counts half), plus bonuses. Delivery: points earned ÷ points due, against others in the same role; a few items are pulled towards the studio average so a light load can\'t outrank a heavy one. Output: points actually finished plus 0.3 for each day with a written day plan, against the role average (max 150). Present: working days in SLATE OS or with a day plan ÷ working days so far; mark approved leave in More › Entry log. Alone in a role: compared with the studio. Interns and other staff are not scored. Pods: timeliness against the studio average. Weights: a task on a 5-katha project is 0.5, rising slowly to 2.5 at 50 katha; a deliverable is 3×; × scope, fast track and priority; studio tasks 0.15 (development 0.3); meetings and coordination tasks count half. Credit: on time full; early +10% only once checked; late −5% a day (minimum 40%); overdue 85% the day after, then −5% a day to nothing. Bonuses: helping another pod (max +10) and studio jobs (max +5).'}))
+        h('thead',{},h('tr',{},h('th',{text:''}),h('th',{class:'n',text:'Output'}),h('th',{class:'n',text:'Delivery'}),h('th',{class:'n',text:'Present'}),h('th',{class:'n',text:'Discipline'}),h('th',{class:'n',text:'Pod support'}),h('th',{class:'n',text:'Studio'}),h('th',{class:'n',text:'Index'}))),
+        h('tbody',{},podRowsT.length?h('tr',{},h('td',{colspan:8,class:'sub2',style:'padding-top:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600',text:fullView()?'Pods':'Your pod'})):null,podRowsT.map(x=>row(podLabel(x.k),null,x,x.k===myPod())),
+          peopleRows.length?h('tr',{},h('td',{colspan:8,class:'sub2',style:'padding-top:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600',text:fullView()||amPodLead()?'People':hdT?'Your team':'You'})):null,peopleRows.map(x=>row(nameOf(x.k),/^pod\b/i.test(teamOf(x.k))?teamLabel(x.k)+(RG[x.rg]?' · '+RG[x.rg]:''):(RG[x.rg]||teamLabel(x.k)),x,x.k===S.uid))))),
+        h('p',{class:'f-hint',style:'margin:10px 0 0',text:!canSeeScoring()?'100 = average for your role.':'People: index = 35% project timeline + 20% daily work + 20% presence + 25% discipline, less 3 for every absent day (approved leave counts half), plus bonuses. Discipline: 100 less 10 a mark (per 5 working days in): day plan after 11:00 1 mark; in with no plan 2 marks; short entries (under 20 characters) half a mark each after the first; a day\'s lines closed or still open 2+ working days later 1 mark. Project timeline (delivery): points earned ÷ points due, against others in the same role; a few items are pulled towards the studio average so a light load can\'t outrank a heavy one. Daily work (output): points actually finished plus 0.3 for each day with a written day plan, against the role average (max 150). Present: working days in SLATE OS or with a day plan ÷ working days so far; mark approved leave in More › Entry log. Alone in a role: compared with the studio. Interns and other staff are not scored. Pods: timeliness against the studio average. Weights: a task on a 5-katha project is 0.5, rising slowly to 2.5 at 50 katha; a deliverable is 3×; × scope, fast track and priority; studio tasks 0.15 (development 0.3); meetings and coordination tasks count half. Credit: on time full; early +10% only once checked; late −5% a day (minimum 40%); overdue 85% the day after, then −5% a day to nothing. Bonuses: helping another pod (max +10) and studio jobs (max +5).'}))
       :h('div',{class:'w-empty',text:'Nothing due and past in this period yet.'}),true));
   }
   if(fullView()||myHeadTeam()){ const sp=myHeadTeam()?people().filter(id=>teamOf(id)===myHeadTeam()):people().filter(id=>isSupport(id)&&(!D.pod||!/^pod\b/i.test(D.pod)?(!D.pod||teamOf(id)===D.pod):true));
