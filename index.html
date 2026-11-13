@@ -130,6 +130,7 @@ main.wrap.wrap-desk{max-width:1480px}
 .mw-pr{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:8px;align-items:center;padding:6px 2px;border-top:1px solid var(--line,#E5E5EA)}.mw-pd{display:flex;gap:4px}.mw-pd .mw-d{width:12px;height:12px}.mw-pd .mw-x{width:8px;height:8px}.mw-pg{font-size:12.5px;color:var(--muted);text-align:right}
 #day-splash .ds-notme{display:block;margin:18px auto 0;appearance:none;border:0;background:none;font:inherit;font-size:13px;color:#8E8E93;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px}
 /* no-scroll Home */
+.fit-fixed .h-row{padding-top:5px;padding-bottom:5px;min-height:0}.fit-fixed .h-t{font-size:13.5px}.fit-fixed .h-list{gap:0}
 .fit-cut{display:none!important}.desk-today .desk-b{overflow-y:hidden}
 .fit-more{appearance:none;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--accent,#007AFF);cursor:pointer;padding:0 2px;margin-left:auto}.desk-st .linkish+.fit-more{margin-left:12px}
 .fit-pg{display:inline-flex;align-items:center;gap:6px;margin-left:6px;font-weight:400}.fit-pgb{width:64px;height:5px;border-radius:3px;background:#E5E5EA;overflow:hidden}
@@ -5315,7 +5316,22 @@ function viewDeskToday(){
     fitOpt(todoSec(),8),
     later.length?fitOpt(h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px;margin:2px 6px',onclick:goMine('active'),text:`${later.length} more due later · open My tasks`}),9):null]);
   /* right: only what has something in it */
-  const right_=[]; { const mw=myWeekEl(); if(mw){ [['.mw-pastb,.mw-ew',9],['.mw-leg',8],['.mw-tip',7],['.mw-sub',6.6],['.mw-bar',6.5]].forEach(([q,fp])=>mw.querySelectorAll(q).forEach(e=>fitOpt(e,fp))); right_.push(h('div',{class:'desk-sub'},mw)); } }
+  const right_=[]; { const mw=myWeekEl(); if(mw){ [['.mw-pastb,.mw-ew',9],['.mw-leg',8],['.mw-tip',7],['.mw-sub',6.6],['.mw-bar',6.5],['.mw-grid',1]].forEach(([q,fp])=>mw.querySelectorAll(q).forEach(e=>fitOpt(e,fp))); right_.push(h('div',{class:'desk-sub'},mw)); } }
+  /* fixed sections on every POD leader's Home (Principal, 13 Nov 2026): the drafting team and the junior architects, each
+     with their work on this POD's projects. Always shown, never cut by fitHome; a row opens that person's work. */
+  if(lead){ const myW=id=>activeTasks().filter(t=>t.assignee===id&&!t.archived&&!t.doneAt&&inMyPodProject(S.projects[t.projectId]));
+    const teamRow=(id,go)=>{ const ts=myW(id), late=ts.filter(t=>t.target&&t.target<td), nx=ts.filter(t=>t.target).sort(byTarget)[0], wait=ts.filter(t=>t.verify).length;
+      const r=hRow({dot:late.length?'var(--overdue)':ts.length?'var(--ontime)':'var(--faint)',strong:shortName(id),
+        title:ts.length?`${ts.length} open`+(late.length?` · ${late.length} late`:'')+(wait?` · ${wait} to check`:''):'nothing on your POD',
+        onclick:go}); if(nx) r.title=`Next: ${nx.title} · ${nx.target<td?diff(nx.target,td)+'d late':fmtD(nx.target)}`; return r; };
+    const goPerson=id=>()=>{ Object.assign(S.f,{person:id,mine:false,project:'',q:'',status:'active'}); S.fInit=1; goView('all'); };
+    const jrs=people().filter(id=>!isLeft(id)&&(isShared(id)||(teamOf(id)===mp&&id!==S.uid&&roleGroup(id)!=='dhead'&&!isPodLead(id,mp))));
+    const drs=dbDrafters().filter(id=>!isLeft(id));
+    const fixed=(title,ids,go,more)=>h('div',{class:'desk-sub fit-fixed'},h('div',{class:'desk-st'},h('span',{text:title}),h('b',{text:String(ids.length)}),h('button',{class:'linkish',type:'button',onclick:more,text:'All'})),
+      h('div',{class:'h-list'},ids.length?ids.map(id=>teamRow(id,go(id))):[h('div',{class:'f-hint',style:'padding:6px 8px',text:'No one yet'})]));
+    right_.push(fixed('Junior architects',jrs,goPerson,()=>goView('team')));
+    right_.push(fixed('Drafting team',drs,id=>()=>{ S.dbF={pod:'',who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); },()=>{ S.dbF={pod:mp,who:''}; S.view='drafting'; render(true); }));
+  }
   { const pw=podWeekEl(); if(pw) right_.push(fitSec(pw,4,{title:'My POD this week'})); }
   if(lead){ const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)&&inMyPodProject(p));
     if(ps.length){ const g=projGateSec(ps,false,0,true); g.querySelectorAll('.pg-note').forEach(e=>fitOpt(e,7.5)); right_.push(fitSec(g,5,{more:()=>goView('projects')})); } }
@@ -5331,8 +5347,6 @@ function viewDeskToday(){
         open?h('div',{class:'cl-open'},myChecklistSec(xs,{grouped:true})):null]; });
     const clKeys=mcl.map(x=>`${x.p.id}|${x.k}|${x.it.id}`);
     right_.push(fitSec(deskSub('My checklist',rows,mcl.length),6,{title:'My checklist',build:()=>[myChecklistSec(mcl,{grouped:true})],prog:{key:'cl',keys:clKeys}})); } }
-  if(lead){ const rows=dbRows(), stt=dbStats(rows), xs=dbDrafters().filter(id=>(stt[id]||{}).open);
-    if(xs.length) right_.push(fitSec(deskSub('Drafting team',xs.map(id=>{ const g=stt[id]; return hRow({dot:g.late?'var(--overdue)':'var(--faint)',strong:shortName(id),title:`${g.open} open`+(g.late?` · ${g.late} late`:''),onclick:()=>{ S.dbF={pod:'',who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); }}); }),xs.length),8,{more:()=>{ S.view='drafting'; render(true); }})); }
   { const later_=meetAll.filter(r=>!meetToday.includes(r)).slice(0,3); if(later_.length) right_.push(fitSec(deskSub('Coming meetings',later_,null,()=>{ S.mhub='up'; goView('meet'); }),9,{more:()=>{ S.mhub='up'; goView('meet'); }})); }
   const right=right_.length?deskCol(lead?'My POD and plan':'Plan',null,right_):null;
   return [top,h('div',{class:'desk desk-today'+(right?'':' desk-one')},left,right),
@@ -5356,7 +5370,8 @@ function fitHome(){ document.querySelectorAll('.desk-today .desk-b').forEach(b=>
     const opts=[...b.querySelectorAll('.fit-o:not(.fit-cut)')].filter(e=>e.offsetParent!==null).map(e=>({p:+e.dataset.fp,e}));
     const secs=[...b.querySelectorAll('[data-fs]')].map(s=>({p:+s.dataset.fs,s,vis:[...s.querySelectorAll('.fit-r:not(.fit-cut)')]})).filter(x=>x.vis.length);
     const empty=[...b.querySelectorAll('[data-fs]:not(.fit-cut)')].filter(s=>+s.dataset.fs>=6&&!s.querySelector('.fit-r:not(.fit-cut)')).map(s=>({p:+s.dataset.fs,e:s}));
-    let c=[...opts,...secs.filter(x=>x.vis.length>1)].sort((a,b)=>b.p-a.p)[0]||[...secs,...empty].sort((a,b)=>b.p-a.p)[0]; if(!c) break;
+    /* one ranking: a section's last row counts 2 lower than its other rows, so blocks like the week grid go only after it */
+    let c=[...opts,...secs.map(x=>({...x,p:x.vis.length>1?x.p:x.p-2})),...empty].sort((a,b)=>b.p-a.p)[0]; if(!c) break;
     if(c.e) c.e.classList.add('fit-cut');
     else { c.vis[c.vis.length-1].classList.add('fit-cut'); const n=c.s.querySelectorAll('.fit-r.fit-cut').length, m=c.s.querySelector('.fit-more'); if(m){ m.hidden=false; m.textContent=`+${n} more`; } } }
 }); }
