@@ -129,6 +129,11 @@ main.wrap.wrap-desk{max-width:1480px}
 .mr-focus{font-size:10px;font-weight:600;color:#C41E29;border:1px solid #C41E29;border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:1px}
 .mw-pr{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:8px;align-items:center;padding:6px 2px;border-top:1px solid var(--line,#E5E5EA)}.mw-pd{display:flex;gap:4px}.mw-pd .mw-d{width:12px;height:12px}.mw-pd .mw-x{width:8px;height:8px}.mw-pg{font-size:12.5px;color:var(--muted);text-align:right}
 #day-splash .ds-notme{display:block;margin:18px auto 0;appearance:none;border:0;background:none;font:inherit;font-size:13px;color:#8E8E93;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px}
+/* no-scroll Home */
+.fit-cut{display:none!important}.desk-today .desk-b{overflow-y:hidden}
+.fit-more{appearance:none;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--accent,#007AFF);cursor:pointer;padding:0 2px;margin-left:auto}.desk-st .linkish+.fit-more{margin-left:12px}
+.fit-pg{display:inline-flex;align-items:center;gap:6px;margin-left:6px;font-weight:400}.fit-pgb{width:64px;height:5px;border-radius:3px;background:#E5E5EA;overflow:hidden}
+.fit-pgb i{display:block;height:100%;background:#34C759;border-radius:3px}.fit-pgt{font-size:11.5px;color:var(--muted,#6e6e73);white-space:nowrap}
 button.nm-line{appearance:none;border:0;background:none;font:inherit;font-size:13.5px;color:var(--ink,#1d1d1f);cursor:pointer;padding:6px 0 0;display:flex;align-items:center;gap:6px;text-align:left}
 button.nm-line:hover b{text-decoration:underline}.nm-dot{width:8px;height:8px;border-radius:50%;background:#007AFF;flex:none}
 .pg-r.pg-1{grid-template-areas:'d n ph'}.pg-note{font-size:12.5px;color:var(--muted,#6e6e73);margin:-2px 4px 8px;line-height:1.4}
@@ -1723,7 +1728,13 @@ const TEAMS_DEFAULT=['Pod 1','Pod 2','Pod 3','Pod 4','Shared (all PODs)','Drafti
 const SHARED_TEAM='Shared (all PODs)';
 const isSharedTeam=t=>/^shared\b/i.test(t||'');
 const isShared=id=>!!id&&isSharedTeam(teamOf(id));
-const mentorOf=id=>{ const m=roster(id).mentor; return m&&!isLeft(m)?m:''; };
+/* no mentors (Principal, 13 Nov 2026): a shared junior or a drafter "works with" the PODs whose projects they have work on;
+   each project's POD leader sets and approves the dates of that work; leave is the COO's. mentorOf stays for old callers. */
+const mentorOf=id=>'';
+function worksWith(id,days=30){ const from=addDays(today(),-days), m=new Map();
+  Object.values(S.tasks).forEach(t=>{ if(!t||t.assignee!==id||t.archived) return; if(t.doneAt&&String(t.doneAt).slice(0,10)<from) return;
+    podsOfProject(S.projects[t.projectId]).filter(pd=>pods().includes(pd)).forEach(pd=>m.set(pd,(m.get(pd)||0)+1)); });
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]).map(([pod,n])=>({pod,n})); }
 const sharedPeople=()=>people().filter(id=>isShared(id)&&!isLeft(id));
 const pods=()=>teams().filter(t=>/^pod\b/i.test(t));
 const podsOfProject=p=>p?[...new Set([p.pod,p.pod2,...(Array.isArray(p.pods)?p.pods:[])].filter(x=>x&&x!=='Studio'))]:[];
@@ -4258,10 +4269,10 @@ function myWeekEl(){ if(!S.uid||window.slateReview||!needPlan(S.uid)) return nul
 /* POD leader: the POD's week, one row a person, each day's worst dot, and greens so far */
 function podWeekEl(){ if(!amPodLead()||window.slateReview) return null; const mp=myPod();
   const rows=presRows(mwRange()); if(!rows) return null; const ws=weekStart(today()), seen=new Set(rows.map(x=>x.user_id));
-  /* plus the shared juniors they mentor and the drafting pool on their POD's projects this week (Principal, 13 Nov 2026) */
-  const helps=id=>isDraftMember(id)&&Object.values(S.tasks).some(t=>t&&t.assignee===id&&!t.archived&&inMyPodProject(S.projects[t.projectId])&&(!t.doneAt||String(t.doneAt).slice(0,10)>=ws));
+  /* plus the shared juniors and drafters who have work on this POD's projects this week (Principal, 13 Nov 2026) */
+  const helps=id=>(isDraftMember(id)||isShared(id))&&Object.values(S.tasks).some(t=>t&&t.assignee===id&&!t.archived&&inMyPodProject(S.projects[t.projectId])&&(!t.doneAt||String(t.doneAt).slice(0,10)>=ws));
   const tag=id=>teamOf(id)===mp?'':isShared(id)?'shared':'drafting';
-  const ids=people().filter(id=>id!==S.uid&&!isLeft(id)&&needPlan(id)&&(teamOf(id)===mp||((isShared(id)&&mentorOf(id)===S.uid)||helps(id))&&seen.has(id))); if(!ids.length) return null;
+  const ids=people().filter(id=>id!==S.uid&&!isLeft(id)&&needPlan(id)&&(teamOf(id)===mp||(helps(id)&&seen.has(id)))); if(!ids.length) return null;
   const worst=cs=>{ const v=cs.filter(c=>!['x','f'].includes(c)); return !v.length?'x':v.includes('r')?'r':v.includes('a')?'a':v.includes('n')?'n':'g'; };
   const list=ids.map(id=>({id,W:mwWeek(id,ws,rows)})).sort((a,b)=>(b.W.r-a.W.r)||nameOf(a.id).localeCompare(nameOf(b.id)));
   return deskSub('My POD this week',list.map(({id,W})=>h('div',{class:'mw-pr'},h('span',{class:'mw-rl'},shortName(id),tag(id)?h('span',{class:'mw-tag',text:' · '+tag(id)}):null),
@@ -4676,9 +4687,9 @@ function wlRunning(u,td=today()){ const r=wlLastLog(u,td); return r?(r.lines||[]
 function wlAskTo(u){ const t=teamOf(u)||''; let to='';
   if(/draft/i.test(t)) to=people().find(id=>id!==u&&!isLeft(id)&&teamOf(id)===t&&roleGroup(id)==='dhead')||'';
   else if(/^pod\b/i.test(t)) to=people().find(id=>id!==u&&!isLeft(id)&&isPodLead(id,t))||'';
-  else if(isSharedTeam(t)) to=mentorOf(u);
+  else if(isSharedTeam(t)){ const w=worksWith(u,14)[0]; if(w) to=people().find(id=>!isLeft(id)&&isPodLead(id,w.pod))||''; }
   return to||cooId(); }
-const wlAskWho=u=>{ const to=wlAskTo(u); return !to?'the COO':to===cooId()?'the COO':roleGroup(to)==='dhead'?'the Design Associate Lead':isShared(u)?'your mentor ('+shortName(to)+')':'your POD leader'; };
+const wlAskWho=u=>{ const to=wlAskTo(u); return !to?'the COO':to===cooId()?'the COO':roleGroup(to)==='dhead'?'the Design Associate Lead':isShared(u)?'the POD leader ('+shortName(to)+')':'your POD leader'; };
 /* a request is answered once a task reaches the person after it was made */
 const wlAskDone=(u,at)=>Object.values(S.tasks).some(t=>t.assignee===u&&!t.archived&&((t.createdAt||'')>at||(t.history||[]).some(e=>e.at>at&&(e.to===u||e.assignee===u)&&/created|reassigned|assignApproved/.test(e.type))));
 /* Studio work stays Studio work (Principal, 13 Nov 2026), but a Studio work line that names a project in SLATE OS is asked
@@ -5288,21 +5299,28 @@ function viewDeskToday(){
   const waiting=mine.filter(t=>t.verify&&!t.doneAt).sort((a,b)=>(a.verify.at||'').localeCompare(b.verify.at||''));
   const meetAll=homeMeetRows(td,false), meetToday=meetAll.filter(r=>/Today|Yesterday|minutes/i.test(r.textContent||''));
   const goMine=st=>()=>{ Object.assign(S.f,{person:'',mine:true,project:'',q:'',status:st}); S.fInit=1; goView('all'); };
+  /* No scrolling on this Home (Principal, 13 Nov 2026): every section shows only the rows that fit (fitHome), the rest go
+     behind "+ N more", which opens the whole list in a side panel. Sections that need action carry a progress bar:
+     cleared ÷ (cleared + still open), counted from when each item first came (progOf). */
+  const tDone=k=>{ const t=S.tasks[k]; return !t||!!t.doneAt||!!t.verify||!!t.archived; };
+  const nowRows=()=>[...now.map(t=>vfReturned(t)?red(deskTask(t,{done:true})):deskTask(t,{done:true})),...kFollow(td,false),...meetToday];
+  const waitRows=()=>waitQ.flatMap(x=>[].concat(x.el()));
+  const waitKeys=[...sent.map(t=>'t:'+t.id),...acts.map(n=>'n:'+(n.id||n.title)),...shReq.map(t=>'r:'+t.id)];
   const left=deskCol('Today',h('span',{class:'cnt',style:'font-weight:400;font-size:12.5px;color:var(--muted)',text:'in the order to work on it'}),[
     wlMyCard(),
-    
-    deskSub('Needs you now',[...now.map(t=>vfReturned(t)?red(deskTask(t,{done:true})):deskTask(t,{done:true})),...kFollow(td,false),...meetToday],null),
-    lead?deskSub('Waiting for you',waitQ.slice(0,15).flatMap(x=>[].concat(x.el())),waitQ.length+(pds.length?pds.length-1:0)):null,
-    deskSub('This week',week.slice(0,15).map(t=>deskTask(t,{done:true})),week.length,goMine('week')),
-    deskSub('Waiting for check',waiting.map(t=>deskTask(t)),waiting.length),
-    todoSec(),
-    later.length?h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px;margin:2px 6px',onclick:goMine('active'),text:`${later.length} more due later · open My tasks`}):null]);
+    fitSec(deskSub('Needs you now',nowRows(),null),2,{title:'Needs you now',build:nowRows,prog:{key:'now',keys:[...now.map(t=>t.id),...[...kFollow(td,false),...meetToday].map(r=>'x:'+(r.textContent||'').slice(0,80))],done:k=>k.startsWith('x:')||tDone(k)}}),
+    lead?fitSec(deskSub('Waiting for you',waitRows(),waitQ.length+(pds.length?pds.length-1:0)),3,{title:'Waiting for you',build:waitRows,prog:{key:'wait',keys:waitKeys}}):null,
+    fitSec(deskSub('This week',week.map(t=>deskTask(t,{done:true})),week.length,goMine('week')),5,{title:'This week',build:()=>week.map(t=>deskTask(t,{done:true})),prog:{key:'week',keys:week.map(t=>t.id),done:tDone}}),
+    fitSec(deskSub('Waiting for check',waiting.map(t=>deskTask(t)),waiting.length),6,{title:'Waiting for check',build:()=>waiting.map(t=>deskTask(t))}),
+    fitOpt(todoSec(),8),
+    later.length?fitOpt(h('button',{class:'linkish',type:'button',style:'justify-self:start;font-size:13px;margin:2px 6px',onclick:goMine('active'),text:`${later.length} more due later · open My tasks`}),9):null]);
   /* right: only what has something in it */
-  const right_=[]; { const mw=myWeekEl(); if(mw) right_.push(h('div',{class:'desk-sub'},mw)); } { const pw=podWeekEl(); if(pw) right_.push(pw); }
+  const right_=[]; { const mw=myWeekEl(); if(mw){ [['.mw-pastb,.mw-ew',9],['.mw-leg',8],['.mw-tip',7],['.mw-sub',6.6],['.mw-bar',6.5]].forEach(([q,fp])=>mw.querySelectorAll(q).forEach(e=>fitOpt(e,fp))); right_.push(h('div',{class:'desk-sub'},mw)); } }
+  { const pw=podWeekEl(); if(pw) right_.push(fitSec(pw,4,{title:'My POD this week'})); }
   if(lead){ const ps=projects().filter(p=>p.std&&!p.closed&&!isInternalP(p)&&p.pod!=='Studio'&&!isOnHold(p)&&inMyPodProject(p));
-    if(ps.length) right_.push(projGateSec(ps,false,4,true)); }
+    if(ps.length){ const g=projGateSec(ps,false,0,true); g.querySelectorAll('.pg-note').forEach(e=>fitOpt(e,7.5)); right_.push(fitSec(g,5,{more:()=>goView('projects')})); } }
   const nt=nAll().filter(n=>nLive(n)&&!nSeen(n)).sort((a,b)=>(b.important-a.important)||b.created_at.localeCompare(a.created_at))[0];
-  if(nt) right_.push(h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})));
+  if(nt) right_.push(fitOpt(h('div',{class:'desk-sub'},noticeCard(nt,{clamp:true})),7));
   if(false){ const W=subsIn('week'), M=subsIn('month'), ts=[['week',W],['month',M]].filter(([k,X])=>X.xs.length);
     if(ts.length) right_.push(h('div',{class:'gl-grid'},ts.map(([k,X])=>h('button',{type:'button',class:'gl-tile',onclick:()=>{ S.sheet={type:'subsView',k}; renderSheet(); }},
       h('span',{class:'gl-l',text:X.P.lbl}),h('b',{class:'gl-n',text:String(X.xs.length)}),h('span',{class:'gl-m'},h('i',{style:'background:var(--ontime)'}),`${X.done.length} done`,X.over.length?[h('i',{style:'background:var(--overdue);margin-left:8px'}),`${X.over.length} late`]:null))))); }
@@ -5311,16 +5329,48 @@ function viewDeskToday(){
     const rows=[...by.values()].flatMap(xs=>{ const p=xs[0].p, open=S.clOpenP===p.id, late=xs.some(x=>x.due&&x.due<td);
       return [hRow({dot:late?'var(--overdue)':'var(--faint)',strong:p.name,meta:[p.code||'',`${xs.length} to tick`,open?'tap to fold':''].filter(Boolean).join(' · '),onclick:()=>{ S.clOpenP=open?'':p.id; render(true); }}),
         open?h('div',{class:'cl-open'},myChecklistSec(xs,{grouped:true})):null]; });
-    right_.push(deskSub('My checklist',rows,mcl.length)); } }
+    const clKeys=mcl.map(x=>`${x.p.id}|${x.k}|${x.it.id}`);
+    right_.push(fitSec(deskSub('My checklist',rows,mcl.length),6,{title:'My checklist',build:()=>[myChecklistSec(mcl,{grouped:true})],prog:{key:'cl',keys:clKeys}})); } }
   if(lead){ const rows=dbRows(), stt=dbStats(rows), xs=dbDrafters().filter(id=>(stt[id]||{}).open);
-    if(xs.length) right_.push(deskSub('Drafting team',xs.map(id=>{ const g=stt[id]; return hRow({dot:g.late?'var(--overdue)':'var(--faint)',strong:shortName(id),title:`${g.open} open`+(g.late?` · ${g.late} late`:''),onclick:()=>{ S.dbF={pod:'',who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); }}); }),xs.length)); }
-  { const later_=meetAll.filter(r=>!meetToday.includes(r)).slice(0,3); if(later_.length) right_.push(deskSub('Coming meetings',later_,null,()=>{ S.mhub='up'; goView('meet'); })); }
+    if(xs.length) right_.push(fitSec(deskSub('Drafting team',xs.map(id=>{ const g=stt[id]; return hRow({dot:g.late?'var(--overdue)':'var(--faint)',strong:shortName(id),title:`${g.open} open`+(g.late?` · ${g.late} late`:''),onclick:()=>{ S.dbF={pod:'',who:id}; S.view='drafting'; render(true); window.scrollTo(0,0); }}); }),xs.length),8,{more:()=>{ S.view='drafting'; render(true); }})); }
+  { const later_=meetAll.filter(r=>!meetToday.includes(r)).slice(0,3); if(later_.length) right_.push(fitSec(deskSub('Coming meetings',later_,null,()=>{ S.mhub='up'; goView('meet'); }),9,{more:()=>{ S.mhub='up'; goView('meet'); }})); }
   const right=right_.length?deskCol(lead?'My POD and plan':'Plan',null,right_):null;
   return [top,h('div',{class:'desk desk-today'+(right?'':' desk-one')},left,right),
     h('div',{class:'desk-foot'},h('button',{class:'linkish',type:'button',onclick:()=>{ savePref('fullHome',1); render(true); window.scrollTo(0,0); },text:'Show the full Home'}))];
 }
 
-function fitDesk(){ const d=document.querySelector('.desk'); if(!d) return; const top=d.getBoundingClientRect().top; d.style.height=Math.max(420,window.innerHeight-top-34)+'px'; }
+function fitDesk(){ const d=document.querySelector('.desk'); if(!d) return; const top=d.getBoundingClientRect().top; d.style.height=Math.max(420,window.innerHeight-top-34)+'px'; try{ fitHome(); }catch(e){} }
+/* ---------- no-scroll Home (Principal, 13 Nov 2026) ----------
+   fitSec marks a section: its rows can be cut from the bottom, lowest priority section first (higher number = cut first),
+   and "+ N more" opens the full list in a side panel. fitOpt marks a block that can go entirely (a legend, a tip, a notice).
+   fitHome cuts until each column fits the screen; it runs after every render and on resize. */
+function fitOpt(el,fp){ if(!el) return el; el.classList.add('fit-o'); el.dataset.fp=fp; return el; }
+function fitSec(el,prio,o={}){ if(!el) return null; el.dataset.fs=prio;
+  const list=el.querySelector('.h-list,.pg-list'); if(list) [...list.children].forEach(r=>{ if(!r.classList.contains('fit-o')) r.classList.add('fit-r'); });
+  const hd=el.querySelector('.desk-st'), cnt=hd&&hd.querySelector(':scope > b'); if(o.prog&&hd){ const pg=progEl(o.prog); if(pg) (cnt||hd.firstChild).after(pg); }
+  const more=h('button',{type:'button',class:'fit-more',hidden:true,onclick:()=>{ if(o.more) return o.more(); if(o.build){ S.sheet={type:'homeList',title:o.title||'',build:o.build}; renderSheet(); } }});
+  if(hd) hd.append(more); else el.append(more); return el; }
+function fitHome(){ document.querySelectorAll('.desk-today .desk-b').forEach(b=>{
+  b.querySelectorAll('.fit-cut').forEach(e=>e.classList.remove('fit-cut')); b.querySelectorAll('.fit-more').forEach(m=>{ m.hidden=true; });
+  for(let guard=0;guard<500&&b.scrollHeight>b.clientHeight+1;guard++){
+    const opts=[...b.querySelectorAll('.fit-o:not(.fit-cut)')].filter(e=>e.offsetParent!==null).map(e=>({p:+e.dataset.fp,e}));
+    const secs=[...b.querySelectorAll('[data-fs]')].map(s=>({p:+s.dataset.fs,s,vis:[...s.querySelectorAll('.fit-r:not(.fit-cut)')]})).filter(x=>x.vis.length);
+    const empty=[...b.querySelectorAll('[data-fs]:not(.fit-cut)')].filter(s=>+s.dataset.fs>=6&&!s.querySelector('.fit-r:not(.fit-cut)')).map(s=>({p:+s.dataset.fs,e:s}));
+    let c=[...opts,...secs.filter(x=>x.vis.length>1)].sort((a,b)=>b.p-a.p)[0]||[...secs,...empty].sort((a,b)=>b.p-a.p)[0]; if(!c) break;
+    if(c.e) c.e.classList.add('fit-cut');
+    else { c.vis[c.vis.length-1].classList.add('fit-cut'); const n=c.s.querySelectorAll('.fit-r.fit-cut').length, m=c.s.querySelector('.fit-more'); if(m){ m.hidden=false; m.textContent=`+${n} more`; } } }
+}); }
+/* progress of an action list, counted from when each item first came; kept on this computer, cleared items kept 30 days */
+function progOf(key,keys,done){ const K='slate.prog.'+S.uid; let st={}; try{ st=JSON.parse(localStorage.getItem(K)||'{}')||{}; }catch(_){}
+  const m=st[key]||(st[key]={}), now=Date.now(), live=new Set(keys);
+  keys.forEach(k=>{ if(!m[k]||m[k].c) m[k]={f:now}; });
+  Object.keys(m).forEach(k=>{ if(live.has(k)) return; if(m[k].c){ if(now-m[k].c>30*864e5) delete m[k]; return; } if(done&&!done(k)){ delete m[k]; return; } m[k].c=now; });
+  try{ localStorage.setItem(K,JSON.stringify(st)); }catch(_){}
+  const cl=Object.values(m).filter(x=>x.c).length; return {cl,open:keys.length,tot:cl+keys.length}; }
+function progEl(o){ const P=progOf(o.key,o.keys,o.done); if(!P.tot) return null; const pct=Math.round(P.cl/P.tot*100);
+  return h('div',{class:'fit-pg',title:'Cleared since each item first came (last 30 days)'},h('span',{class:'fit-pgb'},h('i',{style:`width:${pct}%`})),h('span',{class:'fit-pgt',text:`${P.cl} of ${P.tot} cleared`})); }
+function sheetHomeList(){ const sh=S.sheet; return [h('div',{class:'sh-head'},h('h2',{class:'sh-title sh-ht',text:sh.title||'All'}),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})),
+  h('div',{class:'h-list'},...[].concat(sh.build()).filter(Boolean))]; }
 window.addEventListener('resize',()=>{ const was=!!document.querySelector('.desk'); if(S.view==='mine'&&was!==deskOn()) render(true); else fitDesk(); });
 function viewMineBody(){
   if(deskOn()) return viewDesk();
@@ -7831,7 +7881,7 @@ function renderSheet(fromData){
   if(el.hidden&&!motionOff()) S.sheetAt=performance.now();
   if(fromData&&isTyping(el)){ S.pendingSheet=true; return; }
   const prev=el.querySelector('.panel'); const top=prev?prev.scrollTop:0; const k=keepFocus(el);
-  const body=S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='dwgSetup'?sheetDwgSetup():S.sheet.type==='dwgList'?sheetDwgList():S.sheet.type==='podWeek'?sheetPodWeek():S.sheet.type==='podWeekView'?sheetPodWeekView():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='phCommit'?sheetPhCommit():S.sheet.type==='subWin'?sheetSubWin():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='cooTask'?sheetCooTask():S.sheet.type==='emp'?sheetEmp():S.sheet.type==='hire'?sheetHire():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
+  const body=S.sheet.type==='homeList'?sheetHomeList():S.sheet.type==='wlog'?sheetWlog():S.sheet.type==='dwgSetup'?sheetDwgSetup():S.sheet.type==='dwgList'?sheetDwgList():S.sheet.type==='podWeek'?sheetPodWeek():S.sheet.type==='podWeekView'?sheetPodWeekView():S.sheet.type==='checkin'?sheetCheckin():S.sheet.type==='subsView'?sheetSubsView():S.sheet.type==='tlAdj'?sheetTlAdj():S.sheet.type==='siteVisit'?sheetSiteVisit():S.sheet.type==='rec'?sheetRec():S.sheet.type==='sal'?sheetSal():S.sheet.type==='conv'?sheetConv():S.sheet.type==='convView'?sheetConvView():S.sheet.type==='lead'?sheetLead():S.sheet.type==='fee'?sheetFee():S.sheet.type==='propQuick'?sheetPropQuick():S.sheet.type==='peerRev'?sheetPeerRev():S.sheet.type==='clHelp'?sheetClHelp():S.sheet.type==='client'?sheetClient():S.sheet.type==='prop'?sheetProp():S.sheet.type==='propView'?sheetPropView():S.sheet.type==='agrDoc'?sheetAgrDoc():S.sheet.type==='propTask'?sheetPropTask():S.sheet.type==='propDoc'?sheetPropDoc():S.sheet.type==='leave'?sheetLeave():S.sheet.type==='meeting'?sheetMeeting():S.sheet.type==='rota'?sheetRota():S.sheet.type==='profile'?sheetProfile():S.sheet.type==='myprofile'?sheetMyProfile():S.sheet.type==='notif'?sheetNotifs():S.sheet.type==='projView'?sheetProjView():S.sheet.type==='projClose'?sheetProjClose():S.sheet.type==='abStart'?sheetAbStart():S.sheet.type==='sup'?sheetSup():S.sheet.type==='phCommit'?sheetPhCommit():S.sheet.type==='subWin'?sheetSubWin():S.sheet.type==='tl'?sheetTl():S.sheet.type==='projReopen'?sheetProjReopen():S.sheet.type==='projCloseReq'?sheetProjCloseReq():S.sheet.type==='task'?sheetTask():S.sheet.type==='newTask'?sheetNewTask():S.sheet.type==='cooTask'?sheetCooTask():S.sheet.type==='emp'?sheetEmp():S.sheet.type==='hire'?sheetHire():S.sheet.type==='msgTask'?sheetMsgTask():S.sheet.type==='plan'?sheetPlan():S.sheet.type==='stdPlan'?sheetStdPlan():S.sheet.type==='phEdit'?sheetPhEdit():S.sheet.type==='stdEdit'?sheetStdEdit():S.sheet.type==='pmeet'?sheetPMeet():S.sheet.type==='noticeEdit'?sheetNoticeEdit():S.sheet.type==='pick'?sheetPick():S.sheet.type==='timeline'?sheetTimeline():S.sheet.type==='typeEdit'?sheetTypeEdit():S.sheet.type==='chalkProject'?sheetChalkProject():S.sheet.type==='chalkTask'?sheetChalkTask():S.sheet.type==='chalkProj'?sheetChalkProj():sheetProject();
   const since=S.sheetAt?performance.now()-S.sheetAt:1e9, enter=since<260, dl=enter?{style:`animation-delay:-${Math.round(since)}ms`}:{};
   const panel=h('div',{class:'panel'+((S.sheet.type==='propQuick'&&!S.sheet.done)||(S.sheet.type==='wlog'&&S.sheet.wide)||S.sheet.type==='dwgList'||S.sheet.type==='podWeek'||S.sheet.type==='podWeekView'?' panel-wide':'')+(enter?' sh-in':''),role:'dialog','aria-modal':'true','aria-label':'Details',...dl},body);
   const dock=dockable(); document.body.classList.toggle('sheet-dock',dock);
@@ -13505,12 +13555,11 @@ function sheetEmp(){ const sh=S.sheet, d=sh.d, F=S.feeFin, st=sh.sid?(F.staff||[
     h('div',{},h('div',{class:'lbl',text:'Joined'}),h('div',{class:'v',text:st&&st.joinDate?fmtD(st.joinDate):'—'}),h('div',{class:'s',text:st&&st.joinDate?expLen(st.joinDate)+' at SLATE':''})),
     h('div',{},h('div',{class:'lbl',text:'Status'}),h('div',{class:'v',style:probDue?'color:var(--overdue)':'',text:st&&st.active===false?'Left':onProb?'On probation':st&&st.confirmedOn?'Confirmed':'—'}),h('div',{class:'s',text:onProb?'until '+fmtD(st.probationEnd):st&&st.confirmedOn?'since '+fmtD(st.confirmedOn):''}))));
   /* shared architects (10 Nov 2026): no fixed POD; a POD leader mentors them (feedback, reviews, their whole day log) */
-  if(uid&&isShared(uid)){ const leads=people().filter(id=>!isLeft(id)&&pods().some(pd=>isPodLead(id,pd))), m=mentorOf(uid);
-    out.push(h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:'Shared by all PODs'}),h('span',{class:'muted',text:m?'Mentor: '+nameOf(m):'No mentor yet'})),
-      h('div',{class:'f-hint',style:'margin:0',text:'Every POD leader gives them work on the POD’s projects, sets its dates and checks it. The mentor gives feedback, joins their reviews and sees their whole day log. You are told only if they are overloaded.'}),
-      S.canWrite&&amApprover()?field('Mentor',(()=>{ const el=h('select',{onchange:e=>run(()=>settingsRef().update({roster:{[uid]:{mentor:e.target.value}}}),e.target.value?'Mentor set':'Mentor removed').then(()=>renderSheet())},
-        h('option',{value:'',text:'No mentor'}),leads.map(id=>h('option',{value:id,text:nameOf(id)+' · '+podLabel(teamOf(id))}))); el.value=m||''; return el; })()):null,
-      (()=>{ shLoadGet(); const t=shLoadText(uid); return h('div',{class:'f-hint',style:'margin:0',text:'Open work now: '+t}); })())); }
+  /* shared juniors and drafters (13 Nov 2026): no mentor; "Works with" = the PODs whose projects they had work on in the last 30 days */
+  if(uid&&(isShared(uid)||isDraftMember(uid))){ const ww=worksWith(uid);
+    out.push(h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:'Works with'}),h('span',{class:'muted',text:ww.length?ww.map(x=>`${podLabel(x.pod)} (${x.n})`).join(' · '):'No POD work in the last 30 days'})),
+      h('div',{class:'f-hint',style:'margin:0',text:'Worked out from their tasks in the last 30 days. Each project’s POD leader sets and approves the dates of that work and sees it in “My POD this week”. Leave is approved by the COO.'}),
+      isShared(uid)?(()=>{ shLoadGet(); const t=shLoadText(uid); return h('div',{class:'f-hint',style:'margin:0',text:'Open work now: '+t}); })():null)); }
   if(!st){ out.push(h('div',{class:'callout'},h('div',{text:'No HR record yet for this person.'}),h('button',{class:'btn btn-sm btn-primary',type:'button',style:'justify-self:start',onclick:()=>openSal(null,uid),text:'Set up their HR record'}))); return out; }
   /* work, last 90 days */
   if(uid){ const sc=empScore(uid); out.push(h('div',{class:'card',style:'gap:6px'},h('div',{class:'pc-row'},h('b',{text:'Work in the last 90 days'}),h('b',{style:'color:'+(sc.pct==null?'var(--muted)':sc.pct>=85?'var(--ontime)':sc.pct>=60?'var(--late)':'var(--overdue)'),text:sc.pct==null?'—':sc.pct+'%'})),
