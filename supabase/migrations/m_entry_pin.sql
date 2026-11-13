@@ -100,6 +100,8 @@ create or replace function public.perf_presence(p_from date, p_to date)
   seen as (
     select p.id from public.profiles p, me
     where private.is_top() or p.id = me.id or (me.d = 'pod_leader' and me.pod_id is not null and p.pod_id = me.pod_id)
+       -- a POD leader also sees the shared juniors they mentor and the drafting pool (13 Nov 2026)
+       or (me.d = 'pod_leader' and (p.mentor_id = me.id or p.team ilike '%draft%'))
   ),
   x as (
     select l.user_id, l.day, 1 o, 0 w, 0 v, 0 a from public.day_log l where l.day between p_from and p_to and l.in_at is not null
