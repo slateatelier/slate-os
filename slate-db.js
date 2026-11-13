@@ -42,7 +42,7 @@
   const VA_MSG = 'View only: nothing is saved while you are viewing as someone else.';
   const VA_READ = new Set(['my_review', 'temp_password_pending', 'fin_role', 'books_role', 'shared_load', 'review_list', 'project_dues',
     'pin_status', 'open_accounts', 'fin_private_people', 'fin_pick_lists', 'fin_ledger', 'drafting_board', 'dash_rows', 'books_rc_due',
-    'biz_books_money', 'adoption_stats', 'my_adoption', 'push_public_key', 'view_as_list']);
+    'biz_books_money', 'adoption_stats', 'my_adoption', 'push_public_key', 'view_as_list', 'perf_presence']);
   const VA_QUIET = new Set(['touch_seen', 'review_seen', 'notifications_seen', 'log_day_in', 'pin_touch', 'message_read']);
   const jsonRes = (status, body) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
   function vaBlock(input, init, method) {
@@ -1542,6 +1542,10 @@
     EL.loading = true; EL.day = day;
     const { data, error } = await sb.from('day_log').select('user_id,device,in_at,out_at,out_src').eq('day', day);
     if (EL.day !== day) return;
+    let lv = [];
+    try { const r = await sb.rpc('perf_presence', { p_from: day, p_to: day }); lv = (r.data || []).filter(x => x.leave).map(x => x.user_id); } catch (_) {}
+    if (EL.day !== day) return;
+    EL.leave = new Set(lv);
     EL.loading = false; EL.err = error ? friendly(error).message : ''; EL.rows = error ? [] : (data || []);
     try { if (S.view === 'entries') render(true); } catch (_) {}
   }
@@ -1565,14 +1569,28 @@
     ppl.sort((a, b) => ((a.c && a.c.in_at) || '9') .localeCompare((b.c && b.c.in_at) || '9') || nm(a.p.id).localeCompare(nm(b.p.id)));
     const live = r => r && r.out_src === 'active' && day === td && Date.now() - Date.parse(r.out_at) < 7 * 60000;
     const outTxt = r => !r || !r.out_at ? '—' : live(r) ? 'Active now' : hm(r.out_at) + (r.out_src === 'active' ? ' *' : r.out_src === 'noreply' ? ' †' : '');
+    /* absent on a working day: no computer or phone entry. The Principal or the COO can mark approved leave
+       (half an absence in the performance index) or take it off again. */
+    const absentCell = (id, c, m) => {
+      if (weekend || day >= td || (c && c.in_at) || (m && m.in_at)) return '';
+      const on = EL.leave && EL.leave.has(id);
+      const b = el('button', { class: 'btn btn-sm', type: 'button', title: on ? 'Approved leave: counts as half an absence. Tap to undo.' : 'No entry this day: counts as a full absence. Tap if it was approved leave.' }, on ? 'Leave ✓' : 'Mark leave');
+      b.addEventListener('click', async () => { b.disabled = true;
+        const { error } = await sb.rpc('perf_leave_set', { p_user: id, p_day: day, p_on: !on });
+        if (error) { b.disabled = false; b.title = friendly(error).message; b.textContent = "Couldn’t save"; return; }
+        if (!EL.leave) EL.leave = new Set(); on ? EL.leave.delete(id) : EL.leave.add(id);
+        try { window.slatePerfPresenceReset && window.slatePerfPresenceReset(); render(true); } catch (_) {} });
+      return el('span', { style: 'display:inline-flex;gap:8px;align-items:center' }, el('span', { style: 'color:var(--overdue);font-size:13px' }, 'Absent'), b);
+    };
     const inN = ppl.filter(x => x.c && x.c.in_at).length, outN = ppl.filter(x => x.c && x.c.out_at).length;
     const tile = (n, l) => el('div', { class: 'slate-ad-t' }, el('b', {}, String(n)), el('span', {}, l));
     const table = el('div', { class: 'tbl-wrap', style: 'overflow-x:auto' }, el('table', { class: 'tbl', style: 'width:100%;border-collapse:collapse' },
-      el('thead', {}, el('tr', {}, ...['Person', 'In', 'Out', 'Phone in', 'Phone out'].map((t, i) => el('th', { style: `text-align:${i ? 'right' : 'left'};padding:8px 10px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)` }, t)))),
+      el('thead', {}, el('tr', {}, ...['Person', 'In', 'Out', 'Phone in', 'Phone out', 'Absent'].map((t, i) => el('th', { style: `text-align:${i ? 'right' : 'left'};padding:8px 10px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)` }, t)))),
       el('tbody', {}, ...ppl.map(({ p, c, m }) => el('tr', {},
         el('td', { style: 'padding:10px;border-bottom:1px solid var(--line)' }, el('b', { style: 'font-weight:600' }, nm(p.id)), el('div', { class: 'f-hint' }, [p.team, p.role_label].filter(Boolean).join(' · '))),
         ...[c && c.in_at ? hm(c.in_at) : '—', outTxt(c), m && m.in_at ? hm(m.in_at) : '—', outTxt(m)].map((t, i) =>
-          el('td', { style: `padding:10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap;${i > 1 ? 'color:var(--muted)' : t === '—' ? 'color:var(--faint)' : 'font-weight:500'}` }, t)))))));
+          el('td', { style: `padding:10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap;${i > 1 ? 'color:var(--muted)' : t === '—' ? 'color:var(--faint)' : 'font-weight:500'}` }, t)),
+        el('td', { style: 'padding:10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap' }, absentCell(p.id, c, m)))))));
     return [head, bar,
       weekend && !EL.rows.length ? el('p', { class: 'f-hint' }, 'Weekend: nobody confirmed working on a computer today.') : el('div', { class: 'slate-ad-ts' }, tile(`${inN}/${ppl.length}`, 'Came in (computer)'), tile(outN, 'Out logged')),
       table,
@@ -1917,6 +1935,12 @@
     // Dashboard averages: anonymous score inputs for tasks this person can't see.
     window.slateDashRows = async (from, to) => {
       const { data, error } = await sb.rpc('dash_rows', { p_from: from, p_to: to });
+      if (error) throw friendly(error);
+      return data || [];
+    };
+    // Presence for the performance index: per person and day, opened SLATE OS / wrote the plan / approved leave.
+    window.slatePerfPresence = async (from, to) => {
+      const { data, error } = await sb.rpc('perf_presence', { p_from: from, p_to: to });
       if (error) throw friendly(error);
       return data || [];
     };
