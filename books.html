@@ -1283,7 +1283,7 @@ const uidShort = () => Date.now().toString(36) + Math.random().toString(36).slic
 const S = {
   state: 'loading', uid: null, me: null, isOwner: false, admin: false, canWriteShared: null, readonly: false,
   settings: {}, catalog: {}, ledgers: {}, projects: {}, assets: {}, vouchers: {}, invoices: {}, files: {}, members: {}, signs: {},
-  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, parties: {}, staff: {}, payroll: {}, hrfiles: {}, letters: {}, recurring: {}, rcmonth: {}, rcLive: false, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
+  requests: {}, reqdec: {}, cashcounts: {}, shopitems: {}, shopvendors: {}, shoplists: {}, shopcfg: {}, parties: {}, bills: {}, office: {}, staff: {}, payroll: {}, hrfiles: {}, letters: {}, recurring: {}, rcmonth: {}, rcLive: false, plan: {}, jvin: {}, recon: {}, profiles: {}, ver: 0,
   view: 'home', sub: '', f: { period: 'fy', kind: 'all', acc: '', proj: '', q: '', month: '' },
   rep: { id: '', from: '', to: '', asAt: '', ledger: '', fy: '' }, reqTab: 'mine', invTab: 'open', docKind: '', docQ: '',
   sheet: null, fabOpen: false, busy: false, pendingRender: false, pendingSheet: false
@@ -1991,7 +1991,7 @@ function invoicePDF(id, plain, unsaved) {
   y += 15; doc.text(M, y, cliN(inv), { size: 11, bold: true });
   /* the client's Party ID, address and BIN from Business › Clients */
   const pty = inv.project ? partyOf(inv.project) : partyOfL(inv.client), px = pty ? S.parties[pty] || {} : {};
-  String(px.address || '').split('\n').map(t => t.trim()).filter(Boolean).slice(0, 2).forEach(t => { y += 13; doc.text(M, y, t, { size: 9, color: GREY }); });
+  String(px.billAddr || px.address || '').split('\n').map(t => t.trim()).filter(Boolean).slice(0, 2).forEach(t => { y += 13; doc.text(M, y, t, { size: 9, color: GREY }); });
   if (pty) { y += 13; const lw = doc.text(M, y, 'Client ID ', { size: 9, color: GREY }); const vw = doc.text(M + lw, y, pty, { size: 9, bold: true }); if (px.bin) { const l2 = doc.text(M + lw + vw + 18, y, 'BIN ', { size: 9, color: GREY }); doc.text(M + lw + vw + 18 + l2, y, String(px.bin), { size: 9, bold: true }); } }
   if (inv.project) { y += 14; doc.text(M, y, projLabel(inv.project), { size: 9.5, color: GREY }); }
 
@@ -2424,7 +2424,8 @@ function viewMoney() {
     h('button', { class: 'btn btn-in', type: 'button', onclick: () => openMoney('in'), text: '+ Money in' }),
     h('button', { class: 'btn btn-out', type: 'button', onclick: () => openMoney('out'), text: '− Money out' }),
     h('button', { class: 'btn btn-tr', type: 'button', onclick: () => openMoney('tr'), text: '⇄ Transfer' }),
-    h('button', { class: 'btn', type: 'button', onclick: () => openCount(f.acc && groupOf(f.acc) === 'cash' ? f.acc : ''), text: 'Count cash' })] : null)];
+    h('button', { class: 'btn', type: 'button', onclick: () => openCount(f.acc && groupOf(f.acc) === 'cash' ? f.acc : ''), text: 'Count cash' }),
+    h('button', { class: 'btn', type: 'button', onclick: () => openSheet({ type: 'bills' }), text: 'Bills to pay' + (billsOpen().length ? ` · ${tkShort(billsOpen().reduce((t, b) => t + b.amt, 0))}` : '') })] : null)];
   out.push(h('div', { class: 'acc' }, h('button', { type: 'button', 'aria-pressed': String(!f.acc), onclick: () => { f.acc = ''; render(true); } }, h('span', { class: 'n', text: 'All cash and bank' }), h('span', { class: 'v', text: tkShort(cn.cashT + cn.bankT) }), h('span', { class: 's', text: 'today' })),
     cn.pos.filter(p => p.active || Math.abs(p.bal) > 0.5).map(p => h('button', { type: 'button', 'aria-pressed': String(f.acc === p.id), onclick: () => { f.acc = f.acc === p.id ? '' : p.id; render(true); } }, h('span', { class: 'n', text: short(p.name) || p.name, title: p.name }), h('span', { class: 'v', text: tkShort(p.bal) }), h('span', { class: 's', text: p.group === 'bank' ? 'Bank' : 'Cash' })))));
   const projOpts = Object.entries(S.projects).sort((a, b) => projLabel(a[0]).localeCompare(projLabel(b[0])));
@@ -2593,16 +2594,62 @@ function viewInvoices() {
 
 /* ---------- Documents ---------- */
 function viewDocs() {
+  if (can.check() && S.docTab === 'office') return viewOffice();
   const docs = allDocs(), q = S.docQ.trim().toLowerCase(), kind = S.docKind;
   const list = docs.filter(d => (!kind || d.kind === kind) && (!q || (d.name + ' ' + d.kind + ' ' + (d.party || '') + ' ' + (d.note || '') + ' ' + projLabel(d.project)).toLowerCase().includes(q)));
   const out = [pageH('Documents', 'Every bill, receipt, statement and agreement in one place. Attach files to entries and requests, or upload them here.', can.enter() && assetsCap ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openUpload(), text: '+ Upload document' })] : null)];
   if (!assetsCap) out.push(h('div', { class: 'banner warn' }, h('span', { text: 'File uploads aren’t available right now. Reload the page to add files.' })));
+  if (can.check()) out.push(docTabs());
   const kinds = [...new Set(docs.map(d => d.kind))].sort();
   out.push(h('div', { class: 'bar' }, h('input', { id: 'd-q', type: 'search', placeholder: 'Search documents', value: S.docQ, oninput: e => { S.docQ = e.target.value; render(true); } }),
     h('select', { id: 'd-kind', 'aria-label': 'Kind', onchange: e => { S.docKind = e.target.value; render(true); } }, h('option', { value: '', text: 'All kinds' }), [...new Set(FILE_KINDS.concat(kinds))].map(k => h('option', { value: k, text: k, selected: kind === k })))));
   if (!list.length) out.push(emptyBox(docs.length ? 'No documents match' : 'No documents yet', 'Attach bills and receipts when you enter money in or out, or upload agreements, bank statements and tax challans here.'));
   else out.push(h('div', { class: 'files' }, list.slice(0, 300).map(d => fileTile(d.f, () => openSheet({ type: 'doc', id: d.key }), d.kind + ' · ' + fmtD(d.date || (d.at || '').slice(0, 10))))));
   return out;
+}
+/* ---------- Office records (COO feedback 03, 16 Nov 2026): Principal and COO only ----------
+   Employee documents, IDs, SOP, NOA, agreements, rent and utility receipts, licences: one record each with its files, the person
+   or party it belongs to, and a renewal date that is flagged 30 days ahead. Passwords are not kept here: use a password manager,
+   and keep only "which account, who holds it" as a record of kind Account. */
+const OFFICE_KINDS = ['Employee document', 'ID (NID, passport)', 'SOP or policy', 'NOA or appointment letter', 'Agreement', 'Rent receipt', 'Utility receipt', 'Licence or registration', 'Account (who holds it)', 'Other'];
+const offReady = () => Array.isArray(S.settings.topColls) && S.settings.topColls.includes('office');
+function docTabs() { const t = S.docTab || 'docs'; return seg('Show', [['docs', 'Accounts documents'], ['office', 'Office records']], t, k => { S.docTab = k; render(true); }); }
+function offList() { return Object.entries(S.office || {}).map(([id, r]) => Object.assign({ id }, r)).filter(r => !r.deleted); }
+function offDue(r) { if (!r.expires) return null; return Math.round((new Date(r.expires + 'T00:00') - new Date(today() + 'T00:00')) / 864e5); }
+function viewOffice() {
+  const q = (S.offQ || '').trim().toLowerCase(), kind = S.offKind || '', all = offList();
+  const list = all.filter(r => (!kind || r.kind === kind) && (!q || [r.title, r.kind, r.who, r.note, r.ref].join(' ').toLowerCase().includes(q))).sort((a, b) => (a.kind || '').localeCompare(b.kind || '') || (b.date || '').localeCompare(a.date || ''));
+  const due = all.filter(r => { const d = offDue(r); return d != null && d <= 30; }).sort((a, b) => a.expires.localeCompare(b.expires));
+  if (!offReady()) return [pageH('Documents', 'Office records'), docTabs(), emptyBox('Not switched on yet', 'Office records open once the Principal runs the latest database update (m_coo_feedback_03b.sql), which keeps them to the Principal and the COO.')];
+  const out = [pageH('Documents', 'Office records: only the Principal and the COO see these.', can.check() && assetsCap ? [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => openOffice(), text: '+ Office record' })] : null), docTabs()];
+  if (due.length) out.push(h('div', { class: 'callout', style: 'display:grid;gap:4px;border-color:var(--overdue)' }, h('b', { text: `Renewals due: ${due.length}` }), due.map(r => { const d = offDue(r); return h('button', { class: 'linkish', type: 'button', style: 'justify-self:start;text-decoration:none', onclick: () => openOffice(r.id), text: `${r.title} · ${d < 0 ? 'expired ' + fmtD(r.expires, true) : d === 0 ? 'expires today' : 'expires ' + fmtD(r.expires, true) + ' (' + d + ' days)'}` }); })));
+  out.push(h('div', { class: 'bar' }, h('input', { id: 'o-q', type: 'search', placeholder: 'Search office records', value: S.offQ || '', oninput: e => { S.offQ = e.target.value; render(true); } }),
+    h('select', { id: 'o-kind', 'aria-label': 'Kind', onchange: e => { S.offKind = e.target.value; render(true); } }, h('option', { value: '', text: 'All kinds' }), OFFICE_KINDS.map(k => h('option', { value: k, text: `${k} (${all.filter(r => r.kind === k).length})`, selected: kind === k })))));
+  if (!list.length) out.push(emptyBox(all.length ? 'Nothing matches' : 'No office records yet', 'Keep the office’s papers here: staff documents and IDs, the SOP and policies, NOAs, the office agreement, rent and utility receipts, licences.'));
+  else out.push(h('div', { class: 'list' }, list.map(r => { const d = offDue(r);
+    return h('button', { class: 'card', type: 'button', style: 'display:grid;gap:2px;text-align:left;cursor:pointer;padding:10px 12px', onclick: () => openOffice(r.id) },
+      h('b', { text: r.title }), h('span', { class: 'f-hint', style: 'margin:0' + (d != null && d <= 30 ? ';color:var(--overdue)' : ''), text: [r.kind, r.who, r.date ? fmtD(r.date, true) : '', r.expires ? 'renew by ' + fmtD(r.expires, true) : '', (r.files || []).length ? (r.files.length + ' file' + (r.files.length === 1 ? '' : 's')) : 'no file'].filter(Boolean).join(' · ') })); })));
+  return out;
+}
+function openOffice(id) { const r = id ? S.office[id] || {} : {};
+  openSheet({ type: 'office', editId: id || null, d: { kind: r.kind || OFFICE_KINDS[0], title: r.title || '', who: r.who || '', date: r.date || today(), expires: r.expires || '', ref: r.ref || '', note: r.note || '', files: (r.files || []).slice() } }); }
+function sheetOffice() {
+  const d = D(), id = S.sheet.editId;
+  const save = () => { if (!offReady()) return failS('Office records open once the latest database update is run.'); const title = (d.title || '').trim(); if (!title) return failS('Give it a name, e.g. Office rent agreement 2026–27.');
+    if (/password|পাসওয়ার্ড/i.test(d.note || '') ) return failS('Don’t write passwords here. Keep them in a password manager; note only who holds the account.');
+    const rid = id || 'o' + uidShort(), old = id ? S.office[id] || {} : {};
+    const rec = Object.assign({}, old, { kind: d.kind, title, who: (d.who || '').trim(), date: d.date || '', expires: d.expires || '', ref: (d.ref || '').trim(), note: (d.note || '').trim(), files: d.files || [], at: new Date().toISOString(), by: S.uid, ...(id ? {} : { made: new Date().toISOString(), madeBy: S.uid }) });
+    run(() => Store.put('office', rid, rec), 'Saved').then(ok => { if (ok) closeSheet(); }); };
+  const del = () => { if (!confirm('Remove this office record? Its files stay in the archive.')) return; run(() => Store.patch('office', id, { deleted: true, deletedAt: new Date().toISOString(), deletedBy: S.uid }), 'Removed').then(ok => { if (ok) closeSheet(); }); };
+  return [head('Documents › Office records', id ? d.title || 'Office record' : 'New office record'),
+    h('form', { class: 'form', onsubmit: e => { e.preventDefault(); save(); } },
+      h('div', { class: 'form-row' }, field('Kind', sel('kind', OFFICE_KINDS.map(k => [k, k]))), field('Name *', inp('title', { maxlength: 120, placeholder: 'e.g. Rahim: NID and photo' }))),
+      h('div', { class: 'form-row' }, field('Whose / with whom', inp('who', { maxlength: 80, placeholder: 'Staff member, landlord, DESCO…' })), field('Reference no.', inp('ref', { maxlength: 60 }))),
+      h('div', { class: 'form-row' }, field('Date', inp('date', { type: 'date' })), field('Renew or expires on', inp('expires', { type: 'date' }), 'Flagged here 30 days ahead.')),
+      field('Note', inp('note', { maxlength: 240, placeholder: d.kind === 'Account (who holds it)' ? 'Which account and who holds the login. Never the password.' : '' })),
+      attachBlock('files'),
+      S.sheet.err ? h('div', { class: 'err', text: S.sheet.err }) : null,
+      h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'submit', disabled: S.busy, text: 'Save' }), id ? h('button', { class: 'btn btn-danger', type: 'button', onclick: del, text: 'Remove' }) : null, h('button', { class: 'btn', type: 'button', onclick: closeSheet, text: 'Cancel' })))];
 }
 function fileTile(f, onclick, sub, onRemove) {
   return h('div', { class: 'file' }, h('button', { type: 'button', onclick, style: 'all:unset;cursor:pointer;display:grid', title: f.name },
@@ -2655,7 +2702,7 @@ function form(title, fields, submit, onSubmit, extra) {
 }
 function fact(l, v, s) { return h('div', {}, h('div', { class: 'lbl', text: l }), h('div', { class: 'v', text: v || '—' }), s ? h('div', { class: 's', text: s }) : null); }
 function timeline(trail) {
-  const lab = { signed: 'Signed', created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', restored: 'Restored', shortclosed: 'Balance closed without payment', reopened: 'Balance reopened', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed' };
+  const lab = { signed: 'Signed', created: 'Entered', imported: 'Imported from Tally', submitted: 'Submitted', edited: 'Edited', checked: 'Checked', approved: 'Approved', returned: 'Sent back', restored: 'Restored', shortclosed: 'Balance closed without payment', reopened: 'Balance reopened', rejected: 'Rejected', paid: 'Paid', posted: 'Posted to the books', cancelled: 'Cancelled', resubmitted: 'Updated and resubmitted', withdrawn: 'Withdrawn', issued: 'Issued', counted: 'Counted', tagged: 'Project tagged', split: 'Split into separate entries', unsplit: 'Split undone', saved: 'Prepared', signed: 'Signed off', ordered: 'Ordered', received: 'Arrival confirmed', sent: 'Sent to the client' };
   const col = { approved: 'var(--ontime)', paid: 'var(--ontime)', posted: 'var(--ontime)', checked: 'var(--early)', returned: 'var(--overdue)', rejected: 'var(--overdue)', cancelled: 'var(--faint)' };
   const t = (trail || []).slice().reverse();
   if (!t.length) return null;
@@ -3381,6 +3428,7 @@ function sheetInvoice() {
     const back = prev && prev.act === 'draft' ? 'draft' : (raw.trail || []).some(e => e && e.act === 'issued') || x.no ? 'issued' : 'draft';
     acts.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: () => run(() => Store.patch('invoices', x._id, { status: back, trail: trailAdd(raw.trail, 'restored') }), back === 'draft' ? 'Restored as a draft' : 'Restored'), text: 'Restore invoice' })); }
   if (acts.length) out.push(h('div', { class: 'actions' }, acts));
+  if (!['draft', 'cancelled'].includes(st)) out.push(invSendBox(x, raw));
   const sb = x.project ? stageBook(x.project, x) : null;
   if (sb) out.push(h('div', { class: 'sec' }, secH('Fee stages', 'as printed on the invoice'), h('div', { class: 'tbl-wrap' }, h('table', {}, h('tbody', {},
     sb.rows.map(r => h('tr', {}, h('td', { text: `${r.n}. ${r.label} · ${r.pct}%` }), h('td', {}, h('span', { class: 'stg-tag t-' + r.st, text: r.st === 'now' && r.now < r.amount - STG_TOL ? `Balance billed now · ${tk(r.now)}` : stgTag(r) })), h('td', { class: 'n', text: fmt(r.amount) }))),
@@ -3392,6 +3440,39 @@ function sheetInvoice() {
   return out;
 }
 
+/* how the invoice reached the client (COO feedback 03, 16 Nov 2026): the client's preference from Business › Clients
+   (hard copy / WhatsApp / email, and to whom), a WhatsApp button to that number, and a log of every send */
+const INV_HOW = [['hard', 'Hard copy'], ['whatsapp', 'WhatsApp'], ['email', 'Email']];
+function invSendTo(px) { const cs = Array.isArray(px.contacts) ? px.contacts : [], i = px.sendTo && px.sendTo !== 'main' ? cs[+px.sendTo] : null;
+  return i ? { name: i.name, phone: i.phone, email: i.email, role: i.role } : { name: px.contact, phone: px.phone, email: px.email, role: 'main' }; }
+function invSendBox(x, raw) {
+  const pty = x.project ? partyOf(x.project) : partyOfL(x.client), px = pty ? S.parties[pty] || {} : {}, to = invSendTo(px);
+  const pref = (Array.isArray(px.deliver) ? px.deliver : []), sent = Array.isArray(raw.sent) ? raw.sent : [];
+  const d = S.invSend && S.invSend.id === x._id ? S.invSend : (S.invSend = { id: x._id, how: pref.slice(), note: '', open: false });
+  const ph = String(to.phone || '').replace(/\D/g, ''), t = invTotals(x);
+  const msg = `Dear ${to.name || 'Sir/Madam'}, please find SLATE invoice ${x.no || ''} for ${projLabel(x.project) || cliN(x)}, amount ${tk(t.total)}${x.due ? ', due by ' + fmtD(x.due, true) : ''}. Thank you. SLATE`;
+  const wa = ph ? 'https://wa.me/' + (ph.startsWith('880') ? ph : '88' + ph.replace(/^0?/, '0')) + '?text=' + encodeURIComponent(msg) : '';
+  const mail = to.email ? 'mailto:' + to.email + '?subject=' + encodeURIComponent('SLATE invoice ' + (x.no || '')) + '&body=' + encodeURIComponent(msg) : '';
+  const save = () => { if (!d.how.length) return toast('Tick how it was sent.');
+    const e = { how: d.how.slice(), to: to.name || '', at: new Date().toISOString(), by: S.uid, note: (d.note || '').trim() };
+    const txt = d.how.map(k => (INV_HOW.find(z => z[0] === k) || [k, k])[1]).join(' + ') + (to.name ? ' to ' + to.name : '') + (e.note ? ' · ' + e.note : '');
+    run(() => Store.patch('invoices', x._id, { sent: sent.concat([e]).slice(-30), trail: trailAdd(raw.trail, 'sent', txt) }), 'Recorded as sent').then(ok => { if (ok) { S.invSend = null; renderSheet(); } }); };
+  const howTxt = a => a.map(k => (INV_HOW.find(z => z[0] === k) || [k, k])[1]).join(' + ');
+  return h('div', { class: 'sec' }, secH('Sending', sent.length ? `sent ${sent.length}×` : 'not recorded as sent yet'),
+    h('div', { class: 'facts' }, fact('Client wants it by', pref.length ? howTxt(pref) : 'Not set', pref.length ? '' : 'Set it in SLATE OS › Business › Clients'),
+      fact('Send to', to.name || '—', [to.role && to.role !== 'main' ? to.role : '', to.phone, to.email].filter(Boolean).join(' · ')),
+      px.billAddr ? fact('Billing address', String(px.billAddr).split('\n')[0]) : null,
+      sent.length ? fact('Last sent', fmtTs(sent[sent.length - 1].at), `${howTxt(sent[sent.length - 1].how || [])} · by ${nameOf(sent[sent.length - 1].by)}`) : null),
+    h('div', { class: 'actions', style: 'margin:0' },
+      wa ? h('a', { class: 'btn', href: wa, target: '_blank', rel: 'noopener', text: 'Open WhatsApp chat' }) : null,
+      mail ? h('a', { class: 'btn', href: mail, text: 'Write the email' }) : null,
+      can.enter() && !d.open ? h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { d.open = true; if (!d.how.length) d.how = pref.slice(); renderSheet(); }, text: 'Record as sent' }) : null),
+    can.enter() && d.open ? h('div', { class: 'callout', style: 'display:grid;gap:8px' },
+      h('div', { class: 'chips' }, INV_HOW.map(([k, l]) => { const on = d.how.includes(k); return h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), style: 'border:0;cursor:pointer', 'aria-pressed': String(on), onclick: () => { d.how = on ? d.how.filter(z => z !== k) : d.how.concat([k]); renderSheet(); }, text: (on ? '✓ ' : '') + l }); })),
+      h('input', { maxlength: 160, placeholder: 'Note (optional), e.g. received by the front desk, signed copy kept', value: d.note, style: 'background:#fff', oninput: e => { d.note = e.target.value; } }),
+      h('div', { class: 'actions', style: 'margin:0' }, h('button', { class: 'btn btn-primary btn-sm', type: 'button', disabled: S.busy, onclick: save, text: 'Save' }), h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { d.open = false; renderSheet(); }, text: 'Cancel' }))) : null,
+    pref.length && !sent.length ? h('p', { class: 'f-hint', style: 'margin:0', text: 'Send the PDF the way the client wants, then record it here, so everyone can see when it went.' }) : null);
+}
 /* closing what is left on an invoice without payment: only the Principal and the COO (tax kept back by the client
    is not this: record it with the payment, as AIT or VAT withheld) */
 const INV_SHORT = { discount: 'Discount agreed with the client', writeoff: 'Written off (won’t be paid)', round: 'Small difference (rounding)' };
@@ -3538,7 +3619,74 @@ function saveTag(it, st) {
   run(() => Store.patch('vouchers', it.id, { lines, trail: trailAdd(raw.trail, 'tagged', note) }), 'Tagged to ' + cc.map(c => (S.projects[c.p] || {}).code || (S.projects[c.p] || {}).name).join(', '));
 }
 
-const SHEETS = { mysign: sheetMySign, tagpay: sheetTagPay, money: sheetMoney, journal: sheetJournal, voucher: sheetVoucher, reqform: sheetReqForm, request: sheetRequest, invform: sheetInvForm, invoice: sheetInvoice, invshort: sheetInvShort, upload: sheetUpload, doc: sheetDoc, count: sheetCount, countview: sheetCountView, holders: sheetHolders };
+const SHEETS = { mysign: sheetMySign, tagpay: sheetTagPay, money: sheetMoney, journal: sheetJournal, voucher: sheetVoucher, reqform: sheetReqForm, request: sheetRequest, invform: sheetInvForm, invoice: sheetInvoice, invshort: sheetInvShort, upload: sheetUpload, doc: sheetDoc, count: sheetCount, countview: sheetCountView, holders: sheetHolders, bills: sheetBills, billform: sheetBillForm, office: sheetOffice };
+
+/* ---------- Bills to pay (COO feedback 03, 16 Nov 2026) ----------
+   A consultant's or supplier's bill (COGS) is logged when it arrives: who, which project, what for, amount, bill no, due date, photo.
+   Logging it posts a journal (cost Dr, their account Cr), checked and approved like any journal, so what SLATE owes shows in the
+   books from the day the bill came. Bills to pay lists every open bill with the total; tick several of one payee and Pay selected
+   opens Money out › Pay a bill with the amount, project and bill numbers filled in; the payment voucher prints on the letterhead,
+   and the bills are marked paid with it. */
+function billsOpen() { return Object.entries(S.bills || {}).map(([id, b]) => Object.assign({ id }, b)).filter(b => b.status !== 'paid' && b.status !== 'void').map(b => Object.assign(b, { amt: +b.amount || 0 })); }
+function billDays(b) { return b.due ? Math.round((new Date(b.due + 'T00:00') - new Date(today() + 'T00:00')) / 864e5) : null; }
+function openBillForm(id) {
+  const b = id ? S.bills[id] || {} : {};
+  openSheet({ type: 'billform', editId: id || null, d: { vendor: b.vendor || '', proj: b.proj || '', cat: b.cat || '', no: b.no || '', date: b.date || today(), due: b.due || '', amount: b.amount != null ? String(b.amount) : '', note: b.note || '', files: (b.files || []).slice() } });
+}
+function sheetBillForm() {
+  const d = D(), edit = !!S.sheet.editId, old = edit ? S.bills[S.sheet.editId] || {} : null;
+  const posted = old && old.jv && S.vouchers[old.jv] && S.vouchers[old.jv].status !== 'void';
+  const save = () => { const amt = r2(parseAmt(d.amount));
+    if (!d.vendor) return failS('Who sent the bill?'); if (!(amt > 0)) return failS('Give the bill amount.'); if (!d.cat) return failS('What is it for? Pick the cost.');
+    if (!d.date) return failS('Give the bill date.'); if (d.due && d.due < d.date) return failS('The due date can’t be before the bill date.');
+    const id = S.sheet.editId || 'b' + uidShort(), now = new Date().toISOString();
+    const rec = Object.assign({}, old || {}, { vendor: d.vendor, proj: d.proj || '', cat: d.cat, no: (d.no || '').trim(), date: d.date, due: d.due || '', amount: amt, note: (d.note || '').trim(), files: d.files || [], status: (old && old.status) || 'open', by: (old && old.by) || S.uid, at: (old && old.at) || now });
+    if (posted && (old.amount !== amt || old.vendor !== d.vendor || old.cat !== d.cat || (old.proj || '') !== (d.proj || ''))) return failS('This bill is already in the books. Change it from its journal entry, or cancel that entry first.');
+    const cc = d.proj ? [{ p: d.proj, a: amt }] : undefined;
+    if (posted) return run(() => Store.put('bills', id, rec), 'Bill saved').then(ok => { if (ok) openSheet({ type: 'bills' }); });
+    saveVoucher({ type: 'Journal', date: d.date, party: L(d.vendor), narr: `Bill ${rec.no ? 'no. ' + rec.no + ' ' : ''}from ${L(d.vendor)}${d.proj ? ' · ' + projLabel(d.proj) : ''}${rec.note ? ' · ' + rec.note : ''}`, ref: rec.no, files: rec.files,
+      lines: [{ l: d.cat, dr: amt, cr: 0, cc }, { l: d.vendor, dr: 0, cr: amt, cc }], form: null, inv: '' }, null,
+      async (vid) => { await Store.put('bills', id, Object.assign(rec, { jv: vid })); });
+  };
+  return [head('Money › Bills to pay', edit ? 'Edit bill' : 'Bill received', h('p', { class: 'lead', text: 'A consultant’s or supplier’s bill, logged the day it comes. It goes into the books as owed to them, and waits in Bills to pay until it is paid.' })),
+    h('form', { class: 'form', onsubmit: e => { e.preventDefault(); save(); } },
+      field('From *', sel('vendor', [['', 'Choose the consultant or vendor…']].concat(vendorOpts(d.vendor))), 'New one? Add it in Money out › Pay for something › New consultant or vendor.'),
+      h('div', { class: 'form-row' }, field('For *', sel('cat', [['', 'Choose the cost…']].concat(spendOpts(d.cat)))), field('Project', sel('proj', projOpts()))),
+      h('div', { class: 'form-row' }, field('Amount (Tk) *', inp('amount', { inputmode: 'decimal', class: 'amt-in', placeholder: '0' })), field('Their bill no.', inp('no', { maxlength: 40 }))),
+      h('div', { class: 'form-row' }, field('Bill date *', inp('date', { type: 'date' })), field('Pay by', inp('due', { type: 'date' }))),
+      field('Note', inp('note', { maxlength: 160, placeholder: 'e.g. structural drawings, WD-1' })),
+      attachBlock('files'),
+      S.sheet.err ? h('div', { class: 'err', text: S.sheet.err }) : null,
+      h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'submit', disabled: S.busy, text: edit ? 'Save' : 'Log the bill' }), h('button', { class: 'btn', type: 'button', onclick: () => openSheet({ type: 'bills' }), text: 'Back' })))];
+}
+function failS(m) { S.sheet.err = m; renderSheet(); }
+function sheetBills() {
+  const sh = S.sheet, sel_ = sh.sel || (sh.sel = {}), all = billsOpen().sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.date.localeCompare(b.date));
+  const total = r2(all.reduce((t, b) => t + b.amt, 0)), picked = all.filter(b => sel_[b.id]), ptot = r2(picked.reduce((t, b) => t + b.amt, 0));
+  const late = all.filter(b => b.due && b.due < today()), lateT = r2(late.reduce((t, b) => t + b.amt, 0));
+  const vend = [...new Set(picked.map(b => b.vendor))], pj = [...new Set(picked.map(b => b.proj || ''))];
+  const pay = () => { if (!picked.length) return toast('Tick the bills to pay.'); if (vend.length > 1) return toast('Pick bills from one payee at a time; each payment is one voucher.');
+    const unposted = picked.filter(b => !(b.jv && S.vouchers[b.jv] && ['approved', 'tally'].includes(S.vouchers[b.jv].status)));
+    if (unposted.length) return toast(`${unposted.length} of these ${unposted.length === 1 ? 'is' : 'are'} not approved in the books yet. Approve the journal first.`);
+    const ids = picked.map(b => b.id), nos = picked.map(b => b.no).filter(Boolean);
+    openMoney('out', { mode: 'bill', cat: vend[0], proj: pj.length === 1 ? pj[0] : '', amount: String(ptot), ref: nos.join(', ').slice(0, 60),
+      narr: `Payment of ${picked.length} bill${picked.length === 1 ? '' : 's'}${nos.length ? ' (' + nos.join(', ') + ')' : ''} to ${L(vend[0])}`,
+      after: async (vid) => { const now = new Date().toISOString(); for (const id of ids) await Store.patch('bills', id, { status: 'paid', paidBy: vid, paidAt: now }); } });
+  };
+  const row = b => { const dd = billDays(b), v = b.jv && S.vouchers[b.jv], st = !v ? 'Not in the books' : v.status === 'approved' || v.status === 'tally' ? '' : 'Waiting for approval';
+    return h('label', { class: 'card', style: 'display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;cursor:pointer' },
+      h('input', { type: 'checkbox', checked: !!sel_[b.id], onchange: e => { sel_[b.id] = e.target.checked; renderSheet(); } }),
+      h('div', { style: 'min-width:0' }, h('b', { text: L(b.vendor) }), h('div', { class: 'f-hint', style: 'margin:0', text: [b.no ? 'Bill ' + b.no : '', b.proj ? projLabel(b.proj) : '', b.note, 'dated ' + fmtD(b.date, true), st].filter(Boolean).join(' · ') })),
+      h('div', { style: 'text-align:right' }, h('div', { class: 'mono', text: tk(b.amt) }), h('div', { class: 'f-hint', style: 'margin:0;' + (dd != null && dd < 0 ? 'color:var(--overdue)' : ''), text: dd == null ? 'no due date' : dd < 0 ? `${-dd} days late` : dd === 0 ? 'due today' : `due in ${dd} days` }),
+        can.enter() ? h('button', { class: 'linkish', type: 'button', style: 'font-size:12px', onclick: e => { e.preventDefault(); openBillForm(b.id); }, text: 'Edit' }) : null)); };
+  const paid = Object.entries(S.bills || {}).map(([id, b]) => Object.assign({ id }, b)).filter(b => b.status === 'paid').sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt))).slice(0, 8);
+  return [head('Money', 'Bills to pay'),
+    h('div', { class: 'facts' }, fact('Still to pay', tk(total), `${all.length} bill${all.length === 1 ? '' : 's'}`), fact('Late', tk(lateT), `${late.length} past the pay-by date`), picked.length ? fact('Ticked', tk(ptot), `${picked.length} bill${picked.length === 1 ? '' : 's'}`) : null),
+    can.enter() ? h('div', { class: 'actions', style: 'margin:0' }, h('button', { class: 'btn btn-primary', type: 'button', disabled: !picked.length, onclick: pay, text: picked.length ? `Pay ${tk(ptot)}` : 'Pay selected' }), h('button', { class: 'btn', type: 'button', onclick: () => openBillForm(), text: '+ Bill received' })) : null,
+    all.length ? h('div', { style: 'display:grid;gap:6px' }, all.map(row)) : emptyBox('No bills waiting', 'Log a consultant’s or supplier’s bill when it comes, with + Bill received.'),
+    paid.length ? h('div', { class: 'sec' }, secH('Paid lately'), h('div', { class: 'list' }, paid.map(b => h('button', { class: 'linkish', type: 'button', style: 'justify-self:start;text-decoration:none', onclick: () => b.paidBy && openSheet({ type: 'voucher', id: b.paidBy }), text: `${L(b.vendor)} · ${b.no || 'no bill no.'} · ${tk(+b.amount || 0)} · paid ${fmtTs(b.paidAt)}` })))) : null,
+    h('p', { class: 'f-hint', style: 'margin:0', text: 'Paying opens Money out with the amount and project filled in. Save it, then print the payment voucher from it for signing before the money goes.' })];
+}
 
 /* ---------- reports ---------- */
 const REPORTS = [
@@ -6501,7 +6649,7 @@ async function holderAutoApprove(key, body) {
 }
 
 /* ---------- start-up: capabilities, roles, live data ---------- */
-const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'rcmonth', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs', 'parties', 'hrfiles', 'letters'];
+const COLLS = ['ledgers', 'projects', 'assets', 'vouchers', 'invoices', 'files', 'members', 'reqdec', 'cashcounts', 'staff', 'payroll', 'recurring', 'rcmonth', 'plan', 'jvin', 'recon', 'shopitems', 'shopvendors', 'shoplists', 'signs', 'parties', 'hrfiles', 'letters', 'bills', 'office'];
 const NEED = ['settings', 'ledgers', 'vouchers', 'projects'];
 let loaded = {}, profTimer = null, catTimer = null, lastProfKey = '';
 function changed() { S.ver++; render(); renderSheet(true); scheduleProfiles(); scheduleCatalog(); }
