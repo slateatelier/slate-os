@@ -83,18 +83,10 @@ const blocksData = [
   {"no":"68","title":"Subacha-Arakul-Beyara","aka":[],"name":"Block 68 - Subacha-Arakul-Beyara","du":2.1,"areaFar":2.7}
 ];
 
-const roadsData = [
-  {"label":"20 ft","plotFar":3.258},
-  {"label":"25 ft","plotFar":3.385},
-  {"label":"30 ft","plotFar":3.524},
-  {"label":"35 ft","plotFar":3.778},
-  {"label":"40 ft","plotFar":4.008},
-  {"label":"50 ft","plotFar":4.135},
-  {"label":"60 ft","plotFar":4.274},
-  {"label":"75 ft","plotFar":4.631},
-  {"label":"80 ft","plotFar":4.75},
-  {"label":"100 ft","plotFar":4.75}
-];
+// Road-based (plot) FAR: Imarot Nirman Bidhimala 2025, Table 5, A3, Zone 1 — [road width in metres, FAR].
+// Rule 47(6): between two steps the FAR rises in proportion to the road width; 24 m (78.7 ft) and wider = 4.75.
+// (The old 20/25/30/35/40/50/60 ft band values were this same line read at those widths.)
+const ROAD_FAR_STEPS = [[4.88, 2.25], [6, 3.25], [9, 3.50], [12, 4.00], [18, 4.25], [24, 4.75]];
 
 const blockSel = document.getElementById('densityBlock');
 blocksData.forEach(b => {
@@ -102,6 +94,43 @@ blocksData.forEach(b => {
   o.value = b.name; o.textContent = b.no;
   blockSel.appendChild(o);
 });
+
+// ===== INCENTIVE SWITCHES (Nov 2026, Dhaka) =====
+// Regional +0.5 (Purbachal B54 / Jhilmil B47): on by default, shown only for those blocks.
+// Green FAR +0.5: off by default; when on it is added on top of the capped FAR, like the regional bonus on Block FAR.
+const REGIONAL_BONUS = 0.5, GREEN_FAR_BONUS = 0.5;
+const isRegionalBlock = b => !!b && (b.name.includes('Purbachal') || b.name.includes('Jhilmil'));
+function incentiveOn(id, dflt) { const el = document.getElementById(id); return el ? el.value === 'on' : dflt; }
+
+(function buildIncentiveFields() {
+  const road = document.getElementById('roadWidth');
+  const group = road && road.closest('.input-group');
+  if (!group || document.getElementById('greenToggle')) return;
+  const row = document.createElement('div');
+  row.className = 'field-row'; row.id = 'incentiveRow';
+  row.innerHTML =
+    '<div class="field" id="regionalField" style="display:none;">'
+    + '<label for="regionalToggle">Purbachal / Jhilmil +0.5</label>'
+    + '<select id="regionalToggle" onchange="inputChanged()"><option value="on">On</option><option value="off">Off</option></select></div>'
+    + '<div class="field" id="greenField">'
+    + '<label for="greenToggle">Green FAR +0.5</label>'
+    + '<select id="greenToggle" onchange="inputChanged()"><option value="off">Off</option><option value="on">On</option></select></div>';
+  group.appendChild(row);
+  [['row_regionalBonusNB', 'row_greenBonusNB', 'r_greenBonusNB'], ['row_regionalBonusBlock', 'row_greenBonusBlock', 'r_greenBonusBlock']].forEach(([src, id, valId]) => {
+    const s = document.getElementById(src); if (!s) return;
+    const c = s.cloneNode(true); c.id = id; c.style.display = 'none';
+    const k = c.querySelector('.incentive-key'); if (k) k.textContent = 'Green FAR Bonus';
+    const v = c.querySelector('.incentive-val'); if (v) { v.id = valId; v.textContent = '—'; }
+    s.parentNode.insertBefore(c, s.nextSibling);
+  });
+})();
+
+function updateIncentiveFields() {
+  const row = document.getElementById('incentiveRow'); if (!row) return;
+  row.style.display = CITY === 'ctg' ? 'none' : '';
+  const b = blocksData.find(x => x.name === document.getElementById('densityBlock').value);
+  const rf = document.getElementById('regionalField'); if (rf) rf.style.display = isRegionalBlock(b) ? '' : 'none';
+}
 
 
 function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
@@ -380,8 +409,8 @@ function calcDhaka() {
   const blockEligible = landKatha >= 30;
 
   // --- Check for Regional Bonus ---
-  const isPurbachalOrJhilmil = blockName.includes('Purbachal') || blockName.includes('Jhilmil');
-  const regionalBonus = isPurbachalOrJhilmil ? 0.5 : 0;
+  const regionalBonus = isRegionalBlock(b) && incentiveOn('regionalToggle', true) ? REGIONAL_BONUS : 0;
+  const greenBonus = incentiveOn('greenToggle', false) ? GREEN_FAR_BONUS : 0;
 
   // --- Dynamic Road Bonus Calculation ---
   const roadBonusDynamic = roadWidth > 30 ? Math.min(1, (roadWidth - 30) * 0.02) : 0;
@@ -395,7 +424,7 @@ function calcDhaka() {
   // All incentives (size + road + regional) are added to the Minimum Base,
   // then the total is capped at the Maximum FAR (max of Area FAR and Plot FAR)
   const nonBlockFar = nonBlockBaseFar > 0 ? 
-    Math.min(nonBlockBaseFar + plotSizeBonus + roadBonusNB + regionalBonus, nonBlockMaxFar) : 0;
+    Math.min(nonBlockBaseFar + plotSizeBonus + roadBonusNB + regionalBonus, nonBlockMaxFar) + greenBonus : 0;
   const nonBlockIncentiveApplied = nonBlockFar - nonBlockBaseFar;
 
   // --- Block FAR Calculation ---
@@ -420,7 +449,7 @@ function calcDhaka() {
   
   // Incentives added and capped (+0.5 buffer), plus Regional Bonus
   const blockFar = blockBaseFar > 0 ? 
-    Math.min(blockBaseFar + landBonus + roadBonusBlock, blockMaxFar + 0.5) + regionalBonus : 0;
+    Math.min(blockBaseFar + landBonus + roadBonusBlock, blockMaxFar + 0.5) + regionalBonus + greenBonus : 0;
 
   // --- MGC Calculation ---
   let mgcMaxPct, mgcMinPct;
@@ -492,7 +521,7 @@ function calcDhaka() {
   set('r_projName', projName);
   set('r_areaFar', fmtF(areaFar));
   set('r_plotFar', fmtF(plotFar));
-  set('r_plotFarSub', roadFtIn + ' ft road · ' + r.band + ' band');
+  set('r_plotFarSub', roadFtIn + ' ft (' + r.roadM.toFixed(2) + ' m) road · ' + r.band + ' · Rule 47(6)');
 
   const blockCard   = document.getElementById('r_blockFarCard');
   const blockNotice = document.getElementById('r_blockNotice');
@@ -511,7 +540,10 @@ function calcDhaka() {
     document.getElementById('row_regionalBonusBlock').style.display = regionalBonus > 0 ? 'flex' : 'none';
     set('r_regionalBonusBlock', '+' + fmtF(regionalBonus));
     
-    set('r_blockIncentiveTotal', '+' + fmtF(landBonus + roadBonusDynamic + regionalBonus));
+    const gB = document.getElementById('row_greenBonusBlock'); if (gB) gB.style.display = greenBonus > 0 ? 'flex' : 'none';
+    set('r_greenBonusBlock', '+' + fmtF(greenBonus));
+
+    set('r_blockIncentiveTotal', '+' + fmtF(blockFar - blockBaseFar));
   } else {
     blockCard.style.display   = 'none';
     blockNotice.style.display = 'block';
@@ -526,6 +558,8 @@ function calcDhaka() {
   // Render Regional Bonus conditionally
   document.getElementById('row_regionalBonusNB').style.display = regionalBonus > 0 ? 'flex' : 'none';
   set('r_regionalBonusNB', '+' + fmtF(regionalBonus));
+  const gN = document.getElementById('row_greenBonusNB'); if (gN) gN.style.display = greenBonus > 0 ? 'flex' : 'none';
+  set('r_greenBonusNB', '+' + fmtF(greenBonus));
 
   set('r_nbIncentiveTotal', '+' + fmtF(nonBlockIncentiveApplied));
 
@@ -598,8 +632,8 @@ function calcDhaka() {
     projName, blockName, landKatha, landSqft, roadLabel, isJV, basements,
     qualityName: qSel.value ? qSel.options[qSel.selectedIndex].text.split(' —')[0] : null,
     constRate, areaFar, plotFar, blockEligible, blockFar, nonBlockFar,
-    blockBaseFar, nonBlockBaseFar, landBonus, plotSizeBonus, roadBonusDynamic, regionalBonus,
-    mgcMinPct, mgcMaxPct, mgcMinArea, mgcMaxArea,
+    blockBaseFar, nonBlockBaseFar, landBonus, plotSizeBonus, roadBonusDynamic, regionalBonus, greenBonus,
+    roadM: r.roadM, mgcMinPct, mgcMaxPct, mgcMinArea, mgcMaxArea,
     blockMinFloors, blockMaxFloors, nbMinFloors, nbMaxFloors,
     maxUnits, totalUnits, avgUnitSize, unitsPerFloor, proposedFloors,
     applicableFar: blockEligible ? blockFar : nonBlockFar,
@@ -614,14 +648,23 @@ function calcDhaka() {
 }
 
 
-// ===== DAP PLOT FAR FOR ANY ROAD WIDTH =====
-// A road takes the band of the widest listed width it meets (80 ft and above = 4.75). Minimum 20 ft.
+// ===== DAP PLOT FAR (ROAD-BASED FAR) FOR ANY ROAD WIDTH =====
+// Bidhimala 2025 Table 5 (ROAD_FAR_STEPS, metres) with Rule 47(6): between two steps the FAR rises in
+// proportion to the road width; 24 m and wider = 4.75. Feet are converted at 1 ft = 0.3048 m. Minimum 20 ft.
 const ROAD_MIN_FT = 20;
+const FT_TO_M = 0.3048;
 function getPlotFar(ft) {
   if (!(ft >= ROAD_MIN_FT)) return null;
-  let band = roadsData[0];
-  roadsData.forEach(r => { if (ft >= parseFloat(r.label) - 1e-9) band = r; });
-  return { plotFar: band.plotFar, band: band.label };
+  const m = ft * FT_TO_M, S = ROAD_FAR_STEPS, top = S[S.length - 1];
+  if (m >= top[0] - 1e-9) return { plotFar: top[1], roadM: m, band: top[0] + ' m and wider' };
+  for (let i = S.length - 2; i >= 0; i--) {
+    const s0 = S[i][0], f0 = S[i][1], s1 = S[i + 1][0], f1 = S[i + 1][1];
+    if (m >= s0 - 1e-9) {
+      const far = Math.round((f0 + (m - s0) / (s1 - s0) * (f1 - f0)) * 1000) / 1000;
+      return { plotFar: far, roadM: m, band: 'between ' + s0 + ' m and ' + s1 + ' m' };
+    }
+  }
+  return null;
 }
 
 // ===== CITY SWITCH (Dhaka = DAP 2022–35 · Chittagong = Imarat Nirman Bidhimala 2008, CDA) =====
@@ -761,6 +804,7 @@ function updateInputUI() {
 
 function calc() {
   try { updateInputUI(); } catch (e) {}
+  try { updateIncentiveFields(); } catch (e) {}
   if (CITY === 'ctg') calcCtg(); else calcDhaka();
   if (window.lastReport && window.slateIds) { window.lastReport.projectCode = window.slateIds.project; window.lastReport.userId = window.slateIds.user; }
 }
@@ -1271,6 +1315,7 @@ function buildAndPrintReport() {
     row('Road Bonus', '+' + fmtF(d.roadBonusDynamic))
   ];
   if (d.regionalBonus > 0) farRows.push(row('Regional Bonus', '+' + fmtF(d.regionalBonus)));
+  if (d.greenBonus > 0) farRows.push(row('Green FAR Bonus', '+' + fmtF(d.greenBonus)));
 
   const dUsed = !!(d.unitConfig && d.unitConfig.used);
   const diffRows = dUsed ? [
@@ -1280,7 +1325,7 @@ function buildAndPrintReport() {
   const siteRows = [
     row('Land Area', d.landKatha + ' katha'),
     row('Land Area', fmt(d.landSqft) + ' sqft'),
-    row('Front Road', esc(d.roadLabel)),
+    row('Front Road', esc(d.roadLabel) + (d.roadM ? ' (' + d.roadM.toFixed(2) + ' m)' : '')),
     row('Basements', d.basements),
     row(dUsed ? 'Units / Regular Floor' : 'Units / Floor', d.unitsPerFloor > 0 ? d.unitsPerFloor : dash),
     row('Proposed Floors', d.proposedFloors > 0 ? d.proposedFloors : dash),
