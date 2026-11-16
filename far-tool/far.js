@@ -97,7 +97,8 @@ blocksData.forEach(b => {
 
 // ===== INCENTIVE SWITCHES (Nov 2026, Dhaka) =====
 // Regional +0.5 (Purbachal B54 / Jhilmil B47): on by default, shown only for those blocks.
-// Green FAR +0.5: off by default; when on it is added on top of the capped FAR, like the regional bonus on Block FAR.
+// Green FAR +0.5: off by default; when on it joins the other incentives and never takes FAR above Max FAR
+// (non-block: max of Area FAR and Plot FAR; block: the block cap, max + 0.5).
 const REGIONAL_BONUS = 0.5, GREEN_FAR_BONUS = 0.5;
 const isRegionalBlock = b => !!b && (b.name.includes('Purbachal') || b.name.includes('Jhilmil'));
 function incentiveOn(id, dflt) { const el = document.getElementById(id); return el ? el.value === 'on' : dflt; }
@@ -424,7 +425,7 @@ function calcDhaka() {
   // All incentives (size + road + regional) are added to the Minimum Base,
   // then the total is capped at the Maximum FAR (max of Area FAR and Plot FAR)
   const nonBlockFar = nonBlockBaseFar > 0 ? 
-    Math.min(nonBlockBaseFar + plotSizeBonus + roadBonusNB + regionalBonus, nonBlockMaxFar) + greenBonus : 0;
+    Math.min(nonBlockBaseFar + plotSizeBonus + roadBonusNB + regionalBonus + greenBonus, nonBlockMaxFar) : 0;
   const nonBlockIncentiveApplied = nonBlockFar - nonBlockBaseFar;
 
   // --- Block FAR Calculation ---
@@ -449,7 +450,7 @@ function calcDhaka() {
   
   // Incentives added and capped (+0.5 buffer), plus Regional Bonus
   const blockFar = blockBaseFar > 0 ? 
-    Math.min(blockBaseFar + landBonus + roadBonusBlock, blockMaxFar + 0.5) + regionalBonus + greenBonus : 0;
+    Math.min(blockBaseFar + landBonus + roadBonusBlock + greenBonus, blockMaxFar + 0.5) + regionalBonus : 0;
 
   // --- MGC Calculation ---
   let mgcMaxPct, mgcMinPct;
