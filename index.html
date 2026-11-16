@@ -994,6 +994,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 @media (max-width:520px){.wk-r{grid-template-columns:minmax(0,1fr) auto}.wk-k{grid-column:1/-1;padding:0}}
 .n-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
 .n-sum div{background:var(--group);border-radius:10px;padding:10px 12px;display:grid;gap:2px}
+.n-sum .n-go{appearance:none;border:1px solid transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;border-radius:10px;padding:10px 12px;display:grid;gap:2px}.n-sum .n-go:hover{border-color:var(--ink)}
 .n-sum b{font-size:20px;font-variant-numeric:tabular-nums}
 .n-sum span{font-size:11.5px;color:var(--muted);font-weight:600}
 .n-day{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 4px 0}
@@ -2625,7 +2626,8 @@ Object.assign(TEMPLATES,{
   studiobd:{name:'Business development',internal:1,note:'Winning work: leads, lead meetings, follow-ups, proposals and pitches',items:[]},
   studiomgmt:{name:'Management',internal:1,note:'Leading the studio: planning, reviews, client relationships, reporting',items:[]},
   studiohr:{name:'HR',internal:1,note:'People: recruitment, onboarding, leave, appraisals, policies and training records',items:[]},
-  studiofin:{name:'Finance',internal:1,note:'Money: billing follow-up, collections, budgets, payroll and compliance',items:[]}});
+  studiofin:{name:'Finance',internal:1,note:'Money: billing follow-up, collections, budgets, payroll and compliance',items:[]},
+  studioadmin:{name:'Administration',internal:1,note:'Running the office: IT, assets, facilities, rent, utilities, ID cards and supplies (Principal and COO only)',items:[]}});
 const isInternalT=k=>!!(k&&TEMPLATES[k]&&TEMPLATES[k].internal);
 const isInternalP=p=>!!p&&isInternalT(p.type);
 function T(){ const out={...TEMPLATES}; for(const [author,docs] of Object.entries(S.types)) for(const [id,t] of Object.entries(docs)){ if(!t||!t.name) continue; out['c:'+author+':'+id]={name:t.name,studio:t.studio?1:0,note:t.note||'',items:(t.items||[]).map(x=>[x.title,x.role,x.phase||'',0,x.del?1:0,x.repeat||'']),custom:{author,id}}; } return out; }
@@ -3944,37 +3946,46 @@ function quickItems(){
   init.forEach(t=>{ if(!byP.has(t.projectId)) byP.set(t.projectId,[]); byP.get(t.projectId).push(t); });
   for(const [pid,xs] of byP){ const p=S.projects[pid];
     const nfl=xs.filter(dateFlagged).length;
-    out.push({id:'tl:'+pid,def:!nfl,warn:nfl>0,at:xs.map(t=>t.request.at).sort()[0],kind:'Timeline',title:projLabel(p),meta:`${xs.length} date${xs.length===1?'':'s'} · proposed by ${nameOf(xs[0].request.by)}`+(nfl?` · ⚑ ${nfl} flagged: open and check`:''),
+    out.push({id:'tl:'+pid,def:!nfl,warn:nfl>0,at:xs.map(t=>t.request.at).sort()[0],kind:'Timeline',title:projLabel(p),meta:`${xs.length} date${xs.length===1?'':'s'} · proposed by ${nameOf(xs[0].request.by)}`+(nfl?` · ⚑ ${nfl} flagged: open and check`:''),rej:()=>declineMany(xs,'tl:'+pid),rejTxt:'Return timeline',
       fn:async()=>{ for(const t of xs){ const [pa,e]=approvalOf(S.tasks[t.id]?{...S.tasks[t.id],id:t.id}:t,''); await taskUpdate(t.id,pa,e); } }}); }
   ts.filter(t=>t.request&&!t.request.initial).forEach(t=>{ const r=t.request, sh=diff(t.target,r.date);
     const fc=dateCtx(t);
-    out.push({id:'rv:'+t.id,def:false,warn:!!(fc&&fc.flags.length),at:r.at,kind:'Revised date',title:t.title,meta:`${projLabel(S.projects[t.projectId])} · ${nameOf(r.by)} · ${fmtD(t.target)} → ${fmtD(r.date)} (${sh>0?'+':''}${sh}d) · becomes Date ${(t.revisions||0)+2}`+(fc&&fc.flags.length?' · ⚑ '+fc.flags.join(' · '):''),quote:r.reason||'No reason given',
+    out.push({id:'rv:'+t.id,def:false,warn:!!(fc&&fc.flags.length),at:r.at,kind:'Revised date',title:t.title,meta:`${projLabel(S.projects[t.projectId])} · ${nameOf(r.by)} · ${fmtD(t.target)} → ${fmtD(r.date)} (${sh>0?'+':''}${sh}d) · becomes Date ${(t.revisions||0)+2}`+(fc&&fc.flags.length?' · ⚑ '+fc.flags.join(' · '):''),quote:r.reason||'No reason given',rej:()=>{ S.declineNote[t.id]=S.declineNote['rv:'+t.id]||''; return decline(t); },
       fn:async()=>{ const [pa,e]=approvalOf(t,''); await taskUpdate(t.id,pa,e); }}); });
   ts.filter(t=>t.assignReq).forEach(t=>{ const r=t.assignReq, c=loadOf(r.to,t.id);
     out.push({id:'as:'+t.id,def:true,at:r.at,kind:r.guide?'Guide':'Support',title:r.guide?`${nameOf(r.to)} to guide and check “${t.title}” · ${nameOf(guideWorker(t))} does the work`:`${nameOf(r.to)} for “${t.title}”`,
       guide:!r.guide&&guideWorker(t)&&guideWorker(t)!==r.to?()=>approveGuide(t,r.to):null,guideTxt:`Guide and check only · ${shortName(guideWorker(t))} keeps the work`,meta:`${projLabel(S.projects[t.projectId])} · asked by ${nameOf(r.by)} · ${nameOf(r.to)} has ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:supWhy(t)||'No reason given',
-      alt:people().filter(id=>teamOf(id)===teamOf(r.to)&&id!==r.to&&(S.members[id]||{}).active!==false),altGo:id=>approveAssign(t,id),decline:()=>declineAssign(t),
+      alt:people().filter(id=>teamOf(id)===teamOf(r.to)&&id!==r.to&&(S.members[id]||{}).active!==false),altGo:id=>approveAssign(t,id),rej:()=>declineAssign(t),
       fn:()=>r.guide?taskUpdate(t.id,{assignee:guideWorker(t),checker:r.to,checkerGuide:true,assignReq:null},[{type:'guideApproved',to:r.to,from:guideWorker(t),note:''}]):taskUpdate(t.id,{assignee:r.to,assignReq:null},[{type:'assignApproved',from:r.to,to:r.to,note:''}])}); });
   vfGroups().forEach(t=>{ const v=t.verify, tm=vfTiming(t), ms=t._mates;
     out.push({id:'vf:'+t.id,def:!!(ms||t.target),at:v.ts,kind:ms?'Completed · joint':'Completed',title:t.title,meta:ms?`${projLabel(S.projects[t.projectId])} · ${ms.map(m=>nameOf(m.assignee)).join(', ')} · all done`:`${projLabel(S.projects[t.projectId])} · ${nameOf(v.by)} · done ${fmtD(v.at)}`+(tm?' · '+tm:''),quote:ms?'':v.note,warn:ms?ms.some(m=>m.target&&(m.verify||{}).at>m.target):!!(t.target&&v.at>t.target),
+      rej:()=>qReturnDone(t,ms),rejTxt:'Return',
       fn:async()=>{ if(ms) return verifyJointNow(ms); const cur=S.tasks[t.id]; if(cur&&cur.verify&&!cur.doneAt) await taskUpdate(t.id,vfPatch({...cur,id:t.id}),[{type:'verified',to:cur.verify.at,note:''}]); }}); });
-  phaseReqs().forEach(r=>out.push({id:`ph:${r.pid}:${r.name}`,def:true,at:r.x.req.at,kind:'Phase date',title:`${r.name===FINISH?'Project finished':r.name+' completed'} ${fmtD(r.x.req.date)}`,meta:`${projLabel(r.p)} · recorded by ${nameOf(r.x.req.by)}`,
+  phaseReqs().forEach(r=>out.push({id:`ph:${r.pid}:${r.name}`,def:true,at:r.x.req.at,kind:'Phase date',title:`${r.name===FINISH?'Project finished':r.name+' completed'} ${fmtD(r.x.req.date)}`,meta:`${projLabel(r.p)} · recorded by ${nameOf(r.x.req.by)}`,rej:()=>decidePhase(r,false),rejTxt:'Return',
     fn:()=>phaseUpdate(r.pid,r.name,{done:r.x.req.date,approvedBy:S.uid,approvedAt:now(),req:null},{type:'approved',to:r.x.req.date,reqBy:r.x.req.by,note:''})}));
-  libReqs().forEach(([id,x])=>out.push({id:'lb:'+id,def:true,at:x.requestedAt,kind:'Standard task',title:x.title,meta:`${x.cat||''} · requested by ${nameOf(x.requestedBy)}`,
+  libReqs().forEach(([id,x])=>out.push({id:'lb:'+id,def:true,at:x.requestedAt,kind:'Standard task',title:x.title,meta:`${x.cat||''} · requested by ${nameOf(x.requestedBy)}`,rej:()=>decideLib(id,x,false),
     fn:()=>S.db.doc('tasklib/'+id).update({status:'active',approvedBy:S.uid,approvedAt:now(),decisionNote:''})}));
-  nickProposals().forEach(x=>out.push({id:`nk:${x.d.pod}:${x.d.at}`,def:true,at:x.d.at,kind:'Pod name',title:x.d.nick?`${x.d.pod} · ${x.d.nick}`:`Remove the nickname of ${x.d.pod}`,meta:`requested by ${nameOf(x.author)}`,
+  nickProposals().forEach(x=>out.push({id:`nk:${x.d.pod}:${x.d.at}`,def:true,at:x.d.at,kind:'Pod name',title:x.d.nick?`${x.d.pod} · ${x.d.nick}`:`Remove the nickname of ${x.d.pod}`,meta:`requested by ${nameOf(x.author)}`,rej:()=>decideNick(x,false),
     fn:()=>S.db.doc(`podnames/${S.uid}/items/${podKey(x.d.pod)}`).set({pod:x.d.pod,nick:x.d.nick,status:'approved',reqAt:x.d.at,reqBy:x.author,by:S.uid,at:now()})}));
-  podRequests().forEach(x=>out.push({id:`pr:${x.pid}:${x.d.at}`,def:false,at:x.d.at,kind:'Pod team',title:`Add ${nameOf(x.pid)} to ${podLabel(x.d.pod)}`,meta:`requested by ${nameOf(x.author)}`+(/^pod\b/i.test(teamOf(x.pid))?` · moves them out of ${teamLabel(x.pid)}`:''),
+  podRequests().forEach(x=>out.push({id:`pr:${x.pid}:${x.d.at}`,def:false,at:x.d.at,kind:'Pod team',title:`Add ${nameOf(x.pid)} to ${podLabel(x.d.pod)}`,meta:`requested by ${nameOf(x.author)}`+(/^pod\b/i.test(teamOf(x.pid))?` · moves them out of ${teamLabel(x.pid)}`:''),rej:()=>decidePodReq(x,false),
     fn:()=>S.db.doc(`podjoin/${S.uid}/items/${x.pid}`).set({team:x.d.pod,status:'approved',reqAt:x.d.at,reqBy:x.author,from:teamOf(x.pid),at:now(),by:S.uid})}));
   memberReqs().forEach(x=>{ const c=loadOf(x.uid);
     out.push({id:`mr:${x.pid}:${x.uid}`,def:false,at:x.m.at,kind:'Project team',title:`${nameOf(x.uid)} → ${projLabel(x.p)}`,meta:`${x.m.temp?(x.m.until?'temporary, until '+fmtD(x.m.until):'temporary'):'project member'} · asked by ${nameOf(x.m.by)} · ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`,warn:c.overdue>0,quote:(x.m.note||'').trim()||'No reason given',
       alt:memberCandidates(x.p).filter(id=>id!==x.uid&&!podsOfProject(x.p).includes(teamOf(id))&&!memberOf(x.p,id)),
       altGo:id=>run(async()=>{ const now=new Date().toISOString(), cross=/^pod\b/i.test(teamOf(id)); await S.db.doc('projects/'+x.pid).update({members:{[x.uid]:null,[id]:{...x.m,temp:cross,until:cross?(x.m.until||addDays(today(),14)):'',team:teamOf(id),status:'approved',approvedBy:S.uid,approvedAt:now,swapFrom:x.uid}}}); },`${nameOf(id)} added instead`).then(()=>render(true)),
-      decline:()=>run(()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,null)),'Request declined').then(()=>render(true)),
+      rej:()=>run(()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,null)),'Request declined'),
       fn:()=>S.db.doc('projects/'+x.pid).update(memberPatch(x.uid,{...x.m,status:'approved',approvedBy:S.uid,approvedAt:now()}))}); });
   return out.sort((a,b)=>(a.at||'').localeCompare(b.at||''));
 }
 const qOn=it=>{ const v=(S.qsel||{})[it.id]; return v===undefined?it.def:!!v; };
+/* Approve together › Return / Decline with a reason (COO feedback 03): every row can be sent back, not only approved */
+function qReturnDone(t,ms){ const note=(S.declineNote['vf:'+t.id]||'').trim(), at=new Date().toISOString();
+  const parts=(ms||[t]).map(m=>S.tasks[m.id]?{...S.tasks[m.id],id:m.id}:m).filter(m=>m.verify&&!m.doneAt);
+  if(!parts.length) return Promise.resolve(false);
+  return run(async()=>{ for(const m of parts) await taskUpdate(m.id,{verify:null,stage:'doing',lastReturn:{by:S.uid,at,note,done:m.verify.at}},[{type:'returned',from:m.verify.at,note}]); },parts.length>1?'Returned to everyone with your note':'Returned with your note'); }
+async function qReject(it){ const note=(S.declineNote[it.id]||'').trim();
+  if(!note){ toast('Write the reason first. The person sees it.'); const el=document.getElementById('qr-'+it.id); if(el) el.focus(); return; }
+  await it.rej(); S.qRej=null; if(S.qsel) delete S.qsel[it.id]; delete S.declineNote[it.id]; render(true); }
 async function approveSelected(items){
   if(S.busy) return toast('Still saving the last change…');
   S.busy=true; S.qfail={}; render(true);
@@ -3993,7 +4004,7 @@ function quickSec(items){
   const allOn=sel.length===items.length;
   return h('section',{class:'sec'},
     h('div',{class:'sec-h'},h('h2',{text:'Approve together'}),h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ S.qsel={}; items.forEach(it=>{S.qsel[it.id]=!allOn}); S.qConfirm=false; render(true); },text:allOn?'Untick all':'Tick all'})),
-    h('p',{class:'f-hint',style:'margin:0 4px',text:'Revised dates and people moves start unticked: read each one first. Open any item below to add a note or decline.'}),
+    h('p',{class:'f-hint',style:'margin:0 4px',text:'Revised dates and people moves start unticked: read each one first. Return or Decline on any row sends it back with your reason.'}),
     h('div',{class:'list'},items.map(it=>h('label',{class:'q-row'+(fail[it.id]?' q-fail':'')},
       h('input',{type:'checkbox',checked:qOn(it),disabled:S.busy,onchange:e=>tog(it,e.target.checked)}),
       h('div',{style:'min-width:0;display:grid;gap:2px'},
@@ -4001,10 +4012,14 @@ function quickSec(items){
         h('div',{class:'row-title',style:'font-weight:500',text:it.title}),
         h('div',{class:'row-meta',style:it.warn?'color:var(--late)':'',text:it.meta}),
         it.quote?h('p',{class:'quote',style:'margin:2px 0 0'+(it.quote==='No reason given'?';color:var(--overdue)':''),text:it.quote}):null,
-        it.decline||it.alt||it.guide?h('div',{class:'q-acts',onclick:e=>{ e.preventDefault(); e.stopPropagation(); }},
+        it.rej||it.alt||it.guide?h('div',{class:'q-acts',onclick:e=>{ e.preventDefault(); e.stopPropagation(); }},
           it.alt&&it.alt.length?(()=>{ const el=h('select',{'aria-label':'Give to someone else',disabled:S.busy,onchange:e=>{ const v=e.target.value; if(v) it.altGo(v); }},h('option',{value:'',text:'Someone else…'}),it.alt.map(id=>{ const c=loadOf(id); return h('option',{value:id,text:`${nameOf(id)} · ${teamLabel(id)} · ${c.open} open${c.overdue?', '+c.overdue+' overdue':''}`}); })); return el; })():null,
           it.guide?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,title:'The work stays with the person doing it; this person guides and checks it',onclick:()=>it.guide(),text:it.guideTxt||'Guide and check only'}):null,
-          it.decline?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>it.decline(),text:'Decline'}):null):null,
+          it.rej&&S.qRej!==it.id?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>{ S.qRej=it.id; S.qsel=S.qsel||{}; S.qsel[it.id]=false; render(true); setTimeout(()=>{ const el=document.getElementById('qr-'+it.id); if(el) el.focus(); },30); },text:(it.rejTxt||'Decline')+'…'}):null,
+          it.rej&&S.qRej===it.id?h('div',{class:'bar',style:'flex:1 1 100%;gap:8px'},
+            h('input',{id:'qr-'+it.id,placeholder:'Reason (the person sees this)',value:S.declineNote[it.id]||'',style:'background:#fff;flex:1 1 200px;min-width:0',oninput:e=>{ S.declineNote[it.id]=e.target.value; },onkeydown:e=>{ if(e.key==='Enter'){ e.preventDefault(); qReject(it); } }}),
+            h('button',{class:'btn btn-sm',type:'button',style:'background:var(--overdue);color:#fff;border-color:var(--overdue)',disabled:S.busy,onclick:()=>qReject(it),text:it.rejTxt||'Decline'}),
+            h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',disabled:S.busy,onclick:()=>{ S.qRej=null; render(true); },text:'Cancel'})):null):null,
         fail[it.id]?h('div',{class:'err',role:'alert',text:fail[it.id]}):null)))),
     h('div',{class:'actions',style:'padding:0 4px'},h('button',{class:'btn '+(S.qConfirm?'btn-accent':'btn-primary'),type:'button',disabled:S.busy||!sel.length,
       onclick:()=>{ if(sel.length>1&&!S.qConfirm){ S.qConfirm=true; render(true); setTimeout(()=>{ if(S.qConfirm){ S.qConfirm=false; render(true); } },5000); return; } approveSelected(sel); },
@@ -4545,9 +4560,11 @@ function viewDesk(){
     h('div',{style:'min-width:0'},homeChips(),h('div',{class:'eyebrow',text:`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]}, ${fmtD(td)} · ${roleOf(S.uid)||(S.isOwner?'Principal':isCOO(S.uid)?'COO':'Member')}`}),
       h('div',{class:'desk-hi'},h('b',{text:`${hr<12?'Good morning':hr<17?'Good afternoon':'Good evening'}${first?', '+first:''}`}),daySummary(mine,td,ap)),nextMeetLine()),
     h('div',{class:'actions',style:'margin:0;flex-wrap:nowrap'},
-      canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openLead(),text:'+ Lead'}):null,
-      canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openProp(),text:'+ Proposal'}):null,
-      S.canWrite?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
+      /* same buttons as the phone Home (COO feedback 03): + COO task first for the Principal and the COO */
+      canProps()&&S.canWrite&&seeCooWork()?h('button',{class:'btn btn-sm btn-primary',type:'button',onclick:()=>openCooTask(),text:'+ COO task'}):null,
+      canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openLead(),text:'+ New lead'}):null,
+      canProps()&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',onclick:()=>openProp(),text:'+ New proposal'}):null,
+      S.canWrite?h('button',{class:'btn btn-sm'+(canProps()&&seeCooWork()?'':' btn-primary'),type:'button',onclick:()=>openNewTask(),text:'+ Task'}):null));
   /* LEFT · do now */
   const waits=[];
   if(ap) queueGroups().forEach(g=>waits.push(hRow({dot:'var(--overdue)',strong:`${g.n} ${g.label.toLowerCase()}`,meta:g.oldest?'oldest '+ageTxt(ageOf(g.oldest)):'',onclick:()=>{ S.qf=g.key; goView('queue'); }})));
@@ -5940,6 +5957,8 @@ function seg(id,opts,val,on){ return h('div',{class:'seg',role:'group','aria-lab
 const SC={early:'#007AFF',ontime:'#34C759',late:'#FF9500',overdue:'#FF3B30',open:'#C7C7CC'};
 function svgEl(tag,attrs,...kids){ const el=document.createElementNS('http://www.w3.org/2000/svg',tag); for(const [k,v] of Object.entries(attrs||{})) if(v!=null) el.setAttribute(k,v); kids.flat().forEach(k=>k&&el.append(k)); return el; }
 function widget(title,sub,body,span2){ return h('section',{class:'w'+(span2?' span2':'')},h('div',{class:'w-h'},h('div',{class:'w-t',text:title}),sub&&h('div',{class:'w-s',text:sub})),body); }
+/* a figure that opens what it counts (COO feedback 03): tap again to clear */
+function kpiGo(label,val,s,on,go){ return h('button',{type:'button',class:'kpi kpi-btn'+(s?' s-'+s:'')+(on?' on':''),'data-s':s||null,title:on?'Show everything':'Show these',onclick:go},h('div',{class:'lbl',text:label}),h('div',{class:'num',text:String(val)})); }
 function kpi(label,val,s,extra){ return h('div',{class:'kpi'+(s?' s-'+s:''),'data-s':s||null},h('div',{class:'lbl',text:label}),h('div',{class:'num',text:String(val)}),extra||null); }
 function donut(c){
   const R=58,C=2*Math.PI*R,tot=KEYS.reduce((a,k)=>a+c[k],0); const g=svgEl('g',{transform:'rotate(-90 75 75)'});
@@ -7179,12 +7198,14 @@ function rulesView(){
   return out;
 }
 /* weekly-meeting action items go under a studio area, not a client project */
-const STUDIO_AREAS=[['studiomgmt','Management'],['studioops','Operation'],['studiodev','Development'],['studiobd','Business development'],['studiohr','HR'],['studiofin','Finance']];
+const STUDIO_AREAS=[['studiomgmt','Management'],['studioadmin','Administration'],['studioops','Operation'],['studiodev','Development'],['studiobd','Business development'],['studiohr','HR'],['studiofin','Finance']];
+/* Administration (COO feedback 03, 16 Nov 2026): office running, kept apart from the team's Studio tasks; only the Principal and the COO pick it */
+const areasFor=()=>STUDIO_AREAS.filter(([k])=>k!=='studioadmin'||amApprover()||S.isOwner);
 const areaName=k=>(STUDIO_AREAS.find(x=>x[0]===k)||['',''])[1];
 const areaProject=k=>Object.entries(S.projects).map(([id,p])=>({...p,id})).filter(p=>p.type===k&&isLive(p)&&!p.closed).sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''))[0]||null;
 const _areaMade={};
 async function ensureAreaProject(k){ const ex=areaProject(k); if(ex) return ex.id; if(_areaMade[k]) return _areaMade[k];
-  const now=new Date().toISOString(), ref=S.db.collection('projects').doc(), nm={studiomgmt:'STUDIO MANAGEMENT',studioops:'STUDIO OPERATION',studiodev:'STUDIO DEVELOPMENT',studiobd:'STUDIO BUSINESS DEVELOPMENT',studiohr:'STUDIO HR',studiofin:'STUDIO FINANCE'}[k];
+  const now=new Date().toISOString(), ref=S.db.collection('projects').doc(), nm={studiomgmt:'STUDIO MANAGEMENT',studioops:'STUDIO OPERATION',studiodev:'STUDIO DEVELOPMENT',studiobd:'STUDIO BUSINESS DEVELOPMENT',studiohr:'STUDIO HR',studiofin:'STUDIO FINANCE',studioadmin:'STUDIO ADMINISTRATION'}[k];
   await ref.set({name:nm,type:k,pod:'Studio',pod2:'',pods:[],katha:'',client:'',location:'',agStatus:'internal',scope:[],note:'Studio work from the weekly meeting',closed:false,status:'active',createdAt:now,createdBy:S.uid,approvedBy:S.uid,approvedAt:now});
   _areaMade[k]=ref.id; return ref.id; }
 const actOwners=a=>Array.isArray(a.owners)&&a.owners.length?[...a.owners]:a.owner?[a.owner]:[];
@@ -7372,7 +7393,7 @@ function sheetMeeting(){
   // 4 decisions
   const decRows=d.decisionList.map((x,i)=>h('div',{class:'card',style:'background:#fff;gap:8px'},
     h('div',{style:'display:flex;gap:6px'},h('input',{id:'dc-'+i,maxlength:300,placeholder:'What was decided',value:x.text||'',style:'background:var(--group)',oninput:e=>{x.text=e.target.value}}),h('button',{class:'icon-btn',type:'button','aria-label':'Remove',onclick:()=>{ d.decisionList.splice(i,1); saveMeetDraft(); renderSheet(); },text:'×'})),
-    h('div',{class:'bar'},(()=>{ const s=h('select',{id:'dca-'+i,'aria-label':'Area',style:'background:var(--group);flex:0 1 200px',onchange:e=>{x.area=e.target.value}},h('option',{value:'',text:'Area (optional)'}),STUDIO_AREAS.map(([k,l])=>h('option',{value:k,text:'Area: '+l}))); s.value=x.area||''; return s; })(),
+    h('div',{class:'bar'},(()=>{ const s=h('select',{id:'dca-'+i,'aria-label':'Area',style:'background:var(--group);flex:0 1 200px',onchange:e=>{x.area=e.target.value}},h('option',{value:'',text:'Area (optional)'}),areasFor().map(([k,l])=>h('option',{value:k,text:'Area: '+l}))); s.value=x.area||''; return s; })(),
       h('label',{style:'display:flex;gap:8px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'dcr-'+i,checked:!!x.rule,disabled:!!x.ruleAdded,onchange:e=>{x.rule=e.target.checked}}),x.ruleAdded?'In the studio rules':'Make it a studio rule'))));
   // 5 actions
   const actRows=d.actions.map((a,i)=>{ if(!Array.isArray(a.owners)) a.owners=actOwners(a); if(!Array.isArray(a.taskIds)) a.taskIds=actTaskIds(a); const made=a.taskIds.filter(Boolean).length>0;
@@ -7380,7 +7401,7 @@ function sheetMeeting(){
       a.owners.length?h('div',{class:'chips'},a.owners.map((o,j)=>h('span',{class:'chip who',style:'padding-right:6px;background:var(--group)'},avaEl(o,false,'sm'),nameOf(o),a.taskIds[j]?null:h('button',{class:'icon-btn',type:'button','aria-label':'Remove '+nameOf(o),style:'width:22px;height:22px;font-size:14px',onclick:()=>{ a.owners.splice(j,1); a.taskIds.splice(j,1); saveMeetDraft(); renderSheet(); },text:'×'})))):null,
       h('select',{id:'ma-o-'+i,'aria-label':'Add a person',style:'background:var(--group)',onchange:e=>{ const v=e.target.value; if(v&&!a.owners.includes(v)) a.owners.push(v); saveMeetDraft(); renderSheet(); }},meetOwnerOpts().filter(([v])=>!a.owners.includes(v)).map(([v,l])=>h('option',{value:v,text:v?l:(a.owners.length?'+ Add another person…':'Responsible: choose one or more…')}))));
     const pj=h('select',{id:'ma-p-'+i,'aria-label':'Area','data-pick':'1',style:'background:var(--group)',onchange:e=>{ const v=e.target.value; if(v.startsWith('p:')){ a.project=v.slice(2); a.area=''; } else { a.area=v; a.project=''; } saveMeetDraft(); }},
-      h('option',{value:'',text:'Area: choose…'}),STUDIO_AREAS.map(([k,l])=>h('option',{value:k,text:'Area: '+l})),
+      h('option',{value:'',text:'Area: choose…'}),areasFor().map(([k,l])=>h('option',{value:k,text:'Area: '+l})),
       a.project&&!a.area&&S.projects[a.project]?h('option',{value:'p:'+a.project,text:projLabel(S.projects[a.project])}):null); pj.value=a.area||(a.project?'p:'+a.project:'');
     return h('div',{class:'card',style:'background:#fff;gap:8px'},
       h('div',{style:'display:flex;gap:6px'},h('span',{class:'mono muted',style:'padding-top:12px;min-width:18px',text:String(i+1)}),h('input',{id:'ma-t-'+i,placeholder:'What needs doing',value:a.text||'',disabled:made,style:'background:var(--group)',oninput:e=>{a.text=e.target.value}}),made?null:h('button',{class:'icon-btn',type:'button','aria-label':'Remove',onclick:()=>{d.actions.splice(i,1);saveMeetDraft();renderSheet()},text:'×'})),
@@ -8206,9 +8227,9 @@ function form(title,fields,submit,onSubmit,danger){
 }
 function head(eyebrow,title){ return h('div',{class:'sh-head'},sheetBack(),h('div',{class:'sh-ht'},h('div',{class:'eyebrow',text:eyebrow,style:keepCase(eyebrow)}),h('h2',{class:'sh-title',text:title})),h('button',{class:'icon-btn',type:'button','aria-label':'Close',onclick:closeSheet,text:'×'})); }
 const memberOpts=keep=>[['','Select person…'],...people().filter(id=>(((!isCOO(id)||amApprover())&&canAssignTo(id))||id===keep)&&(!isPriv(id)||seePriv()||id===S.uid)).map(id=>[id,nameOf(id)])];
-const projectOpts=(incl)=>{ const ps=projects().filter(p=>workable(p)||p.id===incl), rank=p=>({studiomgmt:0,studioops:1,studiodev:2,studiobd:3,studiohr:4,studiofin:5})[p.type];
+const projectOpts=(incl)=>{ const ps=projects().filter(p=>workable(p)||p.id===incl), rank=p=>({studiomgmt:0,studioadmin:1,studioops:2,studiodev:3,studiobd:4,studiohr:5,studiofin:6})[p.type];
   const ap=amApprover()||S.isOwner, st=ps.filter(p=>isInternalP(p)&&(ap||p.id===STUDIO_ONE||p.id===incl)).sort((a,b)=>rank(a)-rank(b)||(a.name||'').localeCompare(b.name||'')), rest=ps.filter(p=>!isInternalP(p));
-  return [['','Select project…'],...st.map(p=>[p.id,!ap||p.id===STUDIO_ONE?'Studio tasks':'Studio work · '+(/^STUDIO (MANAGEMENT|OPERATION|DEVELOPMENT|BUSINESS DEVELOPMENT|HR|FINANCE)$/.test(p.name||'')?areaName(p.type):p.name)]),...rest.map(p=>[p.id,projLabel(p)])]; };
+  return [['','Select project…'],...st.map(p=>[p.id,!ap||p.id===STUDIO_ONE?'Studio tasks':'Studio work · '+(/^STUDIO (MANAGEMENT|ADMINISTRATION|OPERATION|DEVELOPMENT|BUSINESS DEVELOPMENT|HR|FINANCE)$/.test(p.name||'')?areaName(p.type):p.name)]),...rest.map(p=>[p.id,projLabel(p)])]; };
 /* everyone can add a task for themselves; managers assign to others */
 const canNewTask=()=>!!S.canWrite&&!amChalkMember();
 const newTaskPeople=()=>amMgr()?memberOpts():[['','Select person…'],...msgTaskPeople().map(id=>[id,nameOf(id)])];
@@ -11298,7 +11319,7 @@ function pmHomeSec(){
    Project, studio and other meetings live in pmeetings. A studio meeting sits in its area's project (Management, HR…);
    an "other" meeting has no project. A meeting is either scheduled ahead (status 'scheduled': date, time, venue, attendees,
    agenda; attendees are invited and reminded 30 minutes before), called off ('cancelled'), or has minutes ('draft' / 'final'). */
-const MCATS=[['project','Project'],['studiomgmt','Management'],['studioops','Operation'],['studiodev','Development'],['studiobd','Business development'],['studiohr','HR'],['studiofin','Finance'],['other','Other']];
+const MCATS=[['project','Project'],['studiomgmt','Management'],['studioadmin','Administration'],['studioops','Operation'],['studiodev','Development'],['studiobd','Business development'],['studiohr','HR'],['studiofin','Finance'],['other','Other']];
 const mCatName=k=>(MCATS.find(x=>x[0]===k)||['','Meeting'])[1];
 function mCat(m){ if(m.cat) return m.cat; const p=m.projectId&&S.projects[m.projectId]; return p&&isInternalP(p)?p.type:m.projectId?'project':'other'; }
 const mTitle=m=>(m.title||'').trim()||(mCat(m)==='project'?`${PMT[m.type]||'Project'} meeting`:`${mCatName(mCat(m))} meeting`);
@@ -11712,7 +11733,7 @@ const HOWDO=[
  ['dates',['lead','boss'],'Propose dates for a whole project',['Tasks › beside the project heading, tap Propose timeline (or Set timeline).','Enter a date for each task. You can leave some for later.','Tap Send for approval (or Set dates).'],'Pod leads’ dates go to the COO; the Principal’s and COO’s count at once.',null],
  ['dates','lead','Propose a date for a task that has none',['Open the task › Propose date.','Pick the date, add a note if useful.','Tap Send for approval.'],'It shows “Waiting for the COO’s approval” until decided.',null],
  ['dates','boss','Verify completed work',['Approvals › Completed work, or open the task from the notification.','Check the work, then tap Verify.','To send it back, write what needs fixing and tap Return.'],'Verified work counts as done on the day the person finished it, so a slow check never makes them late. Returned work reopens with your note. A shared task arrives once everyone has finished: Verify for everyone; it counts as finished on the last person’s day, and anyone who finished earlier scores a little more.','Routine ones can be ticked in Approve together. Settings › Completion verification sets which kinds of task need it.'],
- ['dates','boss','Approve dates and requests',['Approvals (the tab beside Home; Home shows how many are waiting).','Approve together: first timelines, support, phase dates and standard tasks start ticked; revised dates and people moves start unticked so you read each one.','Tap Approve N selected (tap twice). Anything that didn’t save stays ticked with the reason.','To add a note, decline or return, use the cards below: a project’s first timeline is one card; revised dates are approved or declined one by one.'],'Approved dates become the target; changes become Date 2, Date 3… and Date 1 stays on record.','Fast-track projects are listed first and marked “decide today”. A tapped notification about a request opens Approvals or the task itself.'],
+ ['dates','boss','Approve dates and requests',['Approvals (the tab beside Home; Home shows how many are waiting).','Approve together: first timelines, support, phase dates and standard tasks start ticked; revised dates and people moves start unticked so you read each one.','Tap Approve N selected (tap twice). Anything that didn’t save stays ticked with the reason.','To send something back, tap Return or Decline on its row, write the reason (the person sees it) and confirm. The cards below still take notes and one-by-one decisions.'],'Approved dates become the target; changes become Date 2, Date 3… and Date 1 stays on record.','Fast-track projects are listed first and marked “decide today”. A tapped notification about a request opens Approvals or the task itself.'],
  ['dates','boss','Change a target date directly',['Open the task › More options › Change target date (or Set target date, shown straight away).','Enter the new date and the reason.','Tap Save date.'],'It becomes the next revision; the original target stays on record.',null],
 
  // ---- projects
@@ -14385,7 +14406,7 @@ function pjKindSeg(f){ return h('div',{class:'bar pj-kind',style:'margin-top:-4p
    It shows every task on the COO anywhere in SLATE OS: her private list (only she and the Principal see those), studio areas,
    client projects and meeting actions. Columns: To do, In progress, In review (sent to verify), Done (last 30 days). */
 const cooCat=t=>{ const p=S.projects[t.projectId]; if(!p) return 'Other'; if(isInternalP(p)||p.pod==='Studio') return t.projectId===STUDIO_ONE?'Studio tasks':(areaName(p.type)||'Studio'); return 'Client projects'; };
-const COO_CC={'Development':'#2F6FDB','Finance':'#0F8A7C','Management':'#7A4CE0','Operation':'#D6336C','HR':'#9A7B3C','Business development':'#E8590C','Studio tasks':'#495057','Client projects':'#1C7ED6','Other':'#868E96'};
+const COO_CC={'Administration':'#5C7CFA','Development':'#2F6FDB','Finance':'#0F8A7C','Management':'#7A4CE0','Operation':'#D6336C','HR':'#9A7B3C','Business development':'#E8590C','Studio tasks':'#495057','Client projects':'#1C7ED6','Other':'#868E96'};
 const cooKey=t=>{ const p=S.projects[t.projectId]; return (p&&p.code?p.code.split('-').slice(0,2).join('-'):'COO')+'-'+String(t.id).slice(-4).toUpperCase(); };
 function cooTasks(){ const coo=cooId(); if(!coo) return []; return Object.entries(S.tasks).map(([id,t])=>({...t,id})).filter(t=>t.assignee===coo&&!t.archived); }
 function cooTicket(t,drag){ const p=S.projects[t.projectId], c=cooCat(t), col=COO_CC[c]||COO_CC.Other, mv=canMove(t)||amApprover();
@@ -14400,14 +14421,19 @@ function viewCooWork(out){
   const coo=cooId(), td=today(), F=S.cooB||(S.cooB={v:'board',cat:'',lanes:false,m:td.slice(0,7)}), all=cooTasks(), cut=addDays(td,-30);
   const cats=[...new Set(all.filter(t=>!t.doneAt||t.doneAt>=cut).map(cooCat))].sort((a,b)=>Object.keys(COO_CC).indexOf(a)-Object.keys(COO_CC).indexOf(b));
   const xs=all.filter(t=>!F.cat||cooCat(t)===F.cat), open=xs.filter(t=>!t.doneAt), over=open.filter(t=>t.target&&t.target<td&&!t.verify), mon=xs.filter(t=>t.doneAt&&t.doneAt.slice(0,7)===td.slice(0,7));
-  out.push(h('div',{class:'kpis'},kpi('Open',open.length),kpi('Overdue',over.length,'overdue'),kpi('In review',open.filter(t=>t.verify).length,'late'),kpi('Done this month',mon.length,'early')));
+  const rev=open.filter(t=>t.verify), kGo=k=>()=>{ if(F.k===k){ F.k=''; } else { F.k=k; F.v='list'; } render(true); };
+  out.push(h('div',{class:'kpis'},kpiGo('Open',open.length,'',F.k==='open',kGo('open')),kpiGo('Overdue',over.length,'overdue',F.k==='over',kGo('over')),kpiGo('In review',rev.length,'late',F.k==='review',kGo('review')),kpiGo('Done this month',mon.length,'early',F.k==='done',kGo('done'))));
   out.push(h('div',{class:'bar',style:'justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap'},
-    seg('View',[['board','Board'],['list','List'],['cal','Calendar']],F.v,v=>{ F.v=v; render(true); }),
+    seg('View',[['board','Board'],['list','List'],['cal','Calendar']],F.v,v=>{ F.v=v; if(v!=='list') F.k=''; render(true); }),
     h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},
       F.v==='board'?h('label',{style:'display:flex;gap:6px;align-items:center;font-size:13.5px'},h('input',{type:'checkbox',checked:!!F.lanes,onchange:e=>{ F.lanes=e.target.checked; render(true); }}),'Rows by category'):null,
       S.canWrite?h('button',{class:'btn btn-primary btn-sm',type:'button',onclick:()=>openCooTask(),text:'+ New COO task'}):null)));
   if(cats.length>1) out.push(h('div',{class:'chips',style:'margin:0'},[['','All'],...cats.map(c=>[c,c])].map(([v,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;display:inline-flex;align-items:center;gap:6px;'+(F.cat===v?'background:var(--ink);color:#fff':''),onclick:()=>{ F.cat=v; render(true); }},v?h('i',{style:`width:8px;height:8px;border-radius:50%;background:${COO_CC[v]||'#868E96'}`}):null,`${l} · ${(v?all.filter(t=>cooCat(t)===v):all).filter(t=>!t.doneAt).length}`))));
   out.push(h('div',{class:'f-hint',style:'margin:0 2px',text:`Every task on ${S.uid===coo?'you':nameOf(coo)}, wherever it was given: private COO work (🔒, only ${S.uid===coo?'you and the Principal':'you and the COO'}), studio areas, client projects and meeting actions. Drag a ticket to move it; dropping on Done asks for the date.`}));
+  if(F.v==='list'&&F.k){ const KL={open:['Open',open],over:['Overdue',over],review:['In review',rev],done:['Done this month',mon]}, [kl,ks]=KL[F.k]||KL.open;
+    out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:kl}),h('span',{class:'cnt',text:String(ks.length)}),h('button',{class:'linkish',type:'button',style:'font-size:13px;margin-left:auto',onclick:()=>{ F.k=''; render(true); },text:'Show all'})),
+      ks.length?h('div',{class:'list'},ks.slice().sort(F.k==='done'?(a,b)=>b.doneAt.localeCompare(a.doneAt):byTarget).map(t=>row(t,{person:false}))):h('p',{class:'muted',style:'margin:0 4px',text:'Nothing here.'})));
+    return out; }
   if(F.v==='list'){ const by={}; open.forEach(t=>{ const c=cooCat(t); (by[c]=by[c]||[]).push(t); });
     Object.keys(by).sort((a,b)=>Object.keys(COO_CC).indexOf(a)-Object.keys(COO_CC).indexOf(b)).forEach(c=>out.push(h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:c}),h('span',{class:'cnt',text:String(by[c].length)})),h('div',{class:'list'},by[c].sort(byTarget).map(t=>row(t,{person:false}))))));
     if(!open.length) out.push(h('p',{class:'muted',style:'margin:0 4px',text:'Nothing open.'})); return out; }
@@ -14436,7 +14462,8 @@ function viewCooWork(out){
 /* a private COO task in two taps (COO, 9 Nov 2026): no project picker and no drawing suggestions, just the work, its category and a date */
 function openCooTask(){ const coo=cooId(); if(!coo) return toast('No COO set up.'); S.sheet={type:'cooTask',d:{title:'',area:'studiomgmt',projectId:'',target:'',start:'',note:'',kind:'Task',pub:false},err:'',added:[]}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('ct-title'); el&&el.focus(); },30); }
 function sheetCooTask(){ const d=S.sheet.d, coo=cooId(), me=S.uid===coo;
-  const areas=STUDIO_AREAS.filter(([k])=>k!=='studiohr'||true);
+  const areas=STUDIO_AREAS.map(([k,l])=>[k,k==='studioops'?'Studio tasks':l]);
+  const AREA_HINT={studioadmin:'Office running: IT, assets, facilities, rent, utilities, supplies. Kept apart from the team’s Studio tasks.',studioops:'The team’s shared studio jobs list. Your task stays private, but it is filed under Studio tasks.'};
   const save=()=>{ const title=(d.title||'').trim(); if(title.length<3) return fail('Write the task.'); if(d.area==='client'&&!d.projectId) return fail('Choose the client project.');
     if(d.start&&d.target&&d.start>d.target) return fail('The start date can’t be after the due date.');
     run(async()=>{ const pid=d.area==='client'?d.projectId:await ensureAreaProject(d.area);
@@ -14445,7 +14472,7 @@ function sheetCooTask(){ const d=S.sheet.d, coo=cooId(), me=S.uid===coo;
   return [head('Private · only '+(me?'you and the Principal':'you and the COO')+' see it','New COO task'),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); save(); }},
       field('Task',h('input',{id:'ct-title',maxlength:160,placeholder:'e.g. Renew the trade licence',value:d.title,oninput:e=>{ d.title=e.target.value; }})),
-      field('Category',h('div',{class:'chips',style:'margin:0'},[...areas.map(([k,l])=>[k,l]),['client','Client project']].map(([k,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px;'+(d.area===k?'background:var(--ink);color:#fff':''),onclick:()=>{ d.area=k; renderSheet(); },text:l})))),
+      field('Category',h('div',{class:'chips',style:'margin:0'},[...areas.map(([k,l])=>[k,l]),['client','Client project']].map(([k,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px;'+(d.area===k?'background:var(--ink);color:#fff':''),onclick:()=>{ d.area=k; renderSheet(); },text:l}))),AREA_HINT[d.area]||''),
       d.area==='client'?field('Client project',(()=>{ const el=h('select',{onchange:e=>{ d.projectId=e.target.value; }},h('option',{value:'',text:'Select project…'}),cps.map(p=>h('option',{value:p.id,text:projLabel(p)}))); el.value=d.projectId; return el; })(),'Still private: it shows only under COO work.'):null,
       field('Due',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),h('input',{type:'date',value:d.target,oninput:e=>{ d.target=e.target.value; }}))),
       h('div',{class:'form-row'},field('Start (optional)',h('input',{type:'date',value:d.start,oninput:e=>{ d.start=e.target.value; }})),field('Type',(()=>{ const el=h('select',{onchange:e=>{ d.kind=e.target.value; }},[['Task','Task'],['Deliverable','Deliverable']].map(([v,l])=>h('option',{value:v,text:l}))); el.value=d.kind; return el; })())),
@@ -15318,9 +15345,11 @@ function viewProjects(){
   if(f.kind==='coo'){ if(seeCooWork()) return viewCooWork(out); f.kind='client'; }
   if(f.kind==='studio') return viewStudioTasks(out);
   if(sv) out.push(h('div',{class:'kpis'},kpi('Studio areas',act.length),kpi('Open tasks',act.reduce((a,p)=>a+Object.values(S.tasks).filter(t=>t.projectId===p.id&&!t.archived&&!t.doneAt&&!isCooT(t)).length,0))));
-  else out.push(h('div',{class:'kpis kpis5'},kpi('Total',clientAll.length),kpi('Active',act.length),kpi('Completed',compN,'early'),kpi('On hold',hold.length,'late'),kpi('Cancelled',clientAll.filter(p=>p.closed&&outcomeOf(p)==='cancelled').length,'overdue')),
+  else { const pick=(st,ao)=>()=>{ const on=f.st===st&&(f.ao||'')===(ao||''); f.st=on?'active':st; f.ao=on?'':(ao||''); f.ay=''; f.ar=''; render(true); setTimeout(()=>{ const el=document.getElementById('pf-q'); if(el&&!on) el.scrollIntoView({behavior:'smooth',block:'start'}); },40); };
+    const isOn=(st,ao)=>f.st===st&&(f.ao||'')===(ao||'');
+    out.push(h('div',{class:'kpis kpis5'},kpiGo('Total',clientAll.length,'',isOn('all'),pick('all')),kpiGo('Active',act.length,'',false,pick('active')),kpiGo('Completed',compN,'early',isOn('archive','completed'),pick('archive','completed')),kpiGo('On hold',hold.length,'late',isOn('onhold'),pick('onhold')),kpiGo('Cancelled',clientAll.filter(p=>p.closed&&outcomeOf(p)==='cancelled').length,'overdue',isOn('archive','cancelled'),pick('archive','cancelled'))),
     h('div',{class:'lbl',style:'margin:-4px 0 -6px;text-transform:uppercase;letter-spacing:.05em',text:'Active projects'}),
-    h('div',{class:'kpis kpis4'},kpi('On track',hc('ok'),'ontime'),kpi('At risk',hc('risk'),'late'),kpi('Off track',hc('off'),'overdue'),kpi('Not started',hc('none'),'open')));
+    h('div',{class:'kpis kpis4'},kpiGo('On track',hc('ok'),'ontime',isOn('h:ok'),pick('h:ok')),kpiGo('At risk',hc('risk'),'late',isOn('h:risk'),pick('h:risk')),kpiGo('Off track',hc('off'),'overdue',isOn('h:off'),pick('h:off')),kpiGo('Not started',hc('none'),'open',isOn('h:none'),pick('h:none')))); }
   if(!sv){ const pd=podBoard(act.filter(p=>!isOnHold(p)),stats); if(pd) out.push(pd); }
   if(!sv){ const ds=draftsSec(); if(ds) out.push(ds); }
   const crq=ap?closeReqCards():null; if(crq) out.push(crq);
@@ -15328,7 +15357,7 @@ function viewProjects(){
   const phr=ap?phaseReqCards():null; if(phr) out.push(phr);
   const mr=myProjReqs(); if(mr) out.push(mr);
   const podSel=h('select',{id:'pf-pod','aria-label':'Pod',onchange:e=>{f.pod=e.target.value;render(true)}},h('option',{value:'',text:'All pods'}),pods().map(x=>h('option',{value:x,text:podLabel(x)}))); podSel.value=f.pod;
-  const stSel=h('select',{id:'pf-st','aria-label':'Status',onchange:e=>{f.st=e.target.value;render(true)}},[['active','Active'],['risk','At risk or off track'],['site','Construction support'],['onhold','On hold'],...(finOn()?[['acct','Account open']]:[]),['archive','Archive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); if(f.st==='closed') f.st='archive'; stSel.value=f.st;
+  const stSel=h('select',{id:'pf-st','aria-label':'Status',onchange:e=>{f.st=e.target.value;render(true)}},[['active','Active'],['risk','At risk or off track'],['h:ok','On track'],['h:risk','At risk'],['h:off','Off track'],['h:none','Not started'],['site','Construction support'],['onhold','On hold'],...(finOn()?[['acct','Account open']]:[]),['archive','Archive'],['all','All']].map(([v,l])=>h('option',{value:v,text:l}))); if(f.st==='closed') f.st='archive'; stSel.value=f.st;
   const arch=all.filter(isArchivedP), yrs=[...new Set(arch.map(p=>closedOn(p).slice(0,4)).filter(Boolean))].sort().reverse();
   const aSel=f.st==='archive'?[
     (()=>{ const x=h('select',{id:'pf-ao','aria-label':'Outcome',onchange:e=>{f.ao=e.target.value;render(true)}},[['','Every outcome'],['completed','Completed'],['partial','Closed after phase'],['cancelled','Cancelled'],['closed','Closed (not recorded)']].map(([v,l])=>h('option',{value:v,text:l}))); x.value=f.ao||''; return x; })(),
@@ -15337,6 +15366,7 @@ function viewProjects(){
   out.push(h('div',{class:'bar'},h('input',{id:'pf-q',type:'search',placeholder:sv?'Search studio work':'Search code, name or client',value:f.q,oninput:e=>{f.q=e.target.value;render(true)}}),sv?null:podSel,stSel,...aSel));
   const list=all.filter(p=>{ const st=stats.get(p.id);
     if(f.st==='active'&&p.closed&&!abOn(p)&&!supOn(p)) return false; if(f.st==='site'&&!supOn(p)) return false; if(f.st==='onhold'&&!isOnHold(p)) return false; if(f.st==='acct'&&!acctOf(p)) return false; if(f.st==='risk'&&(p.closed||!['risk','off'].includes(st.health))) return false;
+    if(f.st.startsWith('h:')&&(p.closed||st.health!==f.st.slice(2))) return false;
     if(f.st==='archive'){ if(!isArchivedP(p)) return false; if(f.ao&&outcomeOf(p)!==f.ao) return false; if(f.ay&&closedOn(p).slice(0,4)!==f.ay) return false; if(f.ar&&((p.closure||{}).reason||'')!==f.ar) return false; }
     if(f.pod&&![p.pod,p.pod2].includes(f.pod)) return false;
     if(q&&!`${p.code} ${p.name} ${p.client||''}`.toLowerCase().includes(q)) return false; return true; });
@@ -15456,7 +15486,7 @@ function sheetProjView(){
   const out=[head(`${p.code} · ${podText(p)}`,p.name),
     h('div',{class:'sh-status'},h('span',{class:p.closed?'pill '+outcomePill(p):'pill s-'+hk,text:p.closed?outcomeLabel(p):hl}),modoTag(p),tp&&h('span',{class:'tag',text:tp.name}),techTag(p),p.status==='pending'&&h('span',{class:'tag tag-req',text:'Waiting for approval'}),p.entry==='completed'&&h('span',{class:'tag',text:'Completed before SLATE OS'+(p.completedOn?' · '+MON[+p.completedOn.slice(5,7)-1]+' '+p.completedOn.slice(0,4):'')}),p.entry==='running'&&h('span',{class:'tag',text:'Running before SLATE OS'}),p.delReq&&h('span',{class:'tag tag-req',text:'Deletion requested'})),
     h('div',{class:'card',style:'gap:8px'},h('div',{class:'pc-row'},h('b',{text:st.tot?`${st.pct}% complete`:'No tasks yet'}),h('span',{class:'muted',text:st.tot?`${st.ts.filter(t=>t.doneAt).length} of ${st.ts.length} done`:''})),h('div',{class:'pc-bar lg'},h('span',{style:`width:${st.pct}%`})),
-      h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%'],['Overdue',String(st.over)],['Open',String(st.open)],['No date',String(st.noDate)]].map(([l,v])=>h('div',{style:'background:#fff'},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
+      h('div',{class:'n-sum'},[['On time',st.rt==null?'—':Math.round(st.rt*100)+'%','done'],['Overdue',String(st.over),'overdue'],['Open',String(st.open),'active'],['No date',String(st.noDate),'nodate']].map(([l,v,k])=>h('button',{type:'button',class:'n-go',style:'background:#fff',title:'Open these tasks',onclick:()=>{ const pid=p.id; closeSheet(); S.fInit=1; S.f.person=''; S.f.mine=false; S.f.project=pid; S.f.status=k; S.f.q=''; goView('all'); }},h('b',{text:v,style:l==='Overdue'&&st.over?'color:var(--overdue)':''}),h('span',{text:l}))))),
     h('div',{class:'facts'},fact('Client',p.client?(p.clientId?p.clientId+' · ':'')+p.client:'',[p.contact,p.phone].filter(Boolean).join(' · ')),!isInternalP(p)&&p.pod!=='Studio'?fact('Service plan',p.plan&&SP_PLANS[p.plan]?SP_PLANS[p.plan].n:'Legacy terms'):null,fact('Client technical person',p.tech==='yes'?'Available':p.tech==='no'?'⚠ Not available':'',p.techNote||null),fact('Site',siteAddr(p)),isIntP(p)?null:fact('Land',p.katha?p.katha+' katha':''),
       fact('Planned finish',st.end?fmtD(st.end):'',p.dueDate?`Contract: ${fmtD(p.dueDate)}`+(st.end&&st.end>p.dueDate?` · ${diff(p.dueDate,st.end)}d over`:''):null),fact('Current phase',st.phase),(()=>{ const n=st.ts.filter(x=>x.parentId).length; return n?fact('Client revisions',`${n} round${n>1?'s':''}`,`across ${new Set(st.ts.filter(x=>x.parentId).map(x=>x.parentId)).size} item(s)`):null; })())];
   { const cs=closureSection(p); if(cs) put('now',cs); }
