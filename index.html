@@ -994,6 +994,7 @@ span.ava{display:inline-grid;place-items:center;border-radius:50%;vertical-align
 @media (max-width:520px){.wk-r{grid-template-columns:minmax(0,1fr) auto}.wk-k{grid-column:1/-1;padding:0}}
 .n-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
 .n-sum div{background:var(--group);border-radius:10px;padding:10px 12px;display:grid;gap:2px}
+.wlp-l{display:grid;gap:6px}.wlp-r{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}.wlp-r b{font-weight:500;font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .n-sum .n-go{appearance:none;border:1px solid transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;border-radius:10px;padding:10px 12px;display:grid;gap:2px}.n-sum .n-go:hover{border-color:var(--ink)}
 .n-sum b{font-size:20px;font-variant-numeric:tabular-nums}
 .n-sum span{font-size:11.5px;color:var(--muted);font-weight:600}
@@ -2287,11 +2288,16 @@ function approveAssign(t,to){ if(t.assignReq&&t.assignReq.guide) return approveG
   return run(()=>taskUpdate(t.id,{assignee:to,assignReq:null,...(dt?{target:dt,originalTarget:dt,request:null}:{})},[{type:'assignApproved',from:t.assignReq.to,to,note},...(dt?[{type:'dateApproved',to:dt,note:'With the support request'}]:[])]),'Assignment approved').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
 function declineAssign(t){ const key='as:'+t.id, note=(S.declineNote[key]||'').trim();
   return run(()=>taskUpdate(t.id,{assignReq:null},[{type:t.assignReq.guide?'guideDeclined':'assignDeclined',to:t.assignReq.to,note}]),'Declined').then(ok=>{ if(ok){ delete S.declineNote[key]; delete S.assignPick[t.id]; } }); }
-const REPEATS={'':'Does not repeat',weekly:'Repeats weekly',monthly:'Repeats monthly'};
+/* daily (working days), quarterly and yearly added for the COO's office jobs (COO feedback 03, 16 Nov 2026) */
+const REPEATS={'':'Does not repeat',daily:'Repeats every working day',weekly:'Repeats weekly',monthly:'Repeats monthly',quarterly:'Repeats every 3 months',yearly:'Repeats yearly'};
+const REP_SHORT={daily:'Daily',weekly:'Weekly',monthly:'Monthly',quarterly:'Every 3 months',yearly:'Yearly'};
+const REP_LONG={daily:'Every working day',weekly:'Every week',monthly:'Every month',quarterly:'Every 3 months',yearly:'Every year'};
 function nextDate(d,rep){
   if(!d) return null;
+  if(rep==='daily') return addWorkDays(d,1);
   if(rep==='weekly') return addDays(d,7);
-  const [y,m,dd]=d.split('-').map(Number); const last=new Date(y,m+1,0).getDate(); let n=new Date(y,m,Math.min(dd,last));
+  const k=rep==='yearly'?12:rep==='quarterly'?3:1;
+  const [y,m0,dd]=d.split('-').map(Number), m=m0-1+k; const last=new Date(y,m+1,0).getDate(); let n=new Date(y,m,Math.min(dd,last));
   if(n.getDay()===5) n=new Date(n.getFullYear(),n.getMonth(),n.getDate()-1); else if(n.getDay()===6) n=new Date(n.getFullYear(),n.getMonth(),n.getDate()+1);
   return ymd(n);
 }
@@ -3852,7 +3858,7 @@ function row(t,o={}){
         t.assignReq&&h('span',{class:'tag tag-req',text:t.assignReq.guide?`Guide pending: ${shortName(t.assignReq.to)}`:'Assignment pending'}),
         t.checkerGuide&&t.checker&&!t.doneAt?h('span',{class:'tag',text:'Guided by '+shortName(t.checker)}):null,
         t.delivReq&&h('span',{class:'tag tag-req',text:'Deliverable · awaiting COO'}),
-        t.repeat&&h('span',{class:'tag',text:'↻ '+(t.repeat==='weekly'?'Weekly':'Monthly')}),
+        t.repeat&&h('span',{class:'tag',text:'↻ '+(REP_SHORT[t.repeat]||'Repeats')}),
         t.request&&h('span',{class:'tag tag-req',text:isMember()?'New date asked':'Date request'}),
         jointOf(t)&&!t.doneAt&&(()=>{ const ms=jointMates(t), subs=grpSubs(t), sd=subs.filter(x=>x.done).length; return h('span',{class:'tag',title:'Group task with '+ms.filter(x=>x.id!==t.id).map(x=>nameOf(x.assignee)).join(', ')+'. Finished together.',text:`Group · ${ms.map(x=>shortName(x.assignee)).join(', ')}`+(subs.length?` · ${sd}/${subs.length} parts`:'')}); })(),
         t.parentId&&h('span',{class:'tag',style:'color:var(--early)',text:'Client revision'}),
@@ -5080,11 +5086,32 @@ function sheetWlog(){
       h('div',{class:'wl-lines'},sh.lines.map(line)),
       h('div',{class:'wlf-adds'},sh.lines.length<8?h('button',{class:'linkish',type:'button',style:'font-size:13.5px',onclick:()=>{ sh.lines.push(wlNewLine()); renderSheet(); },text:'+ Add another project or task'}):null,
         !hasAsk&&sh.lines.length<8&&askTo&&askTo!==S.uid?h('button',{class:'linkish',type:'button',style:'font-size:13.5px',onclick:addAsk,text:`No task for today? Ask ${wlAskWho(S.uid)}`}):null)),
+      wlPodTasks(sh),
     sh.err?h('div',{class:'err',text:sh.err}):null,
     h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy,onclick:save,text:cur?'Save changes':'Submit today’s plan'}),
       cur||wlGated()?null:h('button',{class:'btn',type:'button',onclick:()=>{ savePref('planLater',{d:td,at:Date.now()}); closeSheet(); },text:'Later'})),
     wlGated()?h('p',{class:'f-hint',style:'margin:0',text:'SLATE OS opens once today’s plan is in.'}):null])];
 }
+/* the POD's open tasks beside today's plan (COO feedback 03, 16 Nov 2026): your own first, each with + Today;
+   Whole POD shows what the rest of the POD has on, so the plan is written with the POD's work in view */
+function wlPodTasks(sh){ if(sh.mode==='ahead') return null; const td=today(), pod=myPod(), lead=amPodLead();
+  const inPlan=new Set(sh.lines.map(l=>l.taskId).filter(Boolean));
+  const base=activeTasks().filter(t=>!t.doneAt&&!t.verify&&!t.archived&&!t.request&&t.projectId&&S.projects[t.projectId]&&!isChalkTask(t));
+  const mine=base.filter(t=>t.assignee===S.uid&&!inPlan.has(t.id)).sort(byTarget);
+  const pw=!!sh.podAll, others=pod?base.filter(t=>t.assignee&&t.assignee!==S.uid&&!isPriv(t.assignee)&&teamOf(t.assignee)===pod&&inMyPodProject(S.projects[t.projectId])).sort(byTarget):[];
+  if(!mine.length&&!others.length) return null;
+  const add=t=>{ if(sh.lines.length>=8) return toast('Eight lines at most.'); const blank=sh.lines.length===1&&!sh.lines[0].text&&sh.lines[0].projectId==null; if(blank) sh.lines=[];
+    sh.lines.push(wlNewLine({projectId:t.projectId,taskId:t.id,due:t.target&&t.target>=td&&t.target<=addDays(td,WL_MAXD)?t.target:td})); sh.err=''; renderSheet(); };
+  const due=t=>!t.target?'no date':t.target<td?`${diff(t.target,td)}d late`:t.target===td?'today':fmtD(t.target);
+  const row=(t,can)=>{ const p=S.projects[t.projectId];
+    return h('div',{class:'wlp-r'},h('div',{style:'min-width:0'},h('b',{text:t.title}),h('div',{class:'f-hint',style:'margin:0',text:[p?(p.name||p.code):'',can?'':shortName(t.assignee),stageOf(t)==='doing'?'in progress':''].filter(Boolean).join(' · ')})),
+      h('span',{class:'mono',style:'font-size:12.5px;white-space:nowrap'+(t.target&&t.target<td?';color:var(--overdue)':''),text:due(t)}),
+      can&&S.canWrite?h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>add(t),text:'+ Today'}):null); };
+  const xs=pw?others:mine;
+  return h('section',{class:'sec wlp'},h('div',{class:'sec-h'},h('h2',{text:pw?(lead?'Your POD’s tasks':'Rest of your POD'):'Your open tasks'}),h('span',{class:'cnt',text:String(xs.length)}),
+      others.length?h('div',{class:'seg',role:'group','aria-label':'Whose tasks',style:'margin-left:auto'},[[false,'Mine'],[true,'Whole POD']].map(([v,l])=>h('button',{type:'button','aria-pressed':String(pw===v),class:pw===v?'on':'',onclick:()=>{ sh.podAll=v; renderSheet(); },text:l}))):null),
+    xs.length?h('div',{class:'wlp-l'},xs.slice(0,sh.podMore?60:8).map(t=>row(t,!pw))):h('p',{class:'f-hint',style:'margin:0',text:'Nothing open.'}),
+    xs.length>8&&!sh.podMore?h('button',{class:'linkish',type:'button',style:'font-size:13px',onclick:()=>{ sh.podMore=1; renderSheet(); },text:`Show all ${xs.length}`}):null); }
 /* the morning plan on a PC: yesterday on the left, today on the right (Principal, 7 Nov 2026); stacked on a phone */
 function wlCols(sh,left,right){ left=left.filter(Boolean); sh.wide=left.length>0;
   return left.length?[h('div',{class:'wl-cols'},h('div',{class:'wl-col'},left),h('div',{class:'wl-col'},right))]:right; }
@@ -7650,7 +7677,7 @@ function buildNotifs0(){
     historyReqs().forEach(r=>{ const p=S.projects[r.pid], n=r.tasks.length+r.subs.length, at=[...r.tasks.map(t=>t.createdAt),...r.subs.map(x=>x.at)].filter(Boolean).sort()[0]||nowIso;
       Q({id:`hy:${r.pid}:${n}`,at,title:`History to approve: ${n} item${n===1?'':'s'} recorded before SLATE OS`,body:projLabel(p)}); });
     closeReqs().forEach(p=>Q({id:`cr:${p.id}:${p.closeReq.at||''}`,at:p.closeReq.at||nowIso,title:`${nameOf(p.closeReq.by)} asks to mark ${p.code||p.name} ${OUTCOMES[p.closeReq.outcome].l.toLowerCase()}`,body:reasonLabel(p.closeReq.reason)+(p.closeReq.note?`\n“${p.closeReq.note}”`:''),projId:p.id,view:null}));
-    projects().filter(p=>isOnHold(p)&&p.closure&&p.closure.reviewOn&&p.closure.reviewOn<=td).forEach(p=>Q({id:`hr:${p.id}:${p.closure.reviewOn}`,at:atLocal(p.closure.reviewOn,9),title:`On-hold review due: ${projLabel(p)}`,body:`On hold since ${fmtD(closedOn(p))}`+(p.closure.reason?` · ${reasonLabel(p.closure.reason)}`:'')+'. Resume it or close it.',projId:p.id,view:null}));
+    projects().filter(p=>isOnHold(p)&&p.closure&&p.closure.reviewOn&&p.closure.reviewOn<=td).forEach(p=>Q({id:`hr:${p.id}:${p.closure.reviewOn}`,at:atLocal(p.closure.reviewOn,9),title:`${isHoldWait(p.closure.reason)?'Follow-up due':'On-hold review due'}: ${projLabel(p)}`,body:isHoldWait(p.closure.reason)?`${HOLD_WAIT[p.closure.reason]} since ${fmtD(closedOn(p))}. Follow up and log it on the project, or release it.`:`On hold since ${fmtD(closedOn(p))}`+(p.closure.reason?` · ${reasonLabel(p.closure.reason)}`:'')+'. Resume it or close it.',projId:p.id,view:null}));
     if(canProps()) for(const p of propList()){
       if(propDue(p)){ const l=propLast(p), dd=diff(p.next,td);
         Q({id:`pf:${p.id}:${p.next}`,at:atLocal(p.next,9),title:`Follow up${isLead(p)?' lead':''}${dd>0?` (${dd} day${dd===1?'':'s'} overdue)`:' today'}: ${pTitle(p)}${p.name?' · '+p.client:''}`,body:l?`Last: ${fmtD(l.at.slice(0,10))} · ${propLine(l)||'Note'}`+(l.note?`\n“${l.note}”`:''):'No client response logged yet.',propId:p.id,view:null}); }
@@ -8099,7 +8126,9 @@ const siteBlock=b=>!b?'':/^[A-Z]{1,2}$/i.test(b)?'Block '+b:/^\d+[A-Z]?$/i.test(
 const siteAddr=p=>!p?'':[p.plotNo?'Plot '+p.plotNo:'',p.roadNo?'Road '+p.roadNo:'',siteBlock(p.blockSector),p.location||''].filter(Boolean).join(', ');
 const PFIELDS=['intBuilding','intUnit','intFloor','intArea','intSpace','intExec','intHandover','plan','entry','completedOn','code','name','client','contact','phone','tech','techNote','location','plotNo','roadNo','blockSector','pod','pod2','katha','type','building','area','farApplies','block','road','upf','floors','basements','mezz','mezzName','saleManual','constManual','loShare','agStatus','agDate','agRef','proBono','dueDate','docUrl','note','briefMix','briefParking','briefBudget','briefLo','briefNotes','junior'];
 /* services that carry a quantity: still renders for 3D visualization, length in seconds for animation */
-const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600}};
+const SCOPE_QTY={'3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Professional 3D visualization':{lbl:'Still renders',unit:'images',short:'stills',max:500},'Animation':{lbl:'Duration',unit:'seconds',short:'sec',max:3600},
+  /* COO feedback 03: how many working drawing sets, and how many site visits the fee includes (visits after that are billed) */
+  'Working drawings':{lbl:'Number of sets',unit:'sets',short:'sets',max:20,need:'the number of working drawing sets'},'Site supervision':{lbl:'Free site visits',unit:'visits',short:'free visits',max:300,need:'how many site visits are free'}};
 /* outsourced services: the consultant or vendor doing the work */
 const SCOPE_VENDOR={'Structural design':'Consultant','MEP design':'Consultant','Professional 3D visualization':'Vendor'};
 const scopeLabel=(p,x)=>{ const q=SCOPE_QTY[x], n=q&&p&&p.scopeQty&&+p.scopeQty[x], vn=SCOPE_VENDOR[x]&&p&&p.scopeVendor&&p.scopeVendor[x]; return [x,n?`${n} ${q.short}`:'',vn||''].filter(Boolean).join(' · '); };
@@ -8248,7 +8277,7 @@ function sheetTask(){
     fact(t.target?`Target · Date ${(t.revisions||0)+1}`:'Target',t.target?fmtD(t.target):'Not approved yet',t.time?'at '+fmtTime(t.time):null,true),
     t.target&&(t.revisions||0)>0&&fact('Original · Date 1',fmtD(t.originalTarget||t.target),t.originalTarget&&t.originalTarget!==t.target?`${diff(t.originalTarget,t.target)>0?'+':''}${diff(t.originalTarget,t.target)}d from original`:null,true),
     fact('Completed',t.doneAt?fmtD(t.doneAt):t.verify?fmtD(t.verify.at):'Not yet',t.doneAt&&t.doneBy?`Recorded by ${nameOf(t.doneBy)}`+(t.verifiedBy&&t.verifiedBy!==t.doneBy?` · verified by ${nameOf(t.verifiedBy)}`:''):t.verify?'Not verified yet':null,true),
-    t.repeat&&fact('Repeats',t.repeat==='weekly'?'Every week':'Every month','The next one is created when this is marked done, with its date already set.')));
+    t.repeat&&fact('Repeats',REP_LONG[t.repeat]||'Repeats','The next one is created when this is marked done, with its date already set.')));
   if(t.gate&&p&&p.std&&PH[t.gate.k]){ const k=t.gate.k, tot=clItems(k).length, left=clLeft(p,k);
     out.push(h('div',{class:'callout',style:'box-shadow:inset 3px 0 0 var(--ink)'},h('div',{class:'lbl',text:`Gate deliverable · Phase ${phLabel(k,p)}`}),h('div',{style:'font-weight:500',text:phGate(k,p)}),
       h('div',{class:'f-hint',text:`Checklist ${tot-left} of ${tot} done`+(t.gate.step==='final'&&left?'. This gate closes once every item is ticked or marked N/A.':'')}),
@@ -8658,7 +8687,7 @@ function sheetProject(){
       if(!isPropT&&!v.agStatus) return fail('Choose the agreement status.');
       if(v.agStatus==='signed'&&!v.agDate) return fail('Add the agreement date.');
       if(!isPropT&&!v.scope.length) return fail('Tick at least one service in the scope.');
-      for(const x of v.scope){ const q=SCOPE_QTY[x]; if(q&&!v.scopeQty[x]) return fail(`${x}: add the number of ${q.unit==='seconds'?'seconds':'still renders'}.`); }
+      for(const x of v.scope){ const q=SCOPE_QTY[x]; if(q&&!v.scopeQty[x]) return fail(`${x}: add ${q.need||'the number of '+(q.unit==='seconds'?'seconds':'still renders')}.`); }
       if(!isInt&&!isPropT&&!v.farApplies) return fail('Say whether FAR applies to this project.');
       if(v.farApplies==='yes'&&(!v.block||!v.road)) return fail(d.roadMode==='custom'&&v.block?'Type the custom road width in feet.':'Choose the density block and the front road.');
       if(v.farApplies==='yes'&&(plotFarOf(v.road)||{}).under) return fail(`A ${v.road} road is under ${ROAD_MIN} ft, outside the DAP plot FAR table. Set FAR to “not applicable” and enter the areas by hand, or check the road width.`);
@@ -10986,7 +11015,7 @@ function projLog(p){
   const td=today(), vDone=vs.filter(t=>t.doneAt||t.verify), vPlan=vs.filter(t=>!t.doneAt&&!t.verify).sort((a,b)=>(a.target||'9').localeCompare(b.target||'9'));
   const mHeld=ms.filter(m=>m.status!=='cancelled'&&m.status!=='scheduled'), mUp=ms.filter(m=>m.status==='scheduled'&&m.date>=td), mDue=ms.filter(m=>m.status==='scheduled'&&m.date<td);
   const lastV=vDone.map(t=>t.doneAt||t.verify.at).sort().pop(), lastC=mHeld.filter(m=>isClientMT(m.type)).map(m=>m.date).sort().pop();
-  const fr=canBiz()&&finOn()?(loadFeeFin(),feeRecOf(p)):null, free=fr&&fr.visits&&fr.visits.free!=null?+fr.visits.free:null;
+  const fr=canBiz()&&finOn()?(loadFeeFin(),feeRecOf(p)):null, free=fr&&fr.visits&&fr.visits.free!=null?+fr.visits.free:(p.scopeQty&&+p.scopeQty['Site supervision']>0?+p.scopeQty['Site supervision']:null);
   const f=(S.sheet&&S.sheet.plf)||'';
   const rows=[...vs.map(t=>({k:'visit',d:t.doneAt||(t.verify&&t.verify.at)||t.target||'',t})),...ms.map(m=>({k:'meet',d:m.date||'',m}))]
     .filter(x=>!f||(f==='visit'?x.k==='visit':f==='meet'?x.k==='meet':x.k==='meet'&&x.m.type===f)).sort((a,b)=>b.d.localeCompare(a.d));
@@ -12582,6 +12611,7 @@ function sheetPropQuick(){
     h('div',{class:'pq-cols'},h('div',{class:'pq-c'},h('div',{class:'lbl',style:'text-transform:uppercase;letter-spacing:.05em;padding-top:4px',text:'Client and project'}),h('div',{class:'qs-box qs-wide'},
       kv('To',inp2('contact',{maxlength:80,placeholder:'e.g. Md. Gious Uddin',onchange:()=>renderSheet()})),
       kv('Designation',inp2('_title',{maxlength:80,placeholder:'e.g. Chairman',onchange:()=>renderSheet()})),
+      kv('Phone *',inp2('phone',{type:'tel',maxlength:40,placeholder:'e.g. 01711000000'})),
       kv('Company / client',clientPick(d),true),
       kv('Address',h('textarea',{id:'pq-addr',class:'tl-num qs-in pq-ta',rows:2,maxlength:240,placeholder:'e.g. Level 07, Plot 77 & 78, Block I, Bashundhara R/A, Dhaka',value:d._addr||'',oninput:e=>{ d._addr=e.target.value; },onchange:()=>renderSheet()}),true),
       (()=>{ const nm=pqT(d.contact), co=pqT(d.client), same=!co||co.toLowerCase()===nm.toLowerCase(); if(!nm&&!co) return null;
@@ -12657,7 +12687,7 @@ function openPropCopy(id){ const src=(S.props||{})[id]; if(!src) return; openPro
   ['client','contact','_title','_addr','_picked','phone','email','name','sPlot','sRoad','sSec','note'].forEach(k=>{ d[k]=''; });
   sh.id=null; sh.copyOf=src.name||'a proposal'; sh.err=''; renderSheet(); setTimeout(()=>{ const el=document.getElementById('pq-contact'); el&&el.focus(); },30); }
 function pqMake(draft){ const sh=S.sheet, d=sh.d; if(!canProps()) return fail('Only the Principal or the COO adds proposals.');
-  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft){ const bad=Object.keys(PQ_SUB).find(l=>(sh.sel.on||{})[l]&&PQ_SUB[l].every(([k])=>!pqSubOn(sh,l,k))); if(bad) return fail(`Tick at least one item under ${bad.split(' (')[0]}, or untick it.`); } if(!draft&&pqDoc(sh).addons.some(x=>!x.amt&&!x.inc)) return fail('Give the fee for each add-on, or tick Included.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
+  const {p,doc}=pqDoc(sh); if(!p.client) return fail('Who is the client?'); if(!draft&&!phoneNorm(d.phone)) return fail('Add the client’s phone number.'); if(!p.name&&!draft) return fail('Give the project name, or the site area, plot and road.'); if(!draft&&!Object.values((sh.sel||{}).on||{}).some(Boolean)) return fail('Tick the services to include.'); if(!draft){ const bad=Object.keys(PQ_SUB).find(l=>(sh.sel.on||{})[l]&&PQ_SUB[l].every(([k])=>!pqSubOn(sh,l,k))); if(bad) return fail(`Tick at least one item under ${bad.split(' (')[0]}, or untick it.`); } if(!draft&&pqDoc(sh).addons.some(x=>!x.amt&&!x.inc)) return fail('Give the fee for each add-on, or tick Included.'); if(!draft&&!d.use) return fail('Choose the project type (Residential, Commercial…).'); if(!draft&&(sh.fm||'sft')==='sft'&&!(+doc.area>0)) return fail('Give the built area (sft).'); if(!draft&&!(+doc.lump>0)) return fail((sh.fm||'sft')==='sft'?'Give the rate per sft.':'Give the lump sum.');
   const now=new Date().toISOString(), pid=sh.id||S.db.collection('proposals').doc().id, old=sh.id?(S.props||{})[sh.id]||{}:{}, F=pbFee(doc), editing=!!(sh.id&&old.doc&&!sh.convert);
   if(old.doc&&old.doc.ref) doc.ref=old.doc.ref;
   const v={...old,name:p.name||'UNTITLED PROPOSAL',client:p.client,contact:p.contact,phone:phoneNorm(d.phone),email:(d.email||'').trim(),location:p.location,siteParts:{area:pqT(d.sArea).toUpperCase(),plot:pqT(d.sPlot),road:pqT(d.sRoad),[(pqKind(d)||'none').toLowerCase()]:pqKind(d)?pqT(d.sSec):''},katha:p.katha,type:p.type,scope:Array.isArray(d.scope)?d.scope:[],
@@ -12676,6 +12706,7 @@ function sheetProp(){
   const submit=(e,draft)=>{ if(e) e.preventDefault(); if(!canProps()) return fail('Only the Principal or the COO adds proposed projects.');
     const name=(d.name||'').trim().toUpperCase()||(draft?'UNTITLED PROPOSAL':''), client=(d.client||'').trim().toUpperCase();
     if(!name) return fail('Give the project a name.'); if(!client) return fail('Who is the client?');
+    if(!draft&&!phoneNorm(d.phone)) return fail('Add the client’s phone number.');
     if(d.katha!==''&&!(+d.katha>0)) return fail('Land size should be a number of katha.');
     if(d.fee!==''&&!(+d.fee>0)) return fail('Fee should be a number, or leave it empty.');
     const now=new Date().toISOString(), pid=id||S.db.collection('proposals').doc().id, old=id?(S.props||{})[id]||{}:{};
@@ -12692,7 +12723,7 @@ function sheetProp(){
     h('form',{class:'form',onsubmit:submit},
       sec('Client'),
       field('Client *',clientPick(d)),
-      h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Phone',inp('phone',{type:'tel',maxlength:40}))),
+      h('div',{class:'form-row'},field('Contact person',inp('contact',{maxlength:80})),field('Phone *',inp('phone',{type:'tel',maxlength:40}))),
       sec('Project'),
       field('Project name *',inp('name',{maxlength:120,placeholder:'e.g. Gulshan 2, Plot 24A residence',style:'text-transform:uppercase',autocapitalize:'characters'})),
       field('Site',inp('location',{maxlength:160,placeholder:'Area, plot, road'})),
@@ -13623,7 +13654,13 @@ function sheetPropView(){
     h('div',{class:'sh-status'},open&&ld?h('span',{class:'pill s-'+ht[1],text:ht[0]}):open?h('span',{class:'pill s-'+(propDue(p)?'overdue':'open'),text:PROP_STAGE[p.stage]||'Preparing'}):h('span',{class:'pill s-'+(p.status==='won'?'ontime':'overdue'),text:PROP_OUT[p.status]||p.status}),
       open&&p.next?h('span',{class:'tag',style:propDue(p)?'color:var(--overdue)':'',text:(p.next<today()?'Follow-up was due ':p.next===today()?'Follow up today':'Next follow-up ')+(p.next===today()?'':fmtD(p.next))}):null,
       p.type?h('span',{class:'tag',text:propTypeName(p.type)}):null,p.src?h('span',{class:'tag',text:srcL(p.src)}):null),
-    h('div',{class:'facts'},fact('Client',p.client?(p.clientId?p.clientId+' · ':'')+p.client:'',[[p.contact,p.title].filter(Boolean).join(', '),p.phone,p.email].filter(Boolean).join(' · ')),fact('Referred by',p.src==='referral'?p.refBy||'Not recorded':''),ld&&LEAD_HEAT[p.heat]?fact('Interest',LEAD_HEAT[p.heat][0],LEAD_HEAT[p.heat][2]):null,fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),fact('Fee proposed',propFee(p)),
+    /* phone (COO feedback 03): every lead and proposal shows its number on its own line; an old one without a number asks for it here */
+    !p.phone&&canProps()&&S.canWrite?(()=>{ const ph=S.sheet.phAdd||(S.sheet.phAdd={v:''});
+      return h('div',{class:'callout',style:'display:grid;gap:8px;border-color:var(--overdue)'},h('b',{text:'No phone number yet'}),
+        h('div',{class:'bar',style:'gap:8px'},h('input',{id:'pv-phone',type:'tel',maxlength:40,placeholder:'Client’s phone',value:ph.v,style:'flex:1 1 180px;min-width:0;background:#fff',oninput:e=>{ ph.v=e.target.value; }}),
+          h('button',{class:'btn btn-sm btn-primary',type:'button',disabled:S.busy,onclick:()=>{ const v=phoneNorm(ph.v); if(!v) return toast('Type the phone number first.'); const cur=(S.props||{})[id]||p;
+            run(async()=>{ await propWrite(id,{...cur,phone:v}); try{ if(cur.client) await clientUpsert({name:cur.client,phone:v}); }catch(_){} },'Phone saved').then(ok=>{ if(ok){ S.sheet.phAdd=null; renderSheet(); } }); },text:'Save phone'}))); })():null,
+    h('div',{class:'facts'},fact('Phone',p.phone||''),fact('Client',p.client?(p.clientId?p.clientId+' · ':'')+p.client:'',[[p.contact,p.title].filter(Boolean).join(', '),p.email].filter(Boolean).join(' · ')),fact('Referred by',p.src==='referral'?p.refBy||'Not recorded':''),ld&&LEAD_HEAT[p.heat]?fact('Interest',LEAD_HEAT[p.heat][0],LEAD_HEAT[p.heat][2]):null,fact('Site',p.location),fact('Land',p.katha?p.katha+' katha':''),fact('Fee proposed',propFee(p)),
       fact('Proposal sent',p.sentOn?fmtD(p.sentOn):''),fact(ld?'Project':'',ld&&p.name?p.name:''),fact('Lead since',p.leadAt&&!ld?fmtD(p.leadAt.slice(0,10)):''),fact('Added',p.createdAt?fmtTs(p.createdAt):'',p.createdBy?'by '+nameOf(p.createdBy):'')),
     (()=>{ const vs=(p.versions||[]).slice().reverse(); if(!vs.length&&!p.doc) return null; const st=S.sheet.vdl||(S.sheet.vdl={});
       const dl=async v=>{ st[v.rev]='making'; renderSheet(); try{ const r=await pbPdfRetry(p,v.doc,'both'); st[v.rev]=''; renderSheet(); dlFile(r.share); }catch(e){ st[v.rev]='err'; renderSheet(); toast(e.message||String(e)); } };
@@ -13840,6 +13877,7 @@ function viewLeads(){
       h('div',{class:'pc-name pn',text:pTitle(p)}),
       (n=>n?h('div',{class:'pc-next'+(n.u?' u':''),text:'Next: '+n.t}):null)(propNext(p)),
       h('div',{class:'pc-meta',text:[p.name?p.client:'',p.phone,p.location,p.katha?p.katha+' katha':''].filter(Boolean).join(' · ')}),
+      p.phone?null:h('div',{class:'pc-meta',style:'color:var(--overdue)',text:'No phone number · open to add'}),
       l?h('div',{class:'f-hint',style:'margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',text:`${fmtD(l.at.slice(0,10))} · ${propLine(l)||'Note'}${l.note?' · “'+l.note+'”':''}`}):h('div',{class:'f-hint',style:'margin:0',text:'Not contacted yet'}),
       propOpen(p)&&isLead(p)?h('div',{class:'pc-row'},h('span',{style:leadStale(p)?'color:var(--late)':'',text:lt?`Last contact ${fmtD(lt)}`:''}),h('span',{class:'mono',style:dueP?'color:var(--overdue)':'',text:p.next?(p.next<td?'Overdue ':p.next===td?'Today ':'Next ')+fmtD(p.next):'No follow-up date'})):null); })));
   return out; }
@@ -14460,14 +14498,15 @@ function viewCooWork(out){
   } else out.push(h('div',{class:'cb-board'},h('div',{class:'cb-row'},STAGES.map(([k])=>colOf(k,pick(xs,k))))));
   return out; }
 /* a private COO task in two taps (COO, 9 Nov 2026): no project picker and no drawing suggestions, just the work, its category and a date */
-function openCooTask(){ const coo=cooId(); if(!coo) return toast('No COO set up.'); S.sheet={type:'cooTask',d:{title:'',area:'studiomgmt',projectId:'',target:'',start:'',note:'',kind:'Task',pub:false},err:'',added:[]}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('ct-title'); el&&el.focus(); },30); }
+function openCooTask(){ const coo=cooId(); if(!coo) return toast('No COO set up.'); S.sheet={type:'cooTask',d:{title:'',area:'studiomgmt',projectId:'',target:'',start:'',note:'',kind:'Task',repeat:'',pub:false},err:'',added:[]}; renderSheet(); setTimeout(()=>{ const el=document.getElementById('ct-title'); el&&el.focus(); },30); }
 function sheetCooTask(){ const d=S.sheet.d, coo=cooId(), me=S.uid===coo;
   const areas=STUDIO_AREAS.map(([k,l])=>[k,k==='studioops'?'Studio tasks':l]);
   const AREA_HINT={studioadmin:'Office running: IT, assets, facilities, rent, utilities, supplies. Kept apart from the team’s Studio tasks.',studioops:'The team’s shared studio jobs list. Your task stays private, but it is filed under Studio tasks.'};
   const save=()=>{ const title=(d.title||'').trim(); if(title.length<3) return fail('Write the task.'); if(d.area==='client'&&!d.projectId) return fail('Choose the client project.');
     if(d.start&&d.target&&d.start>d.target) return fail('The start date can’t be after the due date.');
+    if(d.repeat&&!d.target) return fail('A repeating task needs its first due date.');
     run(async()=>{ const pid=d.area==='client'?d.projectId:await ensureAreaProject(d.area);
-      await createTask({projectId:pid,title,kind:d.kind,assignee:coo,target:d.target||'',...(d.start?{start:d.start}:{}),note:(d.note||'').trim()}); },'COO task added').then(ok=>{ if(ok){ S.sheet.added.unshift(title+(d.target?' · '+fmtD(d.target):'')); d.title=''; d.note=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('ct-title'); el&&el.focus(); } }); };
+      await createTask({projectId:pid,title,kind:d.kind,assignee:coo,target:d.target||'',...(d.start?{start:d.start}:{}),...(d.repeat?{repeat:d.repeat}:{}),note:(d.note||'').trim()}); },'COO task added').then(ok=>{ if(ok){ S.sheet.added.unshift(title+(d.target?' · '+fmtD(d.target):'')+(d.repeat?' · ↻ '+REP_SHORT[d.repeat]:'')); d.title=''; d.note=''; d.repeat=''; S.sheet.err=''; renderSheet(); const el=document.getElementById('ct-title'); el&&el.focus(); } }); };
   const cps=projects().filter(p=>workable(p)&&!isInternalP(p)&&p.pod!=='Studio').sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   return [head('Private · only '+(me?'you and the Principal':'you and the COO')+' see it','New COO task'),
     h('form',{class:'form',onsubmit:e=>{ e.preventDefault(); save(); }},
@@ -14476,6 +14515,8 @@ function sheetCooTask(){ const d=S.sheet.d, coo=cooId(), me=S.uid===coo;
       d.area==='client'?field('Client project',(()=>{ const el=h('select',{onchange:e=>{ d.projectId=e.target.value; }},h('option',{value:'',text:'Select project…'}),cps.map(p=>h('option',{value:p.id,text:projLabel(p)}))); el.value=d.projectId; return el; })(),'Still private: it shows only under COO work.'):null,
       field('Due',h('div',{style:'display:grid;gap:8px'},dateChips(d.target,x=>{ d.target=x; renderSheet(); }),h('input',{type:'date',value:d.target,oninput:e=>{ d.target=e.target.value; }}))),
       h('div',{class:'form-row'},field('Start (optional)',h('input',{type:'date',value:d.start,oninput:e=>{ d.start=e.target.value; }})),field('Type',(()=>{ const el=h('select',{onchange:e=>{ d.kind=e.target.value; }},[['Task','Task'],['Deliverable','Deliverable']].map(([v,l])=>h('option',{value:v,text:l}))); el.value=d.kind; return el; })())),
+      field('Repeat',h('div',{class:'chips',style:'margin:0'},[['','No'],['daily','Every working day'],['weekly','Weekly'],['monthly','Monthly'],['quarterly','Every 3 months'],['yearly','Yearly']].map(([k,l])=>h('button',{type:'button',class:'chip',style:'border:0;cursor:pointer;padding:6px 12px;'+((d.repeat||'')===k?'background:var(--ink);color:#fff':''),onclick:()=>{ d.repeat=k; renderSheet(); },text:l}))),
+        d.repeat?`When you mark it done, the next one appears with its date set${d.target?': '+fmtD(nextDate(d.target,d.repeat)):''}.`:'For jobs that come back, e.g. weekly backup, monthly rent, yearly licence renewal.'),
       field('Note (optional)',h('input',{maxlength:200,value:d.note,placeholder:'Anything to remember',oninput:e=>{ d.note=e.target.value; }})),
       S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
       h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Add COO task'}),h('button',{class:'btn',type:'button',onclick:closeSheet,text:'Close'}))),
@@ -15550,7 +15591,11 @@ const OUTCOMES={
   completed:{l:'Completed',pill:'s-ontime',btn:'Mark completed',d:'All signed scope has been delivered. The project becomes a record.'},
   partial:{l:'Closed after phase',pill:'s-early',btn:'Close project',d:'The client stopped partway. Record the last phase reached and which scope was delivered.'},
   cancelled:{l:'Cancelled',pill:'s-overdue',btn:'Cancel project',d:'The agreement was terminated, usually before meaningful delivery.'}};
-const CLOSE_REASONS=[['client','Client decision'],['funding','Funding'],['land','Land or legal'],['approvals','Approvals (RAJUK etc.)'],['fee','Fee dispute'],['scope','Scope change'],['complete','Work complete'],['other','Other']];
+/* hold reasons with scheduled follow-ups (COO feedback 03, 16 Nov 2026): after the authority submission, and for
+   R&D / speculative work waiting on the client's approval or work order. Follow up every n working days; Release on approval. */
+const HOLD_WAIT={authority:'Waiting for authority approval',workorder:'Waiting for client approval / work order'};
+const isHoldWait=k=>!!HOLD_WAIT[k];
+const CLOSE_REASONS=[['authority',HOLD_WAIT.authority],['workorder',HOLD_WAIT.workorder],['client','Client decision'],['funding','Funding'],['land','Land or legal'],['approvals','Approvals (RAJUK etc.)'],['fee','Fee dispute'],['scope','Scope change'],['complete','Work complete'],['other','Other']];
 const reasonLabel=k=>(CLOSE_REASONS.find(x=>x[0]===k)||['',k||'—'])[1];
 /* round "COMPLETED" rubber stamp for project cards: ring text with the date, double border, the SLATE mark in the middle */
 function stampSVG(id,on,label){
@@ -15623,9 +15668,15 @@ function sheetProjClose(){
   const opts=Object.entries(OUTCOMES).filter(([k])=>!(held&&k==='onhold')&&!(internal&&(k==='partial'))).map(([k,x])=>[k,x.l]);
   const setO=v=>{ d.outcome=v; if(v==='completed'){ d.delivered=[...scope]; if(!d.reason) d.reason='complete'; } if(v==='cancelled') d.delivered=[]; if(v!=='completed'&&d.reason==='complete') d.reason=''; S.sheet.err=''; renderSheet(); };
   const f=[h('div',{class:'field'},h('span',{class:'lbl',text:'How did it end?'}),seg('Outcome',opts,o,setO),h('span',{class:'f-hint',text:OUTCOMES[o].d}))];
-  f.push(h('div',{class:'form-row'},field('Reason *',sel('reason',[['','Select…'],...CLOSE_REASONS.filter(([k])=>k!=='complete'||o==='completed')])),
+  if(o!=='onhold'&&isHoldWait(d.reason)) d.reason='';
+  const rsel=sel('reason',[['','Select…'],...CLOSE_REASONS.filter(([k])=>(k!=='complete'||o==='completed')&&(o==='onhold'||!isHoldWait(k)))]);
+  rsel.addEventListener('change',()=>{ if(o==='onhold'&&isHoldWait(d.reason)){ if(!d.every) d.every='5'; d.reviewOn=addWorkDays(d.on&&d.on>td?d.on:td,+d.every); } renderSheet(); });
+  f.push(h('div',{class:'form-row'},field('Reason *',rsel),
     field(o==='onhold'?'On hold from *':'Effective date *',inp('on',{type:'date',max:addDays(td,30)}))));
-  if(o==='onhold') f.push(field('Review on *',inp('reviewOn',{type:'date',min:td}),'You and the COO are reminded on this date to resume it or close it.'));
+  if(o==='onhold'&&isHoldWait(d.reason)){ const ev=h('select',{id:'pc-every','aria-label':'Follow up every',onchange:e=>{ d.every=e.target.value; d.reviewOn=addWorkDays(td,+d.every); renderSheet(); }},[['3','3 working days'],['5','5 working days (a week)'],['7','7 working days'],['10','10 working days (two weeks)'],['22','22 working days (a month)']].map(([v,l])=>h('option',{value:v,text:l}))); ev.value=d.every||'5';
+    f.push(h('div',{class:'form-row'},field('Follow up every',ev),field('First follow-up *',inp('reviewOn',{type:'date',min:td}))),
+      h('p',{class:'f-hint',style:'margin:-4px 2px 0',text:d.reason==='authority'?'You and the COO are reminded on each follow-up date. Log each call or visit to the authority; the next date is set for you. Release it when the approval comes.':'You and the COO are reminded on each follow-up date. Log what the client said; the next date is set for you. Release it when the approval or work order comes.'})); }
+  else if(o==='onhold') f.push(field('Review on *',inp('reviewOn',{type:'date',min:td}),'You and the COO are reminded on this date to resume it or close it.'));
   if((o==='partial'||o==='cancelled')&&!internal){ const ch=phaseChoices(p);
     f.push(field(o==='partial'?'Last phase reached *':'Last phase reached',ch.length?sel('lastPhase',[['',o==='partial'?'Select…':'Before any phase'],...ch.map(x=>[x,x])]):inp('lastPhase',{placeholder:'e.g. RAJUK drawings'}))); }
   if(o!=='onhold'&&!internal&&scope.length){ const dl=new Set(d.delivered||[]);
@@ -15657,7 +15708,7 @@ function sheetProjClose(){
   }
   out.push(h('form',{class:'form',onsubmit:e=>{ e.preventDefault();
       if(!d.reason) return fail('Choose a reason.'); if(!d.on) return fail('Give the date.');
-      if(o==='onhold'&&(!d.reviewOn||d.reviewOn<td)) return fail('Give a review date from today on.');
+      if(o==='onhold'&&(!d.reviewOn||d.reviewOn<td)) return fail(isHoldWait(d.reason)?'Give the first follow-up date, from today on.':'Give a review date from today on.');
       if(o==='partial'&&!internal&&!d.lastPhase) return fail('Choose the last phase reached.');
       if(o==='completed'&&d.site==='handover'&&!d.handedOn) return fail('Give the handover date.');
       run(()=>doCloseProject(p.id,d,du),o==='onhold'?'Project on hold':`Project ${OUTCOMES[o].l.toLowerCase()}`).then(ok=>{ if(ok){ acctLoad(true); back(); } }); }},
@@ -15671,6 +15722,7 @@ async function doCloseProject(pid,d,du){
   const note=(d.note||'').trim(), why=note||reasonLabel(d.reason);
   const closure={outcome:o,reason:d.reason,note,on:d.on,lastPhase:(o==='partial'||o==='cancelled')?(d.lastPhase||''):'',
     delivered,dropped:delivered?scope.filter(x=>!delivered.includes(x)):null,reviewOn:o==='onhold'?d.reviewOn:null,
+    ...(o==='onhold'&&isHoldWait(d.reason)?{every:+d.every||5,follows:[]}:{}),
     dues:du&&(+du.due>1||+du.unbilled>1)?{open:du.open,due:du.due,overdue:du.overdue||0,unbilled:du.unbilled||0,unbilledMs:du.unbilledMs||[]}:null,reqBy:p.closeReq?p.closeReq.by:null,by:S.uid,at:now};
   // the tasks first: if a save fails half way, the project is still open and the rest can be retried
   if(o==='onhold'){ for(const t of projOpenTasks(pid)) await taskUpdate(t.id,{archived:true,held:true},[{type:'held',note:why}]); }
@@ -15696,10 +15748,14 @@ function sheetProjReopen(){
       :`${outcomeLabel(p)} on ${fmtD(closedOn(p))}. Reopening puts it back in the active list and the task menus.`})];
   if(!held&&parked.length) f.push(h('label',{style:'display:flex;gap:10px;align-items:center;font-size:14px'},h('input',{type:'checkbox',id:'rp-restore',checked:d.restore,onchange:e=>{d.restore=e.target.checked}}),
     `Bring back the ${parked.length} task${parked.length===1?'':'s'} dropped at closing`+(stale?` (${stale} will need a new date)`:'')));
-  f.push(field(held?'Note':'Reason *',ta('note',{rows:2,placeholder:held?'e.g. Client cleared the land papers':'e.g. Client came back for working drawings'})));
-  return [head(projLabel(p),held?'Resume project':'Reopen project'),h('form',{class:'form',onsubmit:e=>{ e.preventDefault();
+  const wt=held&&p.closure&&isHoldWait(p.closure.reason)?p.closure.reason:'';
+  if(wt){ if(d.relOn==null) d.relOn=td; f.push(field(wt==='authority'?'Approval received on *':'Approved / work order on *',inp('relOn',{type:'date',max:td}))); }
+  f.push(field(held?'Note':'Reason *',ta('note',{rows:2,placeholder:wt==='authority'?'e.g. RAJUK approval letter received':wt?'e.g. Work order signed':held?'e.g. Client cleared the land papers':'e.g. Client came back for working drawings'})));
+  return [head(projLabel(p),wt?'Release the hold':held?'Resume project':'Reopen project'),h('form',{class:'form',onsubmit:e=>{ e.preventDefault();
       if(!held&&!(d.note||'').trim()) return fail('Give the reason; it stays in the project’s history.');
-      run(()=>doReopenProject(p.id,(d.note||'').trim(),held||d.restore),held?'Project resumed':'Project reopened').then(ok=>{ if(ok) back(); }); }},
+      if(wt&&!d.relOn) return fail('Give the date it came.');
+      const nt=wt?[`${wt==='authority'?'Authority approval received':'Approval / work order received'} ${fmtD(d.relOn)} after ${workDaysBetween(closedOn(p),d.relOn)} working days`,(d.note||'').trim()].filter(Boolean).join(' · '):(d.note||'').trim();
+      run(()=>doReopenProject(p.id,nt,held||d.restore),held?'Project resumed':'Project reopened').then(ok=>{ if(ok) back(); }); }},
     f,S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
     h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:held?'Resume':'Reopen'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
 }
@@ -15721,7 +15777,7 @@ function sheetProjCloseReq(){
       if(!d.reason) return fail('Choose a reason.'); if(!(d.note||'').trim()) return fail('Add a line on what happened.');
       run(()=>S.db.doc('projects/'+p.id).update({closeReq:{outcome:d.outcome,reason:d.reason,note:d.note.trim(),by:S.uid,at:new Date().toISOString()}}),'Sent to the COO').then(ok=>{ if(ok) back(); }); }},
     h('div',{class:'field'},h('span',{class:'lbl',text:'What should happen?'}),seg('Outcome',Object.entries(OUTCOMES).map(([k,x])=>[k,x.l]),d.outcome,v=>{ d.outcome=v; renderSheet(); }),h('span',{class:'f-hint',text:OUTCOMES[d.outcome].d})),
-    field('Reason *',sel('reason',[['','Select…'],...CLOSE_REASONS.filter(([k])=>k!=='complete'||d.outcome==='completed')])),
+    field('Reason *',sel('reason',[['','Select…'],...CLOSE_REASONS.filter(([k])=>(k!=='complete'||d.outcome==='completed')&&(d.outcome==='onhold'||!isHoldWait(k)))])),
     field('What happened *',ta('note',{rows:3,placeholder:'e.g. Client has stopped after the RAJUK set; fee for working drawings not agreed'}),'The Principal or the COO decides. Nothing changes until they do.'),
     S.sheet.err&&h('div',{class:'err',role:'alert',text:S.sheet.err}),
     h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'submit',disabled:S.busy,text:'Send request'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'})))];
@@ -15754,9 +15810,10 @@ function closureSection(p){
   if(o==='closed') return null;
   const parked=projParkedTasks(p.id).length, rv=c.reviewOn, due=o==='onhold'&&rv&&rv<=today();
   return h('section',{class:'sec'},h('div',{class:'sec-h'},h('h2',{text:o==='onhold'?'On hold':'How it ended'}),h('span',{class:'pill '+outcomePill(p),text:outcomeLabel(p)})),
-    due&&ap?h('div',{class:'callout'},h('b',{text:`Review was due ${fmtD(rv)}`}),h('span',{class:'f-hint',style:'margin:0',text:'Resume it, close it, or push the review date by closing it again as on hold from the same date.'})):null,
+    o==='onhold'&&isHoldWait(c.reason)?holdFollowBox(p,c,ap):due&&ap?h('div',{class:'callout'},h('b',{text:`Review was due ${fmtD(rv)}`}),h('span',{class:'f-hint',style:'margin:0',text:'Resume it, close it, or push the review date by closing it again as on hold from the same date.'})):null,
     h('div',{class:'facts'},fact(o==='onhold'?'Since':'Date',closedOn(p)?fmtD(closedOn(p)):''),fact('Reason',c.reason?reasonLabel(c.reason):''),
-      fact('Last phase reached',c.lastPhase||(o==='cancelled'&&c.reason?'Before any phase':'')),o==='onhold'?fact('Review on',rv?fmtD(rv):''):null,
+      fact('Last phase reached',c.lastPhase||(o==='cancelled'&&c.reason?'Before any phase':'')),o==='onhold'?fact(isHoldWait(c.reason)?'Next follow-up':'Review on',rv?fmtD(rv):''):null,
+      o==='onhold'&&isHoldWait(c.reason)?fact('Waiting',`${workDaysBetween(closedOn(p),today())} working days`,`${(c.follows||[]).length} follow-up${(c.follows||[]).length===1?'':'s'} logged`):null,
       fact('Decided by',c.by?nameOf(c.by):'',c.reqBy?`Asked by ${nameOf(c.reqBy)}`:null),
       fact(o==='onhold'?'Frozen tasks':'Dropped tasks',parked?String(parked):'',parked?(o==='onhold'?'Back on resume':'Not scored'):null),
       ap&&c.dues&&(+c.dues.due>1||+c.dues.unbilled>1)?fact('Open at closing',acctLine(c.dues),c.dues.open?`${c.dues.open} invoice${c.dues.open===1?'':'s'} unpaid`+(c.dues.overdue?` · ${c.dues.overdue} overdue`:''):null):null,
@@ -15767,6 +15824,19 @@ function closureSection(p){
     o==='completed'?supBox(p):null,
     o!=='onhold'?acctBox(p):null);
 }
+/* waiting holds: follow-ups logged with a note, each one sets the next date; Release on approval */
+function workDaysBetween(a,b){ if(!a||!b||b<=a) return 0; let n=0, x=a; while(x<b){ x=addDays(x,1); if(isWorkDay(x)) n++; } return n; }
+function holdFollowBox(p,c,ap){ const td=today(), rv=c.reviewOn, due=rv&&rv<=td, fs=(c.follows||[]).slice().reverse(), st=S.sheet.hf||(S.sheet.hf={note:''});
+  const log=()=>{ const note=(st.note||'').trim(); if(!note) return toast(c.reason==='authority'?'Write what the authority said.':'Write what the client said.');
+    const now=new Date().toISOString(), nx=addWorkDays(td,+c.every||5), cur=(S.projects[p.id]||{}).closure||c;
+    run(()=>S.db.doc('projects/'+p.id).update({closure:{...cur,follows:[...(cur.follows||[]),{on:td,at:now,by:S.uid,note}].slice(-60),reviewOn:nx}}),'Follow-up logged · next '+fmtD(nx)).then(ok=>{ if(ok){ S.sheet.hf=null; renderSheet(); } }); };
+  return h('div',{class:'callout',style:'display:grid;gap:8px'+(due?';border-color:var(--overdue)':'')},
+    h('b',{text:(due?'Follow-up due'+(rv<td?' since '+fmtD(rv):' today'):'Next follow-up '+fmtD(rv))+` · ${HOLD_WAIT[c.reason]}`}),
+    h('span',{class:'f-hint',style:'margin:0',text:`Every ${c.every||5} working days. Tasks stay frozen and nobody is scored while it waits.`}),
+    ap&&S.canWrite?h('div',{class:'bar',style:'gap:8px'},h('input',{id:'hf-note',maxlength:200,placeholder:c.reason==='authority'?'e.g. Called RAJUK, file with the inspector':'e.g. Client will confirm after the board meeting',value:st.note,style:'flex:1 1 220px;min-width:0;background:#fff',oninput:e=>{ st.note=e.target.value; },onkeydown:e=>{ if(e.key==='Enter'){ e.preventDefault(); log(); } }}),
+      h('button',{class:'btn btn-sm btn-primary',type:'button',disabled:S.busy,onclick:log,text:'Log follow-up'}),
+      h('button',{class:'btn btn-sm',type:'button',style:'background:#fff',onclick:()=>openReopenProject(p.id),text:c.reason==='authority'?'Approval received · release':'Approved · release'})):null,
+    fs.length?h('div',{class:'list'},fs.slice(0,6).map(x=>h('div',{class:'f-hint',style:'margin:0',text:`${fmtD(x.on)} · ${nameOf(x.by)} · ${x.note}`}))):null); }
 /* as-built status on a completed project's page */
 function abBox(p){ const a=p.asbuilt; if(!a) return null; const s=stdState(p,'9');
   if(s.done) return h('div',{class:'callout',style:'margin-top:10px;box-shadow:inset 3px 0 0 var(--ontime)'},h('b',{text:`As-built final print issued ${fmtD(s.fin.doneAt)}`}),
