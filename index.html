@@ -9407,7 +9407,7 @@ function fcHTML(p,o,img){ const E=pbEsc, tp=p.type&&(T()[p.type]||LEGACY[p.type]
   const ttl=(o.title||'').trim(), vol=(o.vol||'').trim(), logo=PB_LOGO.replace('fill="#fff"','fill="#000"');
   const rows=[['Client',p.client],['Site',int?[p.intBuilding,p.intUnit,siteAddr(p)].filter(Boolean).join(', '):siteAddr(p)],
     int?['Interior area',p.intArea?Number(p.intArea).toLocaleString('en-IN')+' sft':'']:['Land',p.katha?p.katha+' katha':''],
-    ['POD',podsOfProject(p).length?podText(p):''],['Project architect',fcLeads(p)],['Agreement',p.agDate?fmtLong(p.agDate):'']].filter(x=>x[1]);
+    ['POD',o.pod&&podsOfProject(p).length?podText(p):''],['Project architect',o.arch?fcLeads(p):''],['Agreement',p.agDate?fmtLong(p.agDate):'']].filter(x=>x[1]);
   const fx=`<div class="fx">${rows.map(([l,v])=>`<div><i>${E(l)}</i><b>${E(v)}</b></div>`).join('')}</div>`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${E((p.name||'Project')+' · file cover')}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -9417,7 +9417,7 @@ function fcHTML(p,o,img){ const E=pbEsc, tp=p.type&&(T()[p.type]||LEGACY[p.type]
 <div class="c k"><span>Project file${ttl?' · '+E(ttl):''}</span><span>${vol?'Vol. '+E(vol):''}</span></div>
 <div class="c nm"><h1>${E(p.name||'Project')}</h1><div><b>${E(p.code||'')}</b>${tp&&tp.name?' · '+E(tp.name):''}</div></div>
 <div class="c bd">${img?`<div class="im${o.colour?'':' bw'}"><img src="${img}" alt=""></div>`:''}${fx}</div>
-<div class="c ct"><h2>Contents</h2><table><thead><tr><th class="n">No.</th><th>Document</th><th class="d">Date</th></tr></thead><tbody>${'<tr><td></td><td></td><td></td></tr>'.repeat(13)}</tbody></table></div>
+${o.contents?`<div class="c ct"><h2>Contents</h2><table><thead><tr><th class="n">No.</th><th>Document</th><th class="d">Date</th></tr></thead><tbody>${'<tr><td></td><td></td><td></td></tr>'.repeat(13)}</tbody></table></div>`:''}
 <div class="c ft"><span class="pr">Printed from SLATE OS · ${E(fmtLong(td))}</span><div style="display:flex;gap:4mm"><div class="bx">File no.</div><div class="bx">Shelf / rack</div></div></div>
 </div></body></html>`; }
 async function fcPdf(p,o,img){ const {data}=await fcSb().auth.getSession(); const tok=data&&data.session&&data.session.access_token;
@@ -9435,9 +9435,9 @@ async function fcOpen(p,o){ let img=''; try{ img=await fcImg(p); }catch(e){ toas
   ov.querySelector('[data-a=print]').onclick=()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){ toast('Use Download PDF and print the file.'); } };
   const b=ov.querySelector('[data-a=pdf]'); b.onclick=async()=>{ b.disabled=true; b.textContent='Making…'; try{ dlFile(await fcPdf(p,o,img)); }catch(e){ toast(e.message||String(e)); } b.textContent='Download PDF'; b.disabled=false; };
   document.addEventListener('keydown',esc); document.body.append(ov); }
-function openFileCover(pid){ S.sheet={type:'fileCover',id:pid,fc:{title:'',vol:'',colour:false}}; renderSheet(); }
+function openFileCover(pid){ S.sheet={type:'fileCover',id:pid,fc:{title:'',vol:'',colour:false,pod:false,arch:false,contents:false}}; renderSheet(); }
 function sheetFileCover(){ const sh=S.sheet, p=S.projects[sh.id]?{...S.projects[sh.id],id:sh.id}:null; if(!p||!fcBoss()) return [head('File cover','Not available')];
-  const o=sh.fc||(sh.fc={title:'',vol:'',colour:false}), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }, can=S.canWrite;
+  const o=sh.fc||(sh.fc={title:'',vol:'',colour:false,pod:false,arch:false,contents:false}), back=()=>{ S.sheet={type:'projView',id:p.id}; renderSheet(); }, can=S.canWrite;
   if(p.cover&&p.cover.path&&!fcCache[p.cover.path]&&!sh.fcLoading){ sh.fcLoading=1; fcImg(p).catch(()=>{}).finally(()=>{ sh.fcLoading=0; if(S.sheet===sh) renderSheet(); }); }
   const thumb=p.cover&&p.cover.path?fcCache[p.cover.path]:'';
   const pick=h('input',{type:'file',accept:'image/jpeg,image/png,image/webp',hidden:true,onchange:e=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) run(()=>fcUpload(p,f),'Project image saved'); }});
@@ -9453,6 +9453,8 @@ function sheetFileCover(){ const sh=S.sheet, p=S.projects[sh.id]?{...S.projects[
         field('Volume',h('input',{value:o.vol,maxlength:6,inputMode:'numeric',placeholder:'e.g. 01',oninput:e=>{ o.vol=e.target.value; }}))),
       h('datalist',{id:'fc-titles'},FC_TITLES.map(t=>h('option',{value:t}))),
       h('span',{class:'f-hint',style:'margin:0',text:'Leave both empty for one cover for the whole project. Not saved: type them each time you print.'})),
+    h('div',{class:'sw-sec'},h('b',{text:'Also print (optional)'}),
+      [['pod','POD'],['arch','Project architect'],['contents','Contents list (to fill by hand)']].map(([k,l])=>h('label',{},h('input',{type:'checkbox',checked:!!o[k],onchange:e=>{ o[k]=e.target.checked; }}),h('span',{text:' '+l})))),
     h('div',{class:'actions'},h('button',{class:'btn btn-primary',type:'button',disabled:S.busy||!!sh.fcLoading,onclick:()=>fcOpen(p,o),text:'Preview and print'}),h('button',{class:'btn',type:'button',onclick:back,text:'Back'}))]; }
 /* bell and Waiting for you: the Principal's checks, the COO's sends, the POD leader's returns */
 function hoNotifs(add){ const td=today(), boss=S.isOwner, coo=isCOO(S.uid);
