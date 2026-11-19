@@ -9394,10 +9394,10 @@ body{margin:0;background:#E6E8EA;color:#000;font:10pt/1.4 "Jost","Futura",sans-s
 .k{top:53.5mm;display:flex;justify-content:space-between;align-items:baseline;gap:6mm;font-weight:600;font-size:9.5pt;letter-spacing:.16em;text-transform:uppercase;border-bottom:.5pt solid #000;padding-bottom:2mm}
 .nm{top:62mm}.nm h1{margin:0;font-size:28pt;line-height:1.08;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
 .nm div{margin-top:2mm;font-size:11pt;color:#545454;letter-spacing:.06em}.nm div b{color:#000;font-weight:600}
-.bd{top:92mm;display:flex;gap:8mm;align-items:flex-start}
-.im{flex:0 0 92mm;height:62mm;border:.3pt solid #CFCFCF}.im img{width:100%;height:100%;object-fit:cover;display:block}.im.bw img{filter:grayscale(1)}
+.fl{top:92mm}.bd{display:flex;gap:8mm;align-items:flex-start}
+.im{flex:0 0 auto}.im img{display:block;width:auto;height:auto;max-width:92mm;max-height:90mm}.im.bw img{filter:grayscale(1)}
 .fx{flex:1;min-width:0}.fx div{display:flex;gap:3mm;border-bottom:.3pt solid #CFCFCF;padding:1.5mm 0}.fx i{font-style:normal;color:#545454;flex:0 0 27mm}.fx b{font-weight:600;min-width:0;overflow-wrap:anywhere}
-.ct{top:164mm}.ct h2{margin:0 0 1mm;font-size:8.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
+.ct{margin-top:8mm}.ct h2{margin:0 0 1mm;font-size:8.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
 .ct table{width:100%;border-collapse:collapse}.ct th{font-size:7.5pt;font-weight:400;color:#545454;text-align:left;padding:1mm 0;border-bottom:.5pt solid #000}
 .ct td{height:6.6mm;border-bottom:.3pt solid #CFCFCF}.ct .n{width:10mm}.ct .d{width:28mm}
 .ft{bottom:10mm;display:flex;justify-content:space-between;align-items:flex-end;gap:6mm}
@@ -9416,8 +9416,8 @@ function fcHTML(p,o,img){ const E=pbEsc, tp=p.type&&(T()[p.type]||LEGACY[p.type]
 <div class="ab lh-addr">${PB_ADDR.split('\n').map(E).join('<br>')}</div><div class="ab lh-mark">${logo}</div><div class="ab lh-name">SLATE</div>
 <div class="c k"><span>Project file${ttl?' · '+E(ttl):''}</span><span>${vol?'Vol. '+E(vol):''}</span></div>
 <div class="c nm"><h1>${E(p.name||'Project')}</h1><div><b>${E(p.code||'')}</b>${tp&&tp.name?' · '+E(tp.name):''}</div></div>
-<div class="c bd">${img?`<div class="im${o.colour?'':' bw'}"><img src="${img}" alt=""></div>`:''}${fx}</div>
-${o.contents?`<div class="c ct"><h2>Contents</h2><table><thead><tr><th class="n">No.</th><th>Document</th><th class="d">Date</th></tr></thead><tbody>${'<tr><td></td><td></td><td></td></tr>'.repeat(13)}</tbody></table></div>`:''}
+<div class="c fl"><div class="bd">${img?`<div class="im${o.colour?'':' bw'}"><img src="${img}" alt=""></div>`:''}${fx}</div>
+${o.contents?`<div class="ct"><h2>Contents</h2><table><thead><tr><th class="n">No.</th><th>Document</th><th class="d">Date</th></tr></thead><tbody>${'<tr><td></td><td></td><td></td></tr>'.repeat(10)}</tbody></table></div>`:''}</div>
 <div class="c ft"><span class="pr">Printed from SLATE OS · ${E(fmtLong(td))}</span><div style="display:flex;gap:4mm"><div class="bx">File no.</div><div class="bx">Shelf / rack</div></div></div>
 </div></body></html>`; }
 async function fcPdf(p,o,img){ const {data}=await fcSb().auth.getSession(); const tok=data&&data.session&&data.session.access_token;
