@@ -9413,7 +9413,7 @@ function fcHTML(p,o,img){ const E=pbEsc, tp=p.type&&(T()[p.type]||LEGACY[p.type]
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;600&display=swap"><style>${FC_CSS}</style></head>
 <body><div class="page">
-<div class="ab lh-addr">${PB_ADDR.replace('team@','info@').split('\n').map(E).join('<br>')}</div><div class="ab lh-mark">${logo}</div><div class="ab lh-name">SLATE</div>
+<div class="ab lh-addr">${PB_ADDR.split('\n').map(E).join('<br>')}</div><div class="ab lh-mark">${logo}</div><div class="ab lh-name">SLATE</div>
 <div class="c k"><span>Project file${ttl?' · '+E(ttl):''}</span><span>${vol?'Vol. '+E(vol):''}</span></div>
 <div class="c nm"><h1>${E(p.name||'Project')}</h1><div><b>${E(p.code||'')}</b>${tp&&tp.name?' · '+E(tp.name):''}</div></div>
 <div class="c bd">${img?`<div class="im${o.colour?'':' bw'}"><img src="${img}" alt=""></div>`:''}${fx}</div>
@@ -13590,7 +13590,7 @@ h1,h2,th{letter-spacing:.04em}.docref{text-transform:none;letter-spacing:0;color
 /* every page starts on the same line (Principal, 2 Nov 2026): no top margin on a page's first heading */
 .pb-first>:first-child{margin-top:0!important}.amtbox b{white-space:nowrap}.amtbox span{padding-right:4mm}.pb-gw{margin:3mm 0 0;font-weight:600;color:#C41E29}`;
 const PB_LOGO='<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
-const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
+const PB_ADDR='SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\ninfo@slate-atelier.com';
 const pbLetterhead=()=>`<div class="lh-addr">${PB_ADDR.split('\n').map(pbEsc).join('<br>')}</div><div class="lh-tab"><div class="lh-mark">${PB_LOGO}</div><div class="lh-name">SLATE</div></div><div class="lh-wm">DESIGN<br>WITH<br>PURPOSE</div>`;
 const pbHead=t=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${pbEsc(t)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

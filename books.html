@@ -1799,7 +1799,7 @@ function pdfStr(s) { return '(' + winBytes(s).map(c => c === 40 || c === 41 || c
    Fonts: Didact Gothic for text, Jost for headings and the pad (both SIL OFL, in /fonts), embedded in each PDF.
    If the fonts can't load (offline), the PDF falls back to Helvetica with the same layout. */
 const MM = 72 / 25.4, PAD = { l: 12.6 * MM, r: 14 * MM, t: 53.5 * MM, b: 236 * MM };
-const PAD_ADDR = ['SLATE, Flat: B2, Level - 02, House: SW (I) 3/A', 'Road: 02, Gulshan 01, Dhaka -1212', '+88 01749 390 284', 'slate-atelier.com', 'team@slate-atelier.com'];
+const PAD_ADDR = ['SLATE, Flat: B2, Level - 02, House: SW (I) 3/A', 'Road: 02, Gulshan 01, Dhaka -1212', '+88 01749 390 284', 'slate-atelier.com', 'info@slate-atelier.com'];
 const PAD_MARK = [[0, 0, 106, 7], [0, 0, 8, 44], [98, 0, 8, 44], [74, 37, 32, 7], [0, 63, 32, 7], [0, 63, 8, 45], [98, 63, 8, 45], [0, 101, 106, 7]];
 let PDF_FONTS = null;
 const pdfFontsReady = (async () => {

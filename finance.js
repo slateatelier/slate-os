@@ -722,7 +722,7 @@ function receiptForm(i, pre) {
 /* SLATE letterhead pad: address block top left, black tab with the white SLATE mark top right, and the
    faint DESIGN WITH PURPOSE at the foot. Same measurements as the printed pad. Text in Didact Gothic (free, Century Gothic-like),
    headings and figures in bold in Jost (free, Futura-like); both are open-licensed Google Fonts. */
-const LH_ADDR_DEFAULT = 'SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\nteam@slate-atelier.com';
+const LH_ADDR_DEFAULT = 'SLATE, Flat: B2, Level - 02, House: SW (I) 3/A\nRoad: 02, Gulshan 01, Dhaka -1212\n+88 01749 390 284\nslate-atelier.com\ninfo@slate-atelier.com';
 const LOGO_SVG = '<svg viewBox="0 0 106 108" aria-hidden="true"><g fill="#fff"><rect x="0" y="0" width="106" height="7"/><rect x="0" y="0" width="8" height="44"/><rect x="98" y="0" width="8" height="44"/><rect x="74" y="37" width="32" height="7"/><rect x="0" y="63" width="32" height="7"/><rect x="0" y="63" width="8" height="45"/><rect x="98" y="63" width="8" height="45"/><rect x="0" y="101" width="106" height="7"/></g></svg>';
 const letterhead = () => `<div class="lh-addr">${lines(S.settings.lhAddress || LH_ADDR_DEFAULT).map(esc).join('<br>')}</div><div class="lh-tab"><div class="lh-mark">${LOGO_SVG}</div><div class="lh-name">SLATE</div></div><div class="lh-wm">DESIGN<br>WITH<br>PURPOSE</div>`;
 function docShell(title, ref, body, more = []) {
