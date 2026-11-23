@@ -3109,7 +3109,7 @@ async function boot(){
   const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
   S.db=db; S.user=user;
   if(!db||!user){ S.state='nohost'; render(true); return; }
-  S.me=await user.me(); S.uid=S.me.id; S.isOwner=!!S.me.isOwner;
+  S.me=await user.me(); S.uid=S.me.id; S.isOwner=!!S.me.isOwner; S.isCoo=!!S.me.isCoo;
   if(!S.uid){ S.state='signedout'; render(true); return; }
   const cw=await user.can('data.write'); S.canWrite=cw!==false;
   S.state='ready'; render(true); noticesLive(); try{ wlLive(); }catch(e){} try{ dwLive(); }catch(e){} try{ pwLive(); }catch(e){}
@@ -3190,7 +3190,9 @@ function weekendGate(){
   let raf=0, t0=0, done=false; const HOLD=2000;
   const close=()=>{ el.classList.add('out'); document.removeEventListener('keydown',kd); document.removeEventListener('keyup',ku); document.documentElement.style.overflow=''; setTimeout(()=>el.remove(),420); };
   /* after the hold, the entry PIN (the gate only runs on computers); the server writes the entry when it is right */
-  const finish=()=>{ if(done) return; done=true; cancelAnimationFrame(raf); hold.classList.add('ok'); lab.textContent='Your PIN';
+  const finish=()=>{ if(done) return; done=true; cancelAnimationFrame(raf); hold.classList.add('ok');
+    if(noEntryPin()){ lab.textContent='Have a good day'; try{ window.slateDayIn&&window.slateDayIn(); }catch(_){} savePref('weekendWork',key); return setTimeout(close,450); }
+    lab.textContent='Your PIN';
     setTimeout(()=>{ const q=el.querySelector('.wg-q'); if(q) q.remove(); hold.replaceWith(pinStep(()=>{ savePref('weekendWork',key); setTimeout(close,450); })); },350); };
   const tick=()=>{ const p=Math.min(1,(performance.now()-t0)/HOLD); ring.style.strokeDashoffset=String(176*(1-p)); if(p>=1) return finish(); raf=requestAnimationFrame(tick); };
   const start=e=>{ if(done||t0) return; if(e){ e.preventDefault(); try{ hold.setPointerCapture(e.pointerId); }catch(_){} } t0=performance.now(); hold.classList.add('on'); lab.textContent='Keep holding…'; raf=requestAnimationFrame(tick); };
@@ -3216,6 +3218,8 @@ function weekendGate(){
    (Akib, 12 Nov). The greeting offers a sign-out that records no entry for the person shown. */
 /* Entry PIN (computers only, 13 Nov 2026). The morning greeting asks for the person's own 4 digits; the server writes
    the computer entry only when the PIN is right, so a PC left signed in can't log someone else in. First morning: choose one. */
+/* No entry PIN for the Principal and the COO (Principal, 23 Nov 2026): their greeting is the plain tap-in, as on a phone. */
+function noEntryPin(){ return !!(S.isOwner||S.isCoo); }
 function pinStep(onOk){
   const api=window.slateEntryPin; let mode='load', first='', busy=false;
   const dots=h('div',{class:'pn-dots','aria-hidden':'true'},...[0,1,2,3].map(()=>h('i')));
@@ -3271,7 +3275,7 @@ function daySplash(){
   if(!document.getElementById('jost-font')){ const l=document.createElement('link'); l.id='jost-font'; l.rel='stylesheet';
     l.href='https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap'; document.head.append(l); }
   const hr=now.getHours(), hello=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
-  let done=false; const pc=window.slateDevice==='computer';
+  let done=false; const pc=window.slateDevice==='computer'&&!noEntryPin();
   /* on a computer the entry is written by the server once the PIN is right (pinStep), so go() logs nothing there */
   const go=(viaPin)=>{ if(done||(pc&&viaPin!==true)) return; done=true; savePref('daySplash',key); if(!pc){ try{ window.slateDayIn&&window.slateDayIn(); }catch(_){} } el.classList.add('out'); document.removeEventListener('keydown',kd); window.removeEventListener('resize',fit);
     document.documentElement.style.overflow=''; setTimeout(()=>el.remove(),420); };

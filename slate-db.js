@@ -381,7 +381,8 @@
   const user = {
     async me() {
       if (viewAs) { const p = people.get(viewAs.id); return { id: viewAs.id, name: displayName(p), email: p && p.email, isOwner: false }; }
-      return me ? { id: me.id, name: displayName(me), email: me.email, isOwner: me.designation === 'principal' && (me.active || !!(review && review.live && review.kind === 'principal')) }
+      return me ? { id: me.id, name: displayName(me), email: me.email, isOwner: me.designation === 'principal' && (me.active || !!(review && review.live && review.kind === 'principal')),
+                    isCoo: me.designation === 'coo' && me.active !== false }
                 : { id: authUser ? authUser.id : null, name: authUser && authUser.email, isOwner: false };
     },
     async can(what) { if (viewAs) return true;   // their buttons show as they see them; the saves themselves stop in vaBlock
@@ -1639,6 +1640,7 @@
     };
     /* entry PIN: set or not, and a reset for a forgotten PIN (they choose a new one at the next morning greeting) */
     const pinCell = (id) => { if (!EL.pins) return null; const has = EL.pins.has(id);
+      const pp = people.get(id); if (pp && (pp.designation === 'principal' || pp.designation === 'coo')) return el('div', { class: 'f-hint', style: 'color:var(--faint)' }, 'No entry PIN (Principal and COO)');
       if (!has) return el('div', { class: 'f-hint', style: 'color:var(--faint)' }, 'No entry PIN yet');
       const b = el('button', { class: 'linkish', type: 'button', style: 'font-size:12px' }, 'Reset PIN');
       b.addEventListener('click', async () => { if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Tap again to reset'; return; }
